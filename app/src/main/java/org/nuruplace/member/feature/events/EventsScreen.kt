@@ -37,6 +37,7 @@ import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.EventDetail
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RsvpBody
+import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.Kicker
 import org.nuruplace.member.ui.components.NuruCard
@@ -92,7 +93,16 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -
         fun setRsvp(status: String) {
             if (!busy) {
                 busy = true
-                scope.launch { try { Net.client.api.rsvp(eventId, RsvpBody(status)); reload() } catch (_: Exception) {} finally { busy = false } }
+                scope.launch {
+                    try {
+                        val payload = kotlinx.serialization.json.buildJsonObject {
+                            put("event_id", kotlinx.serialization.json.JsonPrimitive(eventId))
+                            put("status", kotlinx.serialization.json.JsonPrimitive(status))
+                        }
+                        Net.client.offline.runOrQueue("event_rsvps", "set", payload) { Net.client.api.rsvp(eventId, RsvpBody(status)) }
+                        reload()
+                    } catch (_: Exception) {} finally { busy = false }
+                }
             }
         }
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {

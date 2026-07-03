@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 // Release signing — REUSES the existing "CN=Nuru Place" upload key so this app
@@ -31,6 +32,10 @@ val signing = releaseSigning()
 android {
     namespace = "org.nuruplace.member"
     compileSdk = 35
+
+    // JVM unit tests: return defaults for android.* stubs (e.g. android.util.Log)
+    // instead of throwing "not mocked".
+    testOptions { unitTests.isReturnDefaultValues = true }
 
     defaultConfig {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
@@ -103,6 +108,10 @@ dependencies {
     implementation(libs.camera.view)
     implementation(libs.mlkit.barcode)
     implementation(libs.play.location)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

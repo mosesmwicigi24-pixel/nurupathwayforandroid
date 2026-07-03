@@ -1,0 +1,106 @@
+// Drain-engine behaviour (§1.7, §3.6): the queue replays in seq order, removes
+// applied/duplicate rows, drops server-rejected rows (no infinite retry), and —
+// critically — keeps everything intact when the push fails at the transport
+// layer so nothing is lost while offline.
+package org.nuruplace.member.data.offline
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.nuruplace.member.data.net.MemberApi
+import org.nuruplace.member.data.net.SyncPushBody
+import org.nuruplace.member.data.net.SyncPushResult
+import org.nuruplace.member.data.net.SyncMutationResult
+import java.io.IOException
+import java.lang.reflect.Proxy
+
+private class FakeDao : MutationDao {
+    val rows = mutableListOf<PendingMutation>()
+    override suspend fun insert(mutation: PendingMutation) { rows.add(mutation) }
+    override suspend fun oldest(limit: Int): List<PendingMutation> = rows.sortedBy { it.seq }.take(limit)
+    override suspend fun count(): Int = rows.size
+    override suspend fun maxSeq(): Long = rows.maxOfOrNull { it.seq } ?: 0
+    override suspend fun deleteById(mutationId: String) { rows.removeAll { it.mutationId == mutationId } }
+    override suspend fun markFailed(mutationId: String, error: String?) {}
+}
+
+private class FakeNet(private val online: Boolean) : NetworkStatus {
+    override fun isOnline() = online
+    override fun online(): Flow<Boolean> = flowOf(online)
+}
+
+/** A MemberApi whose only implemented method is syncPush; the rest (unused here)
+ *  are dynamic-proxy stubs that throw if ever called. */
+private val unsupportedApi: MemberApi = Proxy.newProxyInstance(
+    MemberApi::class.java.classLoader,
+    arrayOf(MemberApi::class.java),
+) { _, method, _ -> throw UnsupportedOperationException(method.name) } as MemberApi
+
+private class FakeApi(
+    val onPush: (SyncPushBody) -> SyncPushResult,
+) : MemberApi by unsupportedApi {
+    var pushes = 0
+    override suspend fun syncPush(body: SyncPushBody): SyncPushResult {
+        pushes++
+        return onPush(body)
+    }
+}
+
+private fun queue(dao: MutationDao, net: NetworkStatus, api: MemberApi) =
+    OfflineQueue(dao, net, { api }, Json { ignoreUnknownKeys = true })
+
+private fun row(seq: Long, id: String = "m$seq") =
+    PendingMutation(mutationId = id, seq = seq, domain = "prayer_entries", op = "upsert", payloadJson = "{}", createdAt = seq)
+
+class OfflineQueueTest {
+    @Test fun `applied and duplicate rows are removed`() = runTest {
+        val dao = FakeDao().apply { rows += listOf(row(1, "a"), row(2, "b")) }
+        val api = FakeApi { body ->
+            SyncPushResult(body.mutations.map {
+                SyncMutationResult(it.mutationId, if (it.mutationId == "a") "applied" else "duplicate")
+            })
+        }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(0, dao.rows.size)
+    }
+
+    @Test fun `rejected rows are dropped, not retried forever`() = runTest {
+        val dao = FakeDao().apply { rows += row(1, "bad") }
+        val api = FakeApi { body -> SyncPushResult(body.mutations.map { SyncMutationResult(it.mutationId, "rejected", "VALIDATION_FAILED") }) }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(0, dao.rows.size)
+        assertEquals(1, api.pushes)   // one attempt, then gone
+    }
+
+    @Test fun `transport failure keeps the queue intact`() = runTest {
+        val dao = FakeDao().apply { rows += listOf(row(1), row(2)) }
+        val api = FakeApi { throw IOException("offline") }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(2, dao.rows.size)   // nothing lost
+    }
+
+    @Test fun `offline drain is a no-op`() = runTest {
+        val dao = FakeDao().apply { rows += row(1) }
+        val api = FakeApi { SyncPushResult(emptyList()) }
+        queue(dao, FakeNet(false), api).drain()
+        assertEquals(1, dao.rows.size)
+        assertEquals(0, api.pushes)
+    }
+
+    @Test fun `mutations replay in seq order`() = runTest {
+        val dao = FakeDao().apply { rows += listOf(row(3, "c"), row(1, "a"), row(2, "b")) }
+        var seen = listOf<Long>()
+        val api = FakeApi { body ->
+            seen = body.mutations.map { it.seq }
+            SyncPushResult(body.mutations.map { SyncMutationResult(it.mutationId, "applied") })
+        }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(listOf(1L, 2L, 3L), seen)
+        assertTrue(dao.rows.isEmpty())
+    }
+}

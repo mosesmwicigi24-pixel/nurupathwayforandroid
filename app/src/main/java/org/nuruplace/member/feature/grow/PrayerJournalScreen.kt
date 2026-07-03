@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.offline.queuePayload
+import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.data.net.PrayerEntry
 import org.nuruplace.member.data.net.PrayerUpsertBody
 import org.nuruplace.member.ui.components.AsyncContent
@@ -71,14 +73,13 @@ fun PrayerJournalScreen(onBack: () -> Unit) {
                                 busy = true
                                 scope.launch {
                                     try {
-                                        Net.client.api.upsertPrayer(
-                                            PrayerUpsertBody(
-                                                entryId = UUID.randomUUID().toString(),
-                                                title = title.trim().ifBlank { null },
-                                                body = body.trim(),
-                                                clientMutationId = UUID.randomUUID().toString(),
-                                            ),
+                                        val dto = PrayerUpsertBody(
+                                            entryId = UUID.randomUUID().toString(),
+                                            title = title.trim().ifBlank { null },
+                                            body = body.trim(),
+                                            clientMutationId = UUID.randomUUID().toString(),
                                         )
+                                        Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) }
                                         title = ""; body = ""; reload()
                                     } catch (_: Exception) {} finally { busy = false }
                                 }
@@ -110,7 +111,13 @@ private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
             IconButton(onClick = {
                 if (!busy) {
                     busy = true
-                    scope.launch { try { Net.client.api.deletePrayer(e.entryId); onChanged() } catch (_: Exception) {} finally { busy = false } }
+                    scope.launch {
+                        try {
+                            val payload = kotlinx.serialization.json.buildJsonObject { put("entry_id", kotlinx.serialization.json.JsonPrimitive(e.entryId)) }
+                            Net.client.offline.runOrQueue("prayer_entries", "delete", payload) { Net.client.api.deletePrayer(e.entryId) }
+                            onChanged()
+                        } catch (_: Exception) {} finally { busy = false }
+                    }
                 }
             }) { Icon(Icons.Filled.Delete, "Delete", tint = Nuru.ink400) }
         }
@@ -120,9 +127,8 @@ private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
                     busy = true
                     scope.launch {
                         try {
-                            Net.client.api.upsertPrayer(
-                                PrayerUpsertBody(entryId = e.entryId, title = e.title, body = e.body, isAnswered = true, clientMutationId = UUID.randomUUID().toString()),
-                            )
+                            val dto = PrayerUpsertBody(entryId = e.entryId, title = e.title, body = e.body, isAnswered = true, clientMutationId = UUID.randomUUID().toString())
+                            Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) }
                             onChanged()
                         } catch (_: Exception) {} finally { busy = false }
                     }

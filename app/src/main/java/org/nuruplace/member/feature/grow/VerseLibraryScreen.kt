@@ -29,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.offline.queuePayload
+import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.data.net.SavedVerse
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.ui.components.AsyncContent
@@ -68,14 +70,13 @@ fun VerseLibraryScreen(onBack: () -> Unit) {
                                 busy = true
                                 scope.launch {
                                     try {
-                                        Net.client.api.saveVerse(
-                                            VerseUpsertBody(
-                                                savedVerseId = UUID.randomUUID().toString(),
-                                                reference = reference.trim(),
-                                                verseText = text.trim().ifBlank { null },
-                                                clientMutationId = UUID.randomUUID().toString(),
-                                            ),
+                                        val dto = VerseUpsertBody(
+                                            savedVerseId = UUID.randomUUID().toString(),
+                                            reference = reference.trim(),
+                                            verseText = text.trim().ifBlank { null },
+                                            clientMutationId = UUID.randomUUID().toString(),
                                         )
+                                        Net.client.offline.runOrQueue("saved_verses", "save", queuePayload(dto)) { Net.client.api.saveVerse(dto) }
                                         reference = ""; text = ""; reload()
                                     } catch (_: Exception) {} finally { busy = false }
                                 }
@@ -94,7 +95,13 @@ fun VerseLibraryScreen(onBack: () -> Unit) {
                             IconButton(onClick = {
                                 if (!busy) {
                                     busy = true
-                                    scope.launch { try { Net.client.api.deleteVerse(v.savedVerseId); reload() } catch (_: Exception) {} finally { busy = false } }
+                                    scope.launch {
+                                        try {
+                                            val payload = kotlinx.serialization.json.buildJsonObject { put("saved_verse_id", kotlinx.serialization.json.JsonPrimitive(v.savedVerseId)) }
+                                            Net.client.offline.runOrQueue("saved_verses", "delete", payload) { Net.client.api.deleteVerse(v.savedVerseId) }
+                                            reload()
+                                        } catch (_: Exception) {} finally { busy = false }
+                                    }
                                 }
                             }) { Icon(Icons.Filled.Delete, "Delete", tint = Nuru.ink400) }
                         }

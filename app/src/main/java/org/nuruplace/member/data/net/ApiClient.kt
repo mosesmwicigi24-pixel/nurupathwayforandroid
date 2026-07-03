@@ -20,6 +20,9 @@ import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import org.nuruplace.member.BuildConfig
 import org.nuruplace.member.data.TokenVault
+import org.nuruplace.member.data.offline.Connectivity
+import org.nuruplace.member.data.offline.OfflineDb
+import org.nuruplace.member.data.offline.OfflineQueue
 import retrofit2.Retrofit
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 
@@ -110,6 +113,15 @@ class ApiClient(context: Context) {
         .addConverterFactory(json.asConverterFactory(jsonMedia))
         .build()
         .create(MemberApi::class.java)
+
+    /** The offline mutation queue + its replay engine (§1.7). Payload JSON is
+     *  structure-preserving, so a plain Json (no naming strategy) is used for it. */
+    val offline: OfflineQueue = OfflineQueue(
+        dao = OfflineDb.get(context).mutations(),
+        connectivity = Connectivity(context),
+        apiProvider = { api },
+        json = Json { ignoreUnknownKeys = true },
+    ).also { it.start() }
 
     /** Login is the one endpoint that may return a 2FA challenge instead of a session. */
     suspend fun login(email: String, password: String): LoginResponse {

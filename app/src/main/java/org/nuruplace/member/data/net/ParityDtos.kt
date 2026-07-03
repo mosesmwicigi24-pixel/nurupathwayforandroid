@@ -283,3 +283,27 @@ data class EventCheckInResult(val attendanceId: String = "", val duplicate: Bool
 // --- Approximate location sharing (§proximity — coarse geohash only) ---
 @Serializable
 data class LocationBody(val lat: Double, val lng: Double)
+
+// --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
+@Serializable
+data class SyncMutation(
+    val mutationId: String,
+    val seq: Long,
+    val domain: String,
+    val op: String,
+    val payload: kotlinx.serialization.json.JsonObject,
+)
+
+@Serializable
+data class SyncPushBody(val deviceId: String? = null, val mutations: List<SyncMutation>)
+
+@Serializable
+data class SyncPushResult(val results: List<SyncMutationResult> = emptyList())
+
+@Serializable
+data class SyncMutationResult(
+    val mutationId: String,
+    val status: String = "",   // applied | duplicate | rejected
+    val code: String? = null,
+    val detail: String? = null,
+)

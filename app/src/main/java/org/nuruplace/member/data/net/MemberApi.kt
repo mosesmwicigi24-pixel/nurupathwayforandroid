@@ -294,6 +294,10 @@ interface MemberApi {
     @DELETE("me/location")
     suspend fun stopSharingLocation(): Unit
 
+    // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
+    @POST("sync/push")
+    suspend fun syncPush(@Body body: SyncPushBody): SyncPushResult
+
     // --- Profile: notification prefs + MFA ---
     @GET("me/notification-preferences")
     suspend fun notificationPreferences(): NotificationPreferences
