@@ -51,7 +51,8 @@ Base URL (mirrors iOS `resolveBaseURL`): debug → `http://10.0.2.2:8080/v1`
   (add/answer/delete), Verse library (add/delete). Builds green (debug+R8).
 - ✅ **Phase 3 Community** — Community hub, Prayer wall (+compose/pray/detail/comment),
   Chat inbox (conversations + discover spaces) + thread (send). Builds green.
-- ☐ **Phase 4 Events** — Events, EventDetail, Notifications, Calendar
+- ✅ **Phase 4 Events** — Events list (calendar window), Event detail (RSVP + roster),
+  Notification center (mark-all-read). Builds green.
 - ☐ **Phase 5 Giving** (online-only, §5.6) — Giving, Statement, Receipt
 - ☐ **Phase 6 Profile** — Profile detail, Gifts, Resources, Assistant
 - ☐ Home dashboard full build (rhythm ring, next-action hero, verse of the day)

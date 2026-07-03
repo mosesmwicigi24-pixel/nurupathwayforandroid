@@ -51,6 +51,9 @@ import org.nuruplace.member.feature.community.ChatThreadScreen
 import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
 import org.nuruplace.member.feature.community.PrayerWallScreen
+import org.nuruplace.member.feature.events.EventDetailScreen
+import org.nuruplace.member.feature.events.EventsScreen
+import org.nuruplace.member.feature.events.NotificationsScreen
 import org.nuruplace.member.feature.home.HomeScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
 import org.nuruplace.member.feature.pathway.LevelsScreen
@@ -105,7 +108,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         },
     ) { pad ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }) }
+            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }) }
             composable("pathway") { LevelsScreen(onOpenLevel = { nav.navigate("level/$it") }) }
             composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
@@ -140,6 +143,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 ChatThreadScreen(conversationId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
+            composable("events") {
+                EventsScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
+            }
+            composable(
+                "event/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+            }
+            composable("notifications") { NotificationsScreen(onBack = { nav.popBackStack() }) }
             composable("profile") { ProfileScreen(me) { auth.signOut() } }
 
             composable(

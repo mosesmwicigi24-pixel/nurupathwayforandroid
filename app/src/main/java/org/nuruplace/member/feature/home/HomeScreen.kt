@@ -26,7 +26,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 
 @Composable
-fun HomeScreen(me: MeResponse?, onSignOut: () -> Unit) {
+fun HomeScreen(me: MeResponse?, onSignOut: () -> Unit, onOpenNotifications: () -> Unit = {}) {
     Column(
         Modifier
             .fillMaxSize()
@@ -40,7 +40,10 @@ fun HomeScreen(me: MeResponse?, onSignOut: () -> Unit) {
                 .background(Nuru.heroGradient)
                 .padding(horizontal = Spacing.screen, vertical = Spacing.xl),
         ) {
-            Kicker("Nuru Pathway")
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Kicker("Nuru Pathway", modifier = Modifier.weight(1f))
+                TextButton(onClick = onOpenNotifications) { Text("🔔", style = NuruType.title) }
+            }
             Spacer(Modifier.height(Spacing.sm))
             Text(
                 "Hi, ${me?.profile?.fullName?.substringBefore(' ') ?: "friend"}",

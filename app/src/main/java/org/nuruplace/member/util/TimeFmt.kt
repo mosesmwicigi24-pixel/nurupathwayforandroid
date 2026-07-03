@@ -3,6 +3,22 @@ package org.nuruplace.member.util
 
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+/** Today's date (yyyy-MM-dd) and a window `days` ahead — for the calendar query. */
+fun todayIso(): String = LocalDate.now().toString()
+fun isoPlusDays(days: Long): String = LocalDate.now().plusDays(days).toString()
+
+private val eventFmt = DateTimeFormatter.ofPattern("EEE d MMM · HH:mm")
+
+/** Format an ISO instant as e.g. "Sat 5 Jul · 10:00" in the device zone. */
+fun fmtEventTime(iso: String?): String {
+    if (iso.isNullOrBlank()) return ""
+    val inst = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""
+    return runCatching { eventFmt.format(inst.atZone(ZoneId.systemDefault())) }.getOrDefault("")
+}
 
 fun relTime(iso: String?): String {
     if (iso.isNullOrBlank()) return ""

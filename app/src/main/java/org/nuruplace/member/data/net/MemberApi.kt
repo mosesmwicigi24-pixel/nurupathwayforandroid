@@ -133,4 +133,21 @@ interface MemberApi {
 
     @POST("chat/dms")
     suspend fun createDm(@Body body: DmBody): DmRes
+
+    // --- Events / calendar ---
+    @GET("calendar")
+    suspend fun calendar(@retrofit2.http.Query("from") from: String, @retrofit2.http.Query("to") to: String): Envelope<CalendarOccurrence>
+
+    @GET("events/{id}")
+    suspend fun event(@Path("id") eventId: String): EventDetail
+
+    @POST("events/{id}/rsvp")
+    suspend fun rsvp(@Path("id") eventId: String, @Body body: RsvpBody): retrofit2.Response<Unit>
+
+    // --- Notification center ---
+    @GET("me/notifications")
+    suspend fun notifications(): NotificationsRes
+
+    @POST("me/notifications/read")
+    suspend fun markNotificationsRead(@Body body: MarkReadBody): retrofit2.Response<Unit>
 }
