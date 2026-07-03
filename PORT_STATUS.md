@@ -53,7 +53,8 @@ Base URL (mirrors iOS `resolveBaseURL`): debug → `http://10.0.2.2:8080/v1`
   Chat inbox (conversations + discover spaces) + thread (send). Builds green.
 - ✅ **Phase 4 Events** — Events list (calendar window), Event detail (RSVP + roster),
   Notification center (mark-all-read). Builds green.
-- ☐ **Phase 5 Giving** (online-only, §5.6) — Giving, Statement, Receipt
+- ✅ **Phase 5 Giving** (online-only §5.6) — Give (fund/amount/method, M-Pesa STK +
+  PayPal, card "soon"), Statement (history), Receipt (ledger trail). Builds green.
 - ☐ **Phase 6 Profile** — Profile detail, Gifts, Resources, Assistant
 - ☐ Home dashboard full build (rhythm ring, next-action hero, verse of the day)
 - ☐ Offline engine (queue + cursors + SQLCipher cache), connectivity, push (FCM)

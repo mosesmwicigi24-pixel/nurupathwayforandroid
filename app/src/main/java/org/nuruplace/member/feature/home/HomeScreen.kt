@@ -4,6 +4,7 @@
 package org.nuruplace.member.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,7 +27,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 
 @Composable
-fun HomeScreen(me: MeResponse?, onSignOut: () -> Unit, onOpenNotifications: () -> Unit = {}) {
+fun HomeScreen(me: MeResponse?, onSignOut: () -> Unit, onOpenNotifications: () -> Unit = {}, onOpenGive: () -> Unit = {}) {
     Column(
         Modifier
             .fillMaxSize()
@@ -64,6 +65,11 @@ fun HomeScreen(me: MeResponse?, onSignOut: () -> Unit, onOpenNotifications: () -
                 Kicker("Welcome")
                 Spacer(Modifier.height(Spacing.sm))
                 Text("Your daily rhythm, pathway and community land here.", style = NuruType.body, color = Nuru.ink600)
+            }
+            NuruCard(modifier = Modifier.clickable { onOpenGive() }) {
+                Kicker("Give")
+                Spacer(Modifier.height(Spacing.sm))
+                Text("Return to God what is His — tithe & offerings.", style = NuruType.body, color = Nuru.ink600)
             }
             TextButton(onClick = onSignOut) {
                 Text("Sign out", style = NuruType.cardCta, color = Nuru.danger)

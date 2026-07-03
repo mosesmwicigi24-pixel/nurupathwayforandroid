@@ -150,4 +150,14 @@ interface MemberApi {
 
     @POST("me/notifications/read")
     suspend fun markNotificationsRead(@Body body: MarkReadBody): retrofit2.Response<Unit>
+
+    // --- Giving (online-only, §5.6 — money is never queued) ---
+    @GET("giving/history")
+    suspend fun givingHistory(): Envelope<GivingRecord>
+
+    @POST("giving/intents")
+    suspend fun giving(@Body body: GiveBody): GivingIntentResult
+
+    @GET("giving/transactions/{id}")
+    suspend fun givingDetail(@Path("id") transactionId: String): GivingDetail
 }

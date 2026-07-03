@@ -54,6 +54,9 @@ import org.nuruplace.member.feature.community.PrayerWallScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
 import org.nuruplace.member.feature.events.EventsScreen
 import org.nuruplace.member.feature.events.NotificationsScreen
+import org.nuruplace.member.feature.give.GivingReceiptScreen
+import org.nuruplace.member.feature.give.GivingScreen
+import org.nuruplace.member.feature.give.GivingStatementScreen
 import org.nuruplace.member.feature.home.HomeScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
 import org.nuruplace.member.feature.pathway.LevelsScreen
@@ -108,7 +111,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         },
     ) { pad ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }) }
+            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }, onOpenGive = { nav.navigate("give") }) }
             composable("pathway") { LevelsScreen(onOpenLevel = { nav.navigate("level/$it") }) }
             composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
@@ -153,6 +156,18 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("notifications") { NotificationsScreen(onBack = { nav.popBackStack() }) }
+            composable("give") {
+                GivingScreen(onBack = { nav.popBackStack() }, onOpenStatement = { nav.navigate("statement") })
+            }
+            composable("statement") {
+                GivingStatementScreen(onBack = { nav.popBackStack() }, onOpenReceipt = { nav.navigate("receipt/$it") })
+            }
+            composable(
+                "receipt/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                GivingReceiptScreen(transactionId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+            }
             composable("profile") { ProfileScreen(me) { auth.signOut() } }
 
             composable(
