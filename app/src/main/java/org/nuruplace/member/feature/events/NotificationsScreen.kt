@@ -1,5 +1,8 @@
-// Notification center — the member's notifications with a mark-all-read action.
-// Unread rows get a gold dot. Port of the iOS NotificationsView.
+// Notification center — ported to the Figma NotificationsScreen. A white app bar
+// with an unread count + "Mark all read" navy pill, then rows carrying a
+// category-toned icon chip (info · success · warning · security — §B2), a gold
+// left-accent + pulsing dot when unread, and reward rows (badge/certificate/
+// level) in a gold gift treatment. Deep-links mirror the iOS routing.
 package org.nuruplace.member.feature.events
 
 import androidx.compose.foundation.background
@@ -11,18 +14,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -31,9 +40,9 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationRow
 import org.nuruplace.member.data.net.NotificationsRes
 import org.nuruplace.member.ui.components.AsyncContent
-import org.nuruplace.member.ui.components.NuruCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.relTime
 
@@ -53,33 +62,64 @@ private fun routeFor(n: NotificationRow): String? {
     }
 }
 
+/** The four backend notification categories → (glyph, foreground, tint). §B2. */
+private data class Tone(val glyph: String, val fg: Color, val bg: Color, val reward: Boolean = false)
+
+private fun toneFor(template: String): Tone {
+    val t = template.lowercase()
+    return when {
+        "badge" in t -> Tone("🏅", Nuru.navy, Nuru.gold, reward = true)
+        "certificate" in t || "cert" in t -> Tone("📜", Nuru.navy, Nuru.gold, reward = true)
+        "level" in t || "advanced" in t -> Tone("📈", Nuru.navy, Nuru.gold, reward = true)
+        "reflection" in t && ("return" in t || "revis" in t) -> Tone("✍️", Nuru.warning, Nuru.warningBg)     // warning
+        "event" in t || "reminder" in t -> Tone("📅", Nuru.info, Nuru.infoBg)                                 // info
+        "announcement" in t || "announce" in t -> Tone("📣", Nuru.info, Nuru.infoBg)                          // info
+        "system" in t || "security" in t || "login" in t || "password" in t -> Tone("⚙️", Nuru.ink600, Nuru.inputBg) // security
+        "prayer" in t || "verse" in t || "devotional" in t || "give" in t -> Tone("🌿", Nuru.info, Nuru.infoBg)
+        else -> Tone("🔔", Nuru.success, Nuru.successBg)                                                       // success default
+    }
+}
+
 @Composable
 fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     AsyncContent(load = { Net.client.api.notifications() }) { res: NotificationsRes, reload ->
         val scope = rememberCoroutineScope()
         Column(Modifier.fillMaxSize().background(Nuru.paper)) {
+            // White app bar with count + Mark-all pill.
             Row(
-                Modifier.fillMaxWidth().background(Nuru.navy).padding(Spacing.screen),
+                Modifier.fillMaxWidth().background(Nuru.white).padding(horizontal = Spacing.sm).padding(top = Spacing.lg, bottom = Spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onBack) { Text("Back", color = Nuru.onNavy, style = NuruType.cardCta) }
-                Text("Notifications", style = NuruType.title, color = Nuru.onNavy, modifier = Modifier.weight(1f).padding(start = Spacing.sm))
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy) }
+                Column(Modifier.weight(1f)) {
+                    Text("Notifications", style = NuruType.cardTitle, color = Nuru.ink)
+                    Text(if (res.unread > 0) "${res.unread} unread" else "All caught up ✨", style = NuruType.caption, color = Nuru.ink600)
+                }
                 if (res.unread > 0) {
-                    TextButton(onClick = {
-                        scope.launch { try { Net.client.api.markNotificationsRead(MarkReadBody(null)); reload() } catch (_: Exception) {} }
-                    }) { Text("Mark all read", color = Nuru.goldHi, style = NuruType.cardCta) }
+                    Box(
+                        Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
+                            .clickable {
+                                scope.launch { try { Net.client.api.markNotificationsRead(MarkReadBody(null)); reload() } catch (_: Exception) {} }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) { Text("✓ Mark all read", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
                 }
             }
+
             if (res.data.isEmpty()) {
-                Box(Modifier.fillMaxSize(), Alignment.Center) { Text("You're all caught up.", style = NuruType.body, color = Nuru.ink600) }
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(64.dp).clip(RoundedCornerShape(Radii.card)).background(Nuru.white), contentAlignment = Alignment.Center) {
+                        Text("✦", style = NuruType.display, color = Nuru.gold)
+                    }
+                    Spacer(Modifier.height(Spacing.md))
+                    Text("You're all caught up", style = NuruType.cardTitle, color = Nuru.ink)
+                    Text("New encouragement, reflections, and reminders land here.", style = NuruType.caption, color = Nuru.ink600)
+                }
             } else {
-                LazyColumn(
-                    Modifier.fillMaxWidth(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-                ) {
+                LazyColumn(Modifier.fillMaxWidth()) {
                     items(res.data, key = { it.notificationId }) { n ->
-                        NotifCard(n, onClick = { routeFor(n)?.let(onNavigate) })
+                        NotifRow(n, onClick = { routeFor(n)?.let(onNavigate) })
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(Nuru.border))
                     }
                 }
             }
@@ -88,18 +128,35 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
 }
 
 @Composable
-private fun NotifCard(n: NotificationRow, onClick: () -> Unit) {
-    NuruCard(modifier = androidx.compose.ui.Modifier.clickable { onClick() }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (n.isUnread) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(Nuru.gold))
-                Spacer(Modifier.size(Spacing.sm))
+private fun NotifRow(n: NotificationRow, onClick: () -> Unit) {
+    val tone = toneFor(n.template)
+    Box(Modifier.fillMaxWidth().background(if (n.isUnread) Nuru.white else Color.Transparent).clickable { onClick() }) {
+        if (n.isUnread) Box(Modifier.padding(vertical = Spacing.sm).size(width = 4.dp, height = 40.dp).clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)).background(Nuru.gold).align(Alignment.CenterStart))
+        Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.base), verticalAlignment = Alignment.Top) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.control)).background(tone.bg), contentAlignment = Alignment.Center) {
+                Text(tone.glyph, style = NuruType.body)
             }
+            Spacer(Modifier.size(Spacing.md))
             Column(Modifier.weight(1f)) {
-                Text(n.payload?.title ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() },
-                    style = NuruType.rowTitle, color = Nuru.ink, fontWeight = if (n.isUnread) FontWeight.SemiBold else FontWeight.Normal)
-                n.payload?.body?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
-                Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = Nuru.ink400)
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        n.payload?.title ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                        style = NuruType.rowTitle, color = Nuru.ink, modifier = Modifier.weight(1f),
+                        fontWeight = if (n.isUnread) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                    Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = Nuru.ink400)
+                }
+                n.payload?.body?.let { Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2) }
+                if (tone.reward && n.isUnread) {
+                    Spacer(Modifier.height(Spacing.xs))
+                    Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text("🎁 Tap to open your gift", style = NuruType.micro, color = Nuru.goldChipText)
+                    }
+                }
+            }
+            if (n.isUnread) {
+                Spacer(Modifier.size(Spacing.sm))
+                Box(Modifier.size(8.dp).clip(CircleShape).background(Nuru.gold))
             }
         }
     }
