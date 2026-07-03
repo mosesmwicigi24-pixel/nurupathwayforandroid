@@ -210,7 +210,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("gifts") { GiftsScreen(onBack = { nav.popBackStack() }) }
             composable("resources") { ResourcesScreen(onBack = { nav.popBackStack() }) }
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
-            composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }) }
+            composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(it) }) }
+            composable("firebase-account") { org.nuruplace.member.feature.profile.FirebaseAccountScreen(onBack = { nav.popBackStack() }) }
             composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
             composable("cell-info") { org.nuruplace.member.feature.home.CellInfoScreen(onBack = { nav.popBackStack() }) }
             composable(

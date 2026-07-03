@@ -7,11 +7,9 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    // Firebase (add-alongside): APPLY THIS ONCE `app/google-services.json` exists.
-    // The google-services plugin fails the build if the config file is missing, so
-    // it stays commented until the Android app is registered in Firebase project
-    // 777897756817 and google-services.json is dropped into app/. See FIREBASE_SETUP.md.
-    // alias(libs.plugins.google.services)
+    // Firebase (add-alongside): active — app/google-services.json present for
+    // com.nuruplace in project pathway-63ca4 (777897756817). See FIREBASE_SETUP.md.
+    alias(libs.plugins.google.services)
 }
 
 // Release signing — REUSES the existing "CN=Nuru Place" upload key so this app

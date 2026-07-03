@@ -48,7 +48,7 @@ import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
     LaunchedEffect(Unit) { prefs = runCatching { Net.client.api.notificationPreferences() }.getOrNull() }
@@ -69,6 +69,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                     PrefRow("Email", p.emailEnabled) { save(p.copy(emailEnabled = it)) }
                     PrefRow("SMS", p.smsEnabled) { save(p.copy(smsEnabled = it)) }
                 }
+            }
+            NuruCard(modifier = Modifier.clickable { onOpen("firebase-account") }) {
+                Kicker("Firebase account")
+                Spacer(Modifier.height(Spacing.xs))
+                Text("Email / password sign-in + Firestore (add-alongside)", style = NuruType.caption, color = Nuru.ink600)
             }
             NuruCard { TextSizeSection() }
             NuruCard { LocationSection() }
