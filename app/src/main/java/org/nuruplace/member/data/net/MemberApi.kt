@@ -42,6 +42,11 @@ interface MemberApi {
     @POST("modules/{id}/complete")
     suspend fun completeModule(@Path("id") moduleId: String, @Body body: CompleteBody): CompleteResult
 
+    // Standalone reflection (the "Reflect" gate step; persists even for quiz modules,
+    // which complete via the quiz not completeModule). Reuses SaveReflectionBody.
+    @POST("modules/{id}/reflection")
+    suspend fun submitModuleReflection(@Path("id") moduleId: String, @Body body: SaveReflectionBody): Unit
+
     // --- Module engagement heartbeat (reading/audio/video seconds + resume page) ---
     @GET("modules/{id}/engagement")
     suspend fun moduleEngagement(@Path("id") moduleId: String): ModuleEngagement
