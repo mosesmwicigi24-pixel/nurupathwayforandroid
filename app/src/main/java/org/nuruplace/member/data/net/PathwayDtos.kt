@@ -99,9 +99,32 @@ data class ModuleDetail(
     @Serializable(with = FlexIntSerializer::class) val quizPassMark: Int = 0,
     val currentVersion: Int = 1,
     val locked: Boolean = false,
+    // Server-authored pagination (additive; null on older servers). The reader
+    // paginates on this split; lesson_content stays the whole body for fallback.
+    val contentPages: List<String>? = null,
 ) {
     val requiresQuiz: Boolean get() = evaluationKind.lowercase().contains("quiz")
+
+    /** Pages to render — the server split when present, else the whole body. */
+    val pages: List<String> get() = contentPages?.takeIf { it.isNotEmpty() } ?: listOf(lessonContent)
 }
+
+// --- Module engagement (server-accumulated reading/audio/video seconds + resume page) ---
+@Serializable
+data class ModuleEngagement(
+    @Serializable(with = FlexIntSerializer::class) val readingSeconds: Int = 0,
+    @Serializable(with = FlexIntSerializer::class) val audioSeconds: Int = 0,
+    @Serializable(with = FlexIntSerializer::class) val videoSeconds: Int = 0,
+    @Serializable(with = FlexIntSerializer::class) val lastPage: Int = 0,
+)
+
+@Serializable
+data class EngagementBody(
+    val readingSeconds: Int? = null,
+    val audioSeconds: Int? = null,
+    val videoSeconds: Int? = null,
+    val lastPage: Int? = null,
+)
 
 @Serializable
 data class CompleteResult(

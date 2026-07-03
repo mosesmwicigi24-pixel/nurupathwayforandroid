@@ -42,6 +42,15 @@ interface MemberApi {
     @POST("modules/{id}/complete")
     suspend fun completeModule(@Path("id") moduleId: String, @Body body: CompleteBody): CompleteResult
 
+    // --- Module engagement heartbeat (reading/audio/video seconds + resume page) ---
+    @GET("modules/{id}/engagement")
+    suspend fun moduleEngagement(@Path("id") moduleId: String): ModuleEngagement
+
+    // Body is a JsonObject so null deltas are OMITTED (the server's zod schema
+    // rejects an explicit null for its optional numbers).
+    @POST("modules/{id}/engagement")
+    suspend fun reportModuleEngagement(@Path("id") moduleId: String, @Body body: kotlinx.serialization.json.JsonObject): ModuleEngagement
+
     @GET("modules/{id}/quiz")
     suspend fun quiz(@Path("id") moduleId: String): AssembledQuiz
 

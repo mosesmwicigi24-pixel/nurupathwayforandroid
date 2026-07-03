@@ -42,6 +42,10 @@ class ApiClient(context: Context) {
     /** Invoked when the refresh token itself is dead — the app returns to /login. */
     var onSessionExpired: (() -> Unit)? = null
 
+    /** Fire-and-forget scope for telemetry (e.g. the final engagement flush on
+     *  screen exit) that must outlive a composable's own lifecycle scope. */
+    val bgScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
     @OptIn(ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
