@@ -20,17 +20,29 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ScoresSummary
@@ -46,14 +58,39 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
     LaunchedEffect(Unit) { scores = runCatching { Net.client.api.scores() }.getOrNull() }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var avatarUrl by remember(me) { mutableStateOf(me?.profile?.avatarUrl) }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            val part = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let { bytes ->
+                    MultipartBody.Part.createFormData("file", "avatar.jpg", bytes.toRequestBody("image/*".toMediaTypeOrNull()))
+                }
+            }
+            if (part != null) {
+                runCatching { Net.client.api.uploadAvatar(part).avatarUrl }.getOrNull()?.let { avatarUrl = it }
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
         Column(
             Modifier.fillMaxWidth().background(Nuru.heroGradient).padding(horizontal = Spacing.screen, vertical = Spacing.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.size(72.dp).clip(CircleShape).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
-                Text(me?.profile?.fullName?.firstOrNull()?.uppercase() ?: "N", style = NuruType.display, color = Nuru.goldLo)
+            Box(
+                Modifier.size(72.dp).clip(CircleShape).background(Nuru.goldTint)
+                    .clickable { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!avatarUrl.isNullOrBlank()) {
+                    AsyncImage(model = avatarUrl, contentDescription = "Profile photo", modifier = Modifier.size(72.dp).clip(CircleShape))
+                } else {
+                    Text(me?.profile?.fullName?.firstOrNull()?.uppercase() ?: "N", style = NuruType.display, color = Nuru.goldLo)
+                }
             }
+            Text("Tap to change photo", style = NuruType.micro, color = Nuru.onNavyDim, modifier = Modifier.padding(top = Spacing.xs))
             Spacer(Modifier.height(Spacing.sm))
             Text(me?.profile?.fullName ?: "Member", style = NuruType.title, color = Nuru.onNavy)
             me?.profile?.email?.let { Text(it, style = NuruType.caption, color = Nuru.onNavyDim) }

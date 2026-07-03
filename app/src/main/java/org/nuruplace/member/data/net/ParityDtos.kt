@@ -265,3 +265,10 @@ data class ReactionToggleResult(
 
 @Serializable
 data class MediaReactBody(val emoji: String)
+
+// --- Account: avatar + password ---
+@Serializable
+data class AvatarResult(val avatarUrl: String = "")
+
+@Serializable
+data class ChangePasswordBody(val currentPassword: String, val newPassword: String)

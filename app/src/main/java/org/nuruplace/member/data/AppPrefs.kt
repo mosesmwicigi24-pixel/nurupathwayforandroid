@@ -1,0 +1,33 @@
+// Lightweight, non-sensitive app preferences (plain SharedPreferences — tokens
+// live in the encrypted TokenVault). Backs the in-app text-size control: the
+// scale is a Compose state so changing it re-composes the whole tree instantly,
+// and is persisted so it survives restarts. Mirrors the iOS @AppStorage
+// textScale + Nuru.textScaleKey.
+package org.nuruplace.member.data
+
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+
+object AppPrefs {
+    private const val FILE = "nuru_member_prefs"
+    private const val KEY_TEXT_SCALE = "nuru.textScale"
+
+    private lateinit var prefs: SharedPreferences
+
+    /** App-wide font scale (1.0 = default). Observed by NuruTheme. */
+    var textScale by mutableFloatStateOf(1.0f)
+        private set
+
+    fun init(context: Context) {
+        prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        textScale = prefs.getFloat(KEY_TEXT_SCALE, 1.0f)
+    }
+
+    fun updateTextScale(scale: Float) {
+        textScale = scale
+        if (::prefs.isInitialized) prefs.edit().putFloat(KEY_TEXT_SCALE, scale).apply()
+    }
+}

@@ -276,6 +276,14 @@ interface MemberApi {
     @POST("media/{id}/reactions")
     suspend fun toggleMediaReaction(@Path("id") mediaAssetId: String, @Body body: MediaReactBody): ReactionToggleResult
 
+    // --- Account: avatar (multipart, field "file", images ≤5 MB) + password ---
+    @retrofit2.http.Multipart
+    @POST("me/avatar")
+    suspend fun uploadAvatar(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): AvatarResult
+
+    @POST("me/password")
+    suspend fun changePassword(@Body body: ChangePasswordBody): Unit
+
     // --- Profile: notification prefs + MFA ---
     @GET("me/notification-preferences")
     suspend fun notificationPreferences(): NotificationPreferences

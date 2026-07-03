@@ -9,7 +9,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -162,9 +165,15 @@ private val NuruTypography = Typography(
 @Composable
 fun NuruTheme(content: @Composable () -> Unit) {
     @Suppress("UNUSED_EXPRESSION") isSystemInDarkTheme() // brand is light-only for now
-    MaterialTheme(
-        colorScheme = NuruColorScheme,
-        typography = NuruTypography,
-        content = content,
-    )
+    // App-wide text-size control: scale every sp value by the user's preference
+    // without disturbing dp layout metrics.
+    val base = LocalDensity.current
+    val scaled = Density(density = base.density, fontScale = base.fontScale * org.nuruplace.member.data.AppPrefs.textScale)
+    CompositionLocalProvider(LocalDensity provides scaled) {
+        MaterialTheme(
+            colorScheme = NuruColorScheme,
+            typography = NuruTypography,
+            content = content,
+        )
+    }
 }

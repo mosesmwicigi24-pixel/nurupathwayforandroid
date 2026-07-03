@@ -4,7 +4,9 @@
 package org.nuruplace.member.feature.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.MfaCodeBody
@@ -65,6 +68,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                     PrefRow("SMS", p.smsEnabled) { save(p.copy(smsEnabled = it)) }
                 }
             }
+            NuruCard { TextSizeSection() }
+            NuruCard { ChangePasswordSection() }
             NuruCard { TwoFactorSection() }
             Spacer(Modifier.height(Spacing.xxl))
         }
@@ -77,6 +82,68 @@ private fun PrefRow(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
         Text(label, style = NuruType.body, color = Nuru.ink, modifier = Modifier.weight(1f))
         Switch(checked = on, onCheckedChange = onToggle)
     }
+}
+
+private val TEXT_SIZES = listOf("Small" to 0.9f, "Default" to 1.0f, "Large" to 1.15f)
+
+@Composable
+private fun TextSizeSection() {
+    Kicker("Text size")
+    Spacer(Modifier.height(Spacing.sm))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        TEXT_SIZES.forEach { (label, scale) ->
+            val selected = kotlin.math.abs(org.nuruplace.member.data.AppPrefs.textScale - scale) < 0.01f
+            Box(
+                Modifier.weight(1f)
+                    .clip(RoundedCornerShape(Radii.control))
+                    .background(if (selected) Nuru.navyDeep else Nuru.surface)
+                    .clickable { org.nuruplace.member.data.AppPrefs.updateTextScale(scale) }
+                    .padding(vertical = Spacing.sm),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, style = NuruType.cardCta, color = if (selected) Nuru.onNavy else Nuru.ink600)
+            }
+        }
+    }
+    Spacer(Modifier.height(Spacing.xs))
+    Text("Adjusts text size across the whole app.", style = NuruType.micro, color = Nuru.ink400)
+}
+
+@Composable
+private fun ChangePasswordSection() {
+    val scope = rememberCoroutineScope()
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf<String?>(null) }
+
+    Kicker("Change password")
+    Spacer(Modifier.height(Spacing.sm))
+    OutlinedTextField(current, { current = it }, label = { Text("Current password") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), shape = RoundedCornerShape(Radii.control), modifier = Modifier.fillMaxWidth())
+    Spacer(Modifier.height(Spacing.xs))
+    OutlinedTextField(next, { next = it }, label = { Text("New password") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), shape = RoundedCornerShape(Radii.control), modifier = Modifier.fillMaxWidth())
+    Spacer(Modifier.height(Spacing.xs))
+    OutlinedTextField(confirm, { confirm = it }, label = { Text("Confirm new password") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), shape = RoundedCornerShape(Radii.control), modifier = Modifier.fillMaxWidth())
+    msg?.let { Spacer(Modifier.height(Spacing.xs)); Text(it, style = NuruType.caption, color = if (it.startsWith("Password")) Nuru.successText else Nuru.danger) }
+    Spacer(Modifier.height(Spacing.sm))
+    PrimaryButton("Update password", loading = busy, enabled = current.isNotBlank() && next.length >= 8, onClick = {
+        when {
+            next.length < 8 -> msg = "New password must be at least 8 characters."
+            next != confirm -> msg = "New passwords don't match."
+            !busy -> {
+                busy = true
+                scope.launch {
+                    try {
+                        Net.client.api.changePassword(org.nuruplace.member.data.net.ChangePasswordBody(current.trim(), next))
+                        msg = "Password updated."; current = ""; next = ""; confirm = ""
+                    } catch (ex: Exception) {
+                        msg = org.nuruplace.member.data.net.ApiException.message(ex)
+                    } finally { busy = false }
+                }
+            }
+        }
+    })
 }
 
 @Composable
