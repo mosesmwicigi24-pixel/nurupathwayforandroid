@@ -198,7 +198,12 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 PrayerWallDetailScreen(postId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("chat") {
-                ChatInboxScreen(onBack = { nav.popBackStack() }, onOpenThread = { nav.navigate("chat/$it") }, onNewMessage = { nav.navigate("new-message") })
+                ChatInboxScreen(
+                    onOpenThread = { nav.navigate("chat/$it") },
+                    onNewMessage = { nav.navigate("new-message") },
+                    onOpenAssistant = { nav.navigate("assistant") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                )
             }
             composable("new-message") {
                 org.nuruplace.member.feature.community.NewMessageScreen(
