@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pure-Compose app: the XML theme only styles the window/splash before
+         setContent runs. Parent on a platform theme so we don't need the XML
+         Material-Components library. Warm-paper window avoids a white flash. -->
+    <style name="Theme.NuruMember" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/nuru_paper</item>
+        <item name="android:statusBarColor">@color/nuru_navy</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
