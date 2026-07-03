@@ -182,4 +182,20 @@ interface MemberApi {
 
     @POST("assistant/chat")
     suspend fun assistantChat(@Body body: AssistantChatBody): AssistantReplyRes
+
+    // --- Home dashboard ---
+    @GET("me/rhythm/today")
+    suspend fun rhythmToday(): RhythmToday
+
+    @POST("me/rhythm/complete")
+    suspend fun completeRhythm(@Body body: RhythmBody): RhythmToday
+
+    @GET("me/home/next-action")
+    suspend fun nextAction(): NextActionEnvelope
+
+    @GET("me/home/verse")
+    suspend fun homeVerse(): TailoredVerse
+
+    @GET("me/achievements")
+    suspend fun achievements(): Achievements
 }

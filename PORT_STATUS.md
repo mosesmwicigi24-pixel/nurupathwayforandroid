@@ -58,7 +58,8 @@ Base URL (mirrors iOS `resolveBaseURL`): debug → `http://10.0.2.2:8080/v1`
 - ✅ **Phase 6 Profile** — Profile (identity + growth scores + menu), Your Calling
   (gifts profile + Likert assessment), Resources library, Nuru Assistant (AI chat).
   Builds green.
-- ☐ Home dashboard full build (rhythm ring, next-action hero, verse of the day)
+- ✅ **Phase 7 Home dashboard** — greeting + streak, today's rhythm ring (tap to
+  complete), next-best-action hero (deep-links), tailored verse of the day. Builds green.
 - ☐ Offline engine (queue + cursors + SQLCipher cache), connectivity, push (FCM)
 
 Each phase builds clean before moving on, same as the iOS port.

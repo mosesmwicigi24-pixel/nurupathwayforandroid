@@ -115,7 +115,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         },
     ) { pad ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }, onOpenGive = { nav.navigate("give") }) }
+            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }, onOpenGive = { nav.navigate("give") }, onNavigate = { nav.navigate(it) }) }
             composable("pathway") { LevelsScreen(onOpenLevel = { nav.navigate("level/$it") }) }
             composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
