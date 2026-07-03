@@ -62,7 +62,9 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/v1\"")
+            // Point debug at prod for on-emulator design verification (fast, no R8).
+            // Flip back to http://10.0.2.2:8080/v1 for local-backend development.
+            buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
@@ -88,6 +90,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

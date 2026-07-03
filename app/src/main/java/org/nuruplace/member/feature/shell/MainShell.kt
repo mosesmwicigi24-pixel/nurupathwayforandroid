@@ -11,12 +11,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -75,10 +80,12 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 
 private val TABS = listOf(
     Tab("home", "Home", Icons.Filled.Home),
-    Tab("pathway", "Pathway", Icons.AutoMirrored.Filled.List),
-    Tab("grow", "Grow", Icons.Filled.Favorite),
-    Tab("community", "Community", Icons.Filled.Person),
-    Tab("profile", "Profile", Icons.Filled.AccountBox),
+    Tab("pathway", "Pathway", Icons.Filled.MenuBook),
+    Tab("plans", "Plans", Icons.Filled.Bookmark),
+    Tab("events", "Events", Icons.Filled.CalendarMonth),
+    Tab("chat", "Chat", Icons.AutoMirrored.Filled.Chat),
+    Tab("give", "Give", Icons.Filled.VolunteerActivism),
+    Tab("profile", "Profile", Icons.Filled.Person),
 )
 
 @Composable
@@ -102,8 +109,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                                 popUpTo("home"); launchSingleTop = true
                             }
                         },
-                        icon = { Icon(tab.icon, tab.label) },
-                        label = { Text(tab.label, style = NuruType.micro) },
+                        icon = { Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp)) },
+                        label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
+                        alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Nuru.navyDeep,
                             selectedTextColor = Nuru.navyDeep,
@@ -117,7 +125,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         },
     ) { pad ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }, onOpenGive = { nav.navigate("give") }, onNavigate = { nav.navigate(it) }) }
+            composable("home") {
+                HomeScreen(
+                    me,
+                    onSignOut = { auth.signOut() },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                    onOpenGive = { nav.navigate("give") },
+                    onNavigate = { nav.navigate(it) },
+                    onSelectTab = { r -> nav.navigate(r) { popUpTo("home"); launchSingleTop = true } },
+                )
+            }
             composable("pathway") { LevelsScreen(me = me, onOpenLevel = { nav.navigate("level/$it") }) }
             composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }

@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import org.nuruplace.member.ui.components.FitImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.EventDetail
@@ -68,9 +69,7 @@ fun EventsScreen(onBack: () -> Unit, onOpenEvent: (String) -> Unit) {
                 ) {
                     items(events, key = { it.occurrenceId }) { e ->
                         NuruCard(padding = androidx.compose.foundation.layout.PaddingValues(0.dp), modifier = Modifier.clickable { onOpenEvent(e.occurrenceId) }) {
-                            e.primaryImageUrl?.let {
-                                AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(topStart = Radii.card, topEnd = Radii.card)))
-                            }
+                            FitImage(e.primaryImageUrl, modifier = Modifier.clip(RoundedCornerShape(topStart = Radii.card, topEnd = Radii.card)))
                             Column(Modifier.padding(Spacing.base)) {
                                 e.category?.let { Kicker(it) }
                                 Text(e.title, style = NuruType.cardTitle, color = Nuru.ink)
@@ -108,7 +107,7 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -
         }
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             e.primaryImageUrl?.let {
-                AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(220.dp))
+                FitImage(it)
             } ?: ScreenHeader(e.title, kicker = e.category ?: "Event", onBack = onBack)
 
             Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {

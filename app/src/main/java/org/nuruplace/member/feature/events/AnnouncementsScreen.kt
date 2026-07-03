@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.data.net.AnnouncementDetail
 import org.nuruplace.member.data.net.MyAnnouncement
 import org.nuruplace.member.data.net.Net
@@ -54,7 +55,7 @@ fun AnnouncementsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     items(rows, key = { it.announcementId }) { a ->
                         NuruCard(modifier = Modifier.clickable { onOpen(a.announcementId) }) {
                             a.primaryImageUrl?.let {
-                                AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(140.dp))
+                                FitImage(it)
                                 Spacer(Modifier.height(Spacing.sm))
                             }
                             androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
@@ -76,13 +77,13 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
     LaunchedEffect(announcementId) { runCatching { Net.client.api.openAnnouncement(announcementId) } }
     AsyncContent(key = announcementId, load = { Net.client.api.announcement(announcementId) }) { a: AnnouncementDetail, _ ->
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
-            a.primaryImageUrl?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(220.dp)) }
+            a.primaryImageUrl?.let { FitImage(it) }
                 ?: ScreenHeader(a.title, kicker = "Announcement", onBack = onBack)
             Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
                 if (a.primaryImageUrl != null) Text(a.title, style = NuruType.title, color = Nuru.ink)
                 Text(a.body, style = NuruType.bodyLg, color = Nuru.ink)
                 a.videoUrl?.let { org.nuruplace.member.ui.components.InlineVideo(it, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(org.nuruplace.member.ui.theme.Radii.card))) }
-                a.images.drop(1).forEach { AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(180.dp)) }
+                a.images.drop(1).forEach { FitImage(it) }
                 Spacer(Modifier.height(Spacing.xxl))
             }
         }

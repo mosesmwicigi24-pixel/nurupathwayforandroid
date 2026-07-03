@@ -85,6 +85,33 @@ object Nuru {
     val goldGradient = Brush.verticalGradient(listOf(Color(0xFFE5BC3A), Color(0xFFC9A227), Color(0xFFA8861C)))
     val primaryButton = Brush.verticalGradient(listOf(Color(0xFF143559), Color(0xFF0A2540), Color(0xFF07203A)))
 
+    // ── Home-local palette — ports `enum HomeFig` from the iOS HomeCards.swift so
+    // the Home feed matches pixel-for-pixel. `homeNavy` (#0A1628) is intentionally
+    // darker/cooler than the brand `navy` (#0B1F33) used in the tab bar / chrome. ──
+    val homeNavy = Color(0xFF0A1628)
+    val homeNavyDark = Color(0xFF060F1C)
+    val eyebrow = Color(0xFF9A7A2A)        // section labels + card kickers
+    val goldDeep = Color(0xFFB6862F)       // gold-gradient end
+    val goldSoft = Color(0xFFE6C068)       // progress-bar highlight
+    val metaGray = Color(0xFF5B6472)       // card secondary text
+    val faintGray = Color(0xFF74808F)      // card tertiary text
+    val priorityBg = Color(0xFFFFFAEC)     // priority strip / cream inset tint
+    val progressTrack = Color(0xFFEEF0F3)  // progress-bar + video placeholder track
+    val dayWord = Color(0xFF475569)        // daily-blessing italic body
+    val liveRed = Color(0xFFDC2626)        // LIVE pill / radio dot
+    // Mini-card + Grow-tile + score accents
+    val indigo = Color(0xFF6366F1)         // reading-plan tile
+    val indigoBg = Color(0xFFEEF2FF)
+    val answeredText = Color(0xFF92400E)   // "N answered" chip text (bg = warningBg)
+    val callingFg = Color(0xFFA855F7)      // "Your Calling" tile
+    val callingBg = Color(0xFFF5E8FF)
+    val hideWordFg = Color(0xFFB45309)     // "Hide His Word" tile (bg = warningBg)
+    val scoreWord = Color(0xFF2F6FB0)      // Word growth bar
+    val scorePrayer = Color(0xFFC98A3C)    // Prayer growth bar
+    // Home dark-card gradient (#0A1628 → #060F1C) and its radial gold glow accent
+    val homeNavyGradient = Brush.verticalGradient(listOf(homeNavy, homeNavyDark))
+    val headerGradient = Brush.verticalGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
+
     // Engagement bands (§B3): thriving / steady / watch / at_risk — mapped to the
     // canonical semantic palette so band chips read the same as every other chip.
     fun bandColor(band: String?): Color = when (band?.lowercase()) {
@@ -146,8 +173,15 @@ object NuruType {
     val label = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp)
     val caption = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp)
     val micro = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp)
-    val kicker = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp)
+    val kicker = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 1.4.sp)
     val cardCta = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 18.sp)
+    // Section labels that sit OUTSIDE a card (GROW YOUR FAITH · UPCOMING · YOUR
+    // COHORT) — iOS "Inter 11 bold, kerning 1.98", rendered in `Nuru.eyebrow`.
+    val sectionLabel = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 1.8.sp)
+    // Fraunces feature-card headline (verse text, card titles) — iOS "Fraunces 18 semibold".
+    val featureTitle = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 25.sp)
+    // Greeting — iOS "Fraunces 22 semibold, kerning −0.22".
+    val greeting = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp, letterSpacing = (-0.22).sp)
 }
 
 private val NuruColorScheme = lightColorScheme(
