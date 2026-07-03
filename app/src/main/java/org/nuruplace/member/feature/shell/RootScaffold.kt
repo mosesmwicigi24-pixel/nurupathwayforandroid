@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.nuruplace.member.auth.AuthStore
-import org.nuruplace.member.feature.home.HomeScreen
 import org.nuruplace.member.feature.login.LoginScreen
 import org.nuruplace.member.ui.theme.Nuru
 
@@ -30,6 +29,6 @@ fun RootScaffold(auth: AuthStore = viewModel()) {
 
         !state.authenticated -> LoginScreen(onAuthenticated = { auth.onAuthenticated() })
 
-        else -> HomeScreen(me = state.me, onSignOut = { auth.signOut() })
+        else -> MainShell(auth = auth, me = state.me)
     }
 }

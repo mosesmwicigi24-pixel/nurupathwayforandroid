@@ -32,9 +32,20 @@ Base URL (mirrors iOS `resolveBaseURL`): debug → `http://10.0.2.2:8080/v1`
 - **Verified:** `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL**, debug APK
   produced. Authed runtime render pending a live backend session (as with iOS).
 
+## Phase 1 — Pathway (✅ done, builds green + unit-tested)
+- ✅ Tab shell (Home · Pathway · Grow · Community · Profile) → `feature/shell/MainShell.kt`
+  (NavHost + bottom bar; Grow/Community/Profile are placeholders until their phases).
+- ✅ Levels hub → `LevelsScreen.kt` (GET /me/pathway; §1.9 locked levels dimmed).
+- ✅ Level detail → `LevelDetailScreen.kt` (module trail; finished level → exam CTA).
+- ✅ Module → `ModuleScreen.kt` (lesson + reflection/mark-complete, or quiz CTA).
+- ✅ Quiz + Level Exam → `QuizScreen.kt` (one-per-screen flow, all 5 kinds,
+  server-scored verdict, retry; shared by module quiz + level exam).
+- ✅ Gating → `LevelGating.kt` (pure §1.9) + `test/…/LevelGatingTest.kt` (5 tests pass).
+- ✅ DTOs + endpoints → `PathwayDtos.kt` (FlexInt numeric-drift, polymorphic quiz
+  options) + `MemberApi.kt` (pathway/modules/quiz/exam).
+- **Verified:** `assembleDebug` + `assembleRelease` (R8) + `testDebugUnitTest` all green.
+
 ## Screens still to port (mirrors iOS PORT_STATUS — ~37 total)
-- ☐ Tab shell (Home · Pathway · Grow · Community · Profile)
-- ☐ **Phase 1 Pathway** — Levels, LevelDetail, Module, Quiz (5 kinds, §1.9 lock)
 - ☐ **Phase 2 Grow** — Devotional, MemoryVerse, ReadingPlans (+detail/day),
   PrayerJournal, VerseLibrary
 - ☐ **Phase 3 Community** — PrayerWall (+detail), Chat inbox + thread
