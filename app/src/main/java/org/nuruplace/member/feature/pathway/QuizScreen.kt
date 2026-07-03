@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -139,11 +141,20 @@ private fun QuizFlow(
         Modifier.fillMaxSize().background(Nuru.coolPaper),
     ) {
         Column(
-            Modifier.fillMaxWidth().background(Nuru.navy).padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+            Modifier.fillMaxWidth().background(Nuru.navy).padding(horizontal = Spacing.screen).padding(top = Spacing.lg, bottom = Spacing.base),
         ) {
             Kicker(title)
-            Spacer(Modifier.height(Spacing.xs))
-            Text("Question ${idx + 1} of ${questions.size}", style = NuruType.caption, color = Nuru.onNavyDim)
+            // Gold progress dots — active dot widened, completed gold (Figma).
+            Spacer(Modifier.height(Spacing.md))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                questions.indices.forEach { i ->
+                    Box(
+                        Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
+                            .clip(RoundedCornerShape(Radii.pill))
+                            .background(if (i <= idx) Nuru.gold else Nuru.onNavy.copy(alpha = 0.18f)),
+                    )
+                }
+            }
         }
 
         Column(
@@ -151,6 +162,7 @@ private fun QuizFlow(
                 .padding(Spacing.screen),
             verticalArrangement = Arrangement.spacedBy(Spacing.base),
         ) {
+            Text("Question ${idx + 1} of ${questions.size}", style = NuruType.kicker, color = Nuru.ink400)
             Text(q.questionText, style = NuruType.cardTitle, color = Nuru.ink)
             when (q.kind) {
                 QKind.CHECKBOX -> q.choices().forEach { c ->
@@ -245,36 +257,74 @@ private fun OptionRow(text: String, selected: Boolean, multi: Boolean, onClick: 
 
 @Composable
 private fun ResultScreen(v: QuizVerdict, onDone: () -> Unit, onRetry: () -> Unit) {
-    val passed = v.isPassed || v.requiresManualReview
+    when {
+        v.isPassed || v.requiresManualReview -> PassResult(v, onDone)
+        else -> FailResult(v, onDone, onRetry)
+    }
+}
+
+/** Pass / manual-review ceremony — dark ground, concentric gold rings + medal,
+ *  a big gold score, and a gold "Continue Pathway" CTA (Figma pass result). */
+@Composable
+private fun PassResult(v: QuizVerdict, onDone: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().background(if (passed) Nuru.ceremonyGradient else Nuru.navyGradient)
-            .padding(Spacing.screen),
+        Modifier.fillMaxSize().background(Nuru.ceremonyGradient).padding(Spacing.screen),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(if (v.requiresManualReview) "✍️" else if (v.isPassed) "🎉" else "🔁", style = NuruType.display)
-        Spacer(Modifier.height(Spacing.base))
+        Box(Modifier.size(170.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(170.dp).clip(CircleShape).border(1.dp, Nuru.gold.copy(alpha = 0.18f), CircleShape))
+            Box(Modifier.size(138.dp).clip(CircleShape).border(1.dp, Nuru.gold.copy(alpha = 0.33f), CircleShape))
+            Box(
+                Modifier.size(110.dp).clip(CircleShape).background(Nuru.gold.copy(alpha = 0.09f))
+                    .border(2.dp, Nuru.gold.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Text(if (v.requiresManualReview) "✍️" else "🏅", style = NuruType.display) }
+        }
+        Spacer(Modifier.height(Spacing.xl))
+        if (!v.requiresManualReview) {
+            Text("${v.score}%", style = NuruType.display, color = Nuru.gold, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(Spacing.xs))
+        }
         Text(
-            when {
-                v.requiresManualReview -> "Submitted for review"
-                v.isPassed -> "Passed!"
-                else -> "Not quite yet"
-            },
-            style = NuruType.title, color = Nuru.onNavy, textAlign = TextAlign.Center,
+            if (v.requiresManualReview) "Submitted for review" else "Module Passed",
+            style = NuruType.title, color = Nuru.onNavy, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(Spacing.sm))
         Text(
-            if (v.requiresManualReview) "A mentor will review your written answers."
-            else "You scored ${v.score}% · pass mark ${v.passMark}%",
+            if (v.requiresManualReview) "A mentor will review your written answers." else "Excellent work — this module is now complete.",
             style = NuruType.body, color = Nuru.onNavyDim, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(Spacing.xl))
-        if (!v.isPassed && !v.requiresManualReview) {
-            PrimaryButton("Try again", onClick = onRetry)
-            Spacer(Modifier.height(Spacing.sm))
+        Box(Modifier.fillMaxWidth()) { PrimaryButton("Continue Pathway", onClick = onDone) }
+    }
+}
+
+/** Fail — light ground, review encouragement + Review/Retry (Figma fail result). */
+@Composable
+private fun FailResult(v: QuizVerdict, onDone: () -> Unit, onRetry: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(Nuru.coolPaper).padding(Spacing.screen),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(100.dp).clip(CircleShape).background(Nuru.navy.copy(alpha = 0.07f)), contentAlignment = Alignment.Center) {
+            Text("📖", style = NuruType.display)
         }
-        Box(Modifier.clickable { onDone() }.padding(Spacing.md)) {
-            Text("Done", style = NuruType.cardCta, color = Nuru.gold)
+        Spacer(Modifier.height(Spacing.lg))
+        Text("${v.score}%", style = NuruType.display, color = Nuru.ink, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(Spacing.xs))
+        Text("Almost there", style = NuruType.title, color = Nuru.ink, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(Spacing.sm))
+        Text(
+            "You need ${v.passMark}% to pass. Take a moment to review the lesson — you've got this.",
+            style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Spacing.xl))
+        Box(Modifier.fillMaxWidth()) { PrimaryButton("Review lesson", onClick = onDone) }
+        Spacer(Modifier.height(Spacing.sm))
+        Box(Modifier.clickable { onRetry() }.padding(Spacing.md)) {
+            Text("Retry quiz", style = NuruType.cardCta, color = Nuru.navy)
         }
     }
 }
