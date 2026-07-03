@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -53,8 +55,28 @@ import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
 
-private val FUNDS = listOf("tithe" to "Tithe", "offering" to "Offering", "gift" to "Gift", "mission" to "Mission", "discipleship" to "Discipleship")
-private val PRESETS = listOf(100, 500, 1000, 2000, 5000)
+// Funds carry the Figma's meaning + colour so giving reads as worship, not a form.
+private data class FundDef(val id: String, val name: String, val meaning: String, val glyph: String, val color: androidx.compose.ui.graphics.Color, val tint: androidx.compose.ui.graphics.Color)
+
+private val FUNDS = listOf(
+    FundDef("tithe", "Tithe", "A faithful portion", "🪙", Nuru.gold, Nuru.goldTint),
+    FundDef("offering", "Offering", "Freewill worship", "❤️", Nuru.danger, Nuru.dangerBg),
+    FundDef("gift", "Gift", "A special gift", "🎁", androidx.compose.ui.graphics.Color(0xFFA855F7), androidx.compose.ui.graphics.Color(0xFFF3E8FF)),
+    FundDef("mission", "Mission", "Beyond our walls", "🌍", Nuru.info, Nuru.infoBg),
+    FundDef("discipleship", "Discipleship", "Growing the Pathway", "📖", Nuru.success, Nuru.successBg),
+)
+
+// method id → (label, sub, glyph, available)
+private data class MethodDef(val id: String, val label: String, val sub: String, val glyph: String, val available: Boolean)
+
+private val METHODS = listOf(
+    MethodDef("mpesa", "M-Pesa", "STK push to your phone", "📱", true),
+    MethodDef("paypal", "PayPal", "Approve in PayPal", "🅿️", true),
+    MethodDef("airtel", "Airtel Money", "Coming soon", "📶", false),
+    MethodDef("card", "Card", "Coming soon", "💳", false),
+)
+
+private val PRESETS = listOf(200, 500, 1000, 2500, 5000)
 
 fun fmtMoney(minor: Int, currency: String): String = "$currency ${"%,.2f".format(minor / 100.0)}"
 
@@ -81,10 +103,10 @@ fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedule
         ScreenHeader("Give", kicker = "Return to God what is His", onBack = onBack)
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
             NuruCard {
-                Kicker("Fund")
+                Kicker("Choose a fund")
                 Spacer(Modifier.height(Spacing.sm))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    FUNDS.forEach { (key, label) -> Chip(label, fund == key) { fund = key } }
+                    FUNDS.forEach { f -> FundTile(f, fund == f.id) { fund = f.id } }
                 }
             }
             NuruCard {
@@ -97,15 +119,13 @@ fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedule
                 }
             }
             NuruCard {
-                Kicker("Method")
+                Kicker("How you'll give")
                 Spacer(Modifier.height(Spacing.sm))
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    Chip("M-Pesa", method == "mpesa") { method = "mpesa" }
-                    Chip("PayPal", method == "paypal") { method = "paypal" }
-                    Chip("Card · soon", false) {}
+                METHODS.forEach { m ->
+                    MethodTile(m, method == m.id) { if (m.available) method = m.id }
+                    Spacer(Modifier.height(Spacing.sm))
                 }
                 if (method == "mpesa") {
-                    Spacer(Modifier.height(Spacing.sm))
                     OutlinedTextField(phone, { phone = it }, label = { Text("M-Pesa phone (2547…)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), shape = RoundedCornerShape(Radii.control), modifier = Modifier.fillMaxWidth())
                 }
             }
@@ -141,6 +161,47 @@ private fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) { Text(label, style = NuruType.cardCta, color = if (on) Nuru.goldChipText else Nuru.ink) }
+}
+
+@Composable
+private fun FundTile(f: FundDef, on: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(Radii.control))
+            .background(if (on) f.tint else Nuru.surface)
+            .border(1.dp, if (on) f.color else Nuru.border, RoundedCornerShape(Radii.control))
+            .clickable { onClick() }
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(f.glyph, style = NuruType.body)
+        Spacer(Modifier.size(Spacing.sm))
+        Column {
+            Text(f.name, style = NuruType.cardCta, color = if (on) f.color else Nuru.ink, fontWeight = FontWeight.SemiBold)
+            Text(f.meaning, style = NuruType.micro, color = Nuru.ink400)
+        }
+    }
+}
+
+@Composable
+private fun MethodTile(m: MethodDef, on: Boolean, onClick: () -> Unit) {
+    val activeBg = if (m.id == "mpesa") Nuru.successBg else Nuru.goldTint
+    val activeLine = if (m.id == "mpesa") Nuru.success else Nuru.gold
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.control))
+            .background(if (on) activeBg else Nuru.surface)
+            .border(1.dp, if (on) activeLine else Nuru.border, RoundedCornerShape(Radii.control))
+            .then(if (m.available) Modifier.clickable { onClick() } else Modifier.alpha(0.55f))
+            .padding(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(m.glyph, style = NuruType.title)
+        Spacer(Modifier.size(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text(m.label, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+            Text(m.sub, style = NuruType.micro, color = Nuru.ink400)
+        }
+        if (on) Text("✓", style = NuruType.rowTitle, color = activeLine)
+    }
 }
 
 @Composable
