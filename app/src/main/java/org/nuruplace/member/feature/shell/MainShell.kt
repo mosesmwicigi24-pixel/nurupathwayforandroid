@@ -58,6 +58,7 @@ import org.nuruplace.member.feature.community.ChatThreadScreen
 import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
 import org.nuruplace.member.feature.community.PrayerWallScreen
+import org.nuruplace.member.feature.events.AllEventsCalendarScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
 import org.nuruplace.member.feature.events.EventsScreen
 import org.nuruplace.member.feature.events.NotificationsScreen
@@ -212,7 +213,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 ChatThreadScreen(conversationId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("events") {
-                EventsScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
+                EventsScreen(
+                    onOpenEvent = { nav.navigate("event/$it") },
+                    onOpenCalendar = { nav.navigate("events-calendar") },
+                    onOpenAnnouncement = { nav.navigate("announcement/$it") },
+                    onOpenAnnouncements = { nav.navigate("announcements") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                )
+            }
+            composable("events-calendar") {
+                AllEventsCalendarScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
             }
             composable(
                 "event/{id}",
