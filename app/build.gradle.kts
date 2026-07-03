@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,26 +8,57 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Release signing — REUSES the existing "CN=Nuru Place" upload key so this app
+// installs as an UPDATE over the app testers already have (com.nuruplace). The
+// passwords live in the RN app's git-ignored keystore.properties; gradle reads
+// them at build time — they are never copied into this repo. Provide your own
+// keystore.properties at this repo's root to override (also git-ignored).
+fun releaseSigning(): Pair<Properties, File>? {
+    val candidates = listOf(
+        rootProject.file("keystore.properties"),
+        rootProject.file("../pathway/packages/mobile/android/keystore.properties"),
+    )
+    val propsFile = candidates.firstOrNull { it.exists() } ?: return null
+    val props = Properties().apply { propsFile.inputStream().use { load(it) } }
+    val storeName = props.getProperty("storeFile") ?: return null
+    // storeFile is relative to the RN app module (…/android/app).
+    val ks = File(File(propsFile.parentFile, "app"), storeName)
+        .takeIf { it.exists() } ?: File(propsFile.parentFile, storeName)
+    return if (ks.exists()) props to ks else null
+}
+val signing = releaseSigning()
+
 android {
     namespace = "org.nuruplace.member"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.nuruplace.member"
+        applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 10                  // > 9 (installed RN build) so it registers as an update
+        versionName = "2.0.0"
         vectorDrawables { useSupportLibrary = true }
+    }
+
+    signingConfigs {
+        signing?.let { (props, ks) ->
+            create("release") {
+                storeFile = ks
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         debug {
-            // Simulator/dev builds talk to the dev machine; release talks to prod.
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/v1\"")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
+            signing?.let { signingConfig = signingConfigs.getByName("release") }
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

@@ -8,3 +8,7 @@
 /captures
 .externalNativeBuild
 .cxx
+
+# signing secrets
+/keystore.properties
+*.keystore
