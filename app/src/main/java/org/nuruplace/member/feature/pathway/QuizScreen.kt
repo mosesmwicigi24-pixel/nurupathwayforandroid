@@ -72,12 +72,13 @@ fun QuizScreen(
     loadQuestions: suspend () -> List<QuizQuestion>,
     submit: suspend (answers: List<QuizAnswer>, clientMutationId: String) -> QuizVerdict,
     onDone: () -> Unit,
+    onPassed: (() -> Unit)? = null,   // level exam: route to the level-complete ceremony
 ) {
     AsyncContent(key = title, load = { loadQuestions() }) { questions, _ ->
         if (questions.isEmpty()) {
             EmptyQuiz(onDone)
         } else {
-            QuizFlow(title, questions, submit, onDone)
+            QuizFlow(title, questions, submit, onDone, onPassed)
         }
     }
 }
@@ -88,6 +89,7 @@ private fun QuizFlow(
     questions: List<QuizQuestion>,
     submit: suspend (List<QuizAnswer>, String) -> QuizVerdict,
     onDone: () -> Unit,
+    onPassed: (() -> Unit)?,
 ) {
     val scope = rememberCoroutineScope()
     val values = remember { mutableStateMapOf<String, String>() }          // single / scale / text
@@ -130,7 +132,10 @@ private fun QuizFlow(
     }
 
     verdict?.let { v ->
-        ResultScreen(v, onDone = onDone, onRetry = {
+        // A passed level exam continues into the level-complete ceremony; a passed
+        // module quiz (or manual review) just returns to the pathway.
+        val onContinue = if (v.isPassed && onPassed != null) onPassed else onDone
+        ResultScreen(v, onDone = onContinue, onRetry = {
             verdict = null; error = null; values.clear(); checks.clear(); idx = 0; mutationId = newId()
         })
         return

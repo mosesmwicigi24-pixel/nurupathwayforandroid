@@ -197,6 +197,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 GivingReceiptScreen(transactionId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("profile") { ProfileScreen(me, onOpen = { nav.navigate(it) }, onSignOut = { auth.signOut() }) }
+            composable(
+                "level-complete/{n}",
+                arguments = listOf(navArgument("n") { type = NavType.IntType }),
+            ) { entry ->
+                org.nuruplace.member.feature.pathway.LevelCompleteScreen(
+                    levelNumber = entry.arguments?.getInt("n") ?: 1,
+                    onContinue = { nav.popBackStack() },
+                )
+            }
             composable("gifts") { GiftsScreen(onBack = { nav.popBackStack() }) }
             composable("resources") { ResourcesScreen(onBack = { nav.popBackStack() }) }
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
@@ -265,6 +274,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         QuizVerdict(r.scoreAchieved, r.passMark, r.isPassed, r.requiresManualReview)
                     },
                     onDone = { nav.popBackStack() },
+                    onPassed = { nav.navigate("level-complete/$n") { popUpTo("pathway") } },
                 )
             }
         }
