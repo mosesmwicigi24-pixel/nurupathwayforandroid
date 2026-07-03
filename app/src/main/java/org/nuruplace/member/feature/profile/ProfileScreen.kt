@@ -4,7 +4,9 @@
 package org.nuruplace.member.feature.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -56,7 +59,11 @@ import org.nuruplace.member.ui.theme.Spacing
 @Composable
 fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Unit) {
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
-    LaunchedEffect(Unit) { scores = runCatching { Net.client.api.scores() }.getOrNull() }
+    var achievements by remember { mutableStateOf<org.nuruplace.member.data.net.Achievements?>(null) }
+    LaunchedEffect(Unit) {
+        scores = runCatching { Net.client.api.scores() }.getOrNull()
+        achievements = runCatching { Net.client.api.achievements() }.getOrNull()
+    }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -94,6 +101,16 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             Spacer(Modifier.height(Spacing.sm))
             Text(me?.profile?.fullName ?: "Member", style = NuruType.title, color = Nuru.onNavy)
             me?.profile?.email?.let { Text(it, style = NuruType.caption, color = Nuru.onNavyDim) }
+            // Role + place chips (real /me identity).
+            val role = me?.profile?.role
+            val place = listOfNotNull(me?.profile?.city, me?.profile?.countryCode).joinToString(" · ").ifBlank { null }
+            if (role != null || place != null) {
+                Spacer(Modifier.height(Spacing.sm))
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    role?.let { IdentityChip(it) }
+                    place?.let { IdentityChip(it) }
+                }
+            }
         }
 
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -114,6 +131,13 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     }
                 }
             }
+
+            // Engagement band self-view — encouraging, never ranking (D-M8).
+            scores?.let { s -> BandCard(s.overall.band, s.overall.score) }
+
+            // Achievements — earned badges + streak (real /me/achievements).
+            achievements?.let { a -> if (a.badges.isNotEmpty() || a.streak.current > 0) AchievementsCard(a) }
+
             MenuRow("Your Calling", "Spiritual gifts") { onOpen("gifts") }
             MenuRow("Resources", "Books, talks, articles") { onOpen("resources") }
             MenuRow("Nuru Assistant", "Ask a discipleship question") { onOpen("assistant") }
@@ -142,4 +166,74 @@ private fun MenuRow(title: String, subtitle: String, onClick: () -> Unit) {
         Text(title, style = NuruType.rowTitle, color = Nuru.ink)
         Text(subtitle, style = NuruType.caption, color = Nuru.ink600)
     }
+}
+
+@Composable
+private fun IdentityChip(label: String) {
+    Box(
+        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(Radii.pill))
+            .background(Nuru.onNavy.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 3.dp),
+    ) { Text(label, style = NuruType.micro, color = Nuru.onNavy) }
+}
+
+/** Encouraging engagement-band card — supportive copy, never a ranking (D-M8). */
+@Composable
+private fun BandCard(band: String, score: Int) {
+    val (line, tint) = when (band.lowercase().replace(' ', '_')) {
+        "thriving" -> "You're thriving — your roots run deep. Keep watering them." to Nuru.success
+        "steady" -> "Steady and faithful. Small, consistent steps are forming you." to Nuru.info
+        "watch" -> "A gentle nudge — a little rhythm this week will re-centre you." to Nuru.warning
+        "at_risk" -> "Let's reconnect — small steps count. Heaven is cheering you on." to Nuru.danger
+        else -> "Your journey is your own — one faithful day at a time." to Nuru.gold
+    }
+    NuruCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(tint))
+            Spacer(Modifier.size(Spacing.sm))
+            Text(band.replace('_', ' ').replaceFirstChar { it.uppercase() }, style = NuruType.kicker, color = tint)
+        }
+        Spacer(Modifier.height(Spacing.xs))
+        Text(line, style = NuruType.body, color = Nuru.ink)
+    }
+}
+
+/** Earned badges + streak. Medallions read as a keepsake row, not a scoreboard. */
+@Composable
+private fun AchievementsCard(a: org.nuruplace.member.data.net.Achievements) {
+    NuruCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Kicker("Achievements", modifier = Modifier.weight(1f))
+            if (a.streak.current > 0) Text("🔥 ${a.streak.current}-day streak", style = NuruType.micro, color = Nuru.goldLo)
+        }
+        if (a.badges.isNotEmpty()) {
+            Spacer(Modifier.height(Spacing.md))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
+                a.badges.forEach { b -> BadgeMedallion(b) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BadgeMedallion(b: org.nuruplace.member.data.net.Badge) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(72.dp)) {
+        Box(
+            Modifier.size(52.dp).clip(CircleShape).background(Nuru.goldTint)
+                .then(Modifier.border(1.dp, Nuru.gold.copy(alpha = 0.4f), CircleShape)),
+            contentAlignment = Alignment.Center,
+        ) { Text(badgeGlyph(b.category), style = NuruType.title) }
+        Spacer(Modifier.height(Spacing.xs))
+        Text(b.name, style = NuruType.micro, color = Nuru.ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+    }
+}
+
+private fun badgeGlyph(category: String): String = when (category.lowercase()) {
+    "consistency" -> "🔥"
+    "community" -> "🤝"
+    "service" -> "🙌"
+    "journey" -> "🧭"
+    else -> "🏅"
 }
