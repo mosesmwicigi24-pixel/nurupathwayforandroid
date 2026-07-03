@@ -50,8 +50,10 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 
+// The calm all-levels overview (iOS LevelsMapView) — reached from the Pathway hub's
+// "Map view" link. The hub itself is PathwayHubScreen.
 @Composable
-fun LevelsScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit) {
+fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> Unit = {}) {
     AsyncContent(load = { Net.client.api.pathway() }) { summary: PathwaySummary, _ ->
         val levels = summary.levels
         val totalModules = levels.sumOf { it.totalModules }
@@ -71,6 +73,8 @@ fun LevelsScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit) {
                     Modifier.fillMaxWidth().background(Nuru.surface)
                         .padding(horizontal = Spacing.screen).padding(top = Spacing.xl, bottom = Spacing.lg),
                 ) {
+                    Text("‹  Pathway", style = NuruType.cardCta, color = Nuru.navy, modifier = Modifier.clickable { onBack() })
+                    Spacer(Modifier.height(Spacing.md))
                     Kicker(if (firstName != null) "Welcome back, $firstName" else "Welcome back")
                     Spacer(Modifier.height(Spacing.md))
                     Row(verticalAlignment = Alignment.Bottom) {

@@ -68,7 +68,8 @@ import org.nuruplace.member.feature.profile.GiftsScreen
 import org.nuruplace.member.feature.profile.ProfileScreen
 import org.nuruplace.member.feature.profile.ResourcesScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
-import org.nuruplace.member.feature.pathway.LevelsScreen
+import org.nuruplace.member.feature.pathway.LevelsMapScreen
+import org.nuruplace.member.feature.pathway.PathwayHubScreen
 import org.nuruplace.member.feature.pathway.ModuleScreen
 import org.nuruplace.member.feature.pathway.QuizScreen
 import org.nuruplace.member.feature.pathway.QuizVerdict
@@ -135,7 +136,19 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onSelectTab = { r -> nav.navigate(r) { popUpTo("home"); launchSingleTop = true } },
                 )
             }
-            composable("pathway") { LevelsScreen(me = me, onOpenLevel = { nav.navigate("level/$it") }) }
+            composable("pathway") {
+                PathwayHubScreen(
+                    me = me,
+                    onOpenLevel = { nav.navigate("level/$it") },
+                    onOpenModule = { nav.navigate("module/$it") },
+                    onOpenExam = { nav.navigate("exam/$it") },
+                    onOpenMentor = { nav.navigate("mentor") },
+                    onOpenMap = { nav.navigate("pathway-map") },
+                )
+            }
+            composable("pathway-map") {
+                LevelsMapScreen(me = me, onOpenLevel = { nav.navigate("level/$it") }, onBack = { nav.popBackStack() })
+            }
             composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
             composable("memory-verses") { MemoryVerseScreen(onBack = { nav.popBackStack() }) }
