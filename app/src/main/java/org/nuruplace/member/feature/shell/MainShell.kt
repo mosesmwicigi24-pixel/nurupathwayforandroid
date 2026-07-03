@@ -142,7 +142,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 PrayerWallDetailScreen(postId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("chat") {
-                ChatInboxScreen(onBack = { nav.popBackStack() }, onOpenThread = { nav.navigate("chat/$it") })
+                ChatInboxScreen(onBack = { nav.popBackStack() }, onOpenThread = { nav.navigate("chat/$it") }, onNewMessage = { nav.navigate("new-message") })
+            }
+            composable("new-message") {
+                org.nuruplace.member.feature.community.NewMessageScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenThread = { nav.navigate("chat/$it") { popUpTo("chat") } },
+                )
             }
             composable(
                 "chat/{id}",

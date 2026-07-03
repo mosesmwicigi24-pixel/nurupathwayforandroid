@@ -143,6 +143,12 @@ interface MemberApi {
     @POST("chat/dms")
     suspend fun createDm(@Body body: DmBody): DmRes
 
+    @POST("chat/spaces/{id}/join")
+    suspend fun joinChatSpace(@Path("id") conversationId: String): Unit
+
+    @POST("chat/messages/{id}/reactions")
+    suspend fun toggleChatReaction(@Path("id") messageId: String, @Body body: ReactBody): ReactOn
+
     // --- Events / calendar ---
     @GET("calendar")
     suspend fun calendar(@retrofit2.http.Query("from") from: String, @retrofit2.http.Query("to") to: String): Envelope<CalendarOccurrence>
