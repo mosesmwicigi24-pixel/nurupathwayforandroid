@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,6 +27,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
@@ -69,8 +73,18 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
     ) {
         Spacer(Modifier.height(Spacing.xl))
         BrandMark(onDark = true)
+        // Gold rule (line · dot · line) + missionary caption — Figma brand lockup.
+        Spacer(Modifier.height(Spacing.md))
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Spacing.sm),
+        ) {
+            androidx.compose.foundation.layout.Box(Modifier.width(28.dp).height(1.dp).background(Nuru.gold.copy(alpha = 0.5f)))
+            androidx.compose.foundation.layout.Box(Modifier.size(4.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Nuru.gold.copy(alpha = 0.7f)))
+            androidx.compose.foundation.layout.Box(Modifier.width(28.dp).height(1.dp).background(Nuru.gold.copy(alpha = 0.5f)))
+        }
         Spacer(Modifier.height(Spacing.sm))
-        Text("Discipleship Pathway", style = NuruType.caption, color = Nuru.onNavyDim)
+        Text("A MISSIONARY SENDING CHURCH", style = NuruType.micro, color = Nuru.onNavyFaint)
         Spacer(Modifier.height(Spacing.xl))
 
         NuruCard(padding = androidx.compose.foundation.layout.PaddingValues(Spacing.lg)) {
