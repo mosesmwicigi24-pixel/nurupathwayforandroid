@@ -89,7 +89,13 @@ interface MemberApi {
     suspend fun completePlanDay(@Path("id") planId: String, @Body body: CompleteDayBody): Unit
 
     @POST("growth/segments/{id}/complete")
-    suspend fun completeSegment(@Path("id") segmentId: String): Unit
+    suspend fun completeSegment(@Path("id") segmentId: String): SegmentCompleteResult
+
+    @GET("growth/plans/{id}/days/{n}/reflection")
+    suspend fun dayReflection(@Path("id") planId: String, @Path("n") dayNumber: Int): PlanDayReflectionEnv
+
+    @POST("growth/plans/{id}/days/{n}/reflection")
+    suspend fun saveDayReflection(@Path("id") planId: String, @Path("n") dayNumber: Int, @Body body: SaveReflectionBody): PlanDayReflection
 
     // --- Prayer journal (private, §5.4) ---
     @GET("me/prayers")

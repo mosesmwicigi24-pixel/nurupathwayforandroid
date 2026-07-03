@@ -47,7 +47,9 @@ import org.nuruplace.member.data.net.SubmitBody
 import org.nuruplace.member.feature.grow.DevotionalScreen
 import org.nuruplace.member.feature.grow.GrowHubScreen
 import org.nuruplace.member.feature.grow.MemoryVerseScreen
+import org.nuruplace.member.feature.grow.PlanDayScreen
 import org.nuruplace.member.feature.grow.PlanDetailScreen
+import org.nuruplace.member.feature.grow.PlanSegmentScreen
 import org.nuruplace.member.feature.grow.PrayerJournalScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
@@ -153,13 +155,34 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
             composable("memory-verses") { MemoryVerseScreen(onBack = { nav.popBackStack() }) }
             composable("plans") {
-                ReadingPlansScreen(onBack = { nav.popBackStack() }, onOpenPlan = { nav.navigate("plan/$it") })
+                ReadingPlansScreen(
+                    onOpenPlan = { nav.navigate("plan/$it") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                )
             }
             composable(
                 "plan/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
             ) { entry ->
-                PlanDetailScreen(planId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                val id = entry.arguments?.getString("id") ?: ""
+                PlanDetailScreen(planId = id, onBack = { nav.popBackStack() }, onOpenDay = { d -> nav.navigate("plan/$id/day/$d") })
+            }
+            composable(
+                "plan/{id}/day/{n}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val n = entry.arguments?.getInt("n") ?: 1
+                PlanDayScreen(planId = id, dayNumber = n, onBack = { nav.popBackStack() }, onOpenSegment = { i -> nav.navigate("plan/$id/day/$n/seg/$i") })
+            }
+            composable(
+                "plan/{id}/day/{n}/seg/{i}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }, navArgument("i") { type = NavType.IntType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val n = entry.arguments?.getInt("n") ?: 1
+                val i = entry.arguments?.getInt("i") ?: 0
+                PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
             }
             composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
