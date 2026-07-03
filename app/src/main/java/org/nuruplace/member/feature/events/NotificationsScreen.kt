@@ -40,6 +40,7 @@ import org.nuruplace.member.util.relTime
 /** Map a notification to an in-app destination (mirrors the iOS deep-link routing). */
 private fun routeFor(n: NotificationRow): String? {
     n.payload?.moduleId?.let { return "module/$it" }
+    n.payload?.announcementId?.let { return "announcement/$it" }
     n.payload?.levelNumber?.let { return "pathway" }
     val t = n.template.lowercase()
     return when {

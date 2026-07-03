@@ -60,7 +60,7 @@ fun fmtMoney(minor: Int, currency: String): String = "$currency ${"%,.2f".format
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit) {
+fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedules: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var fund by remember { mutableStateOf("tithe") }
     var amount by remember { mutableStateOf("") }
@@ -126,6 +126,7 @@ fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit) {
                 },
             )
             TextButton(onClick = onOpenStatement) { Text("View my giving statement", style = NuruType.cardCta, color = Nuru.goldLo) }
+            TextButton(onClick = onOpenSchedules) { Text("Manage recurring gifts", style = NuruType.cardCta, color = Nuru.goldLo) }
             Spacer(Modifier.height(Spacing.xxl))
         }
     }

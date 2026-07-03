@@ -121,10 +121,66 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit) {
                     Kicker("Who's going")
                     roster.forEach { Text("• ${it.fullName}", style = NuruType.body, color = Nuru.ink) }
                 }
+
+                // Buzz feed ("Who's coming" wall)
+                EventBuzz(eventId)
                 Spacer(Modifier.height(Spacing.xxl))
             }
         }
     }
+}
+
+@Composable
+private fun EventBuzz(eventId: String) {
+    org.nuruplace.member.ui.components.AsyncContent(key = "buzz-$eventId", load = { Net.client.api.eventPosts(eventId).data }) { posts, reload ->
+        val scope = rememberCoroutineScope()
+        var draft by remember { mutableStateOf("") }
+        var busy by remember { mutableStateOf(false) }
+        Column {
+            Kicker("Buzz")
+            Spacer(Modifier.height(Spacing.sm))
+            androidx.compose.material3.OutlinedTextField(
+                draft, { draft = it }, placeholder = { Text("Say you're coming…") },
+                shape = RoundedCornerShape(Radii.control), modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(Spacing.sm))
+            org.nuruplace.member.ui.components.PrimaryButton("Post", loading = busy, enabled = draft.isNotBlank(), onClick = {
+                if (!busy) {
+                    busy = true
+                    scope.launch {
+                        try {
+                            Net.client.api.createEventPost(eventId, org.nuruplace.member.data.net.EventPostBody(java.util.UUID.randomUUID().toString(), draft.trim(), java.util.UUID.randomUUID().toString()))
+                            draft = ""; reload()
+                        } catch (_: Exception) {} finally { busy = false }
+                    }
+                }
+            })
+            Spacer(Modifier.height(Spacing.sm))
+            posts.forEach { p ->
+                NuruCard {
+                    Text(p.authorName, style = NuruType.label, color = Nuru.ink, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    p.body?.let { Text(it, style = NuruType.body, color = Nuru.ink) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        BuzzReact("🎉 ${p.cheerCount}", p.myReaction == "cheer") { react(scope, eventId, p.postId, "cheer", reload) }
+                        BuzzReact("❤️ ${p.loveCount}", p.myReaction == "love") { react(scope, eventId, p.postId, "love", reload) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun react(scope: kotlinx.coroutines.CoroutineScope, eventId: String, postId: String, kind: String, reload: () -> Unit) {
+    scope.launch { try { Net.client.api.reactToEventPost(eventId, postId, org.nuruplace.member.data.net.EventReactBody(kind)); reload() } catch (_: Exception) {} }
+}
+
+@Composable
+private fun BuzzReact(label: String, on: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(Radii.pill))
+            .background(if (on) Nuru.goldTint else Nuru.surface)
+            .clickable { onClick() }.padding(horizontal = 12.dp, vertical = 6.dp),
+    ) { Text(label, style = NuruType.micro, color = if (on) Nuru.goldChipText else Nuru.ink600) }
 }
 
 @Composable

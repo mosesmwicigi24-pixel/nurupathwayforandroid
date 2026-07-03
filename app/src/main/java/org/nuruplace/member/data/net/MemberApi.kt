@@ -17,6 +17,15 @@ interface MemberApi {
     @POST("auth/login/mfa")
     suspend fun completeMfa(@Body body: MfaBody): Session
 
+    @POST("auth/register")
+    suspend fun register(@Body body: RegisterBody): Session
+
+    @POST("auth/password/forgot")
+    suspend fun forgotPassword(@Body body: ForgotBody): ForgotRes
+
+    @POST("auth/password/reset")
+    suspend fun resetPassword(@Body body: ResetBody): Unit
+
     @GET("me")
     suspend fun me(): MeResponse
 
@@ -198,4 +207,40 @@ interface MemberApi {
 
     @GET("me/achievements")
     suspend fun achievements(): Achievements
+
+    // --- Recurring giving schedules ---
+    @GET("giving/schedules")
+    suspend fun schedules(): Envelope<GivingSchedule>
+
+    @POST("giving/schedules/{id}/cancel")
+    suspend fun cancelSchedule(@Path("id") scheduleId: String): Unit
+
+    // --- Announcements ---
+    @GET("me/announcements")
+    suspend fun myAnnouncements(): Envelope<MyAnnouncement>
+
+    @GET("announcements/{id}")
+    suspend fun announcement(@Path("id") announcementId: String): AnnouncementDetail
+
+    @POST("announcements/{id}/open")
+    suspend fun openAnnouncement(@Path("id") announcementId: String): Unit
+
+    @GET("home/featured-announcement")
+    suspend fun featuredAnnouncement(): FeaturedAnnouncementEnv
+
+    // --- Event series + buzz posts ---
+    @GET("calendar/series")
+    suspend fun eventSeries(): Envelope<EventSeries>
+
+    @POST("calendar/series/{id}/follow")
+    suspend fun toggleSeriesFollow(@Path("id") seriesId: String): SeriesFollowResult
+
+    @GET("events/{id}/posts")
+    suspend fun eventPosts(@Path("id") eventId: String): Envelope<EventPost>
+
+    @POST("events/{id}/posts")
+    suspend fun createEventPost(@Path("id") eventId: String, @Body body: EventPostBody): retrofit2.Response<Unit>
+
+    @POST("events/{id}/posts/{postId}/react")
+    suspend fun reactToEventPost(@Path("id") eventId: String, @Path("postId") postId: String, @Body body: EventReactBody): EventPostReactionResult
 }

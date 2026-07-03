@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,6 +47,7 @@ fun CommunityHubScreen(onOpen: (String) -> Unit) {
             HubCard("prayer-wall", "Prayer wall", "Share & carry each other's requests", Icons.Filled.Favorite, onOpen)
             HubCard("chat", "Messages", "Spaces, groups and direct messages", Icons.Filled.Email, onOpen)
             HubCard("events", "Events", "What's on — RSVP and see who's going", Icons.Filled.DateRange, onOpen)
+            HubCard("announcements", "Announcements", "News from your church", Icons.Filled.Notifications, onOpen)
         }
     }
 }

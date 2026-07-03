@@ -163,7 +163,17 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 NotificationsScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })
             }
             composable("give") {
-                GivingScreen(onBack = { nav.popBackStack() }, onOpenStatement = { nav.navigate("statement") })
+                GivingScreen(onBack = { nav.popBackStack() }, onOpenStatement = { nav.navigate("statement") }, onOpenSchedules = { nav.navigate("schedules") })
+            }
+            composable("schedules") { org.nuruplace.member.feature.give.SchedulesScreen(onBack = { nav.popBackStack() }) }
+            composable("announcements") {
+                org.nuruplace.member.feature.events.AnnouncementsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("announcement/$it") })
+            }
+            composable(
+                "announcement/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.events.AnnouncementDetailScreen(announcementId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("statement") {
                 GivingStatementScreen(onBack = { nav.popBackStack() }, onOpenReceipt = { nav.navigate("receipt/$it") })
