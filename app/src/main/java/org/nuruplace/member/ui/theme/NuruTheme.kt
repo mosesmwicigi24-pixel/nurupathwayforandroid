@@ -53,19 +53,25 @@ object Nuru {
     val ink600 = Color(0xFF59667C)
     val ink400 = Color(0xFF6F7E93)
     val ink300 = Color(0xFFB5BDC9)
-    val border = Color(0x1A0A2540)   // #0A2540 @ 10%
-    val track = Color(0x1A0A2540)
-    val inputBg = Color(0xFFEEF1F5)
-    val tintBlue = Color(0xFFE8EEF7)
+    val border = Color(0x140B1F33)   // Figma --nuru-border: rgba(11,31,51,0.08)
+    val track = Color(0x140B1F33)
+    val inputBg = Color(0xFFEEF2F7)  // Figma --input-background
+    val tintBlue = Color(0xFFE8EEF7) // Figma --secondary
 
-    // Status / feedback
-    val success = Color(0xFF1E7F4F)
-    val warning = Color(0xFFB45309)
-    val danger = Color(0xFFD4183D)
-    val successBg = Color(0xFFDCFCE7)
+    // Status / feedback — canonical Figma semantic tokens (theme.css --nuru-*).
+    // Each pairs a saturated foreground with a soft tint bg for chips/banners.
+    val success = Color(0xFF16A34A)      // --nuru-success
+    val successBg = Color(0xFFDCFCE7)    // --nuru-success-bg
     val successText = Color(0xFF166534)
+    val warning = Color(0xFFD97706)      // --nuru-warning
+    val warningBg = Color(0xFFFEF3C7)    // --nuru-warning-bg
+    val danger = Color(0xFFDC2626)       // --nuru-danger
+    val dangerBg = Color(0xFFFEE2E2)     // --nuru-danger-bg
+    val destructive = Color(0xFFD4183D)  // --destructive (destructive-action red)
+    val info = Color(0xFF0EA5E9)         // --nuru-info
+    val infoBg = Color(0xFFE0F2FE)       // --nuru-info-bg
     val verseBg = Color(0xFFFFF8E6)
-    val myBubble = Color(0xFFDDF4C6)   // chat outgoing bubble
+    val myBubble = Color(0xFFDDF4C6)     // chat outgoing bubble
 
     // On-navy text
     val onNavy = Color.White
@@ -79,11 +85,13 @@ object Nuru {
     val goldGradient = Brush.verticalGradient(listOf(Color(0xFFE5BC3A), Color(0xFFC9A227), Color(0xFFA8861C)))
     val primaryButton = Brush.verticalGradient(listOf(Color(0xFF143559), Color(0xFF0A2540), Color(0xFF07203A)))
 
+    // Engagement bands (§B3): thriving / steady / watch / at_risk — mapped to the
+    // canonical semantic palette so band chips read the same as every other chip.
     fun bandColor(band: String?): Color = when (band?.lowercase()) {
-        "thriving" -> Color(0xFF1E7F4F)
-        "steady" -> Color(0xFF1B5FAE)
-        "watch" -> Color(0xFFB45309)
-        "at_risk", "at risk" -> Color(0xFFD4183D)
+        "thriving" -> success
+        "steady" -> info
+        "watch" -> warning
+        "at_risk", "at risk" -> danger
         else -> ink600
     }
 }
