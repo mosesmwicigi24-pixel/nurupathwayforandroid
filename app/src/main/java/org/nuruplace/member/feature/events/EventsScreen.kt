@@ -85,7 +85,7 @@ fun EventsScreen(onBack: () -> Unit, onOpenEvent: (String) -> Unit) {
 }
 
 @Composable
-fun EventDetailScreen(eventId: String, onBack: () -> Unit) {
+fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -> Unit = {}) {
     AsyncContent(key = eventId, load = { Net.client.api.event(eventId) }) { e: EventDetail, reload ->
         val scope = rememberCoroutineScope()
         var busy by remember { mutableStateOf(false) }
@@ -114,6 +114,13 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit) {
                     RsvpChip("Can't go", "declined", e.myRsvp, ::setRsvp, Modifier.weight(1f))
                 }
                 Text("${e.rsvpCounts.going ?: 0} going · ${e.rsvpCounts.maybe ?: 0} maybe", style = NuruType.micro, color = Nuru.ink400)
+
+                // Check-in — opens the QR scanner while the event is live, else a locked notice.
+                if (isEventLive(e.occursAt)) {
+                    org.nuruplace.member.ui.components.PrimaryButton("Check in", onClick = { onCheckIn(eventId) })
+                } else {
+                    Text("🔒 Check-in opens when the event is live", style = NuruType.caption, color = Nuru.ink400)
+                }
 
                 e.description?.let { Text(it, style = NuruType.bodyLg, color = Nuru.ink) }
 
@@ -168,6 +175,14 @@ private fun EventBuzz(eventId: String) {
             }
         }
     }
+}
+
+/** Live window for check-in: from 1h before start to 4h after (no end time on
+ *  the wire). Matches the iOS "check-in opens when the event is live" gate. */
+private fun isEventLive(occursAt: String): Boolean {
+    val start = runCatching { java.time.Instant.parse(occursAt) }.getOrNull() ?: return false
+    val now = java.time.Instant.now()
+    return now.isAfter(start.minusSeconds(3600)) && now.isBefore(start.plusSeconds(4 * 3600))
 }
 
 private fun react(scope: kotlinx.coroutines.CoroutineScope, eventId: String, postId: String, kind: String, reload: () -> Unit) {

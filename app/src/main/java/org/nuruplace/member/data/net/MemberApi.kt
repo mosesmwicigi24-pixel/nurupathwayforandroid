@@ -284,6 +284,9 @@ interface MemberApi {
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit
 
+    @POST("events/{id}/attendance")
+    suspend fun checkInEvent(@Path("id") eventId: String, @Body body: CheckInBody): EventCheckInResult
+
     // --- Profile: notification prefs + MFA ---
     @GET("me/notification-preferences")
     suspend fun notificationPreferences(): NotificationPreferences

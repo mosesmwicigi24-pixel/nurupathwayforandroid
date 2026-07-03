@@ -163,7 +163,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 "event/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
             ) { entry ->
-                EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() }, onCheckIn = { nav.navigate("checkin/$it") })
+            }
+            composable(
+                "checkin/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.events.CheckInScannerScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("notifications") {
                 NotificationsScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })

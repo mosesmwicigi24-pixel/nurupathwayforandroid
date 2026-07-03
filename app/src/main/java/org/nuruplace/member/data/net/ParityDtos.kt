@@ -272,3 +272,10 @@ data class AvatarResult(val avatarUrl: String = "")
 
 @Serializable
 data class ChangePasswordBody(val currentPassword: String, val newPassword: String)
+
+// --- Event QR attendance check-in (idempotent on clientScanId, §3.3) ---
+@Serializable
+data class CheckInBody(val clientScanId: String, val scanToken: String)
+
+@Serializable
+data class EventCheckInResult(val attendanceId: String = "", val duplicate: Boolean = false)
