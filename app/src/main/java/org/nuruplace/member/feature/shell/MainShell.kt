@@ -46,6 +46,11 @@ import org.nuruplace.member.feature.grow.PlanDetailScreen
 import org.nuruplace.member.feature.grow.PrayerJournalScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
+import org.nuruplace.member.feature.community.ChatInboxScreen
+import org.nuruplace.member.feature.community.ChatThreadScreen
+import org.nuruplace.member.feature.community.CommunityHubScreen
+import org.nuruplace.member.feature.community.PrayerWallDetailScreen
+import org.nuruplace.member.feature.community.PrayerWallScreen
 import org.nuruplace.member.feature.home.HomeScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
 import org.nuruplace.member.feature.pathway.LevelsScreen
@@ -116,7 +121,25 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
             composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
-            composable("community") { Placeholder("Community", "Prayer wall, chat and events land here.") }
+            composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
+            composable("prayer-wall") {
+                PrayerWallScreen(onBack = { nav.popBackStack() }, onOpenPost = { nav.navigate("prayer-wall/$it") })
+            }
+            composable(
+                "prayer-wall/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                PrayerWallDetailScreen(postId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+            }
+            composable("chat") {
+                ChatInboxScreen(onBack = { nav.popBackStack() }, onOpenThread = { nav.navigate("chat/$it") })
+            }
+            composable(
+                "chat/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                ChatThreadScreen(conversationId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+            }
             composable("profile") { ProfileScreen(me) { auth.signOut() } }
 
             composable(

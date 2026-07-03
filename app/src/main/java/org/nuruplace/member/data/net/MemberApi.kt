@@ -92,4 +92,45 @@ interface MemberApi {
 
     @DELETE("me/verses/{id}")
     suspend fun deleteVerse(@Path("id") savedVerseId: String): retrofit2.Response<Unit>
+
+    // --- Community: Prayer wall (public, opt-in) ---
+    @GET("prayer-wall")
+    suspend fun prayerWall(@retrofit2.http.Query("sort") sort: String = "latest"): Envelope<PrayerWallPost>
+
+    @GET("prayer-wall/{id}")
+    suspend fun prayerWallGet(@Path("id") postId: String): PrayerWallDetail
+
+    @POST("prayer-wall")
+    suspend fun createPrayerWallPost(@Body body: CreatePrayerBody): retrofit2.Response<Unit>
+
+    @POST("prayer-wall/{id}/reactions")
+    suspend fun prayerWallReact(@Path("id") postId: String, @Body body: ReactBody): ReactOn
+
+    @POST("prayer-wall/{id}/comments")
+    suspend fun prayerWallComment(@Path("id") postId: String, @Body body: PrayerCommentBody): retrofit2.Response<Unit>
+
+    @POST("prayer-wall/{id}/answered")
+    suspend fun prayerWallAnswered(@Path("id") postId: String, @Body body: AnsweredBody): retrofit2.Response<Unit>
+
+    @DELETE("prayer-wall/{id}")
+    suspend fun deletePrayerWallPost(@Path("id") postId: String): retrofit2.Response<Unit>
+
+    // --- Chat ---
+    @GET("chat/conversations")
+    suspend fun chatInbox(@retrofit2.http.Query("scope") scope: String = "mine"): ChatInbox
+
+    @GET("chat/conversations/{id}")
+    suspend fun chatConversation(@Path("id") conversationId: String): ChatThreadDetail
+
+    @POST("chat/conversations/{id}/messages")
+    suspend fun sendChatMessage(@Path("id") conversationId: String, @Body body: SendMessageBody): retrofit2.Response<Unit>
+
+    @POST("chat/conversations/{id}/read")
+    suspend fun markChatRead(@Path("id") conversationId: String): retrofit2.Response<Unit>
+
+    @GET("chat/people")
+    suspend fun chatPeople(@retrofit2.http.Query("q") query: String? = null): PeopleRes
+
+    @POST("chat/dms")
+    suspend fun createDm(@Body body: DmBody): DmRes
 }

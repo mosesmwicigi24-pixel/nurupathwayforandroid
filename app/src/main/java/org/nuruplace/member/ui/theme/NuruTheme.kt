@@ -62,6 +62,7 @@ object Nuru {
     val successBg = Color(0xFFDCFCE7)
     val successText = Color(0xFF166534)
     val verseBg = Color(0xFFFFF8E6)
+    val myBubble = Color(0xFFDDF4C6)   // chat outgoing bubble
 
     // On-navy text
     val onNavy = Color.White
