@@ -83,6 +83,8 @@ private val TABS = listOf(
 
 @Composable
 fun MainShell(auth: AuthStore, me: MeResponse?) {
+    // Register this device for FCM push once we're in the authed shell (§D-M9).
+    org.nuruplace.member.data.firebase.PushRegistration()
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route

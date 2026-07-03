@@ -115,12 +115,11 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
-    // Firebase (add-alongside auth + Firestore). Deps compile without the
-    // google-services plugin; they stay dormant (FirebaseApp uninitialised) until
-    // google-services.json is added and the plugin above is applied.
+    // Firebase (add-alongside): FCM push + Email/Password auth. Postgres stays the
+    // source of truth — Firestore is intentionally NOT used (see FIREBASE_SETUP.md).
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.messaging)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

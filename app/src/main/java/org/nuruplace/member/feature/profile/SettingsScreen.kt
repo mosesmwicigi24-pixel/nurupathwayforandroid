@@ -73,7 +73,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
             NuruCard(modifier = Modifier.clickable { onOpen("firebase-account") }) {
                 Kicker("Firebase account")
                 Spacer(Modifier.height(Spacing.xs))
-                Text("Email / password sign-in + Firestore (add-alongside)", style = NuruType.caption, color = Nuru.ink600)
+                Text("Email / password sign-in (add-alongside)", style = NuruType.caption, color = Nuru.ink600)
             }
             NuruCard { TextSizeSection() }
             NuruCard { LocationSection() }

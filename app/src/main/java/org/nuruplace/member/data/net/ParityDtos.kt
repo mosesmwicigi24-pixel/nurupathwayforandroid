@@ -284,6 +284,15 @@ data class EventCheckInResult(val attendanceId: String = "", val duplicate: Bool
 @Serializable
 data class LocationBody(val lat: Double, val lng: Double)
 
+// --- Device registration (FCM push token, §D-M9) ---
+@Serializable
+data class DeviceBody(
+    val platform: String = "android",
+    val appVersion: String? = null,
+    val model: String? = null,
+    val pushToken: String? = null,
+)
+
 // --- Radio (member player) ---
 @Serializable
 data class RadioProgram(

@@ -303,6 +303,10 @@ interface MemberApi {
     @DELETE("me/location")
     suspend fun stopSharingLocation(): Unit
 
+    // --- Device registration (FCM push token) ---
+    @POST("me/devices")
+    suspend fun registerDevice(@Body body: DeviceBody): Unit
+
     // --- Radio (member player) ---
     @GET("radio/now-playing")
     suspend fun radioNowPlaying(): RadioProgram?

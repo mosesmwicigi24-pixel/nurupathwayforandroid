@@ -1,8 +1,7 @@
-// Firebase account — a self-contained proof that Firebase Email/Password auth +
-// Firestore work end-to-end, ADDED ALONGSIDE the custom-backend session (it does
-// not touch or gate the main app login). Register / sign in / sign out against
-// FirebaseAuth; on success, upsert + read back a `members/{uid}` Firestore doc so
-// both halves are exercised. Concrete Firebase-owned features build on this.
+// Firebase account — Firebase Email/Password authentication, ADDED ALONGSIDE the
+// custom-backend session (it does not touch or gate the main app login). Register
+// / sign in / sign out against FirebaseAuth. Postgres stays the source of truth,
+// so there is no Firestore here — Firebase is used for auth + FCM push only.
 package org.nuruplace.member.feature.profile
 
 import androidx.compose.foundation.background
@@ -31,7 +30,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.firebase.FirebaseAuthService
-import org.nuruplace.member.data.firebase.FirestoreRepo
 import org.nuruplace.member.ui.components.Kicker
 import org.nuruplace.member.ui.components.NuruCard
 import org.nuruplace.member.ui.components.PrimaryButton
@@ -52,23 +50,12 @@ fun FirebaseAccountScreen(onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var signedInEmail by remember { mutableStateOf(FirebaseAuthService.currentUser?.email) }
-    var profileEcho by remember { mutableStateOf<String?>(null) }
-
-    // On a successful auth, upsert + read back the member's Firestore doc.
-    fun afterAuth() {
-        signedInEmail = FirebaseAuthService.currentUser?.email
-        val uid = FirebaseAuthService.currentUser?.uid ?: return
-        scope.launch {
-            FirestoreRepo.set("members", uid, mapOf("owner_uid" to uid, "email" to signedInEmail, "updated_at" to System.currentTimeMillis()))
-            profileEcho = FirestoreRepo.get("members", uid)?.let { "Firestore members/$uid → ${it["email"]}" }
-        }
-    }
 
     fun run(action: suspend () -> Unit, ok: String) {
         if (busy) return
         busy = true; status = null
         scope.launch {
-            try { action(); status = ok; afterAuth() }
+            try { action(); status = ok; signedInEmail = FirebaseAuthService.currentUser?.email }
             catch (e: Exception) { status = e.message ?: "Failed." }
             finally { busy = false }
         }
@@ -86,7 +73,6 @@ fun FirebaseAccountScreen(onBack: () -> Unit) {
                 Kicker("Signed in")
                 Spacer(Modifier.height(Spacing.xs))
                 Text(signedInEmail ?: "Not signed in", style = NuruType.cardTitle, color = Nuru.ink)
-                profileEcho?.let { Text(it, style = NuruType.micro, color = Nuru.success) }
             }
 
             NuruCard {
@@ -107,7 +93,7 @@ fun FirebaseAccountScreen(onBack: () -> Unit) {
             }
 
             if (signedInEmail != null) {
-                PrimaryButton("Sign out", onClick = { FirebaseAuthService.signOut(); signedInEmail = null; profileEcho = null; status = "Signed out." })
+                PrimaryButton("Sign out", onClick = { FirebaseAuthService.signOut(); signedInEmail = null; status = "Signed out." })
             }
         }
     }
