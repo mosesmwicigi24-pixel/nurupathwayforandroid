@@ -56,7 +56,7 @@ interface MemberApi {
     suspend fun memoryVerses(): Envelope<MemoryVerseRow>
 
     @POST("growth/memory-verses/practice")
-    suspend fun practiceVerse(@Body body: PracticeBody): retrofit2.Response<Unit>
+    suspend fun practiceVerse(@Body body: PracticeBody): Unit
 
     @GET("growth/plans")
     suspend fun plans(): Envelope<ReadingPlanRow>
@@ -65,33 +65,33 @@ interface MemberApi {
     suspend fun plan(@Path("id") planId: String): ReadingPlanDetail
 
     @POST("growth/plans/{id}/start")
-    suspend fun startPlan(@Path("id") planId: String): retrofit2.Response<Unit>
+    suspend fun startPlan(@Path("id") planId: String): Unit
 
     @POST("growth/plans/{id}/complete-day")
-    suspend fun completePlanDay(@Path("id") planId: String, @Body body: CompleteDayBody): retrofit2.Response<Unit>
+    suspend fun completePlanDay(@Path("id") planId: String, @Body body: CompleteDayBody): Unit
 
     @POST("growth/segments/{id}/complete")
-    suspend fun completeSegment(@Path("id") segmentId: String): retrofit2.Response<Unit>
+    suspend fun completeSegment(@Path("id") segmentId: String): Unit
 
     // --- Prayer journal (private, §5.4) ---
     @GET("me/prayers")
     suspend fun prayers(): Envelope<PrayerEntry>
 
     @PUT("me/prayers")
-    suspend fun upsertPrayer(@Body body: PrayerUpsertBody): retrofit2.Response<Unit>
+    suspend fun upsertPrayer(@Body body: PrayerUpsertBody): Unit
 
     @DELETE("me/prayers/{id}")
-    suspend fun deletePrayer(@Path("id") entryId: String): retrofit2.Response<Unit>
+    suspend fun deletePrayer(@Path("id") entryId: String): Unit
 
     // --- Verse library ---
     @GET("me/verses")
     suspend fun verses(): Envelope<SavedVerse>
 
     @PUT("me/verses")
-    suspend fun saveVerse(@Body body: VerseUpsertBody): retrofit2.Response<Unit>
+    suspend fun saveVerse(@Body body: VerseUpsertBody): Unit
 
     @DELETE("me/verses/{id}")
-    suspend fun deleteVerse(@Path("id") savedVerseId: String): retrofit2.Response<Unit>
+    suspend fun deleteVerse(@Path("id") savedVerseId: String): Unit
 
     // --- Community: Prayer wall (public, opt-in) ---
     @GET("prayer-wall")
@@ -101,19 +101,19 @@ interface MemberApi {
     suspend fun prayerWallGet(@Path("id") postId: String): PrayerWallDetail
 
     @POST("prayer-wall")
-    suspend fun createPrayerWallPost(@Body body: CreatePrayerBody): retrofit2.Response<Unit>
+    suspend fun createPrayerWallPost(@Body body: CreatePrayerBody): Unit
 
     @POST("prayer-wall/{id}/reactions")
     suspend fun prayerWallReact(@Path("id") postId: String, @Body body: ReactBody): ReactOn
 
     @POST("prayer-wall/{id}/comments")
-    suspend fun prayerWallComment(@Path("id") postId: String, @Body body: PrayerCommentBody): retrofit2.Response<Unit>
+    suspend fun prayerWallComment(@Path("id") postId: String, @Body body: PrayerCommentBody): Unit
 
     @POST("prayer-wall/{id}/answered")
-    suspend fun prayerWallAnswered(@Path("id") postId: String, @Body body: AnsweredBody): retrofit2.Response<Unit>
+    suspend fun prayerWallAnswered(@Path("id") postId: String, @Body body: AnsweredBody): Unit
 
     @DELETE("prayer-wall/{id}")
-    suspend fun deletePrayerWallPost(@Path("id") postId: String): retrofit2.Response<Unit>
+    suspend fun deletePrayerWallPost(@Path("id") postId: String): Unit
 
     // --- Chat ---
     @GET("chat/conversations")
@@ -123,10 +123,10 @@ interface MemberApi {
     suspend fun chatConversation(@Path("id") conversationId: String): ChatThreadDetail
 
     @POST("chat/conversations/{id}/messages")
-    suspend fun sendChatMessage(@Path("id") conversationId: String, @Body body: SendMessageBody): retrofit2.Response<Unit>
+    suspend fun sendChatMessage(@Path("id") conversationId: String, @Body body: SendMessageBody): Unit
 
     @POST("chat/conversations/{id}/read")
-    suspend fun markChatRead(@Path("id") conversationId: String): retrofit2.Response<Unit>
+    suspend fun markChatRead(@Path("id") conversationId: String): Unit
 
     @GET("chat/people")
     suspend fun chatPeople(@retrofit2.http.Query("q") query: String? = null): PeopleRes
@@ -142,14 +142,14 @@ interface MemberApi {
     suspend fun event(@Path("id") eventId: String): EventDetail
 
     @POST("events/{id}/rsvp")
-    suspend fun rsvp(@Path("id") eventId: String, @Body body: RsvpBody): retrofit2.Response<Unit>
+    suspend fun rsvp(@Path("id") eventId: String, @Body body: RsvpBody): Unit
 
     // --- Notification center ---
     @GET("me/notifications")
     suspend fun notifications(): NotificationsRes
 
     @POST("me/notifications/read")
-    suspend fun markNotificationsRead(@Body body: MarkReadBody): retrofit2.Response<Unit>
+    suspend fun markNotificationsRead(@Body body: MarkReadBody): Unit
 
     // --- Giving (online-only, §5.6 — money is never queued) ---
     @GET("giving/history")
