@@ -84,12 +84,23 @@ fun ChatInboxScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit, onNewMes
     }
 }
 
+private val AVATAR_COLORS = listOf(
+    Nuru.navy, Nuru.gold, Nuru.success, Nuru.info,
+    androidx.compose.ui.graphics.Color(0xFFA855F7), Nuru.danger, Nuru.warning,
+)
+
 @Composable
 private fun ConversationRow(c: ChatConversation, onOpen: (String) -> Unit) {
+    val title = c.title ?: (if (c.kind == "dm") "Direct message" else "Conversation")
+    val avColor = AVATAR_COLORS[(title.hashCode() % AVATAR_COLORS.size + AVATAR_COLORS.size) % AVATAR_COLORS.size]
     NuruCard(modifier = Modifier.clickable { onOpen(c.conversationId) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(avColor), contentAlignment = Alignment.Center) {
+                Text(title.firstOrNull()?.uppercase() ?: "•", style = NuruType.rowTitle, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.size(Spacing.md))
             Column(Modifier.weight(1f)) {
-                Text(c.title ?: (if (c.kind == "dm") "Direct message" else "Conversation"), style = NuruType.rowTitle, color = Nuru.ink)
+                Text(title, style = NuruType.rowTitle, color = Nuru.ink)
                 c.lastBody?.let { Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 1) }
             }
             Column(horizontalAlignment = Alignment.End) {
