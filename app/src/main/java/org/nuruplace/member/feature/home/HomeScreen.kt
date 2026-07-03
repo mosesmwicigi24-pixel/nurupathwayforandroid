@@ -6,6 +6,7 @@ package org.nuruplace.member.feature.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,8 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Achievements
+import org.nuruplace.member.data.net.Discipler
+import org.nuruplace.member.data.net.FeaturedCell
+import org.nuruplace.member.data.net.Moment
 import org.nuruplace.member.data.net.NextAction
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RhythmBody
@@ -61,12 +66,18 @@ fun HomeScreen(
     var next by remember { mutableStateOf<NextAction?>(null) }
     var verse by remember { mutableStateOf<TailoredVerse?>(null) }
     var streak by remember { mutableStateOf<Achievements?>(null) }
+    var featuredCell by remember { mutableStateOf<FeaturedCell?>(null) }
+    var disciplers by remember { mutableStateOf<List<Discipler>>(emptyList()) }
+    var moments by remember { mutableStateOf<List<Moment>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
         next = runCatching { Net.client.api.nextAction().action }.getOrNull()
         verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
+        featuredCell = runCatching { Net.client.api.featuredCell().data }.getOrNull()
+        disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
+        moments = runCatching { Net.client.api.moments().data }.getOrDefault(emptyList())
     }
 
     fun tick(kind: String) {
@@ -126,6 +137,60 @@ fun HomeScreen(
                     Spacer(Modifier.height(Spacing.xs))
                     Text("${v.reference} · ${v.version}", style = NuruType.caption, color = Nuru.goldLo)
                     v.reason?.let { Text(it, style = NuruType.micro, color = Nuru.ink400) }
+                }
+            }
+
+            // This week at Nuru — featured cell
+            featuredCell?.let { c ->
+                NuruCard(modifier = Modifier.clickable { onNavigate("cell-info") }) {
+                    c.imageUrl?.let {
+                        AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(Radii.card)))
+                        Spacer(Modifier.height(Spacing.sm))
+                    }
+                    Kicker("This week at Nuru")
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(c.name, style = NuruType.cardTitle, color = Nuru.ink)
+                    c.disciplerName?.let { d ->
+                        Text(d + (c.disciplerRole?.let { " · $it" } ?: ""), style = NuruType.caption, color = Nuru.ink600)
+                    }
+                    c.meets?.let {
+                        Spacer(Modifier.height(Spacing.xs))
+                        Text("📅 $it" + (c.nextSession?.let { n -> " · Next: $n" } ?: ""), style = NuruType.micro, color = Nuru.goldLo)
+                    }
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(if (c.members > 0) "${c.members} members" else "Be the first to join 🔥", style = NuruType.micro, color = Nuru.ink400)
+                }
+            }
+
+            // Meet your discipler
+            if (disciplers.isNotEmpty()) {
+                NuruCard(modifier = Modifier.clickable { onNavigate("mentor") }) {
+                    Kicker("Meet your discipler")
+                    disciplers.take(3).forEach { d ->
+                        Spacer(Modifier.height(Spacing.sm))
+                        Text(d.fullName, style = NuruType.rowTitle, color = Nuru.ink)
+                        Text(d.roleLabel.uppercase(), style = NuruType.micro, color = Nuru.goldLo)
+                        d.message?.takeIf { it.isNotBlank() }?.let {
+                            Text("“$it”", style = NuruType.caption, color = Nuru.ink600, maxLines = 3)
+                        }
+                    }
+                }
+            }
+
+            // Moments — curated photo strip
+            if (moments.isNotEmpty()) {
+                Kicker("Moments")
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    moments.take(10).forEach { m ->
+                        AsyncImage(
+                            model = m.imageUrl,
+                            contentDescription = m.caption,
+                            modifier = Modifier.size(140.dp).clip(RoundedCornerShape(Radii.card)),
+                        )
+                    }
                 }
             }
 

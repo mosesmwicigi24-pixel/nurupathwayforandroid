@@ -61,7 +61,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
 
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
             scores?.let { s ->
-                NuruCard {
+                NuruCard(modifier = Modifier.clickable { onOpen("score/word") }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Kicker("Growth score")
@@ -81,6 +81,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             MenuRow("Resources", "Books, talks, articles") { onOpen("resources") }
             MenuRow("Nuru Assistant", "Ask a discipleship question") { onOpen("assistant") }
             MenuRow("Notifications", "Your inbox") { onOpen("notifications") }
+            MenuRow("Settings", "Alerts & two-factor security") { onOpen("settings") }
             TextButton(onClick = onSignOut, modifier = Modifier.padding(top = Spacing.sm)) {
                 Text("Sign out", style = NuruType.cardCta, color = Nuru.danger)
             }

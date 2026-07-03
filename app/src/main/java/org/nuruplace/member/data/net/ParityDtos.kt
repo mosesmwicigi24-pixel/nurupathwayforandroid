@@ -114,3 +114,114 @@ data class EventPostBody(val postId: String, val body: String, val clientMutatio
 
 @Serializable
 data class EventReactBody(val kind: String? = null)
+
+// --- Home extras ---
+@Serializable
+data class FeaturedCell(
+    val cellGroupId: String = "",
+    val name: String = "",
+    val disciplerName: String? = null,
+    val disciplerRole: String? = null,
+    val focus: String? = null,
+    val levelLabel: String? = null,
+    val meets: String? = null,
+    val room: String? = null,
+    val nextSession: String? = null,
+    val imageUrl: String? = null,
+    val members: Int = 0,
+)
+
+@Serializable
+data class FeaturedCellEnv(val data: FeaturedCell? = null)
+
+@Serializable
+data class Discipler(
+    val userId: String,
+    val fullName: String = "",
+    val message: String? = null,
+    val avatarUrl: String? = null,
+    val cellName: String? = null,
+    val roleLabel: String = "",
+)
+
+@Serializable
+data class Moment(
+    val momentId: String,
+    val imageUrl: String = "",
+    val caption: String? = null,
+    val tag: String? = null,
+    val createdAt: String = "",
+)
+
+// --- Profile: notification prefs + MFA ---
+@Serializable
+data class NotificationPreferences(
+    val pushEnabled: Boolean = true,
+    val emailEnabled: Boolean = true,
+    val smsEnabled: Boolean = false,
+)
+
+@Serializable
+data class MfaEnrollment(val otpauthUri: String = "", val secret: String = "")
+
+@Serializable
+data class MfaCodeBody(val code: String)
+
+@Serializable
+class EmptyBody
+
+// --- Mentor / cell / score drill-down ---
+@Serializable
+data class MentorInfo(
+    val mentor: Mentor? = null,
+    val nextMeetingAt: String? = null,
+    val notes: List<MentorNote> = emptyList(),
+) {
+    @Serializable
+    data class Mentor(
+        val mentorUserId: String,
+        val fullName: String = "",
+        val avatarUrl: String? = null,
+        val cellName: String? = null,
+        val establishedAt: String? = null,
+    )
+
+    @Serializable
+    data class MentorNote(
+        val noteId: String,
+        val topic: String? = null,
+        val note: String = "",
+        val metAt: String? = null,
+        val nextMeetingAt: String? = null,
+    )
+}
+
+@Serializable
+data class CellSummary(val cell: Cell? = null) {
+    @Serializable
+    data class Cell(
+        val cellGroupId: String = "",
+        val name: String = "",
+        val members: Int = 0,
+        val leader: Leader? = null,
+        val attendance: Attendance = Attendance(),
+        val next: Next? = null,
+    )
+
+    @Serializable
+    data class Leader(val name: String = "", val role: String? = null, val avatarUrl: String? = null)
+
+    @Serializable
+    data class Attendance(val attended: Int = 0, val expected: Int = 0)
+
+    @Serializable
+    data class Next(val startAt: String = "", val location: String? = null)
+}
+
+@Serializable
+data class ScoreBreakdown(
+    val score: Int = 0,
+    val band: String = "",
+    val components: Map<String, Double> = emptyMap(),
+    val detail: Map<String, Double> = emptyMap(),
+)

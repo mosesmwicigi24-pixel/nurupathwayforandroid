@@ -249,4 +249,39 @@ interface MemberApi {
 
     @POST("events/{id}/posts/{postId}/react")
     suspend fun reactToEventPost(@Path("id") eventId: String, @Path("postId") postId: String, @Body body: EventReactBody): EventPostReactionResult
+
+    // --- Home extras ---
+    @GET("home/featured-cell")
+    suspend fun featuredCell(): FeaturedCellEnv
+
+    @GET("home/disciplers")
+    suspend fun disciplers(): Envelope<Discipler>
+
+    @GET("moments")
+    suspend fun moments(): Envelope<Moment>
+
+    @GET("growth/mentor")
+    suspend fun mentor(): MentorInfo
+
+    @GET("me/cell-summary")
+    suspend fun cellSummary(): CellSummary
+
+    @GET("me/scores/{pillar}")
+    suspend fun scoreDetail(@Path("pillar") pillar: String): ScoreBreakdown
+
+    // --- Profile: notification prefs + MFA ---
+    @GET("me/notification-preferences")
+    suspend fun notificationPreferences(): NotificationPreferences
+
+    @PUT("me/notification-preferences")
+    suspend fun updateNotificationPreferences(@Body body: NotificationPreferences): Unit
+
+    @POST("auth/mfa/enroll")
+    suspend fun enrollMfa(@Body body: EmptyBody = EmptyBody()): MfaEnrollment
+
+    @POST("auth/mfa/verify")
+    suspend fun verifyMfa(@Body body: MfaCodeBody): Unit
+
+    @POST("auth/mfa/disable")
+    suspend fun disableMfa(@Body body: MfaCodeBody): Unit
 }

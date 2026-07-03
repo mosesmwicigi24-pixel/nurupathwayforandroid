@@ -194,6 +194,18 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("gifts") { GiftsScreen(onBack = { nav.popBackStack() }) }
             composable("resources") { ResourcesScreen(onBack = { nav.popBackStack() }) }
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
+            composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }) }
+            composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
+            composable("cell-info") { org.nuruplace.member.feature.home.CellInfoScreen(onBack = { nav.popBackStack() }) }
+            composable(
+                "score/{pillar}",
+                arguments = listOf(navArgument("pillar") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.profile.ScoreDetailScreen(
+                    initialPillar = entry.arguments?.getString("pillar") ?: "word",
+                    onBack = { nav.popBackStack() },
+                )
+            }
 
             composable(
                 "level/{n}",
