@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -105,6 +106,8 @@ fun HomeScreen(
         }
 
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
+            // Priority strip — the top-of-home attention banner (Figma HomeTab).
+            next?.let { a -> PriorityStrip(a, onClick = { onNavigate(routeFor(a)) }) }
             if (pendingSync > 0) {
                 Text(
                     "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
@@ -160,17 +163,7 @@ fun HomeScreen(
                 }
             }
 
-            // Next best action
-            next?.let { a ->
-                NuruCard {
-                    Kicker(a.accent.ifBlank { "Next step" })
-                    Spacer(Modifier.height(Spacing.xs))
-                    Text(a.title, style = NuruType.cardTitle, color = Nuru.ink)
-                    Text(a.body, style = NuruType.body, color = Nuru.ink600)
-                    Spacer(Modifier.height(Spacing.md))
-                    PrimaryButton(a.ctaLabel.ifBlank { "Continue" }, onClick = { onNavigate(routeFor(a)) })
-                }
-            }
+            // (Next best action now surfaces as the top priority strip.)
 
             // Verse for today
             verse?.let { v ->
@@ -258,6 +251,46 @@ private fun routeFor(a: NextAction): String = when (a.route) {
     "prayer" -> "prayers"
     "give" -> "give"
     else -> "pathway"
+}
+
+/** Top-of-home attention banner — Figma HomeTab PriorityStrip. Rounded-18, warm
+ *  cream fill with a gold hairline, a white icon chip, and a navy CTA pill with
+ *  gold text. Data-bound to the member's next best action. */
+@Composable
+private fun PriorityStrip(a: NextAction, onClick: () -> Unit) {
+    val (glyph, cta) = priorityFor(a)
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFFFFFAEC))
+            .border(1.dp, Nuru.gold.copy(alpha = 0.33f), RoundedCornerShape(18.dp))
+            .clickable { onClick() }
+            .padding(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.white),
+            contentAlignment = Alignment.Center,
+        ) { Text(glyph, style = NuruType.body) }
+        Column(Modifier.weight(1f)) {
+            Text(a.title, style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(a.body.ifBlank { a.accent }, style = NuruType.micro, color = Nuru.ink400, maxLines = 1)
+        }
+        Box(
+            Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy).padding(horizontal = 12.dp, vertical = 6.dp),
+        ) { Text(cta, style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
+    }
+}
+
+/** (icon glyph, CTA label) for a priority strip, keyed off the action's route —
+ *  mirrors the Figma variant map (reflection / event / certificate / catch-up). */
+private fun priorityFor(a: NextAction): Pair<String, String> = when {
+    a.route == "reflection" || a.accent.contains("reflection", true) || a.accent.contains("feedback", true) ->
+        "✍️" to (a.ctaLabel.ifBlank { "Start reflection" })
+    a.route == "event" || a.accent.contains("event", true) -> "📅" to (a.ctaLabel.ifBlank { "View event" })
+    a.accent.contains("certificate", true) -> "🏅" to "View certificate"
+    else -> "✨" to (a.ctaLabel.ifBlank { "Continue" })
 }
 
 @Composable
