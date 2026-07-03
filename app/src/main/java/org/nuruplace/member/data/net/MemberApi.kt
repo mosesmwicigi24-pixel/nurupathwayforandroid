@@ -234,6 +234,9 @@ interface MemberApi {
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 
+    @GET("certificates")
+    suspend fun certificates(): Envelope<Certificate>
+
     // --- Recurring giving schedules ---
     @GET("giving/schedules")
     suspend fun schedules(): Envelope<GivingSchedule>
