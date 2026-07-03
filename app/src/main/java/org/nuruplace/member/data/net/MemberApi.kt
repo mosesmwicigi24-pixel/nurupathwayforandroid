@@ -269,6 +269,13 @@ interface MemberApi {
     @GET("me/scores/{pillar}")
     suspend fun scoreDetail(@Path("pillar") pillar: String): ScoreBreakdown
 
+    // --- Home welcome video + media reactions ---
+    @GET("home/welcome-video")
+    suspend fun welcomeVideo(): WelcomeVideo?
+
+    @POST("media/{id}/reactions")
+    suspend fun toggleMediaReaction(@Path("id") mediaAssetId: String, @Body body: MediaReactBody): ReactionToggleResult
+
     // --- Profile: notification prefs + MFA ---
     @GET("me/notification-preferences")
     suspend fun notificationPreferences(): NotificationPreferences

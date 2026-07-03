@@ -225,3 +225,43 @@ data class ScoreBreakdown(
     val components: Map<String, Double> = emptyMap(),
     val detail: Map<String, Double> = emptyMap(),
 )
+
+// --- Welcome video + media reactions ---
+@Serializable
+data class ContentReaction(val emoji: String = "", val count: Int = 0, val mine: Boolean = false)
+
+@Serializable
+data class WelcomeVideo(
+    val mediaAssetId: String = "",
+    val videoSource: String = "direct",   // cloudinary | youtube | vimeo | direct | private
+    val caption: String? = null,
+    val durationSec: Int? = null,
+    val thumbnailUrl: String? = null,
+    val reactions: List<ContentReaction>? = null,
+    val loveCount: Int? = null,
+    val liked: Boolean? = null,
+    val externalUrl: String? = null,
+    val externalVideoId: String? = null,
+    val url: String? = null,
+    val expiresAt: String? = null,
+) {
+    /** The playable URL — external link when set, else the hosted signed url. */
+    val playUrl: String? get() = externalUrl ?: url
+
+    /** True when playback should hand off to the browser (YouTube/Vimeo/external). */
+    val isExternal: Boolean get() = externalUrl != null || videoSource == "youtube" || videoSource == "vimeo"
+}
+
+@Serializable
+data class WelcomeVideoEnv(val data: WelcomeVideo? = null)
+
+@Serializable
+data class ReactionToggleResult(
+    val on: Boolean = false,
+    val reactions: List<ContentReaction> = emptyList(),
+    val loveCount: Int = 0,
+    val liked: Boolean = false,
+)
+
+@Serializable
+data class MediaReactBody(val emoji: String)

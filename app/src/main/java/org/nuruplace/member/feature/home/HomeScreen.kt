@@ -69,6 +69,8 @@ fun HomeScreen(
     var featuredCell by remember { mutableStateOf<FeaturedCell?>(null) }
     var disciplers by remember { mutableStateOf<List<Discipler>>(emptyList()) }
     var moments by remember { mutableStateOf<List<Moment>>(emptyList()) }
+    var welcomeVideo by remember { mutableStateOf<org.nuruplace.member.data.net.WelcomeVideo?>(null) }
+    var videoPlaying by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
@@ -78,6 +80,7 @@ fun HomeScreen(
         featuredCell = runCatching { Net.client.api.featuredCell().data }.getOrNull()
         disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
         moments = runCatching { Net.client.api.moments().data }.getOrDefault(emptyList())
+        welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrNull()
     }
 
     fun tick(kind: String) {
@@ -99,6 +102,37 @@ fun HomeScreen(
         }
 
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
+            // Featured welcome video
+            welcomeVideo?.let { v ->
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                NuruCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Kicker("Featured")
+                        Spacer(Modifier.weight(1f))
+                        v.caption?.let { Text(it, style = NuruType.micro, color = Nuru.ink400, maxLines = 1) }
+                    }
+                    Spacer(Modifier.height(Spacing.sm))
+                    val playable = v.playUrl
+                    when {
+                        videoPlaying && !v.isExternal && playable != null ->
+                            org.nuruplace.member.ui.components.InlineVideo(playable, modifier = Modifier.clip(RoundedCornerShape(Radii.card)))
+                        else -> Box(
+                            Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(Radii.card)).background(Nuru.navyDeep)
+                                .clickable {
+                                    if (v.isExternal && playable != null) org.nuruplace.member.ui.components.openExternal(ctx, playable)
+                                    else if (playable != null) videoPlaying = true
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            v.thumbnailUrl?.let { AsyncImage(model = it, contentDescription = v.caption, modifier = Modifier.fillMaxWidth().height(200.dp)) }
+                            Text("▶", style = NuruType.display, color = Nuru.gold)
+                        }
+                    }
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+                }
+            }
+
             // Today's rhythm
             rhythm?.let { r ->
                 NuruCard {

@@ -81,6 +81,7 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
             Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
                 if (a.primaryImageUrl != null) Text(a.title, style = NuruType.title, color = Nuru.ink)
                 Text(a.body, style = NuruType.bodyLg, color = Nuru.ink)
+                a.videoUrl?.let { org.nuruplace.member.ui.components.InlineVideo(it, modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(org.nuruplace.member.ui.theme.Radii.card))) }
                 a.images.drop(1).forEach { AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(180.dp)) }
                 Spacer(Modifier.height(Spacing.xxl))
             }
