@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    // Firebase (add-alongside): APPLY THIS ONCE `app/google-services.json` exists.
+    // The google-services plugin fails the build if the config file is missing, so
+    // it stays commented until the Android app is registered in Firebase project
+    // 777897756817 and google-services.json is dropped into app/. See FIREBASE_SETUP.md.
+    // alias(libs.plugins.google.services)
 }
 
 // Release signing — REUSES the existing "CN=Nuru Place" upload key so this app
@@ -112,6 +117,12 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+    // Firebase (add-alongside auth + Firestore). Deps compile without the
+    // google-services plugin; they stay dormant (FirebaseApp uninitialised) until
+    // google-services.json is added and the plugin above is applied.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

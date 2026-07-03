@@ -12,3 +12,4 @@
 # signing secrets
 /keystore.properties
 *.keystore
+app/google-services.json
