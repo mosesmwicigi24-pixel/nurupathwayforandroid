@@ -4,6 +4,7 @@
 package org.nuruplace.member.feature.events
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -117,11 +118,12 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -
                 Text(fmtEventTime(e.occursAt), style = NuruType.heading, color = Nuru.goldLo)
                 e.location?.let { Text("📍 $it", style = NuruType.body, color = Nuru.ink600) }
 
-                // RSVP
+                // RSVP — colour-coded selector (going green · maybe amber · can't gray).
+                Kicker("Will you be there?")
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    RsvpChip("Going", "going", e.myRsvp, ::setRsvp, Modifier.weight(1f))
-                    RsvpChip("Maybe", "maybe", e.myRsvp, ::setRsvp, Modifier.weight(1f))
-                    RsvpChip("Can't go", "declined", e.myRsvp, ::setRsvp, Modifier.weight(1f))
+                    RsvpChip("Going", "going", e.myRsvp, Nuru.success, ::setRsvp, Modifier.weight(1f))
+                    RsvpChip("Maybe", "maybe", e.myRsvp, Nuru.warning, ::setRsvp, Modifier.weight(1f))
+                    RsvpChip("Can't go", "declined", e.myRsvp, Nuru.ink400, ::setRsvp, Modifier.weight(1f))
                 }
                 Text("${e.rsvpCounts.going ?: 0} going · ${e.rsvpCounts.maybe ?: 0} maybe", style = NuruType.micro, color = Nuru.ink400)
 
@@ -209,12 +211,13 @@ private fun BuzzReact(label: String, on: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RsvpChip(label: String, value: String, current: String?, onSet: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun RsvpChip(label: String, value: String, current: String?, color: androidx.compose.ui.graphics.Color, onSet: (String) -> Unit, modifier: Modifier = Modifier) {
     val on = current == value
     Box(
         modifier
             .clip(RoundedCornerShape(Radii.button))
-            .background(if (on) Nuru.primaryButton else androidx.compose.ui.graphics.SolidColor(Nuru.surface))
+            .background(if (on) color else Nuru.surface)
+            .then(if (on) Modifier else Modifier.border(1.dp, Nuru.border, RoundedCornerShape(Radii.button)))
             .clickable { onSet(value) }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
