@@ -61,7 +61,7 @@ private fun ScheduleCard(s: GivingSchedule, onChanged: () -> Unit) {
     NuruCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(fmtMoney(s.amountMinor, s.currency) + " · ${s.frequency}", style = NuruType.cardTitle, color = Nuru.ink)
+                Text(ksh(s.amountMinor) + " · ${s.frequency}", style = NuruType.cardTitle, color = Nuru.ink)
                 Text("${s.fund.replaceFirstChar { it.uppercase() }} · ${s.method}", style = NuruType.caption, color = Nuru.ink600)
                 if (active) Text("Next: ${relTime(s.nextRunAt)}", style = NuruType.micro, color = Nuru.goldLo)
                 else Text("Cancelled", style = NuruType.micro, color = Nuru.ink400, fontWeight = FontWeight.SemiBold)
