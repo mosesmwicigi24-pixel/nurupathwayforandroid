@@ -71,7 +71,7 @@ fun QuizScreen(
     submit: suspend (answers: List<QuizAnswer>, clientMutationId: String) -> QuizVerdict,
     onDone: () -> Unit,
 ) {
-    AsyncContent(key = title, load = { loadQuestions() }) { questions ->
+    AsyncContent(key = title, load = { loadQuestions() }) { questions, _ ->
         if (questions.isEmpty()) {
             EmptyQuiz(onDone)
         } else {

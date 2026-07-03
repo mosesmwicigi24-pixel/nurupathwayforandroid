@@ -39,6 +39,13 @@ import org.nuruplace.member.auth.AuthStore
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.SubmitBody
+import org.nuruplace.member.feature.grow.DevotionalScreen
+import org.nuruplace.member.feature.grow.GrowHubScreen
+import org.nuruplace.member.feature.grow.MemoryVerseScreen
+import org.nuruplace.member.feature.grow.PlanDetailScreen
+import org.nuruplace.member.feature.grow.PrayerJournalScreen
+import org.nuruplace.member.feature.grow.ReadingPlansScreen
+import org.nuruplace.member.feature.grow.VerseLibraryScreen
 import org.nuruplace.member.feature.home.HomeScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
 import org.nuruplace.member.feature.pathway.LevelsScreen
@@ -95,7 +102,20 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
             composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }) }
             composable("pathway") { LevelsScreen(onOpenLevel = { nav.navigate("level/$it") }) }
-            composable("grow") { Placeholder("Grow", "Devotional, memory verses, reading plans and prayer land here.") }
+            composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
+            composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
+            composable("memory-verses") { MemoryVerseScreen(onBack = { nav.popBackStack() }) }
+            composable("plans") {
+                ReadingPlansScreen(onBack = { nav.popBackStack() }, onOpenPlan = { nav.navigate("plan/$it") })
+            }
+            composable(
+                "plan/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                PlanDetailScreen(planId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+            }
+            composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
+            composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
             composable("community") { Placeholder("Community", "Prayer wall, chat and events land here.") }
             composable("profile") { ProfileScreen(me) { auth.signOut() } }
 

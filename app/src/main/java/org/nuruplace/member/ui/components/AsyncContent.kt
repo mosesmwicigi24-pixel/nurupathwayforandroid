@@ -36,10 +36,11 @@ private sealed interface LoadState<out T> {
 fun <T> AsyncContent(
     key: Any? = Unit,
     load: suspend () -> T,
-    content: @Composable (T) -> Unit,
+    content: @Composable (value: T, reload: () -> Unit) -> Unit,
 ) {
     var state by remember(key) { mutableStateOf<LoadState<T>>(LoadState.Loading) }
     var attempt by remember(key) { mutableIntStateOf(0) }
+    val reload: () -> Unit = { attempt++ }
 
     LaunchedEffect(key, attempt) {
         state = LoadState.Loading
@@ -64,6 +65,6 @@ fun <T> AsyncContent(
                 Text("Try again", style = NuruType.cardCta, color = Nuru.gold)
             }
         }
-        is LoadState.Ok -> content(s.value)
+        is LoadState.Ok -> content(s.value, reload)
     }
 }

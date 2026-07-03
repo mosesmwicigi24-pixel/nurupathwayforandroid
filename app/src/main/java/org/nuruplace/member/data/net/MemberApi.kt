@@ -4,8 +4,10 @@
 package org.nuruplace.member.data.net
 
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 
 interface MemberApi {
@@ -42,4 +44,52 @@ interface MemberApi {
 
     @POST("levels/{n}/exam/attempts")
     suspend fun submitLevelExam(@Path("n") levelNumber: Int, @Body body: SubmitBody): ExamResult
+
+    // --- Grow: daily rhythm & Word (§1.7 writes are online-first for now) ---
+    @GET("growth/devotional")
+    suspend fun devotional(): Devotional
+
+    @POST("growth/devotional/reflection")
+    suspend fun saveDevotionalReflection(@Body body: DevotionalReflectionBody): SavedFlag
+
+    @GET("growth/memory-verses")
+    suspend fun memoryVerses(): Envelope<MemoryVerseRow>
+
+    @POST("growth/memory-verses/practice")
+    suspend fun practiceVerse(@Body body: PracticeBody): retrofit2.Response<Unit>
+
+    @GET("growth/plans")
+    suspend fun plans(): Envelope<ReadingPlanRow>
+
+    @GET("growth/plans/{id}")
+    suspend fun plan(@Path("id") planId: String): ReadingPlanDetail
+
+    @POST("growth/plans/{id}/start")
+    suspend fun startPlan(@Path("id") planId: String): retrofit2.Response<Unit>
+
+    @POST("growth/plans/{id}/complete-day")
+    suspend fun completePlanDay(@Path("id") planId: String, @Body body: CompleteDayBody): retrofit2.Response<Unit>
+
+    @POST("growth/segments/{id}/complete")
+    suspend fun completeSegment(@Path("id") segmentId: String): retrofit2.Response<Unit>
+
+    // --- Prayer journal (private, §5.4) ---
+    @GET("me/prayers")
+    suspend fun prayers(): Envelope<PrayerEntry>
+
+    @PUT("me/prayers")
+    suspend fun upsertPrayer(@Body body: PrayerUpsertBody): retrofit2.Response<Unit>
+
+    @DELETE("me/prayers/{id}")
+    suspend fun deletePrayer(@Path("id") entryId: String): retrofit2.Response<Unit>
+
+    // --- Verse library ---
+    @GET("me/verses")
+    suspend fun verses(): Envelope<SavedVerse>
+
+    @PUT("me/verses")
+    suspend fun saveVerse(@Body body: VerseUpsertBody): retrofit2.Response<Unit>
+
+    @DELETE("me/verses/{id}")
+    suspend fun deleteVerse(@Path("id") savedVerseId: String): retrofit2.Response<Unit>
 }

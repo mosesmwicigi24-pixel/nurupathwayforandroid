@@ -54,7 +54,7 @@ fun ModuleScreen(
     onTakeQuiz: (String) -> Unit,
     onCompleted: () -> Unit,
 ) {
-    AsyncContent(key = moduleId, load = { Net.client.api.module(moduleId) }) { m: ModuleDetail ->
+    AsyncContent(key = moduleId, load = { Net.client.api.module(moduleId) }) { m: ModuleDetail, _ ->
         val scope = rememberCoroutineScope()
         var reflection by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }

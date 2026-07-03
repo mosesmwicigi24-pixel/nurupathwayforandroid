@@ -42,7 +42,7 @@ import org.nuruplace.member.ui.theme.Spacing
 
 @Composable
 fun LevelsScreen(onOpenLevel: (Int) -> Unit) {
-    AsyncContent(load = { Net.client.api.pathway() }) { summary: PathwaySummary ->
+    AsyncContent(load = { Net.client.api.pathway() }) { summary: PathwaySummary, _ ->
         LazyColumn(
             Modifier.fillMaxWidth().background(Nuru.paper),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = Spacing.tabBarSpace),

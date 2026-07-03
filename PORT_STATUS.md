@@ -46,8 +46,9 @@ Base URL (mirrors iOS `resolveBaseURL`): debug → `http://10.0.2.2:8080/v1`
 - **Verified:** `assembleDebug` + `assembleRelease` (R8) + `testDebugUnitTest` all green.
 
 ## Screens still to port (mirrors iOS PORT_STATUS — ~37 total)
-- ☐ **Phase 2 Grow** — Devotional, MemoryVerse, ReadingPlans (+detail/day),
-  PrayerJournal, VerseLibrary
+- ✅ **Phase 2 Grow** — Grow hub, Devotional (+save reflection), Memory verses
+  (type-to-match practice), Reading plans (+detail/day/segments), Prayer journal
+  (add/answer/delete), Verse library (add/delete). Builds green (debug+R8).
 - ☐ **Phase 3 Community** — PrayerWall (+detail), Chat inbox + thread
 - ☐ **Phase 4 Events** — Events, EventDetail, Notifications, Calendar
 - ☐ **Phase 5 Giving** (online-only, §5.6) — Giving, Statement, Receipt

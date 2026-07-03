@@ -49,7 +49,7 @@ fun LevelDetailScreen(
     onOpenModule: (String) -> Unit,
     onTakeExam: (Int) -> Unit,
 ) {
-    AsyncContent(key = levelNumber, load = { Net.client.api.levelModules(levelNumber).data }) { modules: List<LevelModule> ->
+    AsyncContent(key = levelNumber, load = { Net.client.api.levelModules(levelNumber).data }) { modules: List<LevelModule>, _ ->
         val allDone = modules.isNotEmpty() && modules.all { it.completed }
         LazyColumn(
             Modifier.fillMaxWidth().background(Nuru.paper),
