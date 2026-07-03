@@ -55,7 +55,9 @@ Base URL (mirrors iOS `resolveBaseURL`): debug → `http://10.0.2.2:8080/v1`
   Notification center (mark-all-read). Builds green.
 - ✅ **Phase 5 Giving** (online-only §5.6) — Give (fund/amount/method, M-Pesa STK +
   PayPal, card "soon"), Statement (history), Receipt (ledger trail). Builds green.
-- ☐ **Phase 6 Profile** — Profile detail, Gifts, Resources, Assistant
+- ✅ **Phase 6 Profile** — Profile (identity + growth scores + menu), Your Calling
+  (gifts profile + Likert assessment), Resources library, Nuru Assistant (AI chat).
+  Builds green.
 - ☐ Home dashboard full build (rhythm ring, next-action hero, verse of the day)
 - ☐ Offline engine (queue + cursors + SQLCipher cache), connectivity, push (FCM)
 

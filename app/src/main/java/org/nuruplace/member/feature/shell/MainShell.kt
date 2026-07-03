@@ -58,6 +58,10 @@ import org.nuruplace.member.feature.give.GivingReceiptScreen
 import org.nuruplace.member.feature.give.GivingScreen
 import org.nuruplace.member.feature.give.GivingStatementScreen
 import org.nuruplace.member.feature.home.HomeScreen
+import org.nuruplace.member.feature.profile.AssistantScreen
+import org.nuruplace.member.feature.profile.GiftsScreen
+import org.nuruplace.member.feature.profile.ProfileScreen
+import org.nuruplace.member.feature.profile.ResourcesScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
 import org.nuruplace.member.feature.pathway.LevelsScreen
 import org.nuruplace.member.feature.pathway.ModuleScreen
@@ -168,7 +172,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 GivingReceiptScreen(transactionId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
-            composable("profile") { ProfileScreen(me) { auth.signOut() } }
+            composable("profile") { ProfileScreen(me, onOpen = { nav.navigate(it) }, onSignOut = { auth.signOut() }) }
+            composable("gifts") { GiftsScreen(onBack = { nav.popBackStack() }) }
+            composable("resources") { ResourcesScreen(onBack = { nav.popBackStack() }) }
+            composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
 
             composable(
                 "level/{n}",
@@ -241,16 +248,3 @@ private fun Placeholder(title: String, subtitle: String) {
     }
 }
 
-@Composable
-private fun ProfileScreen(me: MeResponse?, onSignOut: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen),
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(me?.profile?.fullName ?: "Member", style = NuruType.title, color = Nuru.ink)
-        me?.profile?.email?.let { Text(it, style = NuruType.body, color = Nuru.ink600) }
-        Spacer(Modifier.height(Spacing.lg))
-        TextButton(onClick = onSignOut) { Text("Sign out", style = NuruType.cardCta, color = Nuru.danger) }
-    }
-}

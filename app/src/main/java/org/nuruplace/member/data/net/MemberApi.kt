@@ -160,4 +160,26 @@ interface MemberApi {
 
     @GET("giving/transactions/{id}")
     suspend fun givingDetail(@Path("id") transactionId: String): GivingDetail
+
+    // --- Profile / growth: scores, gifts, resources, assistant ---
+    @GET("me/scores")
+    suspend fun scores(): ScoresSummary
+
+    @GET("me/gifts")
+    suspend fun myGifts(): MyGifts
+
+    @GET("gifts/questions")
+    suspend fun giftQuestions(): GiftQuestionSet
+
+    @POST("gifts/assessments")
+    suspend fun submitGifts(@Body body: GiftSubmitBody): MyGifts
+
+    @GET("growth/resources")
+    suspend fun resources(): Envelope<ResourceRow>
+
+    @GET("assistant/history")
+    suspend fun assistantHistory(): AssistantHistoryRes
+
+    @POST("assistant/chat")
+    suspend fun assistantChat(@Body body: AssistantChatBody): AssistantReplyRes
 }
