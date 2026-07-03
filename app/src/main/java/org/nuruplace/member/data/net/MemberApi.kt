@@ -303,6 +303,13 @@ interface MemberApi {
     @DELETE("me/location")
     suspend fun stopSharingLocation(): Unit
 
+    // --- Radio (member player) ---
+    @GET("radio/now-playing")
+    suspend fun radioNowPlaying(): RadioProgram?
+
+    @GET("radio/programs")
+    suspend fun radioPrograms(): List<RadioProgram>
+
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")
     suspend fun syncPush(@Body body: SyncPushBody): SyncPushResult

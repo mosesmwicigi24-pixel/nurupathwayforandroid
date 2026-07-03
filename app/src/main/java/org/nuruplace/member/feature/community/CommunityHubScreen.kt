@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ fun CommunityHubScreen(onOpen: (String) -> Unit) {
             HubCard("chat", "Messages", "Spaces, groups and direct messages", Icons.Filled.Email, Nuru.info, Nuru.infoBg, onOpen)
             HubCard("events", "Events", "What's on — RSVP and see who's going", Icons.Filled.DateRange, Nuru.goldLo, Nuru.goldTint, onOpen)
             HubCard("announcements", "Announcements", "News from your church", Icons.Filled.Notifications, Nuru.success, Nuru.successBg, onOpen)
+            HubCard("radio", "Live radio", "Tune in to Nuru Place on air", Icons.Filled.PlayArrow, androidx.compose.ui.graphics.Color(0xFFA855F7), androidx.compose.ui.graphics.Color(0xFFF3E8FF), onOpen)
         }
     }
 }

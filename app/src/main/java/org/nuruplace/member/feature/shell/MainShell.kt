@@ -206,6 +206,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onContinue = { nav.popBackStack() },
                 )
             }
+            composable("radio") { org.nuruplace.member.feature.radio.LiveRadioScreen(onBack = { nav.popBackStack() }) }
             composable("gifts") { GiftsScreen(onBack = { nav.popBackStack() }) }
             composable("resources") { ResourcesScreen(onBack = { nav.popBackStack() }) }
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }

@@ -284,6 +284,28 @@ data class EventCheckInResult(val attendanceId: String = "", val duplicate: Bool
 @Serializable
 data class LocationBody(val lat: Double, val lng: Double)
 
+// --- Radio (member player) ---
+@Serializable
+data class RadioProgram(
+    val id: String,
+    val title: String = "",
+    val description: String? = null,
+    val category: String = "",
+    val speaker: String? = null,
+    val artworkUrl: String? = null,
+    val scheduledAt: String? = null,
+    val status: String = "scheduled",   // scheduled | live | ended
+    val isLive: Boolean = false,
+    val audioUrl: String? = null,
+    val hlsUrl: String? = null,
+    val peakListeners: Int? = null,
+) {
+    /** Live → HLS; otherwise the hosted recording (null = nothing to play yet). */
+    val streamUrl: String? get() = if (isLive) hlsUrl ?: audioUrl else audioUrl
+    val live: Boolean get() = isLive || status == "live"
+    val recorded: Boolean get() = !live && status == "ended" && audioUrl != null
+}
+
 // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
 @Serializable
 data class SyncMutation(
