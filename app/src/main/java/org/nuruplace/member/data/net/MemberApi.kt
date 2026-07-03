@@ -287,6 +287,13 @@ interface MemberApi {
     @POST("events/{id}/attendance")
     suspend fun checkInEvent(@Path("id") eventId: String, @Body body: CheckInBody): EventCheckInResult
 
+    // --- Approximate location sharing (opt-in) ---
+    @POST("me/location")
+    suspend fun shareLocation(@Body body: LocationBody): Unit
+
+    @DELETE("me/location")
+    suspend fun stopSharingLocation(): Unit
+
     // --- Profile: notification prefs + MFA ---
     @GET("me/notification-preferences")
     suspend fun notificationPreferences(): NotificationPreferences

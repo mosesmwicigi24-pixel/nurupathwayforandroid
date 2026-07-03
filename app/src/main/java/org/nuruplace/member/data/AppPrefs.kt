@@ -9,11 +9,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 object AppPrefs {
     private const val FILE = "nuru_member_prefs"
     private const val KEY_TEXT_SCALE = "nuru.textScale"
+    private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
 
     private lateinit var prefs: SharedPreferences
 
@@ -21,13 +23,23 @@ object AppPrefs {
     var textScale by mutableFloatStateOf(1.0f)
         private set
 
+    /** Opt-in approximate-location sharing (server keeps only a coarse geohash). */
+    var shareLocation by mutableStateOf(false)
+        private set
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         textScale = prefs.getFloat(KEY_TEXT_SCALE, 1.0f)
+        shareLocation = prefs.getBoolean(KEY_SHARE_LOCATION, false)
     }
 
     fun updateTextScale(scale: Float) {
         textScale = scale
         if (::prefs.isInitialized) prefs.edit().putFloat(KEY_TEXT_SCALE, scale).apply()
+    }
+
+    fun updateShareLocation(on: Boolean) {
+        shareLocation = on
+        if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_SHARE_LOCATION, on).apply()
     }
 }

@@ -102,6 +102,7 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.mlkit.barcode)
+    implementation(libs.play.location)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
 }

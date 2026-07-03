@@ -279,3 +279,7 @@ data class CheckInBody(val clientScanId: String, val scanToken: String)
 
 @Serializable
 data class EventCheckInResult(val attendanceId: String = "", val duplicate: Boolean = false)
+
+// --- Approximate location sharing (§proximity — coarse geohash only) ---
+@Serializable
+data class LocationBody(val lat: Double, val lng: Double)

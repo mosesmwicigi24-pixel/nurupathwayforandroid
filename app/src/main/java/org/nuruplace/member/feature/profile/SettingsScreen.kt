@@ -3,6 +3,7 @@
 // SettingsView + MfaEnrollSheet.
 package org.nuruplace.member.feature.profile
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.MfaCodeBody
@@ -69,6 +71,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
             NuruCard { TextSizeSection() }
+            NuruCard { LocationSection() }
             NuruCard { ChangePasswordSection() }
             NuruCard { TwoFactorSection() }
             Spacer(Modifier.height(Spacing.xxl))
@@ -107,6 +110,50 @@ private fun TextSizeSection() {
     }
     Spacer(Modifier.height(Spacing.xs))
     Text("Adjusts text size across the whole app.", style = NuruType.micro, color = Nuru.ink400)
+}
+
+@Composable
+@Suppress("MissingPermission")
+private fun LocationSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    fun pushFix() {
+        scope.launch {
+            val client = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
+            val loc = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    com.google.android.gms.tasks.Tasks.await(
+                        client.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_BALANCED_POWER_ACCURACY, null),
+                    )
+                }.getOrNull()
+            }
+            if (loc != null) runCatching { Net.client.api.shareLocation(org.nuruplace.member.data.net.LocationBody(loc.latitude, loc.longitude)) }
+        }
+    }
+
+    val askPerm = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) { org.nuruplace.member.data.AppPrefs.updateShareLocation(true); pushFix() }
+    }
+
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Kicker("Share my approximate location")
+            Spacer(Modifier.height(Spacing.xs))
+            Text("Helps you connect with believers near you. Approximate only; turn it off anytime.", style = NuruType.micro, color = Nuru.ink600)
+        }
+        Spacer(Modifier.height(Spacing.sm))
+        Switch(checked = org.nuruplace.member.data.AppPrefs.shareLocation, onCheckedChange = { want ->
+            if (want) {
+                val granted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (granted) { org.nuruplace.member.data.AppPrefs.updateShareLocation(true); pushFix() }
+                else askPerm.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            } else {
+                org.nuruplace.member.data.AppPrefs.updateShareLocation(false)
+                scope.launch { runCatching { Net.client.api.stopSharingLocation() } }
+            }
+        })
+    }
 }
 
 @Composable
