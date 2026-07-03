@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,6 +88,8 @@ fun HomeScreen(
         scope.launch { rhythm = runCatching { Net.client.api.completeRhythm(RhythmBody(kind)) }.getOrNull() ?: rhythm }
     }
 
+    val pendingSync by Net.client.offline.pending.collectAsState()
+
     Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
         Column(Modifier.fillMaxWidth().background(Nuru.heroGradient).padding(horizontal = Spacing.screen, vertical = Spacing.xl)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -102,6 +105,13 @@ fun HomeScreen(
         }
 
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
+            if (pendingSync > 0) {
+                Text(
+                    "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
+                    style = NuruType.micro,
+                    color = Nuru.goldLo,
+                )
+            }
             // Featured welcome video
             welcomeVideo?.let { v ->
                 val ctx = androidx.compose.ui.platform.LocalContext.current
