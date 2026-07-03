@@ -3,6 +3,7 @@
 package org.nuruplace.member.feature.events
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,8 +37,23 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.relTime
 
+/** Map a notification to an in-app destination (mirrors the iOS deep-link routing). */
+private fun routeFor(n: NotificationRow): String? {
+    n.payload?.moduleId?.let { return "module/$it" }
+    n.payload?.levelNumber?.let { return "pathway" }
+    val t = n.template.lowercase()
+    return when {
+        "prayer" in t -> "prayer-wall"
+        "verse" in t || "memory" in t -> "memory-verses"
+        "devotional" in t -> "devotional"
+        "give" in t || "giving" in t -> "give"
+        "event" in t -> "events"
+        else -> null
+    }
+}
+
 @Composable
-fun NotificationsScreen(onBack: () -> Unit) {
+fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     AsyncContent(load = { Net.client.api.notifications() }) { res: NotificationsRes, reload ->
         val scope = rememberCoroutineScope()
         Column(Modifier.fillMaxSize().background(Nuru.paper)) {
@@ -61,7 +77,9 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
-                    items(res.data, key = { it.notificationId }) { n -> NotifCard(n) }
+                    items(res.data, key = { it.notificationId }) { n ->
+                        NotifCard(n, onClick = { routeFor(n)?.let(onNavigate) })
+                    }
                 }
             }
         }
@@ -69,8 +87,8 @@ fun NotificationsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun NotifCard(n: NotificationRow) {
-    NuruCard {
+private fun NotifCard(n: NotificationRow, onClick: () -> Unit) {
+    NuruCard(modifier = androidx.compose.ui.Modifier.clickable { onClick() }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (n.isUnread) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(Nuru.gold))

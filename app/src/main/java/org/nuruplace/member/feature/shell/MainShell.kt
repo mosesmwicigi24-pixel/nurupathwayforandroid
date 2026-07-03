@@ -159,7 +159,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
-            composable("notifications") { NotificationsScreen(onBack = { nav.popBackStack() }) }
+            composable("notifications") {
+                NotificationsScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })
+            }
             composable("give") {
                 GivingScreen(onBack = { nav.popBackStack() }, onOpenStatement = { nav.navigate("statement") })
             }

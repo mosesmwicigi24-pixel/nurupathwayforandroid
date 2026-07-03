@@ -108,10 +108,15 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
 
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(thread.messages.size) {
+            if (thread.messages.isNotEmpty()) listState.animateScrollToItem(thread.messages.size - 1)
+        }
         Column(Modifier.fillMaxSize().background(Nuru.chatPaper)) {
             ScreenHeader(thread.title ?: "Conversation", kicker = "${thread.memberCount} members", onBack = onBack)
             LazyColumn(
                 Modifier.fillMaxWidth().weight(1f),
+                state = listState,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
