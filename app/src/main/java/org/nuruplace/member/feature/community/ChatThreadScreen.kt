@@ -326,6 +326,30 @@ private fun MessageRow(m: ChatMessage, kind: String, runHead: Boolean, onReact: 
                     }
                     else -> Text(m.body, style = cInter(13).copy(lineHeight = 18.sp), color = if (m.mine) Color.White else CHAT.textDark)
                 }
+                // Prayer chip — the server tags prayer-request messages (ai_tag = "prayer");
+                // iOS renders "🙏 I'm praying" on incoming ones, tapping = a 🙏 reaction.
+                if (!m.mine && m.aiTag == "prayer") {
+                    val pray = m.reactions.firstOrNull { it.emoji == "🙏" }
+                    val active = pray?.mine == true
+                    Row(
+                        Modifier.clip(Capsule)
+                            .background(if (active) CHAT.gold.copy(alpha = 0.12f) else CHAT.white)
+                            .border(1.dp, if (active) CHAT.gold.copy(alpha = 0.5f) else CHAT.hairline, Capsule)
+                            .clickable { onReact("🙏") }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            when {
+                                (pray?.count ?: 0) > 0 -> "🙏 Praying · ${pray?.count}"
+                                else -> "🙏 I'm praying"
+                            },
+                            style = cInter(11, FontWeight.Bold),
+                            color = if (active) CHAT.goldDeep else CHAT.navy,
+                        )
+                    }
+                }
                 if (m.reactions.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         m.reactions.forEach { r ->
