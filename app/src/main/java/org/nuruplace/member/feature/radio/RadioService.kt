@@ -5,9 +5,11 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import org.nuruplace.member.MainActivity
+import org.nuruplace.member.R
 
 /**
  * Foreground media service so Nuru Radio keeps speaking when the screen closes
@@ -27,6 +29,22 @@ class RadioService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // The persistent status-bar presence: a live-radio media notification with
+        // our own broadcast small-icon (a recognisable "on air" glyph, not a
+        // generic music note) on the "Nuru Radio" channel. While audio plays this
+        // notification is a FOREGROUND notification — it stays in the status bar no
+        // matter where the member navigates (or leaves the app), and only clears
+        // when they stop the radio.
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId("nuru_radio")
+                .setChannelName(R.string.radio_channel_name)
+                .setNotificationId(NOTIFICATION_ID)
+                .build()
+                .apply { setSmallIcon(R.drawable.ic_radio_notification) },
+        )
+
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -65,5 +83,9 @@ class RadioService : MediaSessionService() {
         session?.run { player.release(); release() }
         session = null
         super.onDestroy()
+    }
+
+    private companion object {
+        const val NOTIFICATION_ID = 1001
     }
 }

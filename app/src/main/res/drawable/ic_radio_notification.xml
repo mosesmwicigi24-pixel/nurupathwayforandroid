@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar small icon for the live-radio notification. Status-bar icons must
+     be a flat white silhouette (the system tints them). A broadcast/on-air glyph:
+     a centre dot with radiating waves. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M12,10.5a1.5,1.5 0,1 0,0.001 0zM12,9a3,3 0,1 1,-0.001 0z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M7.76,7.76l-1.06,-1.06a7.5,7.5 0,0 0,0 10.6l1.06,-1.06a6,6 0,0 1,0 -8.48zM16.24,7.76a6,6 0,0 1,0 8.48l1.06,1.06a7.5,7.5 0,0 0,0 -10.6z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M5.11,4.11l-1.06,-1.06a11.25,11.25 0,0 0,0 15.9l1.06,-1.06a9.75,9.75 0,0 1,0 -13.78zM18.89,4.11a9.75,9.75 0,0 1,0 13.78l1.06,1.06a11.25,11.25 0,0 0,0 -15.9z" />
+</vector>
