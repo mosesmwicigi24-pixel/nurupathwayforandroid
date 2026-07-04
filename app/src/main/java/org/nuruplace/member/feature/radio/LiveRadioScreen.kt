@@ -14,6 +14,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,7 +65,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -78,6 +81,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.sin
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RadioComment
 import org.nuruplace.member.data.net.RadioCommentBody
@@ -308,7 +313,7 @@ private fun ProgressLine(now: RadioProgram?, programs: List<RadioProgram>, elaps
         Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(6.dp).clip(CircleShape).background(RADIO.redDeep))
             Text("LIVE", style = gInter(10, FontWeight.Bold, 1.4f), color = RADIO.redSoft)
-            SweepBar(Modifier.weight(1f))
+            LiveWaveBar(Modifier.weight(1f))
             Text(elapsed, style = gInter(10), color = Color.White.copy(alpha = 0.55f))
         }
     } else {
@@ -317,17 +322,36 @@ private fun ProgressLine(now: RadioProgram?, programs: List<RadioProgram>, elaps
     }
 }
 
-/** Indeterminate sweep: a stripe whose width grows 0→1 repeatedly (measurement-free approximation). */
+/** Subtle live wave: thin gold bars breathing on layered sines — a radio
+ *  signal, not a loading bar. Bright mid-height at the center, fading and
+ *  shortening toward the edges; slow drift so it soothes instead of flickers. */
 @Composable
-private fun SweepBar(modifier: Modifier = Modifier) {
-    val t = rememberInfiniteTransition(label = "sweep")
-    val frac by t.animateFloat(
-        initialValue = 0.05f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
-        label = "sweepFrac",
+private fun LiveWaveBar(modifier: Modifier = Modifier) {
+    val t = rememberInfiniteTransition(label = "liveWave")
+    val phase by t.animateFloat(
+        initialValue = 0f, targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Restart),
+        label = "wavePhase",
     )
-    Box(modifier.height(4.dp).clip(Capsule).background(Color.White.copy(alpha = 0.16f))) {
-        Box(Modifier.fillMaxWidth(frac).height(4.dp).clip(Capsule).background(RADIO.goldGrad))
+    Canvas(modifier.height(18.dp)) {
+        val n = 27
+        val slot = size.width / n
+        val barW = (slot * 0.42f).coerceAtMost(3.dp.toPx())
+        val mid = size.height / 2f
+        for (i in 0 until n) {
+            val x = slot * i + slot / 2f
+            val envelope = sin(PI.toFloat() * i / (n - 1))          // taller + brighter mid-line
+            val a = 0.34f + 0.26f * sin(phase + i * 0.9f) +
+                    0.18f * sin(phase * 1.7f + i * 0.47f + 1.3f)
+            val h = (size.height * a.coerceIn(0.12f, 0.85f) * (0.45f + 0.55f * envelope))
+                .coerceAtLeast(2.dp.toPx())
+            drawRoundRect(
+                color = RADIO.gold.copy(alpha = 0.35f + 0.55f * envelope),
+                topLeft = Offset(x - barW / 2f, mid - h / 2f),
+                size = Size(barW, h),
+                cornerRadius = CornerRadius(barW / 2f),
+            )
+        }
     }
 }
 
