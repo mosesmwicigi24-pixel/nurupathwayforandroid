@@ -58,9 +58,12 @@ data class ChatConversation(
     val lastType: String? = null,
     val lastAt: String? = null,
     val lastAuthor: String? = null,
+    val lastDuration: Int? = null,     // seconds — voice-note length (attachment_meta->>'duration')
     val unread: Int = 0,
     val avatarUrl: String? = null,
     val peerUserId: String? = null,
+    val messageCount: Int = 0,
+    val reactionCount: Int = 0,
 )
 
 @Serializable
