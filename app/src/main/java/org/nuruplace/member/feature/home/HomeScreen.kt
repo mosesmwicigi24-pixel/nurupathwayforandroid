@@ -77,6 +77,8 @@ import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.InlineVideo
+import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
@@ -143,6 +145,13 @@ fun HomeScreen(
         val from = today.toString()
         val to = today.plusDays(45).toString()
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
+
+        // Human moments — REAL server-truth milestones only; keys remember (once each).
+        if ((rhythm?.doneCount ?: 0) >= 3) CelebrationCenter.fire(Moment("rhythm-$today", "Today's rhythm complete", "Prayer, Word and reflection — all before the day ended."))
+        val days = streak?.streak?.current ?: 0
+        if (days in setOf(3, 7, 14, 21, 30, 50, 100)) CelebrationCenter.fire(Moment("streak-$days", "$days-day rhythm streak!"))
+        streak?.badges.orEmpty().filter { CelebrationCenter.seenOnce("seen-badges", it.code) }
+            .forEach { CelebrationCenter.fire(Moment("badge-${it.code}", "${it.name} earned!", "Badges celebrate your growth — keep walking.")) }
     }
 
     val pendingSync by Net.client.offline.pending.collectAsState()

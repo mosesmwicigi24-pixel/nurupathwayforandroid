@@ -45,6 +45,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -69,6 +70,8 @@ import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PayPalCaptureBody
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.Moment
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -548,6 +551,14 @@ private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
     var captured by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
     var captureError by remember { mutableStateOf<String?>(null) }
+    // Human moment — only once the server says the gift SUCCEEDED: an intent that
+    // comes back succeeded/settled, or a confirmed PayPal capture. Never on a
+    // pending intent — server truth only (§5.6).
+    LaunchedEffect(captured, r.status) {
+        if (captured || r.status.lowercase() in setOf("succeeded", "settled")) {
+            CelebrationCenter.fire(Moment("gift-${r.providerRef ?: r.transactionId}", "Thank you for sowing", "Every gift carries the gospel further."))
+        }
+    }
     Box(Modifier.fillMaxSize().background(GIVE.paper), contentAlignment = Alignment.Center) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 32.dp),

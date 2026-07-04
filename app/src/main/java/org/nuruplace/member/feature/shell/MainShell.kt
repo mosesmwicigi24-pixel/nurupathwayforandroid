@@ -76,6 +76,7 @@ import org.nuruplace.member.feature.pathway.PathwayHubScreen
 import org.nuruplace.member.feature.pathway.ModuleScreen
 import org.nuruplace.member.feature.pathway.QuizScreen
 import org.nuruplace.member.feature.pathway.QuizVerdict
+import org.nuruplace.member.ui.components.CelebrationHost
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
@@ -128,7 +129,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
         },
     ) { pad ->
-        NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
+        Box(Modifier.fillMaxSize()) {
+            NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
             composable("home") {
                 HomeScreen(
                     me,
@@ -385,6 +387,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onPassed = { nav.navigate("level-complete/$n") { popUpTo("pathway") } },
                 )
             }
+            }
+            // Human moments — confetti/banner celebrations, topmost overlay (renders
+            // nothing while idle). Fired via CelebrationCenter from any screen.
+            CelebrationHost()
         }
     }
 }

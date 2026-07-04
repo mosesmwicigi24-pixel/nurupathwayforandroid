@@ -76,8 +76,10 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerWallPost
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.LiveWave
+import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
@@ -450,6 +452,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                         val b = body
                         val f = attached
                         val wave = attachedWave
+                        val pid = UUID.randomUUID().toString()
                         posting = true
                         scope.launch {
                             try {
@@ -463,7 +466,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                 }
                                 Net.client.api.createPrayerWallPost(
                                     CreatePrayerBody(
-                                        postId = UUID.randomUUID().toString(),
+                                        postId = pid,
                                         title = t.ifBlank { null },
                                         body = b.trim().ifBlank { "Voice prayer" },
                                         clientMutationId = UUID.randomUUID().toString(),
@@ -471,6 +474,8 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                         audioWaveform = if (url != null && wave.isNotEmpty()) wave else null,
                                     ),
                                 )
+                                // Warm toast — the server accepted the post (key = its uuid).
+                                CelebrationCenter.fire(Moment("wallpost-$pid", "Your prayer is on the wall", "Your cell is standing with you 🙏", confetti = false))
                                 onPosted()
                                 onDismiss()
                             } catch (_: Exception) {
