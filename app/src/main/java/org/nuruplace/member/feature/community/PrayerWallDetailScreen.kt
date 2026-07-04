@@ -103,30 +103,38 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                             color = GrowPal.ink,
                             modifier = Modifier.padding(top = 8.dp),
                         )
+                        // Quick-reaction bar — mirrors iOS PrayerWallDetailView: five fixed
+                        // emoji chips fed by the wire's per-emoji reactions[] (count + mine).
                         Row(
                             Modifier.padding(top = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Box(
-                                Modifier.clip(Capsule)
-                                    .background(if (p.iPrayed) GrowPal.goldChipBg else GrowPal.surface)
-                                    .border(1.dp, if (p.iPrayed) GrowPal.gold else GrowPal.border, Capsule)
-                                    .clickable {
-                                        scope.launch {
-                                            try {
-                                                Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
-                                            } catch (_: Exception) {}
+                            QUICK_REACTIONS.forEach { emoji ->
+                                val r = p.reactions.firstOrNull { it.emoji == emoji }
+                                val mine = r?.mine == true
+                                Box(
+                                    Modifier.clip(Capsule)
+                                        .background(if (mine) GrowPal.goldChipBg else GrowPal.surface)
+                                        .border(1.dp, if (mine) GrowPal.gold else GrowPal.border, Capsule)
+                                        .clickable {
+                                            scope.launch {
+                                                try {
+                                                    Net.client.api.prayerWallReact(p.postId, ReactBody(emoji)); reload()
+                                                } catch (_: Exception) {}
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(emoji, fontSize = 15.sp)
+                                        if ((r?.count ?: 0) > 0) {
+                                            Text(
+                                                "${r?.count}",
+                                                style = gInter(11, FontWeight.Bold),
+                                                color = if (mine) GrowPal.navyDeep else GrowPal.ink600,
+                                            )
                                         }
                                     }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("🙏", fontSize = 15.sp)
-                                    Text(
-                                        "${p.prayCount} praying",
-                                        style = gInter(12, FontWeight.Bold),
-                                        color = if (p.iPrayed) GrowPal.navyDeep else GrowPal.ink600,
-                                    )
                                 }
                             }
                         }
@@ -204,3 +212,7 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
         }
     }
 }
+
+// Fixed quick-reaction palette — must match iOS PrayerWallDetailView.quickReactions.
+// The server accepts arbitrary emoji but only 🙏 feeds pray_count (PRAY constant).
+private val QUICK_REACTIONS = listOf("🙏", "❤️", "🕊️", "🙌", "✨")
