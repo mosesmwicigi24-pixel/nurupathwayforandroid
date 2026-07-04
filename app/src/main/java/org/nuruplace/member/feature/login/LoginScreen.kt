@@ -78,6 +78,7 @@ private enum class Mode { SIGNIN, REGISTER, FORGOT }
 @Composable
 fun LoginScreen(onAuthenticated: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var mode by remember { mutableStateOf(Mode.SIGNIN) }
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -94,7 +95,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         if (busy) return
         busy = true; error = null; info = null
         scope.launch {
-            try { block() } catch (e: Exception) { error = ApiException.message(e) } finally { busy = false }
+            try { block() } catch (e: Exception) { error = ApiException.message(e, context) } finally { busy = false }
         }
     }
 
