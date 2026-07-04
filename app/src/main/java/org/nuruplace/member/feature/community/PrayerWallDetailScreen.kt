@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,7 +54,7 @@ private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
 fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(GrowPal.coolPaper)) {
+    Column(Modifier.fillMaxSize().background(GrowPal.coolPaper).imePadding()) {
         AsyncContent(key = postId, load = { Net.client.api.prayerWallGet(postId) }) { detail: PrayerWallDetail, reload ->
             val scope = rememberCoroutineScope()
             val p = detail.post

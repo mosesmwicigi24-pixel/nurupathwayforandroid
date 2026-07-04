@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -143,7 +144,7 @@ fun PlanDayScreen(
         else segments.firstOrNull { it.segmentId !in completedSegments }?.segmentId
 
     Box(Modifier.fillMaxSize().background(PL.cream)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().imePadding()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 DayHeader(dayNumber = dayNumber, reference = reference, title = title, progress = progress, onBack = onBack)
                 Column(

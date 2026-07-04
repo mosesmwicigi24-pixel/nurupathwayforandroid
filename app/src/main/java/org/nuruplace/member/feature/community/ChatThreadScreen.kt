@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -101,7 +102,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
 
         LaunchedEffect(messages.size) { if (messages.isNotEmpty()) runCatching { listState.animateScrollToItem(messages.lastIndex) } }
 
-        Column(Modifier.fillMaxSize().background(CHAT.threadBg)) {
+        Column(Modifier.fillMaxSize().background(CHAT.threadBg).imePadding()) {
             ThreadHeader(thread, onBack)
             if (thread.kind == "space" && !thread.joined) {
                 Row(Modifier.fillMaxWidth().background(CHAT.canvas).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.Center) {

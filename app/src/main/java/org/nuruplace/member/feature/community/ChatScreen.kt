@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -52,10 +53,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
@@ -116,6 +121,7 @@ fun ChatInboxScreen(
                 Modifier
                     .fillMaxSize()
                     .background(CHAT.paper)
+                    .imePadding()
                     .verticalScroll(rememberScrollState()),
             ) {
                 // ── Header ──
@@ -506,6 +512,27 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                 Text(previewText(c), style = cInter(10), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
                 if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
             }
+            // Bottom meta: overlapping member stack + count pill · space topic on the right
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                MemberStack(avatarUrl = c.avatarUrl, title = c.title, idx = idx, memberCount = c.memberCount)
+                MemberCountPill(c.memberCount)
+                val topic = c.topic
+                if (!topic.isNullOrBlank()) {
+                    Text(
+                        topic,
+                        style = cInter(10),
+                        color = CHAT.faint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f).padding(start = 2.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -516,29 +543,61 @@ private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, onJoin: (String) -> Uni
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         ChatSquircleAvatar("#", chatRowTint(idx + 2), size = 52.dp, radius = 18.dp, textSize = 22)
         Column(Modifier.weight(1f)) {
-            Text(d.title ?: "Space", style = cInter(12, FontWeight.Medium), color = CHAT.navy, maxLines = 1)
-            Text(
-                listOfNotNull(d.topic ?: d.category, "${d.memberCount} members").joinToString(" · "),
-                style = cInter(10),
-                color = CHAT.ink600,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    d.title ?: "Space",
+                    style = cInter(12, FontWeight.Medium),
+                    color = CHAT.navy,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                val category = d.category
+                if (!category.isNullOrBlank()) {
+                    Box(
+                        Modifier
+                            .clip(Capsule)
+                            .background(CHAT.goldTint)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    ) {
+                        Text(category.uppercase(), style = cInter(8, FontWeight.Bold, 0.8f), color = CHAT.goldDeep)
+                    }
+                }
+            }
+            val topic = d.topic
+            if (!topic.isNullOrBlank()) {
+                Text(
+                    topic,
+                    style = cInter(10),
+                    color = CHAT.ink600,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Row(
+                Modifier.padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                MemberStack(avatarUrl = null, title = d.title, idx = idx + 2, memberCount = d.memberCount)
+                MemberCountPill(d.memberCount)
+            }
         }
-        FollowButton { onJoin(d.conversationId) }
+        JoinButton { onJoin(d.conversationId) }
     }
 }
 
 @Composable
-private fun FollowButton(onClick: () -> Unit) {
+private fun JoinButton(onClick: () -> Unit) {
     Row(
         Modifier
             .clip(Capsule)
-            .background(CHAT.storyRing)
+            .background(CHAT.selectedSeg)
             .height(30.dp)
             .clickable { onClick() }
             .padding(horizontal = 12.dp),
@@ -546,7 +605,7 @@ private fun FollowButton(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
-        Text("Follow", style = cInter(11, FontWeight.Bold), color = Color.White)
+        Text("Join", style = cInter(11, FontWeight.Bold), color = Color.White)
     }
 }
 
@@ -834,17 +893,56 @@ private fun Section(label: String, icon: androidx.compose.ui.graphics.vector.Ima
     }
 }
 
+/** Gold filled circle (capsule for 2+ digits) with a bold navy count — the reference unread badge. */
 @Composable
 private fun UnreadBadge(n: Int) {
     Box(
         Modifier
             .clip(Capsule)
-            .background(CHAT.storyRing)
-            .defaultMinSize(minWidth = 18.dp)
-            .padding(horizontal = 6.dp, vertical = 1.dp),
+            .background(CHAT.gold)
+            .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(n.toString(), style = cInter(9, FontWeight.Bold), color = Color.White)
+        Text(n.toString(), style = cInter(10, FontWeight.Bold), color = CHAT.navy)
+    }
+}
+
+/** Overlapping 18dp avatar-circle stack — first circle shows the space photo (or its initial), the rest are tinted placeholders. */
+@Composable
+private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCount: Int) {
+    val circles = minOf(3, maxOf(1, memberCount))
+    Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+        repeat(circles) { i ->
+            Box(
+                Modifier
+                    .size(18.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(chatTileBrush(chatRowTint(idx + i)))
+                    .border(1.5.dp, CHAT.white, androidx.compose.foundation.shape.CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (i == 0 && !avatarUrl.isNullOrBlank()) {
+                    AsyncImage(model = avatarUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
+                } else if (i == 0) {
+                    Text((title ?: "#").trim().take(1).uppercase(), style = cInter(8, FontWeight.Bold), color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+/** White capsule with the space's member count. */
+@Composable
+private fun MemberCountPill(count: Int) {
+    Box(
+        Modifier
+            .clip(Capsule)
+            .background(CHAT.white)
+            .border(1.dp, CHAT.border, Capsule)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    ) {
+        Text(count.toString(), style = cInter(9, FontWeight.SemiBold), color = CHAT.ink600)
     }
 }
 
@@ -860,13 +958,20 @@ private fun EmptyState(text: String) {
     }
 }
 
-/** Inbox-row preview: voice/photo glyph or last body; for groups prefix the author. */
+/** Inbox-row preview: voice/photo glyph or "Author: body" (author for space/group rows only). */
 private fun previewText(c: ChatConversation): String {
-    val base = when (c.lastType) {
-        "voice" -> "🎤 Voice message"
-        "image" -> "📷 Photo"
-        else -> c.lastBody.orEmpty()
+    when (c.lastType) {
+        "voice", "audio" -> {
+            val secs = c.lastDuration
+            return if (secs != null && secs > 0) {
+                "🎙 Voice message · ${secs / 60}:${"%02d".format(secs % 60)}"
+            } else {
+                "🎙 Voice message"
+            }
+        }
+        "image" -> return "📷 Photo"
     }
+    val body = c.lastBody.orEmpty()
     val author = c.lastAuthor
-    return if (c.kind == "group" && !author.isNullOrBlank()) "$author: $base" else base
+    return if (c.kind != "dm" && !author.isNullOrBlank()) "$author: $body" else body
 }

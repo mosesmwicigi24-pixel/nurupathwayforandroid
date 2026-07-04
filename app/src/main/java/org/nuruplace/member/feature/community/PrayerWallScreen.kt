@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -267,7 +268,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
         var title by remember { mutableStateOf("") }
         var body by remember { mutableStateOf("") }
         Column(
-            Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp),
+            Modifier.imePadding().padding(horizontal = 20.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Share a prayer", style = gSerif(18, FontWeight.SemiBold), color = GrowPal.navy)

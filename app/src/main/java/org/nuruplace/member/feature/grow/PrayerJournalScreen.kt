@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,7 +56,7 @@ fun PrayerJournalScreen(onBack: () -> Unit) {
         var body by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
 
-        Column(Modifier.fillMaxSize().background(Nuru.paper)) {
+        Column(Modifier.fillMaxSize().background(Nuru.paper).imePadding()) {
             ScreenHeader("Prayer journal", kicker = "Private", onBack = onBack)
             LazyColumn(
                 Modifier.fillMaxWidth(),

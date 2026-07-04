@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -199,7 +200,7 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             )
 
             // ── Foreground ────────────────────────────────────────────────────
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
                 Header(live = now?.live == true, onBack = onBack)
 
                 Column(

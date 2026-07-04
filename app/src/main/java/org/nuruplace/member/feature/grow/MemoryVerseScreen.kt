@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -351,7 +352,7 @@ private fun PracticeSheet(v: MemoryVerseRow, onClose: () -> Unit, onSave: (Int) 
     val pct = matchPct(v.verseText, attempt)
 
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
+        Modifier.fillMaxWidth().imePadding().padding(horizontal = 20.dp).padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
