@@ -7,13 +7,15 @@
 // matches the iOS RadioPlayerView. Audio only; the player is released with the composition.
 package org.nuruplace.member.feature.radio
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,11 +59,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -73,16 +78,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.pow
 import kotlin.math.sin
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RadioComment
@@ -123,6 +133,186 @@ private object RADIO {
 
 private val Capsule = RoundedCornerShape(999.dp)
 
+// ── Reactions FX — full-screen floating emoji + a live, growing counter ──────
+//
+// A TikTok/IG-LIVE celebration layer. Each tap spawns an emoji that rises the
+// FULL height of the screen with a sine sway, random x-jitter, random scale,
+// slight rotation and a fade near the top; many coexist (rapid taps = a
+// stream). The counter climbs optimistically on every tap and reconciles with
+// the REAL server total from POST /react. The burst overlay is hoisted to the
+// screen root so the stream is never clipped inside the reaction row.
+
+/** One rising emoji particle. Randomness is frozen at spawn so the render is a
+ *  pure function of elapsed time. `bornNanos` is the frame-clock stamp at birth. */
+private class ReactionParticle(
+    val emoji: String,
+    val bornNanos: Long,
+    val lifetimeMs: Float,      // 2500–4000
+    val startXFrac: Float,      // 0…1 across the width
+    val driftPx: Float,         // net horizontal travel
+    val swayPx: Float,          // sine amplitude
+    val swayFreq: Float,        // wobbles over the rise
+    val phase: Float,           // sine phase offset
+    val scale: Float,           // 0.7–1.6
+    val rotation: Float,        // final rotation (deg)
+) {
+    val id = nextId++
+    companion object { private var nextId = 0L }
+}
+
+/** Holds the live burst + counter state. Hoisted at the screen level; `LiveTab`
+ *  pushes taps in, the root [ReactionBurstOverlay] renders them, and the
+ *  [LiveReactionCounter] reads the total. */
+private class ReactionsFx(private val reduceMotion: Boolean) {
+    val particles = mutableStateListOf<ReactionParticle>()
+    var displayTotal by mutableIntStateOf(0)
+        private set
+    var pulse by mutableIntStateOf(0)
+        private set
+
+    private val cap = 60
+    private val rng = java.util.Random()
+
+    /** Reconcile with a REAL server total — only ever grows (never downgrade a
+     *  higher optimistic value on a stale read). */
+    fun sync(total: Int) { if (total > displayTotal) displayTotal = total }
+
+    /** A tap landed: bump the counter and spawn a floating emoji. */
+    fun tap(emoji: String) {
+        displayTotal += 1
+        pulse += 1
+        val p = ReactionParticle(
+            emoji = emoji,
+            bornNanos = System.nanoTime(),
+            lifetimeMs = if (reduceMotion) 2200f else 2500f + rng.nextFloat() * 1500f,
+            startXFrac = 0.15f + rng.nextFloat() * 0.70f,
+            driftPx = if (reduceMotion) 0f else (rng.nextFloat() - 0.5f) * 120f,
+            swayPx = if (reduceMotion) 0f else 18f + rng.nextFloat() * 36f,
+            swayFreq = 1.4f + rng.nextFloat() * 1.4f,
+            phase = rng.nextFloat() * (2f * PI.toFloat()),
+            scale = if (reduceMotion) 1f else 0.7f + rng.nextFloat() * 0.9f,
+            rotation = if (reduceMotion) 0f else (rng.nextFloat() - 0.5f) * 56f,
+        )
+        particles.add(p)
+        if (particles.size > cap) particles.removeRange(0, particles.size - cap)
+    }
+
+    /** Drop particles whose life has fully elapsed (called each frame). */
+    fun reap(nowNanos: Long) {
+        particles.removeAll { (nowNanos - it.bornNanos) / 1_000_000f >= it.lifetimeMs }
+    }
+}
+
+/** True when the user has turned system animations off ("Remove animations"). */
+@Composable
+private fun rememberReduceMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    return remember(resolver) {
+        val scale = android.provider.Settings.Global.getFloat(
+            resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+        )
+        scale == 0f
+    }
+}
+
+/** The full-screen burst layer — mounted at the screen root so emoji rise the
+ *  entire height, never clipped by the reaction row. One frame loop advances a
+ *  shared clock; every particle renders from its own elapsed time. */
+@Composable
+private fun ReactionBurstOverlay(fx: ReactionsFx, modifier: Modifier = Modifier) {
+    // `tick` only forces recomposition each frame; elapsed is measured against
+    // System.nanoTime() so it matches the born-stamp taken in fx.tap().
+    var tick by remember { mutableLongStateOf(0L) }
+    val hasParticles = fx.particles.isNotEmpty()
+    // Only run the frame loop while there's something to animate — idle → asleep.
+    LaunchedEffect(hasParticles) {
+        if (!hasParticles) return@LaunchedEffect
+        while (true) {
+            withInfiniteAnimationFrameNanos { tick = it }
+            fx.reap(System.nanoTime())
+            if (fx.particles.isEmpty()) break
+        }
+    }
+
+    val density = LocalDensity.current
+    Canvas(modifier.fillMaxSize()) {
+        tick                                                    // read → redraw each frame
+        val nowNanos = System.nanoTime()
+        // Rise from just above the reaction bar (near the bottom) to the top.
+        val bottomY = size.height - with(density) { 140.dp.toPx() }
+        val topY = with(density) { 40.dp.toPx() }
+        for (p in fx.particles) {
+            val elapsed = (nowNanos - p.bornNanos) / 1_000_000f
+            val t = (elapsed / p.lifetimeMs).coerceIn(0f, 1f)
+            val eased = 1f - (1f - t).pow(1.7f)                 // easeOut rise
+            val y = bottomY - eased * (bottomY - topY)
+            val baseX = size.width * p.startXFrac
+            val x = baseX + p.driftPx * t +
+                p.swayPx * sin(p.phase + t * p.swayFreq * 2f * PI.toFloat())
+            val appear = (t / 0.12f).coerceAtMost(1f)
+            val fade = if (t < 0.55f) 1f else (1f - (t - 0.55f) / 0.45f).coerceAtLeast(0f)
+            val alpha = appear * fade
+            val scale = p.scale * (0.6f + 0.4f * (t / 0.18f).coerceAtMost(1f))
+
+            drawContext.canvas.nativeCanvas.apply {
+                val paint = emojiPaint
+                paint.textSize = with(density) { 30.dp.toPx() } * scale
+                paint.alpha = (alpha * 255f).toInt().coerceIn(0, 255)
+                val save = save()
+                rotate(p.rotation * t, x, y)
+                // Center the glyph horizontally on x, vertically on y.
+                val w = paint.measureText(p.emoji)
+                drawText(p.emoji, x - w / 2f, y + paint.textSize / 3f, paint)
+                restoreToCount(save)
+            }
+        }
+    }
+}
+
+/** Reused text paint for the emoji canvas — antialiased, centered by hand. */
+private val emojiPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    isSubpixelText = true
+}
+
+/** A prominent, animated LIVE reaction counter — a soft-glass gold pill with a
+ *  heart, the (abbreviated) total, and a "reactions" caption. Scale-bumps on
+ *  every increment (`pulse`). */
+@Composable
+private fun LiveReactionCounter(total: Int, pulse: Int, reduceMotion: Boolean, modifier: Modifier = Modifier) {
+    val bump = remember { Animatable(1f) }
+    LaunchedEffect(pulse) {
+        if (pulse == 0 || reduceMotion) return@LaunchedEffect
+        bump.snapTo(1.12f)
+        bump.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
+    }
+    Row(
+        modifier
+            .graphicsLayer { scaleX = bump.value; scaleY = bump.value }
+            .clip(Capsule).background(RADIO.gold.copy(alpha = 0.14f))
+            .border(1.dp, RADIO.gold.copy(alpha = 0.38f), Capsule)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text("❤️", fontSize = 12.sp)
+        Text(abbreviateCount(total), style = gInter(15, FontWeight.Bold), color = Color.White)
+        Text("reactions", style = gInter(10, FontWeight.SemiBold, 0.6f), color = Color.White.copy(alpha = 0.5f))
+    }
+}
+
+/** 999 → "999", 1_200 → "1.2K", 12_300 → "12.3K", 1_200_000 → "1.2M". */
+private fun abbreviateCount(n: Int): String = when {
+    n < 1_000 -> "$n"
+    n < 1_000_000 -> {
+        val v = n / 1_000.0
+        if (v < 10) "%.1fK".format(v) else "${v.toInt()}K"
+    }
+    else -> {
+        val v = n / 1_000_000.0
+        if (v < 10) "%.1fM".format(v) else "${v.toInt()}M"
+    }
+}
+
 // ── Screen ──────────────────────────────────────────────────────────────────
 @Composable
 fun LiveRadioScreen(onBack: () -> Unit) {
@@ -161,6 +351,11 @@ fun LiveRadioScreen(onBack: () -> Unit) {
     val elapsed = "%d:%02d".format(elapsedSec / 60, elapsedSec % 60)
 
     var tab by remember { mutableStateOf(0) }
+
+    // Full-screen reactions celebration layer — shared between the LiveTab
+    // (which pushes taps + reads the counter) and the root burst overlay.
+    val reduceMotion = rememberReduceMotion()
+    val fx = remember(reduceMotion) { ReactionsFx(reduceMotion) }
 
     Box(Modifier.fillMaxSize().background(RADIO.navyDeep)) {
         AsyncContent(
@@ -220,7 +415,7 @@ fun LiveRadioScreen(onBack: () -> Unit) {
                     SegmentedTabs(tab, onSelect = { tab = it }, Modifier.padding(top = 24.dp))
                     Box(Modifier.padding(top = 16.dp).fillMaxWidth()) {
                         when (tab) {
-                            0 -> LiveTab(now)
+                            0 -> LiveTab(now, fx, reduceMotion)
                             1 -> RecordingsTab(programs, currentUrl, playing, onToggle = { it?.let(::toggle) })
                             else -> ScheduleTab(programs)
                         }
@@ -228,6 +423,9 @@ fun LiveRadioScreen(onBack: () -> Unit) {
                 }
             }
         }
+
+        // Above everything — the rising-emoji stream fills the whole screen.
+        ReactionBurstOverlay(fx, Modifier.matchParentSize())
     }
 }
 
@@ -480,12 +678,20 @@ private fun SegmentedTabs(tab: Int, onSelect: (Int) -> Unit, modifier: Modifier 
 
 // ── Tab: Live ───────────────────────────────────────────────────────────────
 @Composable
-private fun LiveTab(now: RadioProgram?) {
+private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) {
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
     var counts by remember(now?.id) { mutableStateOf(RadioReactionCounts()) }
     var comments by remember(now?.id) { mutableStateOf<List<RadioComment>>(emptyList()) }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+
+    // Reconcile the growing counter with the REAL server total whenever a
+    // POST /react response updates the counts (only ever grows).
+    LaunchedEffect(fx) {
+        snapshotFlow { counts.heart + counts.amen + counts.fire }
+            .collectLatest { fx.sync(it) }
+    }
 
     // Initial load + gentle 5s poll of the live comments feed (parity with iOS).
     // Reaction counts have no GET — they arrive only on each react response.
@@ -504,37 +710,27 @@ private fun LiveTab(now: RadioProgram?) {
                 Triple("🙏", RADIO.gold, "amen"),
                 Triple("🙌", RADIO.indigoSoft, "fire"),
             ).forEach { (emoji, tint, kind) ->
-                val count = when (kind) {
-                    "heart" -> counts.heart
-                    "amen" -> counts.amen
-                    else -> counts.fire
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape)
-                            .clickable(enabled = now != null) {
-                                val id = now?.id ?: return@clickable
-                                scope.launch {
-                                    runCatching {
-                                        counts = Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
-                                    }
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape)
+                        .clickable(enabled = now != null) {
+                            val id = now?.id ?: return@clickable
+                            // Celebrate instantly: haptic + optimistic counter bump
+                            // + a floating emoji, then fire the real server react.
+                            org.nuruplace.member.ui.components.Haptics.tap(view)
+                            fx.tap(emoji)
+                            scope.launch {
+                                runCatching {
+                                    counts = Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
                                 }
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) { Text(emoji, fontSize = 20.sp) }
-                    if (count > 0) {
-                        Text(count.toString(), style = gInter(10, FontWeight.Bold), color = Color.White.copy(alpha = 0.7f))
-                    } else {
-                        Spacer(Modifier.height(12.dp))
-                    }
-                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) { Text(emoji, fontSize = 20.sp) }
             }
         }
-        val total = counts.heart + counts.amen + counts.fire
-        Text(
-            if (total > 0) "$total reactions today" else "Tap to react as you listen together.",
-            style = gInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.45f),
-            modifier = Modifier.padding(top = 8.dp),
+        LiveReactionCounter(
+            total = fx.displayTotal, pulse = fx.pulse, reduceMotion = reduceMotion,
+            modifier = Modifier.padding(top = 12.dp),
         )
 
         if (now != null) {
