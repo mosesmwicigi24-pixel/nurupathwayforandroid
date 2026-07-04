@@ -114,7 +114,7 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                                     .clickable {
                                         scope.launch {
                                             try {
-                                                Net.client.api.prayerWallReact(p.postId, ReactBody("pray")); reload()
+                                                Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
                                             } catch (_: Exception) {}
                                         }
                                     }
