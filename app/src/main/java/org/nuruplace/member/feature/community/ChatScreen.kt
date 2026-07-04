@@ -61,10 +61,19 @@ import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.DiscoverSpace
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
 import java.time.LocalTime
 
 private val Capsule = RoundedCornerShape(999.dp)
+
+/** Hub bundle — one load for inbox + people + greeting name + the tailored verse. */
+private data class HubData(
+    val inbox: org.nuruplace.member.data.net.ChatInbox,
+    val people: List<ChatPerson>,
+    val name: String,
+    val verse: TailoredVerse?,
+)
 
 @Composable
 fun ChatInboxScreen(
@@ -77,8 +86,11 @@ fun ChatInboxScreen(
         val inbox = Net.client.api.chatInbox()
         val people = runCatching { Net.client.api.chatPeople(null).people }.getOrDefault(emptyList())
         val name = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("")
-        Triple(inbox, people, name)
-    }) { (inbox, people, name), reload ->
+        // Verse for today comes from the same tailored-verse service Home uses —
+        // the hub card must reflect the server's pick, not a hardcoded verse.
+        val verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
+        HubData(inbox, people, name, verse)
+    }) { (inbox, people, name, verse), reload ->
         val scope = rememberCoroutineScope()
         var tab by remember { mutableIntStateOf(0) }
         var query by remember { mutableStateOf("") }
@@ -208,7 +220,7 @@ fun ChatInboxScreen(
                 ) {
                     AiCard(totalUnread = totalUnread, spaceCount = spaces.size, onOpenAssistant = onOpenAssistant)
 
-                    if (query.isBlank()) VerseCard()
+                    if (query.isBlank()) VerseCard(verse)
 
                     // Segmented control
                     Row(
@@ -356,7 +368,7 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
 
 // ── Verse-for-today card ──
 @Composable
-private fun VerseCard() {
+private fun VerseCard(verse: TailoredVerse?) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -379,12 +391,16 @@ private fun VerseCard() {
         Column {
             Text("VERSE FOR TODAY", style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.eyebrow)
             Text(
-                "The heartfelt counsel of a friend is as sweet as perfume and incense.",
+                verse?.text?.takeIf { it.isNotBlank() }
+                    ?: "The heartfelt counsel of a friend is as sweet as perfume and incense.",
                 style = cSerif(13, FontWeight.Normal).copy(fontStyle = FontStyle.Italic, lineHeight = 19.sp),
                 color = CHAT.navy,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            Text("Proverbs 27:9", style = cInter(10, FontWeight.Bold), color = CHAT.eyebrow, modifier = Modifier.padding(top = 4.dp))
+            Text(
+                verse?.reference?.takeIf { it.isNotBlank() } ?: "Proverbs 27:9",
+                style = cInter(10, FontWeight.Bold), color = CHAT.eyebrow, modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
