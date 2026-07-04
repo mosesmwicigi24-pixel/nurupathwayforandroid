@@ -417,6 +417,11 @@ private fun ActionsRow() {
 private fun TwoFactorRow() {
     val scope = rememberCoroutineScope()
     var twoFAon by remember { mutableStateOf(false) }
+    // Seed from the wire: GET /me carries mfa_enabled — the toggle must reflect
+    // the account's real state, not always start "off".
+    LaunchedEffect(Unit) {
+        runCatching { Net.client.api.me().profile.mfaEnabled }.getOrNull()?.let { twoFAon = it }
+    }
     var enrollment by remember { mutableStateOf<MfaEnrollment?>(null) }
     var expanded by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
