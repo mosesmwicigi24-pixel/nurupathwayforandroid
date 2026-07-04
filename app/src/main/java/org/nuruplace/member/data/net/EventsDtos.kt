@@ -74,3 +74,13 @@ data class RsvpBody(val status: String)
 
 @Serializable
 data class MarkReadBody(val ids: List<String>? = null)
+
+/** GET /me/rsvps — the member's own RSVP list (event_id → status feeds the Events tab). */
+@Serializable
+data class MyRsvp(
+    val rsvpId: String = "",
+    val status: String = "",
+    val eventId: String = "",
+    val title: String = "",
+    val occursAt: String? = null,
+)

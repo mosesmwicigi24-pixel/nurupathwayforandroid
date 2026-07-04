@@ -179,6 +179,9 @@ interface MemberApi {
     @POST("events/{id}/rsvp")
     suspend fun rsvp(@Path("id") eventId: String, @Body body: RsvpBody): Unit
 
+    @GET("me/rsvps")
+    suspend fun myRsvps(): Envelope<MyRsvp>
+
     // --- Notification center ---
     @GET("me/notifications")
     suspend fun notifications(): NotificationsRes

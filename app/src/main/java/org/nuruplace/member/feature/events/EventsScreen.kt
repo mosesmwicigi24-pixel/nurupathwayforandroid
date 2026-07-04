@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.EventSeries
 import org.nuruplace.member.data.net.MyAnnouncement
+import org.nuruplace.member.data.net.MyRsvp
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.util.isoPlusDays
@@ -65,6 +66,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val Capsule = RoundedCornerShape(999.dp)
+
+/** Events-tab bundle — calendar + series + announcements + the member's own RSVPs. */
+private data class EventsData(
+    val events: List<CalendarOccurrence>,
+    val series: List<EventSeries>,
+    val anns: List<MyAnnouncement>,
+    val rsvps: List<MyRsvp>,
+)
 
 @Composable
 fun EventsScreen(
@@ -78,8 +87,10 @@ fun EventsScreen(
         val cal = runCatching { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }.getOrDefault(emptyList())
         val series = runCatching { Net.client.api.eventSeries().data }.getOrDefault(emptyList())
         val anns = runCatching { Net.client.api.myAnnouncements().data }.getOrDefault(emptyList())
-        Triple(cal, series, anns)
-    }) { (events, series, anns), reload ->
+        // The member's own RSVPs (GET /me/rsvps) — feeds the going-count + My RSVPs tab.
+        val rsvps = runCatching { Net.client.api.myRsvps().data }.getOrDefault(emptyList())
+        EventsData(cal, series, anns, rsvps)
+    }) { (events, series, anns, rsvps), reload ->
         val scope = rememberCoroutineScope()
         val today = remember { LocalDate.now(EV_ZONE) }
         var selectedDay by remember { mutableStateOf(today) }
@@ -90,7 +101,8 @@ fun EventsScreen(
         // date helpers over events
         fun occDate(occ: CalendarOccurrence): LocalDate? = evZdt(occ.startAt)?.toLocalDate()
         val thisWeek = events.count { val d = occDate(it); d != null && !d.isBefore(today) && d.isBefore(today.plusDays(7)) }
-        val going = 0
+        val rsvpMap = rsvps.associate { it.eventId to it.status }
+        val going = rsvpMap.values.count { it == "going" }
         val upcoming = events.count { val d = occDate(it); d != null && !d.isBefore(today) }
 
         Column(
@@ -223,7 +235,7 @@ fun EventsScreen(
                 // Segmented control
                 val segTodayCount = events.count { occDate(it) == selectedDay }
                 val segUpcomingCount = upcoming
-                val segRsvpCount = 0
+                val segRsvpCount = events.count { rsvpMap.containsKey(it.occurrenceId) }
                 Row(
                     Modifier.fillMaxWidth().clip(Capsule).background(EV.white)
                         .border(1.dp, EV.border, Capsule).padding(4.dp),
@@ -304,7 +316,7 @@ fun EventsScreen(
                     val segOk = when (segment) {
                         0 -> d == selectedDay
                         1 -> d != null && !d.isBefore(today)
-                        else -> false
+                        else -> rsvpMap.containsKey(occ.occurrenceId)
                     }
                     val catOk = category == "All" || occ.category?.equals(category, ignoreCase = true) == true
                     val q = query.trim()
