@@ -334,6 +334,9 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                                         style = giInter(11),
                                         color = GIVE.tertiary,
                                     )
+                                        r.receiptCode?.takeIf { it.isNotBlank() }?.let {
+                                            Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow)
+                                        }
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(ksh(r.amountMinor), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
@@ -454,7 +457,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
                     DetailRow("Date", fullDate(d.createdAt), showDivider = true)
                     DetailRow("Method", (d.method ?: "").replaceFirstChar { it.uppercase() }, showDivider = true)
                     DetailRow("Currency", d.currency, showDivider = true)
-                    DetailRow("Reference", d.providerRef ?: "—", showDivider = true)
+                    DetailRow("Reference", d.receiptCode ?: d.providerRef ?: "—", showDivider = true)
                     DetailRow("Transaction", d.transactionId.take(8) + "…", showDivider = false)
                 }
 
