@@ -145,10 +145,6 @@ fun HomeScreen(
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
     }
 
-    fun tick(kind: String) {
-        scope.launch { rhythm = runCatching { Net.client.api.completeRhythm(RhythmBody(kind)) }.getOrNull() ?: rhythm }
-    }
-
     val pendingSync by Net.client.offline.pending.collectAsState()
     val level = me?.enrollment?.currentLevel ?: 1
     val reflectionDue = rhythm?.reflection == false
@@ -177,7 +173,7 @@ fun HomeScreen(
             radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
             if (reflectionDue) next?.let { ReflectionStrip(it) { onNavigate(routeFor(it)) } }
             next?.let { ResumeHero(it, level) { onNavigate(routeFor(it)) } }
-            rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0, ::tick) }
+            rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0) }
             welcomeVideo?.let {
                 FeaturedVideo(it, videoPlaying, onPlay = { playable ->
                     if (it.isExternal) Unit else videoPlaying = true
@@ -475,7 +471,7 @@ private fun ResumeHero(a: NextAction, level: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RhythmCard(r: RhythmToday, streak: Int, onTick: (String) -> Unit) {
+private fun RhythmCard(r: RhythmToday, streak: Int) {
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (r.doneCount >= 3) "Today's rhythm complete 🎉" else "Today's rhythm", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
@@ -484,20 +480,22 @@ private fun RhythmCard(r: RhythmToday, streak: Int, onTick: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(Spacing.md))
+        // Read-only by design: the chips REFLECT real acts (a prayer posted or
+        // encouraged, Scripture engaged, a reflection written) — the server ticks
+        // them from interaction events; they are not tappable checkboxes.
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            RhythmTile("Prayer", r.prayer, Modifier.weight(1f)) { onTick("prayer") }
-            RhythmTile("Word", r.word, Modifier.weight(1f)) { onTick("word") }
-            RhythmTile("Reflection", r.reflection, Modifier.weight(1f)) { onTick("reflection") }
+            RhythmTile("Prayer", r.prayer, Modifier.weight(1f))
+            RhythmTile("Word", r.word, Modifier.weight(1f))
+            RhythmTile("Reflection", r.reflection, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun RhythmTile(label: String, done: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun RhythmTile(label: String, done: Boolean, modifier: Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(14.dp))
             .background(if (done) Nuru.successBg else Nuru.goldChipBg)
-            .clickable(enabled = !done) { onClick() }
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
