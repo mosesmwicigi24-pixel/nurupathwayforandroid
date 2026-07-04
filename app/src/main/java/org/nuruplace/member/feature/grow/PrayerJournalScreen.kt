@@ -97,6 +97,8 @@ fun PrayerJournalScreen(onBack: () -> Unit) {
 private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
+    var sharedToWall by remember { mutableStateOf(false) }
+    var confirmShare by remember { mutableStateOf(false) }
 
     NuruCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -139,5 +141,45 @@ private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
                 Text("Mark answered", style = NuruType.cardCta, color = Nuru.success)
             }
         }
+        // Share to the prayer wall — copies the PRIVATE entry into a member-visible
+        // wall post, so it is deliberate (confirm) and NEVER queued offline; the
+        // server is idempotent (re-share returns the existing post). iOS parity.
+        TextButton(onClick = { if (!busy && !sharedToWall) confirmShare = true }) {
+            Text("🤲", style = NuruType.caption)
+            Spacer(Modifier.size(6.dp))
+            Text(
+                if (sharedToWall) "On the wall 🙏" else "Share to wall",
+                style = NuruType.cardCta,
+                color = if (sharedToWall) Nuru.gold else Nuru.eyebrow,
+            )
+        }
+    }
+
+    if (confirmShare) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmShare = false },
+            title = { Text("Share to the prayer wall?", style = NuruType.rowTitle, color = Nuru.ink) },
+            text = { Text("Your cell will see this and pray with you.", style = NuruType.body, color = Nuru.ink600) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmShare = false
+                    busy = true
+                    scope.launch {
+                        try {
+                            Net.client.api.sharePrayerToWall(e.entryId)
+                            sharedToWall = true
+                        } catch (_: Exception) {
+                            // 404 = offline-created entry the server hasn't synced yet.
+                        } finally { busy = false }
+                    }
+                }) { Text("Share to wall", style = NuruType.cardCta, color = Nuru.eyebrow) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmShare = false }) {
+                    Text("Keep it private", style = NuruType.cardCta, color = Nuru.ink600)
+                }
+            },
+            containerColor = Nuru.white,
+        )
     }
 }

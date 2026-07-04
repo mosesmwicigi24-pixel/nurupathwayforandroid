@@ -266,6 +266,23 @@ interface MemberApi {
     @GET("home/featured-event")
     suspend fun featuredEvent(): FeaturedEventEnv
 
+    // The student's Discipleship Hub — one read-aggregation call (§1.9 pure read).
+    @GET("me/discipleship")
+    suspend fun discipleship(): DiscipleshipEnv
+
+    // Copy a private journal prayer onto the wall. Idempotent (re-share returns
+    // the existing post). NEVER queued offline — it creates member-visible
+    // content, and the server 404s an entry it hasn't synced yet.
+    @POST("me/prayers/{id}/share-to-wall")
+    suspend fun sharePrayerToWall(@Path("id") entryId: String): ShareToWallRes
+
+    // Certificate PDF — /certificates emits a RELATIVE download_url brokered by
+    // the media module; it needs the authed session, so it must be fetched
+    // through this client (a browser ACTION_VIEW would 401).
+    @retrofit2.http.Streaming
+    @GET("media/certificates/{code}")
+    suspend fun certificatePdf(@Path("code") code: String): okhttp3.ResponseBody
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 

@@ -171,3 +171,7 @@ data class VerseUpsertBody(
     val note: String? = null,
     val clientMutationId: String,
 )
+
+/** POST /me/prayers/{id}/share-to-wall — 201 with the wall post id (idempotent). */
+@Serializable
+data class ShareToWallRes(val postId: String = "")
