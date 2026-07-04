@@ -174,7 +174,7 @@ fun HomeScreen(
             ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
             scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
             GrowSection(onNavigate)
-            UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}") })
+            UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
             EncouragementCard(prayers.size)
             CohortSection(cohort) { onNavigate("cell-info") }
             GiveCard { onSelectTab("give") }

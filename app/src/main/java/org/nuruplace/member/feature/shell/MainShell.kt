@@ -219,7 +219,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
             composable("events") {
                 EventsScreen(
-                    onOpenEvent = { nav.navigate("event/$it") },
+                    onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") },
                     onOpenCalendar = { nav.navigate("events-calendar") },
                     onOpenAnnouncement = { nav.navigate("announcement/$it") },
                     onOpenAnnouncements = { nav.navigate("announcements") },
@@ -227,13 +227,23 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 )
             }
             composable("events-calendar") {
-                AllEventsCalendarScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
+                AllEventsCalendarScreen(onBack = { nav.popBackStack() }, onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") })
             }
             composable(
-                "event/{id}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                // The end time travels as nav state: GET /events/{id} has no end field
+                // on the wire — the calendar occurrence's end_at is the source (as iOS).
+                "event/{id}?end={end}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("end") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
             ) { entry ->
-                EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() }, onCheckIn = { nav.navigate("checkin/$it") })
+                EventDetailScreen(
+                    eventId = entry.arguments?.getString("id") ?: "",
+                    endAt = entry.arguments?.getString("end")?.takeIf { it.isNotBlank() },
+                    onBack = { nav.popBackStack() },
+                    onCheckIn = { nav.navigate("checkin/$it") },
+                )
             }
             composable(
                 "checkin/{id}",

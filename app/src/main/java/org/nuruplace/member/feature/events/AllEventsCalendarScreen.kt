@@ -52,7 +52,7 @@ import java.util.Locale
 private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
-fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String) -> Unit) {
+fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String, String?) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -69,7 +69,7 @@ fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String) -> Unit) {
 private fun AllEventsCalendarBody(
     events: List<CalendarOccurrence>,
     onBack: () -> Unit,
-    onOpenEvent: (String) -> Unit,
+    onOpenEvent: (String, String?) -> Unit,
 ) {
     var visibleMonth by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -228,7 +228,7 @@ private fun AllEventsCalendarBody(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 shown.forEach { occ ->
-                    EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId) })
+                    EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
                 }
             }
         }

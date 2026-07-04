@@ -68,7 +68,7 @@ private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
 fun EventsScreen(
-    onOpenEvent: (String) -> Unit,
+    onOpenEvent: (String, String?) -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenAnnouncement: (String) -> Unit,
     onOpenAnnouncements: () -> Unit,
@@ -343,7 +343,7 @@ fun EventsScreen(
                     }
                 } else {
                     filtered.forEach { occ ->
-                        EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId) })
+                        EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
                     }
                 }
 
