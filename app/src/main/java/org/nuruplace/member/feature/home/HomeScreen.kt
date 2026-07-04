@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -69,6 +70,9 @@ import org.nuruplace.member.data.net.RhythmBody
 import org.nuruplace.member.data.net.RhythmToday
 import org.nuruplace.member.data.net.ScoresSummary
 import org.nuruplace.member.data.net.TailoredVerse
+import org.nuruplace.member.data.net.VerseReactionBody
+import org.nuruplace.member.data.net.VerseReactions
+import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.InlineVideo
@@ -94,6 +98,7 @@ fun HomeScreen(
     onSelectTab: (String) -> Unit = onNavigate,
 ) {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var rhythm by remember { mutableStateOf<RhythmToday?>(null) }
     var next by remember { mutableStateOf<NextAction?>(null) }
     var verse by remember { mutableStateOf<TailoredVerse?>(null) }
@@ -110,12 +115,15 @@ fun HomeScreen(
     var radio by remember { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
     var personalWord by remember { mutableStateOf<String?>(null) }
+    var verseReactions by remember { mutableStateOf<VerseReactions?>(null) }
+    var verseSaved by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
         // Nuru's daily word — a blessing written for THIS member (server-side,
         // grounded in their streak/level/prayers, cached per day). iOS parity.
         personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
+        verseReactions = runCatching { Net.client.api.verseReactions() }.getOrNull()
         next = runCatching { Net.client.api.nextAction().action }.getOrNull()
         verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
@@ -172,7 +180,41 @@ fun HomeScreen(
                     if (it.isExternal) Unit else videoPlaying = true
                 }, onExternal = { url -> })
             }
-            verse?.let { VerseCard(it) }
+            verse?.let { v ->
+                VerseCard(
+                    v = v,
+                    reactions = verseReactions,
+                    saved = verseSaved,
+                    onReact = { emoji ->
+                        scope.launch {
+                            runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
+                                .onSuccess { verseReactions = it }
+                        }
+                    },
+                    onSave = {
+                        if (!verseSaved) scope.launch {
+                            runCatching {
+                                Net.client.api.saveVerse(
+                                    VerseUpsertBody(
+                                        savedVerseId = java.util.UUID.randomUUID().toString(),
+                                        reference = v.reference,
+                                        version = v.version,
+                                        verseText = v.text,
+                                        clientMutationId = java.util.UUID.randomUUID().toString(),
+                                    ),
+                                )
+                            }.onSuccess { verseSaved = true }
+                        }
+                    },
+                    onShare = {
+                        val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                    },
+                )
+            }
             if (prayers.isNotEmpty()) PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") })
             MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
             featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
@@ -500,14 +542,25 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
     }
 }
 
+// Fixed reaction palette — must match iOS HomeView.verseReactionEmojis; the
+// server enum (home REACTIONS) is the source of truth.
+private val VERSE_REACTIONS = listOf("❤️", "🙏", "🔥", "🙌", "👍")
+
 @Composable
-private fun VerseCard(v: TailoredVerse) {
+private fun VerseCard(
+    v: TailoredVerse,
+    reactions: VerseReactions? = null,
+    saved: Boolean = false,
+    onReact: (String) -> Unit = {},
+    onSave: () -> Unit = {},
+    onShare: () -> Unit = {},
+) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg).border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape).padding(Spacing.base),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CardKicker("📖  Verse for today")
+            CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
             Spacer(Modifier.weight(1f))
             Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
                 Text(v.version, style = NuruType.micro, color = Nuru.ink600)
@@ -521,6 +574,55 @@ private fun VerseCard(v: TailoredVerse) {
             Spacer(Modifier.height(Spacing.sm))
             Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
                 Text("✦ Chosen for your season — $it", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        // One row (iOS parity): reaction chips left, Save + Share pushed right.
+        Spacer(Modifier.height(Spacing.md))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            VERSE_REACTIONS.forEach { e ->
+                val count = reactions?.counts?.get(e) ?: 0
+                val mine = reactions?.mine == e
+                Row(
+                    Modifier.clip(RoundedCornerShape(999.dp))
+                        .background(if (mine) Nuru.goldChipBg else Nuru.white)
+                        .border(1.dp, if (mine) Nuru.gold else Nuru.border, RoundedCornerShape(999.dp))
+                        .clickable { onReact(e) }
+                        .padding(horizontal = 7.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(e, style = NuruType.caption)
+                    if (count > 0) {
+                        Text("$count", style = NuruType.micro, color = if (mine) Nuru.goldChipText else Nuru.ink600, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+                    .border(1.dp, if (saved) Nuru.gold else Nuru.border, RoundedCornerShape(999.dp))
+                    .clickable { onSave() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(if (saved) "♥" else "♡", style = NuruType.caption, color = if (saved) Nuru.gold else Nuru.navy)
+                Text(if (saved) "Saved" else "Save", style = NuruType.micro, color = if (saved) Nuru.gold else Nuru.navy, fontWeight = FontWeight.SemiBold)
+            }
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+                    .border(1.dp, Nuru.border, RoundedCornerShape(999.dp))
+                    .clickable { onShare() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("↗", style = NuruType.caption, color = Nuru.navy)
+                Text("Share", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
             }
         }
     }

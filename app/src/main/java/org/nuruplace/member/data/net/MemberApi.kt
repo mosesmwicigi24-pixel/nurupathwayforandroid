@@ -255,6 +255,13 @@ interface MemberApi {
     @GET("me/home/greeting")
     suspend fun homeGreeting(): DailyGreeting
 
+    // Community reactions on today's shared verse — one per member per day.
+    @GET("me/home/verse/reactions")
+    suspend fun verseReactions(): VerseReactions
+
+    @POST("me/home/verse/reactions")
+    suspend fun reactToVerse(@Body body: VerseReactionBody): VerseReactions
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 

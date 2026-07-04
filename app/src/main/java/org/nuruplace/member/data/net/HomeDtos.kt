@@ -28,8 +28,22 @@ data class TailoredVerse(
     val version: String = "WEB",
     val theme: String? = null,
     val reason: String? = null,
+    // The season Nuru sensed (title-cased library theme) when mood-driven.
+    val mood: String? = null,
     val text: String? = null,
 )
+
+/** GET/POST /me/home/verse/reactions — community reactions on today's verse
+ *  (counts per emoji + mine + total; exactly one per member per day — switching moves it). */
+@Serializable
+data class VerseReactions(
+    val counts: Map<String, Int> = emptyMap(),
+    val mine: String? = null,
+    val total: Int = 0,
+)
+
+@Serializable
+data class VerseReactionBody(val emoji: String)
 
 @Serializable
 data class Streak(val current: Int = 0, val longest: Int = 0)
