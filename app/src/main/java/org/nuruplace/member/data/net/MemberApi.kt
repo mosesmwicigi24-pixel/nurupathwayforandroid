@@ -283,6 +283,17 @@ interface MemberApi {
     @GET("media/certificates/{code}")
     suspend fun certificatePdf(@Path("code") code: String): okhttp3.ResponseBody
 
+    // Giving statement / single-gift receipt as PDFs (financial/index.ts:71,88).
+    // Fetched through the authed client (never a ?token= browser URL — that
+    // would leak the JWT into browser history).
+    @retrofit2.http.Streaming
+    @GET("giving/statement.pdf")
+    suspend fun givingStatementPdf(): okhttp3.ResponseBody
+
+    @retrofit2.http.Streaming
+    @GET("giving/transactions/{id}/receipt.pdf")
+    suspend fun givingReceiptPdf(@Path("id") txId: String): okhttp3.ResponseBody
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 

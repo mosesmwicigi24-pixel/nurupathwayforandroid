@@ -31,7 +31,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -163,17 +165,27 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                             color = GIVE.gold,
                         )
                         Spacer(Modifier.weight(1f))
+                        // Statement PDF (giving/statement.pdf) — was shipped inert.
+                        val pdfScope = rememberCoroutineScope()
+                        val pdfCtx = androidx.compose.ui.platform.LocalContext.current
                         Box(
                             Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.10f))
-                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape),
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .clickable {
+                                    pdfScope.launch {
+                                        openPdfAuthed(pdfCtx, "nuru-giving-statement.pdf") {
+                                            Net.client.api.givingStatementPdf()
+                                        }
+                                    }
+                                },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 Icons.Filled.Download,
-                                contentDescription = null,
+                                contentDescription = "Download statement PDF",
                                 tint = Color.White,
                                 modifier = Modifier.size(17.dp),
                             )
@@ -494,8 +506,57 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
                         }
                     }
                 }
+
+                // Download this gift's receipt PDF (authed fetch — never a token URL).
+                val pdfScope = rememberCoroutineScope()
+                val pdfCtx = androidx.compose.ui.platform.LocalContext.current
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GIVE.gold)
+                        .clickable {
+                            pdfScope.launch {
+                                openPdfAuthed(pdfCtx, "nuru-giving-receipt-${d.transactionId.take(8)}.pdf") {
+                                    Net.client.api.givingReceiptPdf(d.transactionId)
+                                }
+                            }
+                        }
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Download, null, tint = GIVE.navy, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Download receipt (PDF)", style = giInter(13, FontWeight.Bold), color = GIVE.navy)
+                }
             }
         }
+    }
+}
+
+// Authed PDF fetch → cache/shared → content:// viewer chooser (FileProvider is
+// declared in the manifest; same plumbing as certificate downloads).
+private suspend fun openPdfAuthed(
+    context: android.content.Context,
+    fileName: String,
+    fetch: suspend () -> okhttp3.ResponseBody,
+) {
+    runCatching {
+        val f = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
+            val file = java.io.File(dir, fileName)
+            fetch().byteStream().use { input -> file.outputStream().use { input.copyTo(it) } }
+            file
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", f)
+        val view = android.content.Intent(android.content.Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/pdf")
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(
+            android.content.Intent.createChooser(view, "Open PDF")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 }
 
