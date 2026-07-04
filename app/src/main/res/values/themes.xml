@@ -1,11 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Pure-Compose app: the XML theme only styles the window/splash before
+    <!-- Pure-Compose app: the XML theme only styles the window before
          setContent runs. Parent on a platform theme so we don't need the XML
-         Material-Components library. Warm-paper window avoids a white flash. -->
+         Material-Components library. Warm-paper window avoids a white flash;
+         system bars are managed at runtime by enableEdgeToEdge() (Android 15
+         deprecates statusBarColor — never hard-set it here). -->
     <style name="Theme.NuruMember" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/nuru_paper</item>
-        <item name="android:statusBarColor">@color/nuru_navy</item>
-        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Cold-start splash (SplashScreen compat): the round TGNM mark on its
+         own paper tone, then a clean hand-off into the app. One UI, HiOS and
+         stock Android each render this with their native splash motion. -->
+    <style name="Theme.NuruMember.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="windowSplashScreenAnimationDuration">400</item>
+        <item name="postSplashScreenTheme">@style/Theme.NuruMember</item>
     </style>
 </resources>

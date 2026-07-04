@@ -386,8 +386,12 @@ private fun TransportRow(
 
 @Composable
 private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val view = androidx.compose.ui.platform.LocalView.current
     Box(
-        Modifier.size(78.dp).clip(CircleShape).background(RADIO.goldGrad).clickable(enabled = enabled) { onClick() },
+        Modifier.size(78.dp).clip(CircleShape).background(RADIO.goldGrad).clickable(enabled = enabled) {
+            org.nuruplace.member.ui.components.Haptics.tap(view)
+            onClick()
+        },
         contentAlignment = Alignment.Center,
     ) {
         if (playing) {

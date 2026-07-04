@@ -30,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,6 +102,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val onTab = TABS.any { it.route == route }
+    val rootView = androidx.compose.ui.platform.LocalView.current
+
+    // Launcher-shortcut / notification destination (long-press icon → Radio,
+    // Pathway, Prayer Wall, Give). Consumed once per intent.
+    LaunchedEffect(Unit) {
+        org.nuruplace.member.PendingDest.consume()?.let { dest ->
+            nav.navigate(dest) { launchSingleTop = true }
+        }
+    }
 
     Scaffold(
         containerColor = Nuru.paper,
@@ -110,8 +120,11 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     NavigationBarItem(
                         selected = route == tab.route,
                         onClick = {
-                            if (route != tab.route) nav.navigate(tab.route) {
-                                popUpTo("home"); launchSingleTop = true
+                            if (route != tab.route) {
+                                org.nuruplace.member.ui.components.Haptics.tick(rootView)
+                                nav.navigate(tab.route) {
+                                    popUpTo("home"); launchSingleTop = true
+                                }
                             }
                         },
                         icon = { Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp)) },

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TGNM launcher icon — paper face + round mark; the launcher's mask keeps it circular. -->
+<!-- TGNM launcher icon — paper face + round mark; the launcher's mask keeps it
+     circular. The monochrome layer makes One UI themed icons / Material You
+     tint the mark instead of showing a foreign-looking untinted square. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

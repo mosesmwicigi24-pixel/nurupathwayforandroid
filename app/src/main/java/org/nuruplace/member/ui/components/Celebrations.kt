@@ -123,6 +123,10 @@ fun CelebrationHost() {
     LaunchedEffect(Unit) { CelebrationCenter.init(context) }
     val moment by CelebrationCenter.current.collectAsState()
     val m = moment ?: return
+    // A celebration you can feel — the OS renders its own success effect
+    // (rich on One UI's haptic engine, appropriate on every other brand).
+    val view = androidx.compose.ui.platform.LocalView.current
+    LaunchedEffect(m.key) { Haptics.confirm(view) }
     if (m.confetti) CelebrationCard(m) else CelebrationBanner(m)
 }
 

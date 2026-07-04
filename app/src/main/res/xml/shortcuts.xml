@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press launcher shortcuts — the four doors members open most. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="radio"
+        android:icon="@drawable/ic_sc_radio"
+        android:shortcutShortLabel="@string/shortcut_radio">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nuruplace"
+            android:targetClass="org.nuruplace.member.MainActivity">
+            <extra android:name="nuru.dest" android:value="radio" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="pathway"
+        android:icon="@drawable/ic_sc_pathway"
+        android:shortcutShortLabel="@string/shortcut_pathway">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nuruplace"
+            android:targetClass="org.nuruplace.member.MainActivity">
+            <extra android:name="nuru.dest" android:value="pathway" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="prayer"
+        android:icon="@drawable/ic_sc_prayer"
+        android:shortcutShortLabel="@string/shortcut_prayer">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nuruplace"
+            android:targetClass="org.nuruplace.member.MainActivity">
+            <extra android:name="nuru.dest" android:value="prayer-wall" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="give"
+        android:icon="@drawable/ic_sc_give"
+        android:shortcutShortLabel="@string/shortcut_give">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nuruplace"
+            android:targetClass="org.nuruplace.member.MainActivity">
+            <extra android:name="nuru.dest" android:value="give" />
+        </intent>
+    </shortcut>
+</shortcuts>

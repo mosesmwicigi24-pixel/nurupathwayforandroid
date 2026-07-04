@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon layer (One UI themed icons / Material You): the TGNM essence —
+     ring + cross — as a single-color glyph the launcher tints itself. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- ring -->
+    <path
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:pathData="M54,32 a22,22 0 1,0 0.001,0 z" />
+    <!-- cross -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M52,42h4v7h6v4h-6v14h-4V53h-6v-4h6z" />
+</vector>

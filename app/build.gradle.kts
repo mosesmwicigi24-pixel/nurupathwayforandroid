@@ -44,8 +44,8 @@ android {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 35
-        versionCode = 15                  // bump every release so devices take it as an update
-        versionName = "2.1.4"
+        versionCode = 16                  // bump every release so devices take it as an update
+        versionName = "2.1.5"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -86,6 +86,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
