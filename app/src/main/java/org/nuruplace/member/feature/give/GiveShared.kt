@@ -29,12 +29,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 
 /** iOS Give palette — global Nuru tokens + the inline literals used across the give files. */
 object GIVE {
@@ -135,11 +134,12 @@ fun ksh(minor: Int): String = "KSh " + "%,d".format(minor / 100)
 /** "KSh 1,000" from major units. */
 fun kshMajor(major: Int): String = "KSh " + "%,d".format(major)
 
+// Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun giInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
-    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp)
+    nuruSans(size, weight, kerning.takeIf { it != 0f })
 
 fun giSerif(size: Int, weight: FontWeight = FontWeight.SemiBold, kerning: Float = 0f) =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, lineHeight = (size * 1.18f).sp)
+    nuruSerif(size, weight, kerning.takeIf { it != 0f })
 
 /** Cream header chrome (giving tab + receipt). Gradient + gold glow + 24dp bottom corners + hairline. */
 @Composable

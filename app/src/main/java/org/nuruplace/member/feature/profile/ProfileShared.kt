@@ -25,12 +25,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 
 /** iOS Profile palette — global Nuru tokens + the inline literals used across profile/settings. */
 object PROF {
@@ -95,11 +94,12 @@ val TINT_LANGUAGE = RowTint(Color(0xFFE0F2FE), Color(0xFF0EA5E9))
 val TINT_HELP = RowTint(Color(0xFFDCFCE7), Color(0xFF16A34A))
 val TINT_PRIVACY = RowTint(Color(0xFFEEF2FF), Color(0xFF6366F1))
 
+// Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun pInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
-    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp)
+    nuruSans(size, weight, kerning.takeIf { it != 0f })
 
 fun pSerif(size: Int, weight: FontWeight = FontWeight.SemiBold, kerning: Float = 0f) =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, lineHeight = (size * 1.2f).sp)
+    nuruSerif(size, weight, kerning.takeIf { it != 0f })
 
 /** Country-code → flag emoji (regional indicators). */
 fun flagEmoji(code: String?): String {
