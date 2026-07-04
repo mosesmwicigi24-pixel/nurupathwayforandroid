@@ -67,6 +67,7 @@ import org.nuruplace.member.data.net.GiveBody
 import org.nuruplace.member.data.net.GivingIntentResult
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.PayPalCaptureBody
 import org.nuruplace.member.ui.components.AsyncContent
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -540,6 +541,13 @@ private fun SheetDivider() {
 @Composable
 private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
     val context = LocalContext.current
+    // PayPal is a two-step settle: approve in the browser, then POST
+    // /giving/paypal/capture with the order id (the intent's provider_ref) —
+    // without the capture the gift never settles (money §5.6: online-only).
+    val scope = rememberCoroutineScope()
+    var captured by remember { mutableStateOf(false) }
+    var capturing by remember { mutableStateOf(false) }
+    var captureError by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(GIVE.paper), contentAlignment = Alignment.Center) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 32.dp),
@@ -563,13 +571,14 @@ private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             val sub = when {
+                captured -> "Gift confirmed — receipt on its way. 🎉"
                 r.provider == "mpesa" -> "Check your phone to approve the M-Pesa prompt."
-                r.approveUrl != null -> "Continue on PayPal to finish."
+                r.approveUrl != null -> "Continue on PayPal, then confirm below."
                 else -> "Your gift is being processed."
             }
-            Text(sub, style = giInter(13), color = GIVE.sub, textAlign = TextAlign.Center)
+            Text(sub, style = giInter(13), color = if (captured) GIVE.successText else GIVE.sub, textAlign = TextAlign.Center)
 
-            if (r.approveUrl != null) {
+            if (r.approveUrl != null && !captured) {
                 Spacer(Modifier.height(20.dp))
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.navy)
@@ -582,6 +591,32 @@ private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Text("Continue on PayPal", style = giInter(14, FontWeight.SemiBold), color = Color.White)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
+                        .background(GIVE.white).border(1.dp, GIVE.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .clickable(enabled = !capturing && !r.providerRef.isNullOrBlank()) {
+                            capturing = true; captureError = null
+                            scope.launch {
+                                runCatching { Net.client.api.capturePayPal(PayPalCaptureBody(r.providerRef!!)) }
+                                    .onSuccess { captured = true }
+                                    .onFailure { captureError = org.nuruplace.member.data.net.ApiException.message(it) }
+                                capturing = false
+                            }
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    if (capturing) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.gold, strokeWidth = 2.dp)
+                    } else {
+                        Text("I've approved — confirm gift", style = giInter(14, FontWeight.SemiBold), color = GIVE.gold)
+                    }
+                }
+                captureError?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = giInter(11), color = GIVE.danger, textAlign = TextAlign.Center)
                 }
             }
 
