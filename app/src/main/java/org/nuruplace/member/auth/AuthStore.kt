@@ -51,7 +51,16 @@ class AuthStore : ViewModel() {
     }
 
     fun signOut() {
+        // Best-effort server-side revocation (POST /auth/logout, unauthenticated,
+        // takes the refresh token in the body). Capture the token BEFORE clearing;
+        // never block sign-out on the network — local sign-out always proceeds.
+        val rt = Net.client.vault.refreshToken
         Net.client.vault.clear()
         _state.update { it.copy(authenticated = false, me = null) }
+        if (rt != null) {
+            viewModelScope.launch {
+                runCatching { Net.client.api.logout(org.nuruplace.member.data.net.LogoutBody(rt)) }
+            }
+        }
     }
 }
