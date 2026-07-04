@@ -351,7 +351,7 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                                         }
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text(ksh(r.amountMinor), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                                    Text(money(r.amountMinor, r.currency), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                                     Spacer(Modifier.height(4.dp))
                                     StatusChip(r.status)
                                 }
@@ -452,7 +452,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
                             modifier = Modifier.size(30.dp),
                         )
                     }
-                    Text(ksh(d.amountMinor), style = giSerif(36, FontWeight.Bold), color = GIVE.ink)
+                    Text(money(d.amountMinor, d.currency), style = giSerif(36, FontWeight.Bold), color = GIVE.ink)
                     Text("to ${giveFund(d.fund).name}", style = giInter(14), color = GIVE.sub)
                     StatusChip(d.status)
                 }
@@ -501,7 +501,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
                                     color = GIVE.ink,
                                     modifier = Modifier.weight(1f),
                                 )
-                                Text(ksh(e.amountMinor), style = giInter(13, FontWeight.SemiBold), color = GIVE.ink)
+                                Text(money(e.amountMinor, d.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.ink)
                             }
                         }
                     }

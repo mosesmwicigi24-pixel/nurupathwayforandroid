@@ -128,8 +128,18 @@ fun giveFee(amountMajor: Int): Int = when {
     else -> Math.round(amountMajor * 0.012).toInt()
 }
 
-/** "KSh 1,000" from minor units (no decimals, grouped). */
+/** "KSh 1,000" from minor units (no decimals, grouped). KES-only contexts (fund
+ *  tiles, M-Pesa entry). For real transaction rows use [money] with the row's currency. */
 fun ksh(minor: Int): String = "KSh " + "%,d".format(minor / 100)
+
+/** Currency-AWARE amount — statement/receipt rows carry a real `currency`
+ *  (PayPal settles in USD server-side); rendering everything as "KSh" printed
+ *  the wrong symbol on USD gifts while the Currency detail row said USD. */
+fun money(minor: Int, currency: String?): String = when (currency?.uppercase()) {
+    null, "", "KES" -> ksh(minor)
+    "USD" -> "$" + "%,.2f".format(minor / 100.0)
+    else -> "${'$'}{currency.uppercase()} " + "%,.2f".format(minor / 100.0)
+}
 
 /** "KSh 1,000" from major units. */
 fun kshMajor(major: Int): String = "KSh " + "%,d".format(major)

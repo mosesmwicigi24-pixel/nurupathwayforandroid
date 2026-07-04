@@ -541,8 +541,12 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
             }
         }
         Spacer(Modifier.height(Spacing.sm))
+        // Caption is the heading; the sub-line only earns its place when it adds
+        // information (an uncaptioned video used to print the same line twice).
         Text(v.caption ?: "Start here — what the journey looks like", style = NuruType.heading, color = Nuru.ink)
-        Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+        if (v.caption != null && v.caption != "Start here — what the journey looks like") {
+            Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+        }
     }
 }
 
@@ -1011,7 +1015,7 @@ private fun EncouragementCard(prayerCount: Int) {
 @Composable
 private fun CohortSection(cohort: CellSummary?, onOpen: () -> Unit) {
     Column {
-        SectionLabel("Your cohort")
+        SectionLabel("Your cell")
         HomeCard {
             val cell = cohort?.cell
             Text(cell?.name ?: "You're not in a cell yet", style = NuruType.cardCta, color = Nuru.ink600)
