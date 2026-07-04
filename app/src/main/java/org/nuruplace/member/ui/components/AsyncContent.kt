@@ -51,6 +51,13 @@ fun <T> AsyncContent(
         }
     }
 
+    // The error (and loading) states must NEVER trap the member: screens whose
+    // whole body is AsyncContent lose their own header here, so we always offer
+    // a way back via the activity's back dispatcher (fixes the "failed quiz /
+    // missing event → restart the app" trap).
+    val backDispatcher =
+        androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+
     when (val s = state) {
         is LoadState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
             CircularProgressIndicator(color = Nuru.gold)
@@ -63,6 +70,9 @@ fun <T> AsyncContent(
             Text(s.message, style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center)
             TextButton(onClick = { attempt++ }) {
                 Text("Try again", style = NuruType.cardCta, color = Nuru.gold)
+            }
+            TextButton(onClick = { backDispatcher?.onBackPressed() }) {
+                Text("‹ Go back", style = NuruType.cardCta, color = Nuru.ink600)
             }
         }
         is LoadState.Ok -> content(s.value, reload)

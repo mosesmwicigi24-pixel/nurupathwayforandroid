@@ -145,7 +145,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenLevel = { nav.navigate("level/$it") },
                     onOpenModule = { nav.navigate("module/$it") },
                     onOpenExam = { nav.navigate("exam/$it") },
-                    onOpenMentor = { nav.navigate("mentor") },
+                    // The hub row says "Your Discipleship Hub" — route it there
+                    // (iOS PathwayDisciplershipRow → discipleshipHub), not to Mentor.
+                    onOpenMentor = { nav.navigate("discipleship") },
                     onOpenMap = { nav.navigate("pathway-map") },
                 )
             }
@@ -186,6 +188,29 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
             }
             composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
+            composable("discipleship") {
+                org.nuruplace.member.feature.discipleship.DiscipleshipHubScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { conversationId -> nav.navigate("chat/$conversationId") },
+                )
+            }
+            // Discipler-facing (Instructor+; server enforces role + scope).
+            composable("disciples") {
+                org.nuruplace.member.feature.discipleship.DisciplerRosterScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenStudent = { id -> nav.navigate("disciples/$id") },
+                )
+            }
+            composable(
+                "disciples/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.discipleship.DisciplerDossierScreen(
+                    studentId = entry.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { conversationId -> nav.navigate("chat/$conversationId") },
+                )
+            }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
             composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
             composable("prayer-wall") {
@@ -203,6 +228,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNewMessage = { nav.navigate("new-message") },
                     onOpenAssistant = { nav.navigate("assistant") },
                     onOpenNotifications = { nav.navigate("notifications") },
+                    isStaff = me?.profile?.role in setOf("Instructor", "Admin", "SuperAdmin"),
                 )
             }
             composable("new-message") {
@@ -219,7 +245,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
             composable("events") {
                 EventsScreen(
-                    onOpenEvent = { nav.navigate("event/$it") },
+                    onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") },
                     onOpenCalendar = { nav.navigate("events-calendar") },
                     onOpenAnnouncement = { nav.navigate("announcement/$it") },
                     onOpenAnnouncements = { nav.navigate("announcements") },
@@ -227,13 +253,23 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 )
             }
             composable("events-calendar") {
-                AllEventsCalendarScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
+                AllEventsCalendarScreen(onBack = { nav.popBackStack() }, onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") })
             }
             composable(
-                "event/{id}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                // The end time travels as nav state: GET /events/{id} has no end field
+                // on the wire — the calendar occurrence's end_at is the source (as iOS).
+                "event/{id}?end={end}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("end") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
             ) { entry ->
-                EventDetailScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() }, onCheckIn = { nav.navigate("checkin/$it") })
+                EventDetailScreen(
+                    eventId = entry.arguments?.getString("id") ?: "",
+                    endAt = entry.arguments?.getString("end")?.takeIf { it.isNotBlank() },
+                    onBack = { nav.popBackStack() },
+                    onCheckIn = { nav.navigate("checkin/$it") },
+                )
             }
             composable(
                 "checkin/{id}",

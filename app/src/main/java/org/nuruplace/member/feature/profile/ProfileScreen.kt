@@ -22,15 +22,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
@@ -55,6 +60,7 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -71,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -78,6 +85,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,10 +95,13 @@ import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.net.Achievements
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Badge
 import org.nuruplace.member.data.net.Certificate
 import org.nuruplace.member.data.net.MeResponse
@@ -108,11 +120,22 @@ private val Capsule = RoundedCornerShape(999.dp)
 fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Unit) {
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
     var achievements by remember { mutableStateOf<Achievements?>(null) }
+    var badgeGallery by remember { mutableStateOf<List<Badge>>(emptyList()) }
     var certs by remember { mutableStateOf<List<Certificate>>(emptyList()) }
     LaunchedEffect(Unit) {
         scores = runCatching { Net.client.api.scores() }.getOrNull()
         achievements = runCatching { Net.client.api.achievements() }.getOrNull()
         certs = runCatching { Net.client.api.certificates().data }.getOrDefault(emptyList())
+        // GET /badges catalogue merged with earned awards (iOS ProfileView.loadExtras):
+        // earned first (with awarded_at), then locked — so the rail shows what's
+        // still ahead, not just trophies already won.
+        val catalogue = runCatching { Net.client.api.badgesCatalogue().data }.getOrDefault(emptyList())
+        if (catalogue.isNotEmpty()) {
+            val earnedByCode = achievements?.badges.orEmpty().associateBy { it.code }
+            badgeGallery = catalogue
+                .map { c -> earnedByCode[c.code] ?: c }
+                .sortedByDescending { it.awardedAt != null }
+        }
     }
 
     val context = LocalContext.current
@@ -121,6 +144,9 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     var avatarUrl by remember(me) { mutableStateOf(me?.profile?.avatarUrl) }
     var sheetBadge by remember { mutableStateOf<Badge?>(null) }
     var copiedCode by remember { mutableStateOf<String?>(null) }
+    // Locally editable profile — refreshed from the PATCH /me response after each save.
+    var profile by remember(me) { mutableStateOf(me?.profile) }
+    var editing by remember { mutableStateOf<EditField?>(null) }
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
@@ -141,7 +167,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     fun pickAvatar() =
         pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
 
-    val p = me?.profile
+    val p = profile ?: me?.profile
     val fullName = p?.fullName ?: "Member"
     val email = p?.email ?: ""
     val level = me?.enrollment?.currentLevel ?: 1
@@ -238,8 +264,13 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             Modifier.padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            PersonalInformationCard(p)
-            AchievementsSection(achievements) { sheetBadge = it }
+            PersonalInformationCard(p, onEdit = { editing = it })
+            // Discipler console entry — staff only. The server enforces the role
+            // (requireRole Instructor on /disciples); this just hides the door.
+            if (p?.role in setOf("Instructor", "Admin", "SuperAdmin")) {
+                DisciplesEntryCard { onOpen("disciples") }
+            }
+            AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             MilestonesCard(me)
             CertificatesCard(
@@ -249,9 +280,29 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     clipboard.setText(AnnotatedString(code))
                     copiedCode = code
                 },
-                onDownload = { url ->
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                onDownload = { cert ->
+                    // download_url is a RELATIVE, auth-required media path — a browser
+                    // ACTION_VIEW 401s. Fetch through the authed client, stash in
+                    // cache/shared, and hand a content:// URI to a PDF viewer.
+                    scope.launch {
+                        runCatching {
+                            val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                val body = Net.client.api.certificatePdf(cert.verificationCode)
+                                val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
+                                val f = java.io.File(dir, "nuru-certificate-${cert.verificationCode}.pdf")
+                                body.byteStream().use { input -> f.outputStream().use { input.copyTo(it) } }
+                                f
+                            }
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", bytes,
+                            )
+                            val view = Intent(Intent.ACTION_VIEW)
+                                .setDataAndType(uri, "application/pdf")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            context.startActivity(
+                                Intent.createChooser(view, "Open certificate").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
                     }
                 },
             )
@@ -331,6 +382,189 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             }
         }
     }
+
+    // ── Personal-info edit sheet ────────────────────────────────────────────
+    editing?.let { field ->
+        EditFieldSheet(
+            field = field,
+            profile = p,
+            onDismiss = { editing = null },
+            onSaved = { res ->
+                profile = res.profile
+                editing = null
+            },
+        )
+    }
+}
+
+// ── Personal-info edit fields ───────────────────────────────────────────────
+private enum class EditField(
+    val title: String,
+    val wireKey: String,
+    val helper: String? = null,
+    val keyboardType: KeyboardType = KeyboardType.Text,
+    val capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+) {
+    NAME("Full name", "full_name", capitalization = KeyboardCapitalization.Words),
+    PHONE("Phone", "phone_number", keyboardType = KeyboardType.Phone),
+    DOB("Date of birth", "date_of_birth", helper = "YYYY-MM-DD"),
+    GENDER("Gender", "gender"),
+    COUNTRY("Country", "country_code", helper = "2-letter code, e.g. KE", capitalization = KeyboardCapitalization.Characters),
+    CITY("City", "city", capitalization = KeyboardCapitalization.Words),
+}
+
+private val DOB_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
+private val GENDER_OPTIONS = listOf(
+    "Male" to "male",
+    "Female" to "female",
+    "Prefer not to say" to "prefer_not_to_say",
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditFieldSheet(
+    field: EditField,
+    profile: UserProfile?,
+    onDismiss: () -> Unit,
+    onSaved: (MeResponse) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var value by remember(field) {
+        mutableStateOf(
+            when (field) {
+                EditField.NAME -> profile?.fullName ?: ""
+                EditField.PHONE -> profile?.phoneNumber ?: ""
+                EditField.DOB -> profile?.dateOfBirth ?: ""
+                EditField.GENDER -> profile?.gender ?: ""
+                EditField.COUNTRY -> profile?.countryCode ?: ""
+                EditField.CITY -> profile?.city ?: ""
+            },
+        )
+    }
+    var busy by remember(field) { mutableStateOf(false) }
+    var error by remember(field) { mutableStateOf<String?>(null) }
+
+    // The value that goes on the wire — trimmed; country code uppercased.
+    val wireValue = when (field) {
+        EditField.COUNTRY -> value.trim().uppercase()
+        else -> value.trim()
+    }
+    val valid = when (field) {
+        EditField.NAME, EditField.PHONE, EditField.CITY -> wireValue.isNotBlank()
+        EditField.DOB -> DOB_REGEX.matches(wireValue)
+        EditField.COUNTRY -> wireValue.length == 2 && wireValue.all { it.isLetter() }
+        EditField.GENDER -> GENDER_OPTIONS.any { it.second == wireValue }
+    }
+
+    fun save() {
+        if (!valid || busy) return
+        scope.launch {
+            busy = true
+            try {
+                val body = buildJsonObject {
+                    put(field.wireKey, JsonPrimitive(wireValue))
+                    put("row_version", JsonPrimitive(profile?.rowVersion ?: 0))
+                }
+                // PATCH returns only {user_id, row_version}; refetch /me for the
+                // authoritative profile (and the fresh row_version for future edits).
+                Net.client.api.updateMe(body)
+                onSaved(Net.client.api.me())
+            } catch (e: Exception) {
+                error = ApiException.message(e)
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = PROF.white) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(field.title, style = pSerif(20, FontWeight.SemiBold), color = PROF.navy)
+            field.helper?.let { helper ->
+                Text(helper, style = pInter(11), color = PROF.sub)
+            }
+
+            if (field == EditField.GENDER) {
+                GENDER_OPTIONS.forEach { (label, wire) ->
+                    val selected = value == wire
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (selected) PROF.gold.copy(alpha = 0.12f) else PROF.surface)
+                            .border(
+                                if (selected) 1.5.dp else 1.dp,
+                                if (selected) PROF.gold else PROF.border,
+                                RoundedCornerShape(14.dp),
+                            )
+                            .clickable { value = wire }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            label,
+                            style = pInter(13, if (selected) FontWeight.SemiBold else FontWeight.Medium),
+                            color = PROF.navy,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected) {
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(15.dp))
+                        }
+                    }
+                }
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(PROF.surface)
+                        .border(1.dp, PROF.border, RoundedCornerShape(14.dp))
+                        .padding(12.dp),
+                ) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        singleLine = true,
+                        textStyle = pInter(14, FontWeight.Medium).copy(color = PROF.navy),
+                        cursorBrush = SolidColor(PROF.gold),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = field.keyboardType,
+                            capitalization = field.capitalization,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            error?.let { msg ->
+                Text(msg, style = pInter(11, FontWeight.Medium), color = PROF.danger)
+            }
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (valid) PROF.gold else PROF.gold.copy(alpha = 0.4f))
+                    .clickable(enabled = valid && !busy) { save() },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = PROF.navy, strokeWidth = 2.dp)
+                } else {
+                    Text("Save", style = pInter(14, FontWeight.Bold), color = PROF.navy)
+                }
+            }
+        }
+    }
 }
 
 // ── Section card scaffold ───────────────────────────────────────────────────
@@ -367,7 +601,7 @@ private fun HairlineDivider() {
 
 // ── Personal information ────────────────────────────────────────────────────
 @Composable
-private fun PersonalInformationCard(p: UserProfile?) {
+private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit) {
     val userId = p?.userId ?: ""
     val memberId = "NRU-" + userId.filter { it.isLetterOrDigit() }.takeLast(8).uppercase() + "-2026"
     SectionCard {
@@ -405,26 +639,26 @@ private fun PersonalInformationCard(p: UserProfile?) {
             Text("PERMANENT", style = pInter(9, FontWeight.SemiBold, 0.9f), color = PROF.rowLabel)
         }
 
-        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—", editable = false)
+        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—")
         HairlineDivider()
-        InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", editable = true)
-        InfoRow(Icons.Filled.Call, "PHONE", p?.phoneNumber ?: "—", editable = true)
-        InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", p?.dateOfBirth ?: "Not set", editable = true)
-        InfoRow(Icons.Filled.Group, "GENDER", p?.gender ?: "—", editable = true)
+        InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", onEdit = { onEdit(EditField.NAME) })
+        InfoRow(Icons.Filled.Call, "PHONE", p?.phoneNumber ?: "—", onEdit = { onEdit(EditField.PHONE) })
+        InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", p?.dateOfBirth ?: "Not set", onEdit = { onEdit(EditField.DOB) })
+        InfoRow(Icons.Filled.Group, "GENDER", p?.gender ?: "—", onEdit = { onEdit(EditField.GENDER) })
         InfoRow(
             Icons.Filled.Public,
             "COUNTRY",
             (flagEmoji(p?.countryCode) + " " + countryName(p?.countryCode)).trim(),
-            editable = true,
+            onEdit = { onEdit(EditField.COUNTRY) },
         )
-        InfoRow(Icons.Filled.LocationOn, "CITY", p?.city ?: "—", editable = true)
+        InfoRow(Icons.Filled.LocationOn, "CITY", p?.city ?: "—", onEdit = { onEdit(EditField.CITY) })
         HairlineDivider()
         LanguagesRow()
     }
 }
 
 @Composable
-private fun InfoRow(icon: ImageVector, label: String, value: String, editable: Boolean) {
+private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (() -> Unit)? = null) {
     Column {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 10.dp),
@@ -445,8 +679,16 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, editable: B
                 Text(label, style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
                 Text(value, style = pInter(13, FontWeight.Medium), color = PROF.navy)
             }
-            if (editable) {
-                Icon(Icons.Filled.Edit, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
+            if (onEdit != null) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable { onEdit() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit $label", tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
+                }
             }
         }
     }
@@ -489,14 +731,42 @@ private fun LanguagesRow() {
     }
 }
 
+// ── Discipler console entry (staff only) ────────────────────────────────────
+@Composable
+private fun DisciplesEntryCard(onOpen: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(PROF.navy)
+            .clickable { onOpen() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PROF.gold),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Groups, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(20.dp)) }
+        Column(Modifier.weight(1f)) {
+            Text("SHEPHERD THE FLOCK", style = pInter(8, FontWeight.Bold, 1.28f), color = PROF.gold)
+            Text("Your disciples", style = pInter(14, FontWeight.SemiBold), color = Color.White)
+            Text("Roster, journeys & pending reflections", style = pInter(11), color = Color.White.copy(alpha = 0.7f))
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+    }
+}
+
 // ── Achievements ────────────────────────────────────────────────────────────
 @Composable
-private fun AchievementsSection(achievements: Achievements?, onBadge: (Badge) -> Unit) {
+private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, onBadge: (Badge) -> Unit) {
     SectionCard {
         SectionTitle(Icons.Filled.AutoAwesome, "ACHIEVEMENTS") {
             Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.navy)
         }
-        val badges = achievements?.badges.orEmpty()
+        // Catalogue merge (GET /badges): earned first, locked after — the rail
+        // shows what's ahead. Falls back to earned-only while the catalogue loads.
+        val badges = gallery.ifEmpty { achievements?.badges.orEmpty() }
         if (badges.isEmpty()) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -749,7 +1019,7 @@ private fun CertificatesCard(
     certs: List<Certificate>,
     copiedCode: String?,
     onCopy: (String) -> Unit,
-    onDownload: (String) -> Unit,
+    onDownload: (Certificate) -> Unit,
 ) {
     SectionCard {
         SectionTitle(Icons.Filled.Verified, "CERTIFICATES")
@@ -783,7 +1053,7 @@ private fun CertificateCard(
     c: Certificate,
     copied: Boolean,
     onCopy: (String) -> Unit,
-    onDownload: (String) -> Unit,
+    onDownload: (Certificate) -> Unit,
 ) {
     val levelLabel = (c.levelNumber?.toString() ?: "")
     Column(
@@ -874,7 +1144,7 @@ private fun CertificateCard(
                     .height(36.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(PROF.gold)
-                    .clickable { onDownload(c.downloadUrl) },
+                    .clickable { onDownload(c) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {

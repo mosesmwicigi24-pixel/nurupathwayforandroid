@@ -70,11 +70,11 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.data.net.PathwaySummary
 import org.nuruplace.member.ui.components.FitImage
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 import java.time.LocalTime
 
 // Exact Figma palette (LevelsOverview.tsx) — local so the page is 1:1 with iOS.
@@ -101,10 +101,10 @@ private object PW {
         3 to "Grace, repentance, and new life", 4 to "Who you are in Him",
         5 to "How Scripture forms faith and life", 6 to "Walking in the Spirit's gifts and power",
     )
-    // Type helpers
-    fun over(size: Int, ker: Float = 1.4f) = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = size.sp, letterSpacing = ker.sp)
-    fun t(size: Int, w: FontWeight = FontWeight.Normal, ker: Float = 0f) = TextStyle(fontFamily = Inter, fontWeight = w, fontSize = size.sp, letterSpacing = ker.sp)
-    fun serif(size: Int, w: FontWeight = FontWeight.Medium, ker: Float = 0f) = TextStyle(fontFamily = Fraunces, fontWeight = w, fontSize = size.sp, letterSpacing = ker.sp)
+    // Type helpers — delegate to the canonical schema (ui/theme/TypeSchema.kt).
+    fun over(size: Int, ker: Float = 1.4f) = nuruSans(size, FontWeight.Bold, ker)
+    fun t(size: Int, w: FontWeight = FontWeight.Normal, ker: Float = 0f) = nuruSans(size, w, ker.takeIf { it != 0f })
+    fun serif(size: Int, w: FontWeight = FontWeight.Medium, ker: Float = 0f) = nuruSerif(size, w, ker.takeIf { it != 0f })
 }
 
 private fun pwShort(t: String): String = t.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: ""

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,7 +53,7 @@ fun VerseLibraryScreen(onBack: () -> Unit) {
         var text by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
 
-        Column(Modifier.fillMaxSize().background(Nuru.paper)) {
+        Column(Modifier.fillMaxSize().background(Nuru.paper).imePadding()) {
             ScreenHeader("Verse library", kicker = "Saved", onBack = onBack)
             LazyColumn(
                 Modifier.fillMaxWidth(),

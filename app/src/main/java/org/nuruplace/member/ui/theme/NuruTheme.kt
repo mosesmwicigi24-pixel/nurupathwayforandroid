@@ -14,12 +14,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.nuruplace.member.R
 
 /** Brand palette — hex values identical to NuruTheme.swift / tokens.ts. */
@@ -161,27 +159,31 @@ val Fraunces = FontFamily(
     Font(R.font.fraunces_bold, FontWeight.Bold),
 )
 
-/** Semantic type scale — matches NuruTheme's Font extension (Inter body · Fraunces display). */
+/**
+ * Semantic type scale (Inter body · Fraunces display). Every style is built from
+ * the canonical factories in TypeSchema.kt so line-height and letter-spacing follow
+ * ONE schema — sizes/weights here are the scale, rhythm lives in TypeSchema.kt.
+ */
 object NuruType {
-    val display = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 28.sp, lineHeight = 34.sp)
-    val title = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Medium, fontSize = 22.sp, lineHeight = 28.sp)
-    val cardTitle = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 24.sp)
-    val rowTitle = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp)
-    val heading = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 22.sp)
-    val body = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp)
-    val bodyLg = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp)
-    val label = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp)
-    val caption = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp)
-    val micro = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp)
-    val kicker = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 1.4.sp)
-    val cardCta = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 18.sp)
+    val display = nuruSerif(28, FontWeight.Medium)
+    val title = nuruSerif(22, FontWeight.Medium)
+    val cardTitle = nuruSerif(18, FontWeight.SemiBold)
+    val rowTitle = nuruSerif(15, FontWeight.SemiBold)
+    val heading = nuruSans(16, FontWeight.Medium)
+    val body = nuruSans(14)
+    val bodyLg = nuruSans(16)
+    val label = nuruSans(12, FontWeight.Medium)
+    val caption = nuruSans(12)
+    val micro = nuruSans(11, FontWeight.Medium)
+    val kicker = nuruSans(11, FontWeight.Bold, tracking = 1.4f)
+    val cardCta = nuruSans(14, FontWeight.SemiBold)
     // Section labels that sit OUTSIDE a card (GROW YOUR FAITH · UPCOMING · YOUR
     // COHORT) — iOS "Inter 11 bold, kerning 1.98", rendered in `Nuru.eyebrow`.
-    val sectionLabel = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 1.8.sp)
+    val sectionLabel = nuruSans(11, FontWeight.Bold, tracking = 1.8f)
     // Fraunces feature-card headline (verse text, card titles) — iOS "Fraunces 18 semibold".
-    val featureTitle = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 25.sp)
+    val featureTitle = nuruSerif(18, FontWeight.SemiBold)
     // Greeting — iOS "Fraunces 22 semibold, kerning −0.22".
-    val greeting = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp, letterSpacing = (-0.22).sp)
+    val greeting = nuruSerif(22, FontWeight.SemiBold, tracking = -0.22f)
 }
 
 private val NuruColorScheme = lightColorScheme(

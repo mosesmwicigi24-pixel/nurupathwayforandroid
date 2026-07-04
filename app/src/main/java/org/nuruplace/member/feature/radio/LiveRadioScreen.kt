@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,9 +34,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bedtime
@@ -55,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +67,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -72,8 +77,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.RadioComment
+import org.nuruplace.member.data.net.RadioCommentBody
 import org.nuruplace.member.data.net.RadioProgram
+import org.nuruplace.member.data.net.RadioReactBody
+import org.nuruplace.member.data.net.RadioReactionCounts
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
@@ -190,7 +200,7 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             )
 
             // ── Foreground ────────────────────────────────────────────────────
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
                 Header(live = now?.live == true, onBack = onBack)
 
                 Column(
@@ -443,20 +453,133 @@ private fun SegmentedTabs(tab: Int, onSelect: (Int) -> Unit, modifier: Modifier 
 // ── Tab: Live ───────────────────────────────────────────────────────────────
 @Composable
 private fun LiveTab(now: RadioProgram?) {
+    val scope = rememberCoroutineScope()
+    var counts by remember(now?.id) { mutableStateOf(RadioReactionCounts()) }
+    var comments by remember(now?.id) { mutableStateOf<List<RadioComment>>(emptyList()) }
+    var draft by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+
+    // Initial load + gentle 5s poll of the live comments feed (parity with iOS).
+    // Reaction counts have no GET — they arrive only on each react response.
+    LaunchedEffect(now?.id) {
+        val id = now?.id ?: return@LaunchedEffect
+        while (true) {
+            runCatching { comments = Net.client.api.radioComments(id) }
+            kotlinx.coroutines.delay(5000)
+        }
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf("❤️" to RADIO.redDeep, "🙏" to RADIO.gold, "🙌" to RADIO.indigoSoft).forEach { (emoji, tint) ->
-                Box(
-                    Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) { Text(emoji, fontSize = 20.sp) }
+            listOf(
+                Triple("❤️", RADIO.redDeep, "heart"),
+                Triple("🙏", RADIO.gold, "amen"),
+                Triple("🙌", RADIO.indigoSoft, "fire"),
+            ).forEach { (emoji, tint, kind) ->
+                val count = when (kind) {
+                    "heart" -> counts.heart
+                    "amen" -> counts.amen
+                    else -> counts.fire
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape)
+                            .clickable(enabled = now != null) {
+                                val id = now?.id ?: return@clickable
+                                scope.launch {
+                                    runCatching {
+                                        counts = Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(emoji, fontSize = 20.sp) }
+                    if (count > 0) {
+                        Text(count.toString(), style = gInter(10, FontWeight.Bold), color = Color.White.copy(alpha = 0.7f))
+                    } else {
+                        Spacer(Modifier.height(12.dp))
+                    }
+                }
             }
         }
+        val total = counts.heart + counts.amen + counts.fire
         Text(
-            "Tap to react as you listen together.",
+            if (total > 0) "$total reactions today" else "Tap to react as you listen together.",
             style = gInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.45f),
             modifier = Modifier.padding(top = 8.dp),
         )
+
+        if (now != null) {
+            // Comments feed.
+            if (comments.isNotEmpty()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    comments.forEach { c -> CommentRow(c) }
+                }
+            } else {
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // Composer.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    Modifier.weight(1f).clip(Capsule).background(RADIO.glass).border(1.dp, RADIO.glassBorder, Capsule)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        textStyle = gInter(13).copy(color = Color.White),
+                        cursorBrush = SolidColor(RADIO.gold),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (draft.isBlank()) {
+                                    Text("Say amen…", style = gInter(13), color = Color.White.copy(alpha = 0.4f))
+                                }
+                                inner()
+                            }
+                        },
+                    )
+                }
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape)
+                        .then(
+                            if (draft.isNotBlank()) Modifier.background(RADIO.goldGrad)
+                            else Modifier.background(Color.White.copy(alpha = 0.12f)),
+                        )
+                        .clickable(enabled = draft.isNotBlank() && !busy) {
+                            val id = now.id
+                            scope.launch {
+                                busy = true
+                                runCatching {
+                                    Net.client.api.addRadioComment(id, RadioCommentBody(draft.trim(), java.util.UUID.randomUUID().toString()))
+                                }.onSuccess {
+                                    draft = ""
+                                    runCatching { comments = Net.client.api.radioComments(id) }
+                                }
+                                busy = false
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send, contentDescription = null,
+                        tint = if (draft.isNotBlank()) RADIO.textOnGold else Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
+        }
+
         now?.description?.let {
             Text(
                 it,
@@ -465,6 +588,38 @@ private fun LiveTab(now: RadioProgram?) {
             )
         }
     }
+}
+
+@Composable
+private fun CommentRow(c: RadioComment) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RADIO.glass)
+            .border(1.dp, RADIO.glassBorder, RoundedCornerShape(16.dp)).padding(10.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.size(28.dp).clip(CircleShape).background(RADIO.goldGrad), contentAlignment = Alignment.Center) {
+            if (c.authorAvatarUrl != null) {
+                AsyncImage(
+                    model = c.authorAvatarUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize().clip(CircleShape),
+                )
+            } else {
+                Text(initials(c.authorName ?: ""), style = gInter(9, FontWeight.Bold), color = Color.White)
+            }
+        }
+        Column {
+            Text(c.authorName ?: "Member", style = gInter(12, FontWeight.Bold), color = Color.White)
+            Text(c.body, style = gInter(12).copy(lineHeight = 17.sp), color = Color.White.copy(alpha = 0.7f))
+        }
+    }
+}
+
+/** First letters of up to two words, uppercased; "?" when there's nothing usable. */
+private fun initials(name: String): String {
+    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (parts.isEmpty()) return "?"
+    return parts.take(2).mapNotNull { it.firstOrNull()?.uppercaseChar()?.toString() }.joinToString("")
 }
 
 // ── Tab: Recordings ─────────────────────────────────────────────────────────

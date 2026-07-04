@@ -23,14 +23,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -129,11 +128,12 @@ fun chatSenderAccent(name: String, mine: Boolean): Color {
     return CHAT.senderPalette[((h % 8) + 8) % 8]
 }
 
+// Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun cInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
-    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp)
+    nuruSans(size, weight, kerning.takeIf { it != 0f })
 
 fun cSerif(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, lineHeight = (size * 1.28f).sp)
+    nuruSerif(size, weight, kerning.takeIf { it != 0f })
 
 /** Up to two leading letters of the name, uppercased. */
 fun chatInitials(name: String): String {

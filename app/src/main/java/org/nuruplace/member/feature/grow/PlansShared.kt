@@ -15,14 +15,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 
 /** iOS `enum PL` palette — Plans-tab-specific (darker/cooler than the global Nuru navy/gold). */
 object PL {
@@ -51,13 +50,13 @@ object PL {
     val headerGrad = Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
 }
 
-/** Inter text style (size in sp, optional weight/kerning/italic). */
+/** Inter text style — delegates to the canonical schema (ui/theme/TypeSchema.kt). */
 fun plInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f, italic: Boolean = false) =
-    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal)
+    nuruSans(size, weight, kerning.takeIf { it != 0f }).copy(fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal)
 
 /** Fraunces (serif) text style — default medium weight, like iOS `.fraunces()`. */
 fun plSerif(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f, italic: Boolean = false) =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal)
+    nuruSerif(size, weight, kerning.takeIf { it != 0f }).copy(fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal)
 
 /** Uppercased gold section overline (Inter 9 bold, tracked). */
 @Composable

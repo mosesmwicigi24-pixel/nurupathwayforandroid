@@ -45,6 +45,14 @@ data class UserProfile(
     val countryCode: String? = null,
     val avatarUrl: String? = null,
     val mfaEnabled: Boolean? = null,
+    // Full getMe wire shape (identity/service.ts) — served but previously dropped.
+    // socials is a free-form JSON object ({platform: handle}); role_keys are the
+    // RBAC grants behind `role`; account_status is active|suspended|….
+    val socials: kotlinx.serialization.json.JsonObject? = null,
+    val accountStatus: String? = null,
+    @kotlinx.serialization.SerialName("require_2fa") val require2fa: Boolean? = null,
+    val createdAt: String? = null,
+    val roleKeys: List<String> = emptyList(),
     val rowVersion: Int = 0,
 )
 
@@ -80,3 +88,11 @@ data class MfaBody(val mfaToken: String, val code: String)
 
 @Serializable
 data class RefreshBody(val refreshToken: String)
+
+/** POST /auth/logout — best-effort refresh-token revocation on sign-out. */
+@Serializable
+data class LogoutBody(val refreshToken: String)
+
+/** PATCH /me response — the server returns only the concurrency handle. */
+@Serializable
+data class UpdateMeRes(val userId: String, val rowVersion: Int)

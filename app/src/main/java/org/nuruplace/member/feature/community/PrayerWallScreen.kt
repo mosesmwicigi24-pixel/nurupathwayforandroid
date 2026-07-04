@@ -3,6 +3,15 @@
 // request for its comments. Port of the iOS PrayerWallView.
 package org.nuruplace.member.feature.community
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -25,12 +35,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,22 +57,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.net.CreatePrayerBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerWallPost
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.GrowPal
+import org.nuruplace.member.ui.components.LiveWave
+import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.components.voiceClock
+import org.nuruplace.member.util.VoicePlayer
+import org.nuruplace.member.util.VoiceRecorder
 import org.nuruplace.member.util.relTime
+import java.io.File
 import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
@@ -110,6 +139,8 @@ fun PrayerWallScreen(onBack: () -> Unit, onOpenPost: (String) -> Unit) {
         // Body
         AsyncContent(key = sort, load = { Net.client.api.prayerWall(sort).data }) { posts: List<PrayerWallPost>, reload ->
             val scope = rememberCoroutineScope()
+            val player = remember { VoicePlayer() }
+            DisposableEffect(Unit) { onDispose { player.release() } }
             Column(
                 Modifier.padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -127,11 +158,12 @@ fun PrayerWallScreen(onBack: () -> Unit, onOpenPost: (String) -> Unit) {
                     posts.forEach { p ->
                         PrayerCard(
                             p,
+                            player = player,
                             onOpen = { onOpenPost(p.postId) },
                             onPray = {
                                 scope.launch {
                                     try {
-                                        Net.client.api.prayerWallReact(p.postId, ReactBody("pray")); reload()
+                                        Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
                                     } catch (_: Exception) {}
                                 }
                             },
@@ -160,7 +192,7 @@ private fun SortPill(label: String, key: String, sort: String, onSelect: (String
 }
 
 @Composable
-private fun PrayerCard(p: PrayerWallPost, onOpen: () -> Unit, onPray: () -> Unit) {
+private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Unit, onPray: () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
@@ -188,6 +220,35 @@ private fun PrayerCard(p: PrayerWallPost, onOpen: () -> Unit, onPray: () -> Unit
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
         )
+        // Voice prayer — playable waveform (audio_url + audio_waveform on the wire).
+        if (!p.audioUrl.isNullOrBlank()) {
+            val playing = player.playingId == p.postId
+            Row(
+                Modifier.padding(top = 8.dp).clip(Capsule).background(GrowPal.surface)
+                    .border(1.dp, GrowPal.border, Capsule)
+                    .clickable { player.toggle(p.postId, p.audioUrl) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playing) "Pause voice prayer" else "Play voice prayer",
+                    tint = GrowPal.navyDeep,
+                    modifier = Modifier.size(16.dp),
+                )
+                WaveformBars(
+                    levels = p.audioWaveform.orEmpty(),
+                    color = GrowPal.navyMid.copy(alpha = 0.35f),
+                    playedFraction = if (playing) player.progress else 0f,
+                    playedColor = GrowPal.gold,
+                    maxBarHeight = 18.dp,
+                )
+                if (playing && player.durationSec > 0) {
+                    Text(voiceClock(player.durationSec), style = gInter(10, FontWeight.SemiBold), color = GrowPal.ink400)
+                }
+            }
+        }
         Row(
             Modifier.padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -251,10 +312,28 @@ private fun AnsweredChip() {
 @Composable
 private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white) {
+        val context = LocalContext.current
         var title by remember { mutableStateOf("") }
         var body by remember { mutableStateOf("") }
+        var posting by remember { mutableStateOf(false) }
+        // Voice prayer attachment — record, keep the file + its waveform, post.
+        val recorder = remember { VoiceRecorder() }
+        var attached by remember { mutableStateOf<File?>(null) }
+        var attachedWave by remember { mutableStateOf<List<Int>>(emptyList()) }
+        var attachedDur by remember { mutableStateOf(0) }
+        DisposableEffect(Unit) { onDispose { recorder.cancel() } }
+        val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) recorder.start(context)
+        }
+        fun startRecording() {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                recorder.start(context)
+            } else {
+                askMic.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
         Column(
-            Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp),
+            Modifier.imePadding().padding(horizontal = 20.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Share a prayer", style = gSerif(18, FontWeight.SemiBold), color = GrowPal.navy)
@@ -286,26 +365,123 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     modifier = Modifier.fillMaxWidth().heightIn(min = 110.dp),
                 )
             }
+            // Voice row — idle "Add voice" / live recording wave / attached preview.
+            when {
+                recorder.isRecording -> Row(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GrowPal.coolPaper)
+                        .border(1.dp, GrowPal.gold, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    val pulse by rememberInfiniteTransition(label = "prec").animateFloat(
+                        initialValue = 0.35f, targetValue = 1f,
+                        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "precDot",
+                    )
+                    Box(Modifier.size(10.dp).clip(Capsule).background(GrowPal.danger.copy(alpha = pulse)))
+                    Text(voiceClock(recorder.elapsedSec), style = gInter(12, FontWeight.Bold), color = GrowPal.navy)
+                    LiveWave(recorder.levels.toList(), color = GrowPal.gold, modifier = Modifier.weight(1f), maxBarHeight = 24.dp)
+                    Box(
+                        Modifier.size(36.dp).clip(Capsule).background(GrowPal.white).border(1.dp, GrowPal.border, Capsule)
+                            .clickable { recorder.cancel() },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Close, "Discard recording", tint = GrowPal.ink400, modifier = Modifier.size(15.dp)) }
+                    Box(
+                        Modifier.size(36.dp).clip(Capsule).background(GrowPal.gold)
+                            .clickable {
+                                val f = recorder.stop()
+                                if (f != null) {
+                                    attached = f
+                                    attachedWave = recorder.waveformFor()
+                                    attachedDur = recorder.elapsedSec.coerceAtLeast(1)
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Check, "Keep recording", tint = GrowPal.navyDeep, modifier = Modifier.size(16.dp)) }
+                }
+                attached != null -> Row(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GrowPal.goldChipBg)
+                        .border(1.dp, GrowPal.gold, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(Icons.Filled.Mic, null, tint = GrowPal.goldChipText, modifier = Modifier.size(16.dp))
+                    WaveformBars(
+                        levels = attachedWave,
+                        color = GrowPal.goldLo.copy(alpha = 0.6f),
+                        modifier = Modifier.weight(1f),
+                        maxBarHeight = 20.dp,
+                    )
+                    Text(voiceClock(attachedDur), style = gInter(11, FontWeight.Bold), color = GrowPal.goldChipText)
+                    Box(
+                        Modifier.size(28.dp).clip(Capsule).background(GrowPal.white).border(1.dp, GrowPal.border, Capsule)
+                            .clickable {
+                                attached?.delete()
+                                attached = null
+                                attachedWave = emptyList()
+                                attachedDur = 0
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Close, "Remove voice prayer", tint = GrowPal.ink400, modifier = Modifier.size(13.dp)) }
+                }
+                else -> Row(
+                    Modifier.clip(Capsule).background(GrowPal.coolPaper).border(1.dp, GrowPal.border, Capsule)
+                        .clickable { startRecording() }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Icons.Filled.Mic, null, tint = GrowPal.navyDeep, modifier = Modifier.size(15.dp))
+                    Text("Add voice", style = gInter(12, FontWeight.Bold), color = GrowPal.navyDeep)
+                }
+            }
+            val canPost = (body.isNotBlank() || attached != null) && !posting
             Box(
                 Modifier.fillMaxWidth().height(52.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (body.isNotBlank()) GrowPal.navyDeep else GrowPal.navyDeep.copy(alpha = 0.5f))
-                    .clickable(enabled = body.isNotBlank()) {
+                    .background(if (canPost) GrowPal.navyDeep else GrowPal.navyDeep.copy(alpha = 0.5f))
+                    .clickable(enabled = canPost) {
                         val t = title
                         val b = body
+                        val f = attached
+                        val wave = attachedWave
+                        posting = true
                         scope.launch {
                             try {
+                                var url: String? = null
+                                if (f != null) {
+                                    url = withContext(Dispatchers.IO) {
+                                        val part = MultipartBody.Part.createFormData("file", f.name, f.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
+                                        Net.client.api.uploadVoiceNote(part).url.ifBlank { null }
+                                    }
+                                    if (url == null) return@launch   // upload failed — keep the sheet open to retry
+                                }
                                 Net.client.api.createPrayerWallPost(
-                                    CreatePrayerBody(UUID.randomUUID().toString(), t.ifBlank { null }, b.trim(), UUID.randomUUID().toString()),
+                                    CreatePrayerBody(
+                                        postId = UUID.randomUUID().toString(),
+                                        title = t.ifBlank { null },
+                                        body = b.trim().ifBlank { "Voice prayer" },
+                                        clientMutationId = UUID.randomUUID().toString(),
+                                        audioUrl = url,
+                                        audioWaveform = if (url != null && wave.isNotEmpty()) wave else null,
+                                    ),
                                 )
                                 onPosted()
-                            } catch (_: Exception) {}
+                                onDismiss()
+                            } catch (_: Exception) {
+                            } finally {
+                                posting = false
+                            }
                         }
-                        onDismiss()
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Post to wall", style = gInter(16, FontWeight.Medium), color = Color.White)
+                Text(if (posting) "Posting…" else "Post to wall", style = gInter(16, FontWeight.Medium), color = Color.White)
             }
         }
     }

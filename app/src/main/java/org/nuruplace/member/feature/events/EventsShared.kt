@@ -35,15 +35,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.ui.components.FitImage
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -135,13 +134,13 @@ fun evCategory(cat: String?): Color = when (cat?.lowercase()?.trim()) {
     else -> Color(0xFF59667C)
 }
 
-/** Inter text style (size in sp, optional weight/kerning). */
+/** Inter text style — delegates to the canonical schema (ui/theme/TypeSchema.kt). */
 fun evInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
-    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp)
+    nuruSans(size, weight, kerning.takeIf { it != 0f })
 
-/** Fraunces (serif) style — generous lineHeight so serif ascenders never clip. */
+/** Fraunces (serif) style — delegates to the canonical schema (ui/theme/TypeSchema.kt). */
 fun evSerif(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, lineHeight = (size * 1.28f).sp)
+    nuruSerif(size, weight, kerning.takeIf { it != 0f })
 
 /** Uppercased tracked overline (Inter bold). */
 @Composable
@@ -250,6 +249,17 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Icon(Icons.Filled.Schedule, null, tint = if (urgent) EV.navy else EV.white, modifier = Modifier.size(10.dp))
                     Text(cd, style = evInter(8, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
                 }
+            }
+            // Rescheduled pill (top-end) — wire truth: a moved occurrence arrives
+            // with rescheduled=true and the NEW start/end already applied, so the
+            // pill is the member's only cue the time changed. (Cancelled
+            // occurrences never reach the client — dropped server-side.)
+            if (occ.rescheduled) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(12.dp)
+                        .clip(RoundedCornerShape(999.dp)).background(EV.goldTile)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) { Text("RESCHEDULED", style = evInter(8, FontWeight.Bold, 1f), color = EV.navy) }
             }
             // Category tag (bottom-end)
             occ.category?.takeIf { it.isNotBlank() }?.let { c ->

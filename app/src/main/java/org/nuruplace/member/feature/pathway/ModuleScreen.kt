@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -170,7 +171,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     val sectionCount = m.pages.size.coerceAtLeast(1)
 
     Box(Modifier.fillMaxSize().background(ML.cream)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().imePadding()) {
             if (!chromeHidden) {
                 Header(m, readMinutes, sectionCount, readDone, reflectDone, onBack = onBack, onExpand = { chromeHidden = true })
             }

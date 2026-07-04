@@ -6,6 +6,7 @@ package org.nuruplace.member.data.net
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -13,6 +14,10 @@ import retrofit2.http.Path
 interface MemberApi {
     @POST("auth/login")
     suspend fun login(@Body body: LoginBody): LoginResponse
+
+    // 204; revokes the refresh token server-side on sign-out.
+    @POST("auth/logout")
+    suspend fun logout(@Body body: LogoutBody): Unit
 
     @POST("auth/login/mfa")
     suspend fun completeMfa(@Body body: MfaBody): Session
@@ -28,6 +33,14 @@ interface MemberApi {
 
     @GET("me")
     suspend fun me(): MeResponse
+
+    // PATCH /me — profile self-edit (identity module). Body is a JsonObject so unset
+    // fields are OMITTED: the server's strict zod schema rejects explicit nulls
+    // (same precedent as reportModuleEngagement). Include row_version (optimistic
+    // concurrency) on every call. Wire truth (identity/service.ts updateMe): the
+    // response is ONLY {user_id, row_version} — refetch GET /me for the profile.
+    @PATCH("me")
+    suspend fun updateMe(@Body body: kotlinx.serialization.json.JsonObject): UpdateMeRes
 
     // --- Pathway (server-authoritative gating §1.9) ---
     @GET("me/pathway")
@@ -154,6 +167,11 @@ interface MemberApi {
     @POST("chat/conversations/{id}/messages")
     suspend fun sendChatMessage(@Path("id") conversationId: String, @Body body: SendMessageBody): Unit
 
+    // Same endpoint, voice shape (attachment_url + attachment_meta) — see
+    // SendVoiceBody in CommunityDtos.kt for why this is a separate method.
+    @POST("chat/conversations/{id}/messages")
+    suspend fun sendChatVoice(@Path("id") conversationId: String, @Body body: SendVoiceBody): Unit
+
     @POST("chat/conversations/{id}/read")
     suspend fun markChatRead(@Path("id") conversationId: String): Unit
 
@@ -162,6 +180,12 @@ interface MemberApi {
 
     @POST("chat/dms")
     suspend fun createDm(@Body body: DmBody): DmRes
+
+    // Staff-only (Instructor+ — Students get 403): one message delivered to every
+    // active member as an individual DM from the sender. Idempotent on
+    // client_mutation_id; returns how many members it reached.
+    @POST("chat/broadcast")
+    suspend fun broadcast(@Body body: BroadcastBody): BroadcastRes
 
     @POST("chat/spaces/{id}/join")
     suspend fun joinChatSpace(@Path("id") conversationId: String): Unit
@@ -179,6 +203,9 @@ interface MemberApi {
     @POST("events/{id}/rsvp")
     suspend fun rsvp(@Path("id") eventId: String, @Body body: RsvpBody): Unit
 
+    @GET("me/rsvps")
+    suspend fun myRsvps(): Envelope<MyRsvp>
+
     // --- Notification center ---
     @GET("me/notifications")
     suspend fun notifications(): NotificationsRes
@@ -192,6 +219,10 @@ interface MemberApi {
 
     @POST("giving/intents")
     suspend fun giving(@Body body: GiveBody): GivingIntentResult
+
+    // Settle an approved PayPal order (order_id = the intent's provider_ref).
+    @POST("giving/paypal/capture")
+    suspend fun capturePayPal(@Body body: PayPalCaptureBody): PayPalCaptureRes
 
     @GET("giving/transactions/{id}")
     suspend fun givingDetail(@Path("id") transactionId: String): GivingDetail
@@ -231,8 +262,65 @@ interface MemberApi {
     @GET("me/home/verse")
     suspend fun homeVerse(): TailoredVerse
 
+    // Nuru's warm daily-greeting line (cached per day server-side).
+    @GET("me/home/greeting")
+    suspend fun homeGreeting(): DailyGreeting
+
+    // Community reactions on today's shared verse — one per member per day.
+    @GET("me/home/verse/reactions")
+    suspend fun verseReactions(): VerseReactions
+
+    @POST("me/home/verse/reactions")
+    suspend fun reactToVerse(@Body body: VerseReactionBody): VerseReactions
+
+    // The one admin-featured event for the mobile Home (portal toggle; may be null).
+    @GET("home/featured-event")
+    suspend fun featuredEvent(): FeaturedEventEnv
+
+    // The student's Discipleship Hub — one read-aggregation call (§1.9 pure read).
+    @GET("me/discipleship")
+    suspend fun discipleship(): DiscipleshipEnv
+
+    // Discipler-facing (Instructor+): roster + one student's dossier. The server
+    // enforces the role and disciple-set scope (403 FORBIDDEN_SCOPE outside it);
+    // the client only hides the entry point for students.
+    @GET("disciples")
+    suspend fun disciples(): RosterRes
+
+    @GET("disciples/{id}")
+    suspend fun disciple(@Path("id") studentId: String): DossierEnv
+
+    // Copy a private journal prayer onto the wall. Idempotent (re-share returns
+    // the existing post). NEVER queued offline — it creates member-visible
+    // content, and the server 404s an entry it hasn't synced yet.
+    @POST("me/prayers/{id}/share-to-wall")
+    suspend fun sharePrayerToWall(@Path("id") entryId: String): ShareToWallRes
+
+    // Certificate PDF — /certificates emits a RELATIVE download_url brokered by
+    // the media module; it needs the authed session, so it must be fetched
+    // through this client (a browser ACTION_VIEW would 401).
+    @retrofit2.http.Streaming
+    @GET("media/certificates/{code}")
+    suspend fun certificatePdf(@Path("code") code: String): okhttp3.ResponseBody
+
+    // Giving statement / single-gift receipt as PDFs (financial/index.ts:71,88).
+    // Fetched through the authed client (never a ?token= browser URL — that
+    // would leak the JWT into browser history).
+    @retrofit2.http.Streaming
+    @GET("giving/statement.pdf")
+    suspend fun givingStatementPdf(): okhttp3.ResponseBody
+
+    @retrofit2.http.Streaming
+    @GET("giving/transactions/{id}/receipt.pdf")
+    suspend fun givingReceiptPdf(@Path("id") txId: String): okhttp3.ResponseBody
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
+
+    // Full badge catalogue (gamification module) — merged with /me/achievements
+    // so the profile rail can show locked badges too, as iOS does.
+    @GET("badges")
+    suspend fun badgesCatalogue(): Envelope<Badge>
 
     @GET("certificates")
     suspend fun certificates(): Envelope<Certificate>
@@ -304,6 +392,12 @@ interface MemberApi {
     @POST("me/avatar")
     suspend fun uploadAvatar(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): AvatarResult
 
+    // Voice notes (multipart, field "file", AAC .m4a ≤5 MB) → { url } — shared
+    // by chat voice messages and prayer-wall voice prayers.
+    @retrofit2.http.Multipart
+    @POST("me/media/audio")
+    suspend fun uploadVoiceNote(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): VoiceUploadRes
+
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit
 
@@ -327,6 +421,20 @@ interface MemberApi {
 
     @GET("radio/programs")
     suspend fun radioPrograms(): List<RadioProgram>
+
+    @GET("radio/programs/{id}")
+    suspend fun radioProgram(@Path("id") programId: String): RadioProgram
+
+    // kind ∈ heart | amen | fire; idempotent per client_event_id → same counts on replay.
+    @POST("radio/programs/{id}/react")
+    suspend fun radioReact(@Path("id") programId: String, @Body body: RadioReactBody): RadioReactRes
+
+    // Bare array on the wire (not enveloped).
+    @GET("radio/programs/{id}/comments")
+    suspend fun radioComments(@Path("id") programId: String): List<RadioComment>
+
+    @POST("radio/programs/{id}/comments")
+    suspend fun addRadioComment(@Path("id") programId: String, @Body body: RadioCommentBody): RadioComment
 
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")

@@ -29,12 +29,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.nuruplace.member.ui.theme.Fraunces
-import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
 
 /** iOS Give palette — global Nuru tokens + the inline literals used across the give files. */
 object GIVE {
@@ -129,17 +128,28 @@ fun giveFee(amountMajor: Int): Int = when {
     else -> Math.round(amountMajor * 0.012).toInt()
 }
 
-/** "KSh 1,000" from minor units (no decimals, grouped). */
+/** "KSh 1,000" from minor units (no decimals, grouped). KES-only contexts (fund
+ *  tiles, M-Pesa entry). For real transaction rows use [money] with the row's currency. */
 fun ksh(minor: Int): String = "KSh " + "%,d".format(minor / 100)
+
+/** Currency-AWARE amount — statement/receipt rows carry a real `currency`
+ *  (PayPal settles in USD server-side); rendering everything as "KSh" printed
+ *  the wrong symbol on USD gifts while the Currency detail row said USD. */
+fun money(minor: Int, currency: String?): String = when (currency?.uppercase()) {
+    null, "", "KES" -> ksh(minor)
+    "USD" -> "$" + "%,.2f".format(minor / 100.0)
+    else -> "${'$'}{currency.uppercase()} " + "%,.2f".format(minor / 100.0)
+}
 
 /** "KSh 1,000" from major units. */
 fun kshMajor(major: Int): String = "KSh " + "%,d".format(major)
 
+// Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun giInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
-    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp)
+    nuruSans(size, weight, kerning.takeIf { it != 0f })
 
 fun giSerif(size: Int, weight: FontWeight = FontWeight.SemiBold, kerning: Float = 0f) =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, letterSpacing = kerning.sp, lineHeight = (size * 1.18f).sp)
+    nuruSerif(size, weight, kerning.takeIf { it != 0f })
 
 /** Cream header chrome (giving tab + receipt). Gradient + gold glow + 24dp bottom corners + hairline. */
 @Composable

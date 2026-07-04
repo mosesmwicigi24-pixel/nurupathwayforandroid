@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,10 +46,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Achievements
@@ -56,6 +59,7 @@ import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.CellSummary
 import org.nuruplace.member.data.net.Discipler
 import org.nuruplace.member.data.net.FeaturedAnnouncement
+import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
@@ -67,6 +71,9 @@ import org.nuruplace.member.data.net.RhythmBody
 import org.nuruplace.member.data.net.RhythmToday
 import org.nuruplace.member.data.net.ScoresSummary
 import org.nuruplace.member.data.net.TailoredVerse
+import org.nuruplace.member.data.net.VerseReactionBody
+import org.nuruplace.member.data.net.VerseReactions
+import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.InlineVideo
@@ -92,6 +99,7 @@ fun HomeScreen(
     onSelectTab: (String) -> Unit = onNavigate,
 ) {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var rhythm by remember { mutableStateOf<RhythmToday?>(null) }
     var next by remember { mutableStateOf<NextAction?>(null) }
     var verse by remember { mutableStateOf<TailoredVerse?>(null) }
@@ -107,9 +115,18 @@ fun HomeScreen(
     var prayers by remember { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
     var radio by remember { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
+    var personalWord by remember { mutableStateOf<String?>(null) }
+    var verseReactions by remember { mutableStateOf<VerseReactions?>(null) }
+    var verseSaved by remember { mutableStateOf(false) }
+    var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
+        // Nuru's daily word — a blessing written for THIS member (server-side,
+        // grounded in their streak/level/prayers, cached per day). iOS parity.
+        personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
+        verseReactions = runCatching { Net.client.api.verseReactions() }.getOrNull()
+        featuredEvent = runCatching { Net.client.api.featuredEvent().data }.getOrNull()
         next = runCatching { Net.client.api.nextAction().action }.getOrNull()
         verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
@@ -128,10 +145,6 @@ fun HomeScreen(
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
     }
 
-    fun tick(kind: String) {
-        scope.launch { rhythm = runCatching { Net.client.api.completeRhythm(RhythmBody(kind)) }.getOrNull() ?: rhythm }
-    }
-
     val pendingSync by Net.client.offline.pending.collectAsState()
     val level = me?.enrollment?.currentLevel ?: 1
     val reflectionDue = rhythm?.reflection == false
@@ -142,6 +155,7 @@ fun HomeScreen(
             streak = streak?.streak?.current ?: 0,
             level = level,
             overallPct = scores?.overall?.score ?: 0,
+            personalWord = personalWord,
             onBell = onOpenNotifications,
             onRadio = { onNavigate("radio") },
         )
@@ -159,13 +173,47 @@ fun HomeScreen(
             radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
             if (reflectionDue) next?.let { ReflectionStrip(it) { onNavigate(routeFor(it)) } }
             next?.let { ResumeHero(it, level) { onNavigate(routeFor(it)) } }
-            rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0, ::tick) }
+            rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0) }
             welcomeVideo?.let {
                 FeaturedVideo(it, videoPlaying, onPlay = { playable ->
                     if (it.isExternal) Unit else videoPlaying = true
                 }, onExternal = { url -> })
             }
-            verse?.let { VerseCard(it) }
+            verse?.let { v ->
+                VerseCard(
+                    v = v,
+                    reactions = verseReactions,
+                    saved = verseSaved,
+                    onReact = { emoji ->
+                        scope.launch {
+                            runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
+                                .onSuccess { verseReactions = it }
+                        }
+                    },
+                    onSave = {
+                        if (!verseSaved) scope.launch {
+                            runCatching {
+                                Net.client.api.saveVerse(
+                                    VerseUpsertBody(
+                                        savedVerseId = java.util.UUID.randomUUID().toString(),
+                                        reference = v.reference,
+                                        version = v.version,
+                                        verseText = v.text,
+                                        clientMutationId = java.util.UUID.randomUUID().toString(),
+                                    ),
+                                )
+                            }.onSuccess { verseSaved = true }
+                        }
+                    },
+                    onShare = {
+                        val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                    },
+                )
+            }
             if (prayers.isNotEmpty()) PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") })
             MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
             featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
@@ -174,7 +222,8 @@ fun HomeScreen(
             ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
             scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
             GrowSection(onNavigate)
-            UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}") })
+            featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
+            UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
             EncouragementCard(prayers.size)
             CohortSection(cohort) { onNavigate("cell-info") }
             GiveCard { onSelectTab("give") }
@@ -191,6 +240,7 @@ private fun HomeHeader(
     streak: Int,
     level: Int,
     overallPct: Int,
+    personalWord: String? = null,
     onBell: () -> Unit,
     onRadio: () -> Unit,
 ) {
@@ -227,6 +277,19 @@ private fun HomeHeader(
         }
         Spacer(Modifier.height(Spacing.md))
         Text("$greeting, $firstName.", style = NuruType.greeting, color = Nuru.navy)
+        // Nuru's daily word (GET /me/home/greeting) — hanging gold quote + serif
+        // voice, mirroring iOS HomePersonalWord. Absent until the wire answers.
+        personalWord?.let { word ->
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Top) {
+                Text("“", style = NuruType.title, color = Nuru.gold)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    word,
+                    style = NuruType.body.copy(fontStyle = FontStyle.Italic, lineHeight = 20.sp),
+                    color = Nuru.ink600,
+                )
+            }
+        }
         Spacer(Modifier.height(Spacing.sm))
         // Level jewel capsule
         Row(
@@ -408,7 +471,7 @@ private fun ResumeHero(a: NextAction, level: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RhythmCard(r: RhythmToday, streak: Int, onTick: (String) -> Unit) {
+private fun RhythmCard(r: RhythmToday, streak: Int) {
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (r.doneCount >= 3) "Today's rhythm complete 🎉" else "Today's rhythm", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
@@ -417,20 +480,22 @@ private fun RhythmCard(r: RhythmToday, streak: Int, onTick: (String) -> Unit) {
             }
         }
         Spacer(Modifier.height(Spacing.md))
+        // Read-only by design: the chips REFLECT real acts (a prayer posted or
+        // encouraged, Scripture engaged, a reflection written) — the server ticks
+        // them from interaction events; they are not tappable checkboxes.
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            RhythmTile("Prayer", r.prayer, Modifier.weight(1f)) { onTick("prayer") }
-            RhythmTile("Word", r.word, Modifier.weight(1f)) { onTick("word") }
-            RhythmTile("Reflection", r.reflection, Modifier.weight(1f)) { onTick("reflection") }
+            RhythmTile("Prayer", r.prayer, Modifier.weight(1f))
+            RhythmTile("Word", r.word, Modifier.weight(1f))
+            RhythmTile("Reflection", r.reflection, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun RhythmTile(label: String, done: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun RhythmTile(label: String, done: Boolean, modifier: Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(14.dp))
             .background(if (done) Nuru.successBg else Nuru.goldChipBg)
-            .clickable(enabled = !done) { onClick() }
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -474,19 +539,34 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
             }
         }
         Spacer(Modifier.height(Spacing.sm))
+        // Caption is the heading; the sub-line only earns its place when it adds
+        // information (an uncaptioned video used to print the same line twice).
         Text(v.caption ?: "Start here — what the journey looks like", style = NuruType.heading, color = Nuru.ink)
-        Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+        if (v.caption != null && v.caption != "Start here — what the journey looks like") {
+            Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+        }
     }
 }
 
+// Fixed reaction palette — must match iOS HomeView.verseReactionEmojis; the
+// server enum (home REACTIONS) is the source of truth.
+private val VERSE_REACTIONS = listOf("❤️", "🙏", "🔥", "🙌", "👍")
+
 @Composable
-private fun VerseCard(v: TailoredVerse) {
+private fun VerseCard(
+    v: TailoredVerse,
+    reactions: VerseReactions? = null,
+    saved: Boolean = false,
+    onReact: (String) -> Unit = {},
+    onSave: () -> Unit = {},
+    onShare: () -> Unit = {},
+) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg).border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape).padding(Spacing.base),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CardKicker("📖  Verse for today")
+            CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
             Spacer(Modifier.weight(1f))
             Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
                 Text(v.version, style = NuruType.micro, color = Nuru.ink600)
@@ -500,6 +580,55 @@ private fun VerseCard(v: TailoredVerse) {
             Spacer(Modifier.height(Spacing.sm))
             Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
                 Text("✦ Chosen for your season — $it", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        // One row (iOS parity): reaction chips left, Save + Share pushed right.
+        Spacer(Modifier.height(Spacing.md))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            VERSE_REACTIONS.forEach { e ->
+                val count = reactions?.counts?.get(e) ?: 0
+                val mine = reactions?.mine == e
+                Row(
+                    Modifier.clip(RoundedCornerShape(999.dp))
+                        .background(if (mine) Nuru.goldChipBg else Nuru.white)
+                        .border(1.dp, if (mine) Nuru.gold else Nuru.border, RoundedCornerShape(999.dp))
+                        .clickable { onReact(e) }
+                        .padding(horizontal = 7.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(e, style = NuruType.caption)
+                    if (count > 0) {
+                        Text("$count", style = NuruType.micro, color = if (mine) Nuru.goldChipText else Nuru.ink600, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+                    .border(1.dp, if (saved) Nuru.gold else Nuru.border, RoundedCornerShape(999.dp))
+                    .clickable { onSave() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(if (saved) "♥" else "♡", style = NuruType.caption, color = if (saved) Nuru.gold else Nuru.navy)
+                Text(if (saved) "Saved" else "Save", style = NuruType.micro, color = if (saved) Nuru.gold else Nuru.navy, fontWeight = FontWeight.SemiBold)
+            }
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+                    .border(1.dp, Nuru.border, RoundedCornerShape(999.dp))
+                    .clickable { onShare() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text("↗", style = NuruType.caption, color = Nuru.navy)
+                Text("Share", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -762,6 +891,35 @@ private fun GrowTile(title: String, sub: String, glyph: String, bg: Color, fg: C
 }
 
 @Composable
+private fun FeaturedGatheringCard(ev: FeaturedEvent, onOpen: () -> Unit) {
+    // The ONE admin-featured event (portal "feature on homepage" toggle) —
+    // previously served by GET /home/featured-event but rendered by no client.
+    val shape = RoundedCornerShape(20.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(Nuru.white).border(1.dp, Nuru.border, shape).clickable { onOpen() }) {
+        ev.primaryImageUrl?.let {
+            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
+        }
+        Column(Modifier.padding(Spacing.base)) {
+            CardKicker("⭐ Featured gathering")
+            Spacer(Modifier.height(Spacing.sm))
+            Text(ev.title, style = NuruType.featureTitle, color = Nuru.navy)
+            ev.description?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            val whenText = runCatching {
+                java.time.LocalDateTime.parse(ev.dtstartLocal.take(19))
+                    .format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
+            }.getOrDefault(ev.dtstartLocal)
+            Text(
+                listOfNotNull(whenText, ev.location?.takeIf { it.isNotBlank() }).joinToString("  ·  "),
+                style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
 private fun UpcomingSection(events: List<CalendarOccurrence>, onSeeAll: () -> Unit, onEvent: (CalendarOccurrence) -> Unit) {
     Column {
         SectionLabel("Upcoming")
@@ -855,7 +1013,7 @@ private fun EncouragementCard(prayerCount: Int) {
 @Composable
 private fun CohortSection(cohort: CellSummary?, onOpen: () -> Unit) {
     Column {
-        SectionLabel("Your cohort")
+        SectionLabel("Your cell")
         HomeCard {
             val cell = cohort?.cell
             Text(cell?.name ?: "You're not in a cell yet", style = NuruType.cardCta, color = Nuru.ink600)

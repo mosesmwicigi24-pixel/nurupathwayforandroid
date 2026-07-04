@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -97,7 +98,7 @@ private fun initials(name: String): String =
         .ifBlank { "?" }
 
 @Composable
-fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -> Unit = {}) {
+fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit, onCheckIn: (String) -> Unit = {}) {
     AsyncContent(key = eventId, load = { Net.client.api.event(eventId) }) { e: EventDetail, reload ->
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
@@ -122,7 +123,8 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -
                     e.description?.let { putExtra(CalendarContract.Events.DESCRIPTION, it) }
                     if (start != null) {
                         putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
-                        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + 2 * 3600 * 1000)
+                        val end = endAt?.let { runCatching { Instant.parse(it) }.getOrNull() }?.toEpochMilli()
+                        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end ?: (start + 2 * 3600 * 1000))
                     }
                 }
                 context.startActivity(insert)
@@ -145,6 +147,7 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -
             Modifier
                 .fillMaxSize()
                 .background(EV.paper)
+                .imePadding()
                 .verticalScroll(rememberScrollState()),
         ) {
             EventHero(e, onBack, shareIntent)
@@ -156,9 +159,13 @@ fun EventDetailScreen(eventId: String, onBack: () -> Unit, onCheckIn: (String) -
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                MetaCard(e, onAddToCalendar = addToCalendar, onShare = shareIntent)
+                MetaCard(e, endAt, onAddToCalendar = addToCalendar, onShare = shareIntent)
 
                 e.description?.takeIf { it.isNotBlank() }?.let { AboutCard(it) }
+
+                // Gallery strip — wire serves images=[primary,…gallery]; the hero
+                // already shows images[0], so only extra shots earn the strip.
+                e.images.drop(1).takeIf { it.isNotEmpty() }?.let { GalleryStrip(it) }
 
                 e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it) }
 
@@ -275,7 +282,7 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
 // ── Meta card ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun MetaCard(e: EventDetail, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
+private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
     val accent = evCategory(e.category)
     val peopleLabel = (e.rsvpCounts.going ?: 0).let { if (it == 1) "1 person" else "$it people" }
     Column(
@@ -290,7 +297,7 @@ private fun MetaCard(e: EventDetail, onAddToCalendar: () -> Unit, onShare: () ->
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetaTile(Modifier.weight(1f), Icons.Filled.CalendarMonth, "DATE", evDateFull(e.occursAt), accent)
-                MetaTile(Modifier.weight(1f), Icons.Filled.Schedule, "TIME", evTime(e.occursAt), accent)
+                MetaTile(Modifier.weight(1f), Icons.Filled.Schedule, "TIME", if (endAt != null) evTimeRange(e.occursAt, endAt) else evTime(e.occursAt), accent)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetaTile(Modifier.weight(1f), Icons.Filled.Place, "WHERE", e.location ?: "—", accent)
@@ -363,6 +370,36 @@ private fun AboutCard(description: String) {
         EVOverline("About this gathering")
         Spacer(Modifier.height(8.dp))
         Text(description, style = evInter(13).copy(lineHeight = 19.sp), color = EV.body)
+    }
+}
+
+// ── Gallery strip ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun GalleryStrip(urls: List<String>) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(EV.white)
+            .border(1.dp, EV.borderSoft, RoundedCornerShape(22.dp))
+            .padding(16.dp),
+    ) {
+        EVOverline("Gallery")
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(urls.size) { i ->
+                AsyncImage(
+                    model = urls[i],
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .width(148.dp)
+                        .height(100.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                )
+            }
+        }
     }
 }
 

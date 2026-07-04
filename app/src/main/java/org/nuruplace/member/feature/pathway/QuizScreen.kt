@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +52,7 @@ import org.nuruplace.member.data.net.QKind
 import org.nuruplace.member.data.net.QuizAnswer
 import org.nuruplace.member.data.net.QuizQuestion
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.Kicker
 import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.theme.Nuru
@@ -143,21 +145,23 @@ private fun QuizFlow(
 
     val q = questions[idx]
     Column(
-        Modifier.fillMaxSize().background(Nuru.coolPaper),
+        Modifier.fillMaxSize().background(Nuru.coolPaper).imePadding(),
     ) {
-        Column(
-            Modifier.fillMaxWidth().background(Nuru.navy).padding(horizontal = Spacing.screen).padding(top = Spacing.lg, bottom = Spacing.base),
-        ) {
-            Kicker(title)
-            // Gold progress dots — active dot widened, completed gold (Figma).
-            Spacer(Modifier.height(Spacing.md))
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                questions.indices.forEach { i ->
-                    Box(
-                        Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
-                            .clip(RoundedCornerShape(Radii.pill))
-                            .background(if (i <= idx) Nuru.gold else Nuru.onNavy.copy(alpha = 0.18f)),
-                    )
+        GrowCreamHeader {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(top = Spacing.lg, bottom = Spacing.base),
+            ) {
+                Kicker(title)
+                // Gold progress dots — active dot widened, completed gold (Figma).
+                Spacer(Modifier.height(Spacing.md))
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                    questions.indices.forEach { i ->
+                        Box(
+                            Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
+                                .clip(RoundedCornerShape(Radii.pill))
+                                .background(if (i <= idx) Nuru.gold else Nuru.navy.copy(alpha = 0.18f)),
+                        )
+                    }
                 }
             }
         }
