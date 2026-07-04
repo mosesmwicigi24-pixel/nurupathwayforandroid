@@ -17,6 +17,7 @@ data class PrayerWallPost(
     val title: String? = null,
     val body: String = "",
     val audioUrl: String? = null,
+    val audioWaveform: List<Int>? = null,   // ints 0..100, ≤80 bars (server zod cap)
     val isAnswered: Boolean = false,
     val createdAt: String = "",
     val mine: Boolean = false,
@@ -34,6 +35,7 @@ data class PrayerWallComment(
     val authorAvatar: String? = null,
     val body: String = "",
     val audioUrl: String? = null,
+    val audioWaveform: List<Int>? = null,
     val createdAt: String = "",
     val mine: Boolean = false,
 )
@@ -106,6 +108,7 @@ data class ChatMessage(
     val body: String = "",
     val msgType: String = "text",       // text | voice | image | file | video
     val attachmentUrl: String? = null,
+    val attachmentMeta: kotlinx.serialization.json.JsonObject? = null,  // voice: { duration, waveform[] }
     val replyBody: String? = null,
     val replyAuthor: String? = null,
     val isEdited: Boolean = false,
@@ -130,8 +133,18 @@ data class ChatThreadDetail(
 )
 
 // --- Request bodies / small responses ---
+// audio_url / audio_waveform are .nullable().optional() in the server's create
+// schema, so the explicit nulls kotlinx emits (encodeDefaults + explicitNulls)
+// are accepted for plain text posts.
 @Serializable
-data class CreatePrayerBody(val postId: String, val title: String? = null, val body: String, val clientMutationId: String)
+data class CreatePrayerBody(
+    val postId: String,
+    val title: String? = null,
+    val body: String,
+    val clientMutationId: String,
+    val audioUrl: String? = null,
+    val audioWaveform: List<Int>? = null,
+)
 
 @Serializable
 data class ReactBody(val emoji: String)
@@ -147,6 +160,23 @@ data class AnsweredBody(val answered: Boolean)
 
 @Serializable
 data class SendMessageBody(val messageId: String, val body: String, val msgType: String = "text", val clientMutationId: String)
+
+// Voice sends use their own body class: the chat send schema's attachment_url /
+// attachment_meta are zod .optional() but NOT nullable, and our Json encodes
+// defaults + explicit nulls — a shared class would emit "attachment_meta": null
+// on every text send and be rejected. Separate shape = zero risk to text sends.
+@Serializable
+data class SendVoiceBody(
+    val messageId: String,
+    val body: String,
+    val msgType: String,
+    val attachmentUrl: String,
+    val attachmentMeta: kotlinx.serialization.json.JsonObject,   // { duration: sec, waveform: [0..100] }
+    val clientMutationId: String,
+)
+
+@Serializable
+data class VoiceUploadRes(val url: String = "")
 
 @Serializable
 data class PeopleRes(val people: List<ChatPerson> = emptyList())

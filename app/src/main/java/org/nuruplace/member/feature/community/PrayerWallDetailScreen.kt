@@ -23,9 +23,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,8 +48,11 @@ import org.nuruplace.member.data.net.PrayerWallDetail
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.GrowPal
+import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.components.voiceClock
+import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.relTime
 import java.util.UUID
 
@@ -57,6 +63,8 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(GrowPal.coolPaper).imePadding()) {
         AsyncContent(key = postId, load = { Net.client.api.prayerWallGet(postId) }) { detail: PrayerWallDetail, reload ->
             val scope = rememberCoroutineScope()
+            val player = remember { VoicePlayer() }
+            DisposableEffect(Unit) { onDispose { player.release() } }
             val p = detail.post
 
             // Header
@@ -104,6 +112,9 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                             color = GrowPal.ink,
                             modifier = Modifier.padding(top = 8.dp),
                         )
+                        if (!p.audioUrl.isNullOrBlank()) {
+                            VoicePrayerRow(p.postId, p.audioUrl!!, p.audioWaveform.orEmpty(), player)
+                        }
                         // Quick-reaction bar — mirrors iOS PrayerWallDetailView: five fixed
                         // emoji chips fed by the wire's per-emoji reactions[] (count + mine).
                         Row(
@@ -162,6 +173,9 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                             color = GrowPal.ink600,
                             modifier = Modifier.padding(top = 8.dp),
                         )
+                        if (!c.audioUrl.isNullOrBlank()) {
+                            VoicePrayerRow(c.commentId, c.audioUrl!!, c.audioWaveform.orEmpty(), player)
+                        }
                     }
                 }
             }
@@ -210,6 +224,38 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                     Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(17.dp))
                 }
             }
+        }
+    }
+}
+
+// Playable voice-prayer row: play/pause + stored waveform (played bars in gold)
+// + duration once the player has prepared the stream.
+@Composable
+private fun VoicePrayerRow(id: String, url: String, wave: List<Int>, player: VoicePlayer) {
+    val playing = player.playingId == id
+    Row(
+        Modifier.padding(top = 10.dp).clip(Capsule).background(GrowPal.coolPaper)
+            .border(1.dp, GrowPal.border, Capsule)
+            .clickable { player.toggle(id, url) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) "Pause voice prayer" else "Play voice prayer",
+            tint = GrowPal.navyDeep,
+            modifier = Modifier.size(18.dp),
+        )
+        WaveformBars(
+            levels = wave,
+            color = GrowPal.navyMid.copy(alpha = 0.35f),
+            playedFraction = if (playing) player.progress else 0f,
+            playedColor = GrowPal.gold,
+            maxBarHeight = 20.dp,
+        )
+        if (playing && player.durationSec > 0) {
+            Text(voiceClock(player.durationSec), style = gInter(10, FontWeight.Bold), color = GrowPal.ink400)
         }
     }
 }

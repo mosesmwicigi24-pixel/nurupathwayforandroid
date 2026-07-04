@@ -167,6 +167,11 @@ interface MemberApi {
     @POST("chat/conversations/{id}/messages")
     suspend fun sendChatMessage(@Path("id") conversationId: String, @Body body: SendMessageBody): Unit
 
+    // Same endpoint, voice shape (attachment_url + attachment_meta) — see
+    // SendVoiceBody in CommunityDtos.kt for why this is a separate method.
+    @POST("chat/conversations/{id}/messages")
+    suspend fun sendChatVoice(@Path("id") conversationId: String, @Body body: SendVoiceBody): Unit
+
     @POST("chat/conversations/{id}/read")
     suspend fun markChatRead(@Path("id") conversationId: String): Unit
 
@@ -380,6 +385,12 @@ interface MemberApi {
     @retrofit2.http.Multipart
     @POST("me/avatar")
     suspend fun uploadAvatar(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): AvatarResult
+
+    // Voice notes (multipart, field "file", AAC .m4a ≤5 MB) → { url } — shared
+    // by chat voice messages and prayer-wall voice prayers.
+    @retrofit2.http.Multipart
+    @POST("me/media/audio")
+    suspend fun uploadVoiceNote(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): VoiceUploadRes
 
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit
