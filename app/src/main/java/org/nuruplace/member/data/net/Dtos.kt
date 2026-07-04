@@ -84,3 +84,7 @@ data class RefreshBody(val refreshToken: String)
 /** POST /auth/logout — best-effort refresh-token revocation on sign-out. */
 @Serializable
 data class LogoutBody(val refreshToken: String)
+
+/** PATCH /me response — the server returns only the concurrency handle. */
+@Serializable
+data class UpdateMeRes(val userId: String, val rowVersion: Int)

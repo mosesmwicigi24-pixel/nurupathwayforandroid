@@ -37,9 +37,10 @@ interface MemberApi {
     // PATCH /me — profile self-edit (identity module). Body is a JsonObject so unset
     // fields are OMITTED: the server's strict zod schema rejects explicit nulls
     // (same precedent as reportModuleEngagement). Include row_version (optimistic
-    // concurrency) on every call.
+    // concurrency) on every call. Wire truth (identity/service.ts updateMe): the
+    // response is ONLY {user_id, row_version} — refetch GET /me for the profile.
     @PATCH("me")
-    suspend fun updateMe(@Body body: kotlinx.serialization.json.JsonObject): MeResponse
+    suspend fun updateMe(@Body body: kotlinx.serialization.json.JsonObject): UpdateMeRes
 
     // --- Pathway (server-authoritative gating §1.9) ---
     @GET("me/pathway")

@@ -426,8 +426,10 @@ private fun EditFieldSheet(
                     put(field.wireKey, JsonPrimitive(wireValue))
                     put("row_version", JsonPrimitive(profile?.rowVersion ?: 0))
                 }
-                val res = Net.client.api.updateMe(body)
-                onSaved(res)
+                // PATCH returns only {user_id, row_version}; refetch /me for the
+                // authoritative profile (and the fresh row_version for future edits).
+                Net.client.api.updateMe(body)
+                onSaved(Net.client.api.me())
             } catch (e: Exception) {
                 error = ApiException.message(e)
             } finally {
