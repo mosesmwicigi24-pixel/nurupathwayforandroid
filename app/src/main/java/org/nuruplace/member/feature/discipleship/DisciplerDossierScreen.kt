@@ -57,6 +57,7 @@ import org.nuruplace.member.data.net.DossierReflection
 import org.nuruplace.member.data.net.HubProgression
 import org.nuruplace.member.data.net.HubScores
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
@@ -94,20 +95,23 @@ fun DisciplerDossierScreen(studentId: String, onBack: () -> Unit, onOpenChat: (S
     }
 
     Column(Modifier.fillMaxSize().background(GrowPal.coolPaper)) {
-        // Navy header — back circle + serif first name (matches DiscipleshipHub anatomy).
-        Row(
-            Modifier.fillMaxWidth().background(GrowPal.navy)
-                .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-            val title = dossier?.member?.fullName?.let { firstName(it) }?.takeIf { it.isNotBlank() } ?: "Disciple"
-            Text(title, style = gSerif(20, FontWeight.SemiBold), color = Color.White)
+        // Cream header — back circle + serif first name (matches DiscipleshipHub anatomy).
+        GrowCreamHeader {
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(GrowPal.white)
+                        .border(1.dp, GrowPal.border, CircleShape)
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
+                val title = dossier?.member?.fullName?.let { firstName(it) }?.takeIf { it.isNotBlank() } ?: "Disciple"
+                Text(title, style = gSerif(20, FontWeight.SemiBold), color = GrowPal.navy)
+            }
         }
 
         val d = dossier

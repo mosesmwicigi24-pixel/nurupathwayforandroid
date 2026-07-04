@@ -1,7 +1,7 @@
 // Plan segment — the day-step reader, ported pixel-faithfully from the iOS
 // PlanSegmentView (NuruMember/Features/Grow/PlanSegmentView.swift). Presented as
-// the Figma make's ReadingDayReader: a flat navy day header (gold kicker, serif
-// title, per-segment step chips), a warm reader canvas with serif passage text
+// the Figma make's ReadingDayReader: a warm cream day header (muted-gold kicker,
+// navy serif title, per-segment step chips), a reader canvas with serif passage text
 // (small gold verse numbers when the content carries them), a gold pull-quote
 // card for featured scripture, a REFLECTION prompt card for talk-it-over
 // segments, an encouragement line, and a pinned completion CTA.
@@ -66,6 +66,7 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
@@ -214,65 +215,65 @@ private fun SegmentHeader(
 ) {
     val caption = segment.reference?.takeIf { it.isNotEmpty() } ?: chipLabel(segment.kind)
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
-            .background(Nuru.navy)
-            .padding(horizontal = 20.dp)
-            .padding(top = 8.dp, bottom = 12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            HeaderChip(onClick = onBack) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "DAY $dayNumber · ${planTitle.uppercase()}",
-                style = inter(10, FontWeight.Bold, 1.8f),
-                color = Nuru.gold,
-                maxLines = 1,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            HeaderChip(onClick = { /* bookmark — visual parity with iOS */ }) {
-                Icon(
-                    Icons.Filled.BookmarkBorder,
-                    contentDescription = "Bookmark",
-                    tint = Nuru.gold,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-
-        Text(
-            segment.title,
-            style = serif(22, FontWeight.SemiBold),
-            color = Color.White,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-        Text(
-            caption,
-            style = inter(12),
-            color = Color.White.copy(alpha = 0.7f),
-            modifier = Modifier.padding(top = 2.dp),
-        )
-
-        Row(
-            Modifier.fillMaxWidth().padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+    GrowCreamHeader {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 8.dp, bottom = 12.dp),
         ) {
-            segments.forEachIndexed { idx, seg ->
-                StepChip(
-                    label = chipLabel(seg.kind),
-                    done = seg.completed || (idx == index && completed),
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HeaderChip(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Nuru.navy,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "DAY $dayNumber · ${planTitle.uppercase()}",
+                    style = inter(10, FontWeight.Bold, 1.8f),
+                    color = Nuru.eyebrow,
+                    maxLines = 1,
                     modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(8.dp))
+                HeaderChip(onClick = { /* bookmark — visual parity with iOS */ }) {
+                    Icon(
+                        Icons.Filled.BookmarkBorder,
+                        contentDescription = "Bookmark",
+                        tint = Nuru.gold,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+
+            Text(
+                segment.title,
+                style = serif(22, FontWeight.SemiBold),
+                color = Nuru.navy,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Text(
+                caption,
+                style = inter(12),
+                color = Nuru.ink600,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+
+            Row(
+                Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                segments.forEachIndexed { idx, seg ->
+                    StepChip(
+                        label = chipLabel(seg.kind),
+                        done = seg.completed || (idx == index && completed),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -284,7 +285,8 @@ private fun HeaderChip(onClick: () -> Unit, content: @Composable () -> Unit) {
         Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.08f))
+            .background(Nuru.white)
+            .border(1.dp, Nuru.border, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { content() }
@@ -296,7 +298,7 @@ private fun StepChip(label: String, done: Boolean, modifier: Modifier = Modifier
     Row(
         modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(if (done) Nuru.gold else Color.White.copy(alpha = 0.08f))
+            .background(if (done) Nuru.gold else Nuru.navy.copy(alpha = 0.08f))
             .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -313,7 +315,7 @@ private fun StepChip(label: String, done: Boolean, modifier: Modifier = Modifier
         Text(
             label,
             style = inter(10, FontWeight.Bold),
-            color = if (done) Nuru.navy else Color.White.copy(alpha = 0.7f),
+            color = if (done) Nuru.navy else Nuru.ink600,
             maxLines = 1,
         )
     }

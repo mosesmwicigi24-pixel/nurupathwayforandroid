@@ -44,6 +44,7 @@ import coil.compose.AsyncImage
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RosterRes
 import org.nuruplace.member.data.net.RosterRow
+import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
@@ -72,25 +73,28 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(GrowPal.coolPaper)) {
-        // Navy header — back circle + serif title + summary sub-line once loaded.
-        Row(
-            Modifier.fillMaxWidth().background(GrowPal.navy)
-                .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Your disciples", style = gSerif(20, FontWeight.SemiBold), color = Color.White)
-                roster?.summary?.let { s ->
-                    Text(
-                        "${s.totalStudents} walking with you · ${s.awaitingAction} awaiting action",
-                        style = gInter(11), color = Color.White.copy(alpha = 0.7f),
-                    )
+        // Cream header — back circle + serif title + summary sub-line once loaded.
+        GrowCreamHeader {
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(GrowPal.white)
+                        .border(1.dp, GrowPal.border, CircleShape)
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Your disciples", style = gSerif(20, FontWeight.SemiBold), color = GrowPal.navy)
+                    roster?.summary?.let { s ->
+                        Text(
+                            "${s.totalStudents} walking with you · ${s.awaitingAction} awaiting action",
+                            style = gInter(11), color = GrowPal.ink600,
+                        )
+                    }
                 }
             }
         }
