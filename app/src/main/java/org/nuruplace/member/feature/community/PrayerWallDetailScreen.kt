@@ -46,6 +46,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerCommentBody
 import org.nuruplace.member.data.net.PrayerWallDetail
 import org.nuruplace.member.data.net.ReactBody
+import org.nuruplace.member.ui.components.AiDraftButton
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.WaveformBars
@@ -202,6 +203,17 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                // ✨ Nuru drafting — reads the prayer request + latest comments and
+                // proposes an editable encouragement; "Use draft" only fills the field.
+                AiDraftButton(
+                    recentMessages = buildList {
+                        val postText = listOfNotNull(p.title?.takeIf { it.isNotBlank() }, p.body).joinToString(" — ")
+                        add(p.authorName.ifBlank { "Member" } to postText.ifBlank { "(voice prayer)" })
+                        detail.comments.takeLast(4).forEach { c ->
+                            add(c.authorName.ifBlank { "Member" } to c.body.ifBlank { "(voice reply)" })
+                        }
+                    },
+                ) { t -> text = t }
                 Box(
                     Modifier.size(44.dp).clip(CircleShape).background(GrowPal.navy)
                         .clickable {

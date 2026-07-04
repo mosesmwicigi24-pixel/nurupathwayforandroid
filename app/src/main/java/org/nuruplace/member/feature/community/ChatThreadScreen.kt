@@ -90,6 +90,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.data.net.SendMessageBody
 import org.nuruplace.member.data.net.SendVoiceBody
+import org.nuruplace.member.ui.components.AiDraftButton
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.LiveWave
@@ -267,9 +268,23 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                        Box(Modifier.size(28.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.gold.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.gold, modifier = Modifier.size(15.dp))
-                        }
+                        // ✨ Nuru drafting — summarizes the last messages and proposes an
+                        // editable reply; "Use draft" only fills the composer (member sends).
+                        AiDraftButton(
+                            recentMessages = messages
+                                .filter { it.msgType != "system" }
+                                .takeLast(5)
+                                .map { m ->
+                                    val author = if (m.mine) "You" else m.authorName.ifBlank { "Member" }
+                                    author to when (m.msgType) {
+                                        "voice" -> m.body.ifBlank { "(voice note)" }
+                                        "image" -> m.body.ifBlank { "(photo)" }
+                                        "video", "file" -> m.body.ifBlank { "(shared a file)" }
+                                        else -> m.body
+                                    }
+                                },
+                            conversationId = conversationId,
+                        ) { text -> draft = text }
                         Icon(Icons.Filled.EmojiEmotions, null, tint = CHAT.meta, modifier = Modifier.size(19.dp))
                     }
                     val hasDraft = draft.isNotBlank()

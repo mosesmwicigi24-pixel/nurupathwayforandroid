@@ -3,6 +3,8 @@
 // Models/Gifts.swift + Home.swift (ScoresSummary) + the feature-local DTOs.
 package org.nuruplace.member.data.net
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 // --- Growth scores (GET /me/scores) ---
@@ -91,8 +93,17 @@ data class AssistantMessage(val role: String, val text: String)
 @Serializable
 data class AssistantHistoryRes(val messages: List<AssistantMessage> = emptyList())
 
+// conversation_id / context_limit ground the reply on a chat the member can
+// access (composer AI drafting). The server's zod fields are plain `.optional()`
+// (explicit null is rejected), so unset values must be OMITTED from the JSON —
+// EncodeDefault(NEVER) overrides the client's global encodeDefaults = true.
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class AssistantChatBody(val messages: List<AssistantMessage>)
+data class AssistantChatBody(
+    val messages: List<AssistantMessage>,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val conversationId: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val contextLimit: Int? = null,
+)
 
 @Serializable
 data class AssistantReplyRes(val reply: String = "")
