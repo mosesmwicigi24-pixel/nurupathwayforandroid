@@ -254,6 +254,11 @@ interface MemberApi {
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 
+    // Full badge catalogue (gamification module) — merged with /me/achievements
+    // so the profile rail can show locked badges too, as iOS does.
+    @GET("badges")
+    suspend fun badgesCatalogue(): Envelope<Badge>
+
     @GET("certificates")
     suspend fun certificates(): Envelope<Certificate>
 

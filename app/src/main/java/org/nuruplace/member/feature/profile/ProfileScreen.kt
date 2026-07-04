@@ -117,11 +117,22 @@ private val Capsule = RoundedCornerShape(999.dp)
 fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Unit) {
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
     var achievements by remember { mutableStateOf<Achievements?>(null) }
+    var badgeGallery by remember { mutableStateOf<List<Badge>>(emptyList()) }
     var certs by remember { mutableStateOf<List<Certificate>>(emptyList()) }
     LaunchedEffect(Unit) {
         scores = runCatching { Net.client.api.scores() }.getOrNull()
         achievements = runCatching { Net.client.api.achievements() }.getOrNull()
         certs = runCatching { Net.client.api.certificates().data }.getOrDefault(emptyList())
+        // GET /badges catalogue merged with earned awards (iOS ProfileView.loadExtras):
+        // earned first (with awarded_at), then locked — so the rail shows what's
+        // still ahead, not just trophies already won.
+        val catalogue = runCatching { Net.client.api.badgesCatalogue().data }.getOrDefault(emptyList())
+        if (catalogue.isNotEmpty()) {
+            val earnedByCode = achievements?.badges.orEmpty().associateBy { it.code }
+            badgeGallery = catalogue
+                .map { c -> earnedByCode[c.code] ?: c }
+                .sortedByDescending { it.awardedAt != null }
+        }
     }
 
     val context = LocalContext.current
@@ -251,7 +262,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PersonalInformationCard(p, onEdit = { editing = it })
-            AchievementsSection(achievements) { sheetBadge = it }
+            AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             MilestonesCard(me)
             CertificatesCard(
@@ -693,12 +704,14 @@ private fun LanguagesRow() {
 
 // ── Achievements ────────────────────────────────────────────────────────────
 @Composable
-private fun AchievementsSection(achievements: Achievements?, onBadge: (Badge) -> Unit) {
+private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, onBadge: (Badge) -> Unit) {
     SectionCard {
         SectionTitle(Icons.Filled.AutoAwesome, "ACHIEVEMENTS") {
             Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.navy)
         }
-        val badges = achievements?.badges.orEmpty()
+        // Catalogue merge (GET /badges): earned first, locked after — the rail
+        // shows what's ahead. Falls back to earned-only while the catalogue loads.
+        val badges = gallery.ifEmpty { achievements?.badges.orEmpty() }
         if (badges.isEmpty()) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
