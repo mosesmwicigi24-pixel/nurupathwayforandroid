@@ -1,8 +1,10 @@
 // Giving statement (history) + receipt (detail with the double-entry ledger).
-// Port of the iOS GivingStatementView + GivingReceiptView.
+// Port of the iOS GivingStatementView + GivingReceiptView. Uses the shared GIVE
+// palette / helpers from GiveShared.kt (same package — no import needed).
 package org.nuruplace.member.feature.give
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,60 +15,353 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.nuruplace.member.data.net.GivingDetail
 import org.nuruplace.member.data.net.GivingRecord
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
-import org.nuruplace.member.ui.components.Kicker
-import org.nuruplace.member.ui.components.NuruCard
-import org.nuruplace.member.ui.components.ScreenHeader
-import org.nuruplace.member.ui.theme.Nuru
-import org.nuruplace.member.ui.theme.NuruType
-import org.nuruplace.member.ui.theme.Radii
-import org.nuruplace.member.ui.theme.Spacing
-import org.nuruplace.member.util.relTime
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-private fun statusColor(s: String) = when (s) {
-    "succeeded", "settled" -> Nuru.successText
-    "failed", "cancelled" -> Nuru.danger
-    else -> Nuru.warning
+private val NAIROBI: ZoneId = ZoneId.of("Africa/Nairobi")
+private val Capsule = RoundedCornerShape(999.dp)
+
+/** Parse an ISO timestamp into a Nairobi-zoned date-time, tolerating several shapes. */
+private fun parseNairobi(iso: String?): ZonedDateTime? {
+    if (iso.isNullOrBlank()) return null
+    return runCatching { Instant.parse(iso).atZone(NAIROBI) }
+        .recoverCatching { OffsetDateTime.parse(iso).atZoneSameInstant(NAIROBI) }
+        .recoverCatching { LocalDateTime.parse(iso).atZone(NAIROBI) }
+        .recoverCatching { LocalDate.parse(iso).atStartOfDay(NAIROBI) }
+        .getOrNull()
 }
 
+private val DAY_FMT = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
+private val TIME_FMT = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+private val FULL_FMT = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a", Locale.ENGLISH)
+
+private fun dayHeader(iso: String?): String =
+    parseNairobi(iso)?.format(DAY_FMT)?.uppercase(Locale.ENGLISH) ?: "—"
+
+private fun timeLabel(iso: String?): String =
+    parseNairobi(iso)?.format(TIME_FMT) ?: ""
+
+private fun fullDate(iso: String?): String =
+    parseNairobi(iso)?.format(FULL_FMT) ?: "—"
+
+/** Year a record belongs to — prefer settledAt, fall back to createdAt. */
+private fun recordYear(r: GivingRecord): Int? =
+    (parseNairobi(r.settledAt) ?: parseNairobi(r.createdAt))?.year
+
+// ── Status chip (shared visual for statement rows + receipt) ──────────────────
+@Composable
+private fun StatusChip(status: String?) {
+    val (label, bg, fg) = giveStatus(status)
+    Box(
+        Modifier.clip(Capsule).background(bg).padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(label, style = giInter(11, FontWeight.Medium), color = fg)
+    }
+}
+
+@Composable
+private fun HairlineDivider() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(GIVE.border))
+}
+
+// ── GivingStatementScreen — iOS GivingStatementView ───────────────────────────
 @Composable
 fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
     AsyncContent(load = { Net.client.api.givingHistory().data }) { records: List<GivingRecord>, _ ->
-        val settled = records.filter { it.status == "succeeded" || it.status == "settled" }.sumOf { it.amountMinor }
-        Column(Modifier.fillMaxSize().background(Nuru.paper)) {
-            ScreenHeader("Giving statement", kicker = "Given: ${fmtMoney(settled, "KES")}", onBack = onBack)
-            if (records.isEmpty()) {
-                Box(Modifier.fillMaxSize(), Alignment.Center) { Text("No gifts yet.", style = NuruType.body, color = Nuru.ink600) }
-            } else {
-                LazyColumn(
-                    Modifier.fillMaxWidth(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        var period by remember { mutableIntStateOf(0) } // 0 = This year, 1 = Last year
+
+        val currentYear = LocalDate.now(NAIROBI).year
+        val settled = records.filter { it.status == "succeeded" || it.status == "settled" }
+        val targetYear = if (period == 0) currentYear else currentYear - 1
+        val periodRecords = settled.filter { recordYear(it) == targetYear }
+        val total = periodRecords.sumOf { it.amountMinor }
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(GIVE.paper)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            // ── Dark navy header ──
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+                    .background(GIVE.statementHeader),
+            ) {
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.radialGradient(
+                            listOf(GIVE.gold.copy(alpha = 0.30f), Color.Transparent),
+                            center = Offset(820f, 40f),
+                            radius = 420f,
+                        ),
+                    ),
+                )
+                Column(
+                    Modifier
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 20.dp),
                 ) {
-                    items(records, key = { it.transactionId }) { r ->
-                        NuruCard(modifier = Modifier.clickable { onOpenReceipt(r.transactionId) }) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(fmtMoney(r.amountMinor, r.currency), style = NuruType.cardTitle, color = Nuru.ink)
-                                    Text("${r.fund.replaceFirstChar { it.uppercase() }} · ${relTime(r.createdAt)}", style = NuruType.caption, color = Nuru.ink600)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.10f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                .clickable { onBack() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "GIVING STATEMENT",
+                            style = giInter(10, FontWeight.Bold, 2.2f),
+                            color = GIVE.gold,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.10f))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Download,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        "Total given",
+                        style = giInter(11),
+                        color = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                    Text(
+                        ksh(total),
+                        style = giSerif(34, FontWeight.SemiBold, -1f),
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    Text(
+                        "${periodRecords.size} gifts · ${if (period == 0) "this year" else "in ${currentYear - 1}"} · most recent first",
+                        style = giInter(11),
+                        color = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
+            // ── Body ──
+            Column(
+                Modifier
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // Period selector
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(GIVE.track)
+                        .padding(4.dp),
+                ) {
+                    listOf("This year", "Last year").forEachIndexed { i, label ->
+                        val on = period == i
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .then(if (on) Modifier.background(GIVE.white) else Modifier)
+                                .clickable { period = i },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                label,
+                                style = giInter(13, FontWeight.SemiBold),
+                                color = if (on) GIVE.navy else GIVE.sub,
+                            )
+                        }
+                    }
+                }
+
+                // BY FUND card
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(GIVE.white)
+                        .border(1.dp, GIVE.border, RoundedCornerShape(22.dp))
+                        .padding(16.dp),
+                ) {
+                    Text("BY FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    val byFund = periodRecords.groupBy { it.fund }
+                    if (byFund.isEmpty()) {
+                        Text(
+                            "No settled gifts ${if (period == 0) "this year" else "in ${currentYear - 1}"}.",
+                            style = giInter(13),
+                            color = GIVE.sub,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    } else {
+                        val entries = byFund.entries.toList()
+                        entries.forEachIndexed { idx, (fund, recs) ->
+                            val f = giveFund(fund)
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(
+                                    Modifier.size(32.dp).clip(CircleShape).background(f.tint),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(15.dp))
                                 }
-                                Text(r.status, style = NuruType.micro, color = statusColor(r.status), fontWeight = FontWeight.SemiBold)
+                                Column(Modifier.weight(1f)) {
+                                    Text(f.name, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+                                    Text(
+                                        "${recs.size} gift${if (recs.size == 1) "" else "s"}",
+                                        style = giInter(11),
+                                        color = GIVE.tertiary,
+                                    )
+                                }
+                                Text(
+                                    ksh(recs.sumOf { it.amountMinor }),
+                                    style = giInter(13, FontWeight.SemiBold),
+                                    color = GIVE.navy,
+                                )
+                            }
+                            if (idx < entries.lastIndex) HairlineDivider()
+                        }
+                    }
+                    // TOTAL GIVEN
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("TOTAL GIVEN", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.navy)
+                        Spacer(Modifier.weight(1f))
+                        Text(ksh(total), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
+                    }
+                }
+
+                // History grouped by day
+                val grouped = periodRecords
+                    .sortedByDescending { it.createdAt }
+                    .groupBy { dayHeader(it.createdAt) }
+                grouped.forEach { (dayKey, recs) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            dayKey,
+                            style = giInter(11, FontWeight.Bold, 1.1f),
+                            color = GIVE.overline,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                        recs.forEach { r ->
+                            val f = giveFund(r.fund)
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(GIVE.white)
+                                    .border(1.dp, GIVE.border, RoundedCornerShape(18.dp))
+                                    .clickable { onOpenReceipt(r.transactionId) }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(
+                                    Modifier.size(44.dp).clip(CircleShape).background(f.tint),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(18.dp))
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
+                                    Text(
+                                        "${timeLabel(r.createdAt)} · ${(r.method ?: "").replaceFirstChar { it.uppercase() }}",
+                                        style = giInter(11),
+                                        color = GIVE.tertiary,
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(ksh(r.amountMinor), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                                    Spacer(Modifier.height(4.dp))
+                                    StatusChip(r.status)
+                                }
                             }
                         }
+                    }
+                }
+
+                // Empty state
+                if (periodRecords.isEmpty()) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "No gifts ${if (period == 0) "this year" else "in ${currentYear - 1}"}.",
+                            style = giInter(13),
+                            color = GIVE.sub,
+                        )
+                        Text(
+                            "Statement reflects records held under Finance · receipts emailed per gift.",
+                            style = giInter(11),
+                            color = GIVE.tertiary,
+                        )
                     }
                 }
             }
@@ -74,40 +369,127 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
     }
 }
 
+// ── GivingReceiptScreen — iOS GivingReceiptView ───────────────────────────────
 @Composable
 fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
     AsyncContent(key = transactionId, load = { Net.client.api.givingDetail(transactionId) }) { d: GivingDetail, _ ->
-        Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
-            Column(
-                Modifier.fillMaxWidth().background(Nuru.ceremonyGradient).padding(horizontal = Spacing.screen, vertical = Spacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Kicker("Receipt")
-                Spacer(Modifier.height(Spacing.sm))
-                Text(fmtMoney(d.amountMinor, d.currency), style = NuruType.display, color = Nuru.onNavy)
-                Text("${d.fund.replaceFirstChar { it.uppercase() }} · ${d.status}", style = NuruType.body, color = Nuru.onNavyDim)
-            }
-            Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
-                NuruCard {
-                    ReceiptRow("Method", d.method ?: "—")
-                    ReceiptRow("Reference", d.providerRef ?: d.transactionId.take(12))
-                    ReceiptRow("Created", relTime(d.createdAt))
-                    d.settledAt?.let { ReceiptRow("Settled", relTime(it)) }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(GIVE.paper)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            // Cream header
+            GiveCreamHeaderBox {
+                Row(
+                    Modifier
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(GIVE.white)
+                            .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = GIVE.navy,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Text("Receipt", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy)
                 }
+            }
+
+            // Body
+            Column(
+                Modifier
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 16.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // Amount card
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(GIVE.white)
+                        .border(1.dp, GIVE.border, RoundedCornerShape(24.dp))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        Modifier.size(64.dp).clip(CircleShape).background(GIVE.successBg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Verified,
+                            contentDescription = null,
+                            tint = GIVE.success,
+                            modifier = Modifier.size(30.dp),
+                        )
+                    }
+                    Text(ksh(d.amountMinor), style = giSerif(36, FontWeight.Bold), color = GIVE.ink)
+                    Text("to ${giveFund(d.fund).name}", style = giInter(14), color = GIVE.sub)
+                    StatusChip(d.status)
+                }
+
+                // Detail card
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(GIVE.white)
+                        .border(1.dp, GIVE.border, RoundedCornerShape(22.dp))
+                        .padding(horizontal = 16.dp),
+                ) {
+                    DetailRow("Date", fullDate(d.createdAt), showDivider = true)
+                    DetailRow("Method", (d.method ?: "").replaceFirstChar { it.uppercase() }, showDivider = true)
+                    DetailRow("Currency", d.currency, showDivider = true)
+                    DetailRow("Reference", d.providerRef ?: "—", showDivider = true)
+                    DetailRow("Transaction", d.transactionId.take(8) + "…", showDivider = false)
+                }
+
+                // Ledger card
                 if (d.ledger.isNotEmpty()) {
-                    NuruCard {
-                        Kicker("Ledger")
-                        Spacer(Modifier.height(Spacing.sm))
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(GIVE.white)
+                            .border(1.dp, GIVE.border, RoundedCornerShape(22.dp))
+                            .padding(16.dp),
+                    ) {
+                        Text("LEDGER", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.gold)
                         d.ledger.forEach { e ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                                Text("${e.side} · ${e.account}", style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
-                                Text(fmtMoney(e.amountMinor, e.currency), style = NuruType.caption, color = Nuru.ink)
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    e.side.uppercase(Locale.ENGLISH),
+                                    style = giInter(11, FontWeight.Medium),
+                                    color = if (e.side == "debit") GIVE.ledgerDebit else GIVE.ledgerCredit,
+                                    modifier = Modifier.width(56.dp),
+                                )
+                                Text(
+                                    e.account,
+                                    style = giInter(12),
+                                    color = GIVE.ink,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(ksh(e.amountMinor), style = giInter(13, FontWeight.SemiBold), color = GIVE.ink)
                             }
                         }
                     }
-                }
-                Box(Modifier.fillMaxWidth().clickable { onBack() }.padding(Spacing.md), contentAlignment = Alignment.Center) {
-                    Text("Done", style = NuruType.cardCta, color = Nuru.goldLo)
                 }
             }
         }
@@ -115,9 +497,22 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ReceiptRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, style = NuruType.caption, color = Nuru.ink400, modifier = Modifier.weight(1f))
-        Text(value, style = NuruType.caption, color = Nuru.ink, fontWeight = FontWeight.Medium)
+private fun DetailRow(label: String, value: String, showDivider: Boolean) {
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = giInter(12), color = GIVE.tertiary)
+            Spacer(Modifier.weight(1f))
+            Text(
+                value,
+                style = giInter(13, FontWeight.SemiBold),
+                color = GIVE.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (showDivider) HairlineDivider()
     }
 }

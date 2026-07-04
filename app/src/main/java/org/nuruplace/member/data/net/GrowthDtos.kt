@@ -127,6 +127,31 @@ data class PracticeBody(val memoryVerseId: String, val matchPct: Int)
 @Serializable
 data class CompleteDayBody(val dayNumber: Int)
 
+// --- Plan-day reflection (per-day journal; UPSERT, §2.1/§3.6 idempotency) ---
+@Serializable
+data class PlanDayReflection(
+    val id: String? = null,
+    val planId: String = "",
+    val dayNumber: Int = 0,
+    val body: String = "",
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+)
+
+@Serializable
+data class PlanDayReflectionEnv(val data: PlanDayReflection? = null)
+
+@Serializable
+data class SaveReflectionBody(val body: String, val clientMutationId: String)
+
+/** POST growth/segments/{id}/complete → tells us if finishing this segment completed the day. */
+@Serializable
+data class SegmentCompleteResult(
+    val segmentId: String = "",
+    val dayNumber: Int = 0,
+    val dayCompleted: Boolean = false,
+)
+
 @Serializable
 data class PrayerUpsertBody(
     val entryId: String,

@@ -1,167 +1,584 @@
-// Live radio — the member player (GET /radio/now-playing + /radio/programs).
-// A now-playing hero (artwork, LIVE badge, title, speaker, gold play/pause) over
-// a Media3 ExoPlayer that streams the live HLS/Icecast feed or a hosted
-// recording, then the schedule (live · upcoming · recorded). Port of the iOS
-// RadioPlayerView. Audio only; the player is released with the composition.
+// Live radio — the immersive member player (GET /radio/now-playing + /radio/programs).
+// An immersive dark radio player: a blurred-artwork backdrop with breathing gold/indigo
+// glows, a now-playing centerpiece (LIVE badge, title, speaker, gold play/pause with an
+// expanding ring), an indeterminate sweep progress line, transport controls (mute · play ·
+// sleep), live stat chips, and segmented tabs (Live · Recordings · Schedule) over a Media3
+// ExoPlayer that streams the live HLS/Icecast feed or a hosted recording. Full rewrite that
+// matches the iOS RadioPlayerView. Audio only; the player is released with the composition.
 package org.nuruplace.member.feature.radio
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RadioProgram
 import org.nuruplace.member.ui.components.AsyncContent
-import org.nuruplace.member.ui.components.Kicker
-import org.nuruplace.member.ui.components.ScreenHeader
-import org.nuruplace.member.ui.theme.Nuru
-import org.nuruplace.member.ui.theme.NuruType
-import org.nuruplace.member.ui.theme.Radii
-import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.components.gInter
+import org.nuruplace.member.ui.components.gSerif
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-private data class RadioBundle(val nowPlaying: RadioProgram?, val programs: List<RadioProgram>)
+// ── Palette ─────────────────────────────────────────────────────────────────
+private object RADIO {
+    val navyDeep = Color(0xFF060F1C)
+    val navy = Color(0xFF0A1628)
+    val panelTop = Color(0xFF16273F)
+    val gold = Color(0xFFC89B3C)
+    val goldLight = Color(0xFFE6C068)
+    val goldDeep = Color(0xFFB6862F)
+    val red = Color(0xFFEF4444)
+    val redDeep = Color(0xFFDC2626)
+    val redSoft = Color(0xFFFCA5A5)
+    val indigo = Color(0xFF4338CA)
+    val indigoSoft = Color(0xFF818CF8)
+    val green = Color(0xFF16A34A)
+    val textOnGold = Color(0xFF0B1F33)
 
+    val glass = Color.White.copy(alpha = 0.06f)
+    val glassBorder = Color.White.copy(alpha = 0.10f)
+
+    val goldGrad = Brush.linearGradient(listOf(gold, goldDeep))
+}
+
+private val Capsule = RoundedCornerShape(999.dp)
+
+// ── Screen ──────────────────────────────────────────────────────────────────
 @Composable
 fun LiveRadioScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val player = remember { ExoPlayer.Builder(context).build() }
+    val player = remember { androidx.media3.exoplayer.ExoPlayer.Builder(context).build() }
     var playing by remember { mutableStateOf(false) }
     var currentUrl by remember { mutableStateOf<String?>(null) }
+    var muted by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
+        val l = object : androidx.media3.common.Player.Listener {
+            override fun onIsPlayingChanged(v: Boolean) { playing = v }
         }
-        player.addListener(listener)
-        onDispose { player.removeListener(listener); player.release() }
+        player.addListener(l)
+        onDispose { player.removeListener(l); player.release() }
     }
+    LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
 
     fun toggle(url: String) {
         if (currentUrl == url && player.isPlaying) { player.pause(); return }
         if (currentUrl != url) {
-            player.setMediaItem(MediaItem.fromUri(url)); player.prepare(); currentUrl = url
+            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(url)); player.prepare(); currentUrl = url
         }
         player.play()
     }
 
-    AsyncContent(
-        load = {
-            val np = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
-            val progs = runCatching { Net.client.api.radioPrograms() }.getOrDefault(emptyList())
-            RadioBundle(np, progs)
-        },
-    ) { bundle: RadioBundle, _ ->
-        val now = bundle.nowPlaying ?: bundle.programs.firstOrNull { it.live } ?: bundle.programs.firstOrNull()
-        Column(Modifier.fillMaxSize().background(Nuru.paper)) {
-            ScreenHeader("Radio", kicker = "Nuru Place", onBack = onBack)
-            LazyColumn(
-                Modifier.fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
-                verticalArrangement = Arrangement.spacedBy(Spacing.base),
-            ) {
-                if (now != null) item { NowPlaying(now, isThisPlaying = currentUrl == now.streamUrl && playing, onToggle = { now.streamUrl?.let(::toggle) }) }
+    // Elapsed timer: reset the origin whenever a fresh playback starts, tick every second.
+    var startedAt by remember { mutableLongStateOf(0L) }
+    var elapsedSec by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(playing, currentUrl) {
+        if (playing) {
+            if (startedAt == 0L) startedAt = System.currentTimeMillis()
+            while (true) {
+                elapsedSec = (System.currentTimeMillis() - startedAt) / 1000
+                kotlinx.coroutines.delay(1000)
+            }
+        } else {
+            startedAt = 0L
+            elapsedSec = 0L
+        }
+    }
+    val elapsed = "%d:%02d".format(elapsedSec / 60, elapsedSec % 60)
 
-                val upcoming = bundle.programs.filter { it.status == "scheduled" && !it.live }
-                val recorded = bundle.programs.filter { it.recorded }
-                if (upcoming.isNotEmpty()) {
-                    item { Kicker("Coming up") }
-                    items(upcoming, key = { it.id }) { p -> ProgramRow(p, onToggle = { p.streamUrl?.let(::toggle) }, playingUrl = currentUrl.takeIf { playing }) }
-                }
-                if (recorded.isNotEmpty()) {
-                    item { Spacer(Modifier.height(Spacing.sm)); Kicker("Recorded") }
-                    items(recorded, key = { it.id }) { p -> ProgramRow(p, onToggle = { p.streamUrl?.let(::toggle) }, playingUrl = currentUrl.takeIf { playing }) }
+    var tab by remember { mutableStateOf(0) }
+
+    Box(Modifier.fillMaxSize().background(RADIO.navyDeep)) {
+        AsyncContent(
+            load = {
+                val now = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
+                val progs = runCatching { Net.client.api.radioPrograms() }.getOrDefault(emptyList())
+                now to progs
+            },
+        ) { (nowPlaying, programs), _ ->
+            val now = nowPlaying ?: programs.firstOrNull { it.live } ?: programs.firstOrNull()
+
+            // ── Backdrop ──────────────────────────────────────────────────────
+            val glowT = rememberInfiniteTransition(label = "glow")
+            val goldAlpha by glowT.animateFloat(
+                initialValue = 0.10f, targetValue = 0.20f,
+                animationSpec = infiniteRepeatable(tween(6000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                label = "goldAlpha",
+            )
+            now?.artworkUrl?.let { art ->
+                AsyncImage(model = art, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().blur(44.dp))
+                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.35f)))
+            }
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.verticalGradient(listOf(RADIO.navyDeep.copy(alpha = 0.55f), RADIO.navyDeep.copy(alpha = 0.82f), RADIO.navyDeep)),
+                ),
+            )
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.radialGradient(listOf(RADIO.gold.copy(alpha = goldAlpha), Color.Transparent), center = Offset(120f, 320f), radius = 300f),
+                ),
+            )
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.radialGradient(listOf(RADIO.indigo.copy(alpha = 0.28f), Color.Transparent), center = Offset(900f, 1900f), radius = 320f),
+                ),
+            )
+
+            // ── Foreground ────────────────────────────────────────────────────
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Header(live = now?.live == true, onBack = onBack)
+
+                Column(
+                    Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Centerpiece(now, Modifier.padding(top = 12.dp))
+                    Titles(now)
+                    ProgressLine(now, programs, elapsed, Modifier.padding(top = 20.dp))
+                    TransportRow(now, playing, muted, onMute = { muted = !muted }, onPlay = { now?.streamUrl?.let(::toggle) }, Modifier.padding(top = 20.dp))
+                    if (now?.live == true) StatChips(now, Modifier.padding(top = 20.dp))
+                    SegmentedTabs(tab, onSelect = { tab = it }, Modifier.padding(top = 24.dp))
+                    Box(Modifier.padding(top = 16.dp).fillMaxWidth()) {
+                        when (tab) {
+                            0 -> LiveTab(now)
+                            1 -> RecordingsTab(programs, currentUrl, playing, onToggle = { it?.let(::toggle) })
+                            else -> ScheduleTab(programs)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+// ── Header ──────────────────────────────────────────────────────────────────
 @Composable
-private fun NowPlaying(p: RadioProgram, isThisPlaying: Boolean, onToggle: () -> Unit) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.hero)).background(Nuru.ceremonyGradient)) {
-        p.artworkUrl?.let {
-            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(Radii.hero)))
-            Box(Modifier.fillMaxWidth().height(220.dp).background(Nuru.navyDeep.copy(alpha = 0.55f)))
+private fun Header(live: Boolean, onBack: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GlassSquare(Icons.AutoMirrored.Filled.ArrowBack, 20.dp) { onBack() }
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (live) PulsingDot(RADIO.red, 6.dp)
+            Text("NURU RADIO", style = gInter(11, FontWeight.Bold, 3.1f), color = RADIO.gold)
         }
-        Column(Modifier.padding(Spacing.lg)) {
-            if (p.live) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(Nuru.danger))
-                    Spacer(Modifier.size(Spacing.xs))
-                    Text("LIVE", style = NuruType.micro, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
-                    p.peakListeners?.let { Spacer(Modifier.size(Spacing.sm)); Text("$it listening", style = NuruType.micro, color = Nuru.onNavyDim) }
-                }
+        Spacer(Modifier.weight(1f))
+        GlassSquare(Icons.Filled.Notifications, 18.dp) { }
+    }
+}
+
+@Composable
+private fun GlassSquare(icon: ImageVector, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(RADIO.glass)
+            .border(1.dp, RADIO.glassBorder, RoundedCornerShape(16.dp)).clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(size)) }
+}
+
+// ── Centerpiece ─────────────────────────────────────────────────────────────
+@Composable
+private fun Centerpiece(now: RadioProgram?, modifier: Modifier = Modifier) {
+    Box(modifier.widthIn(max = 300.dp).fillMaxWidth().aspectRatio(5f / 3f)) {
+        Box(
+            Modifier.matchParentSize().clip(RoundedCornerShape(26.dp))
+                .border(2.dp, if (now?.live == true) RADIO.red.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.14f), RoundedCornerShape(26.dp)),
+        ) {
+            if (now?.artworkUrl != null) {
+                AsyncImage(model = now.artworkUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
             } else {
-                Kicker(p.category.ifBlank { "On demand" })
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            Text(p.title, style = NuruType.display, color = Nuru.onNavy, maxLines = 2)
-            p.speaker?.let { Text(it, style = NuruType.body, color = Nuru.onNavyDim) }
-            Spacer(Modifier.height(Spacing.md))
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(56.dp).clip(CircleShape).background(Nuru.gold)
-                        .then(if (p.streamUrl != null) Modifier.clickable { onToggle() } else Modifier),
+                    Modifier.matchParentSize().background(Brush.linearGradient(listOf(RADIO.panelTop, RADIO.navy))),
                     contentAlignment = Alignment.Center,
-                ) { Text(if (isThisPlaying) "⏸" else "▶", style = NuruType.title, color = Nuru.navy) }
-                Spacer(Modifier.size(Spacing.md))
+                ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = RADIO.gold.copy(alpha = 0.8f), modifier = Modifier.size(44.dp)) }
+            }
+            if (now?.live != true) {
+                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.5f)))
+                Box(
+                    Modifier.align(Alignment.TopStart).padding(12.dp).clip(Capsule).background(RADIO.navyDeep.copy(alpha = 0.7f))
+                        .border(1.dp, RADIO.glassBorder, Capsule).padding(horizontal = 12.dp, vertical = 4.dp),
+                ) { Text("OFF AIR", style = gInter(10, FontWeight.Bold, 2.2f), color = Color.White) }
+            }
+        }
+    }
+}
+
+// ── Titles ──────────────────────────────────────────────────────────────────
+@Composable
+private fun Titles(now: RadioProgram?) {
+    val kicker = when {
+        now?.recorded == true -> "RECORDING"
+        now?.category?.isNotBlank() == true -> now.category.uppercase()
+        else -> "NURU PLACE RADIO"
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(kicker, style = gInter(9, FontWeight.Bold, 2.0f), color = RADIO.goldLight, modifier = Modifier.padding(top = 24.dp))
+        Text(
+            now?.title ?: "We're off air right now",
+            style = gSerif(24, FontWeight.SemiBold, -0.48f), color = Color.White,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
+        )
+        now?.speaker?.let {
+            Text(it, style = gInter(13, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+// ── Progress line ───────────────────────────────────────────────────────────
+@Composable
+private fun ProgressLine(now: RadioProgram?, programs: List<RadioProgram>, elapsed: String, modifier: Modifier = Modifier) {
+    if (now?.live == true) {
+        Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(RADIO.redDeep))
+            Text("LIVE", style = gInter(10, FontWeight.Bold, 1.4f), color = RADIO.redSoft)
+            SweepBar(Modifier.weight(1f))
+            Text(elapsed, style = gInter(10), color = Color.White.copy(alpha = 0.55f))
+        }
+    } else {
+        val nextUp = programs.firstOrNull { it.status == "scheduled" }?.title ?: "—"
+        Text("Next up · $nextUp", style = gInter(12), color = Color.White.copy(alpha = 0.6f), modifier = modifier)
+    }
+}
+
+/** Indeterminate sweep: a stripe whose width grows 0→1 repeatedly (measurement-free approximation). */
+@Composable
+private fun SweepBar(modifier: Modifier = Modifier) {
+    val t = rememberInfiniteTransition(label = "sweep")
+    val frac by t.animateFloat(
+        initialValue = 0.05f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
+        label = "sweepFrac",
+    )
+    Box(modifier.height(4.dp).clip(Capsule).background(Color.White.copy(alpha = 0.16f))) {
+        Box(Modifier.fillMaxWidth(frac).height(4.dp).clip(Capsule).background(RADIO.goldGrad))
+    }
+}
+
+// ── Transport row ───────────────────────────────────────────────────────────
+@Composable
+private fun TransportRow(
+    now: RadioProgram?,
+    playing: Boolean,
+    muted: Boolean,
+    onMute: () -> Unit,
+    onPlay: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (now?.live == true || now?.streamUrl != null) {
+        Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            GlassCircle(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, active = !muted) { onMute() }
+            PlayButton(playing, enabled = now?.streamUrl != null, onClick = onPlay)
+            GlassCircle(Icons.Filled.Bedtime, active = false) { }
+        }
+    } else {
+        Box(
+            modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RADIO.goldGrad).clickable { }.padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Notifications, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(15.dp))
+                Text("Remind me", style = gInter(14, FontWeight.Bold), color = RADIO.textOnGold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(78.dp).clip(CircleShape).background(RADIO.goldGrad).clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (playing) {
+            val t = rememberInfiniteTransition(label = "ring")
+            val scale by t.animateFloat(
+                initialValue = 1f, targetValue = 1.35f,
+                animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Restart),
+                label = "ringScale",
+            )
+            val ringAlpha by t.animateFloat(
+                initialValue = 0.5f, targetValue = 0f,
+                animationSpec = infiniteRepeatable(tween(1800, easing = FastOutSlowInEasing), RepeatMode.Restart),
+                label = "ringAlpha",
+            )
+            Box(
+                Modifier.matchParentSize()
+                    .graphicsLayer { scaleX = scale; scaleY = scale; alpha = ringAlpha }
+                    .border(2.dp, RADIO.gold, CircleShape),
+            )
+        }
+        Icon(
+            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(30.dp),
+        )
+    }
+}
+
+@Composable
+private fun GlassCircle(icon: ImageVector, active: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(48.dp).clip(CircleShape)
+            .then(
+                if (active) Modifier.background(RADIO.gold.copy(alpha = 0.165f)).border(1.dp, RADIO.gold.copy(alpha = 0.4f), CircleShape)
+                else Modifier.background(RADIO.glass).border(1.dp, RADIO.glassBorder, CircleShape),
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, contentDescription = null, tint = if (active) RADIO.goldLight else Color.White, modifier = Modifier.size(18.dp)) }
+}
+
+// ── Stat chips ──────────────────────────────────────────────────────────────
+@Composable
+private fun StatChips(now: RadioProgram?, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatChip(Icons.Filled.Headphones, (now?.peakListeners ?: 0).toString(), "LISTENING")
+        StatChip(Icons.Filled.Schedule, "LIVE", "STARTED")
+        StatChip(Icons.Filled.Public, "🌍", "REACH")
+    }
+}
+
+@Composable
+private fun StatChip(icon: ImageVector, value: String, label: String) {
+    Row(
+        Modifier.clip(Capsule).background(RADIO.glass).border(1.dp, RADIO.glassBorder, Capsule).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = RADIO.goldLight, modifier = Modifier.size(12.dp))
+        Text(value, style = gInter(11, FontWeight.Bold), color = Color.White)
+        Text(label, style = gInter(9, FontWeight.SemiBold, 0.9f), color = Color.White.copy(alpha = 0.45f))
+    }
+}
+
+// ── Segmented tabs ──────────────────────────────────────────────────────────
+@Composable
+private fun SegmentedTabs(tab: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(Capsule).background(RADIO.glass).border(1.dp, RADIO.glassBorder, Capsule).padding(4.dp),
+    ) {
+        listOf("Live", "Recordings", "Schedule").forEachIndexed { i, label ->
+            val on = tab == i
+            Box(
+                Modifier.weight(1f).clip(Capsule)
+                    .then(if (on) Modifier.background(RADIO.goldGrad) else Modifier)
+                    .clickable { onSelect(i) }.padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    if (p.streamUrl == null) "Nothing playing yet" else if (isThisPlaying) "On air" else "Tap to tune in",
-                    style = NuruType.caption, color = Nuru.onNavyDim,
+                    label,
+                    style = gInter(11, if (on) FontWeight.Bold else FontWeight.SemiBold),
+                    color = if (on) RADIO.textOnGold else Color.White.copy(alpha = 0.6f),
                 )
             }
         }
     }
 }
 
+// ── Tab: Live ───────────────────────────────────────────────────────────────
 @Composable
-private fun ProgramRow(p: RadioProgram, onToggle: () -> Unit, playingUrl: String?) {
-    val isThis = playingUrl != null && playingUrl == p.streamUrl
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.white)
-            .then(if (p.streamUrl != null) Modifier.clickable { onToggle() } else Modifier)
-            .padding(Spacing.base),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
-            if (p.artworkUrl != null) AsyncImage(model = p.artworkUrl, contentDescription = null, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)))
-            else Text(if (isThis) "⏸" else "▶", style = NuruType.rowTitle, color = Nuru.goldLo)
+private fun LiveTab(now: RadioProgram?) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            listOf("❤️" to RADIO.redDeep, "🙏" to RADIO.gold, "🙌" to RADIO.indigoSoft).forEach { (emoji, tint) ->
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Text(emoji, fontSize = 20.sp) }
+            }
         }
-        Spacer(Modifier.size(Spacing.md))
-        Column(Modifier.weight(1f)) {
-            Text(p.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1)
-            val meta = listOfNotNull(p.speaker, p.scheduledAt?.let { org.nuruplace.member.util.fmtEventTime(it) }.takeIf { !it.isNullOrBlank() }).joinToString(" · ")
-            if (meta.isNotBlank()) Text(meta, style = NuruType.caption, color = Nuru.ink600, maxLines = 1)
+        Text(
+            "Tap to react as you listen together.",
+            style = gInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.45f),
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        now?.description?.let {
+            Text(
+                it,
+                style = gInter(13).copy(lineHeight = 19.sp), color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
-        if (p.live) Text("LIVE", style = NuruType.micro, color = Nuru.danger, fontWeight = FontWeight.Bold)
     }
+}
+
+// ── Tab: Recordings ─────────────────────────────────────────────────────────
+@Composable
+private fun RecordingsTab(programs: List<RadioProgram>, currentUrl: String?, playing: Boolean, onToggle: (String?) -> Unit) {
+    val recs = programs.filter { it.recorded }
+    if (recs.isEmpty()) {
+        Text("No recordings yet.", style = gInter(13), color = Color.White.copy(alpha = 0.5f))
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            recs.forEach { p -> RecordingRow(p, tuned = currentUrl == p.streamUrl && playing, onToggle = { onToggle(p.streamUrl) }) }
+        }
+    }
+}
+
+@Composable
+private fun RecordingRow(p: RadioProgram, tuned: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .then(
+                if (tuned) Modifier.background(RADIO.gold.copy(alpha = 0.12f)).border(1.dp, RADIO.gold.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
+                else Modifier.background(RADIO.glass).border(1.dp, RADIO.glassBorder, RoundedCornerShape(18.dp)),
+            )
+            .clickable { onToggle() }.padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(RADIO.panelTop, RADIO.navy))),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (p.artworkUrl != null) {
+                AsyncImage(model = p.artworkUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)))
+                Box(Modifier.matchParentSize().background(RADIO.navyDeep.copy(alpha = 0.4f)))
+            }
+            Box(Modifier.size(32.dp).clip(CircleShape).background(RADIO.goldGrad), contentAlignment = Alignment.Center) {
+                Icon(if (tuned) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(13.dp))
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            if (p.category.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.clip(Capsule).background(RADIO.gold.copy(alpha = 0.2f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text(p.category.uppercase(), style = gInter(8, FontWeight.Bold, 0.8f), color = Color.White)
+                    }
+                }
+            }
+            Text(p.title, style = gInter(13, FontWeight.Bold), color = Color.White, modifier = Modifier.padding(top = 2.dp))
+            p.speaker?.let { Text(it, style = gInter(10), color = Color.White.copy(alpha = 0.55f)) }
+        }
+    }
+}
+
+// ── Tab: Schedule ───────────────────────────────────────────────────────────
+@Composable
+private fun ScheduleTab(programs: List<RadioProgram>) {
+    val sched = programs.sortedBy { it.scheduledAt ?: "" }
+    if (sched.isEmpty()) {
+        Text("Nothing scheduled.", style = gInter(13), color = Color.White.copy(alpha = 0.5f))
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            sched.forEach { p -> ScheduleRow(p) }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleRow(p: RadioProgram) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(RADIO.glass)
+            .border(1.dp, if (p.live) RADIO.gold.copy(alpha = 0.53f) else RADIO.glassBorder, RoundedCornerShape(18.dp)).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.width(48.dp)) {
+            Text(schedTime(p.scheduledAt), style = gInter(13, FontWeight.Bold, -0.26f), color = Color.White)
+        }
+        Box(Modifier.width(1.dp).height(36.dp).background(Color.White.copy(alpha = 0.12f)))
+        Column(Modifier.weight(1f)) {
+            Text(p.title, style = gInter(13, FontWeight.Bold), color = Color.White)
+            Text(
+                listOfNotNull(p.speaker, p.category.ifBlank { null }).joinToString(" · "),
+                style = gInter(10), color = Color.White.copy(alpha = 0.5f),
+            )
+        }
+        if (p.live) {
+            Box(Modifier.clip(Capsule).background(RADIO.redDeep).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.size(4.dp).clip(CircleShape).background(Color.White))
+                    Text("LIVE", style = gInter(8, FontWeight.Bold, 0.8f), color = Color.White)
+                }
+            }
+        } else {
+            Icon(Icons.Filled.Schedule, contentDescription = null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(13.dp))
+        }
+    }
+}
+
+// ── Animations & helpers ────────────────────────────────────────────────────
+@Composable
+private fun PulsingDot(color: Color, size: androidx.compose.ui.unit.Dp) {
+    val t = rememberInfiniteTransition(label = "pulse")
+    val alpha by t.animateFloat(
+        initialValue = 1f, targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulseAlpha",
+    )
+    Box(Modifier.size(size).clip(CircleShape).background(color.copy(alpha = alpha)))
+}
+
+/** Parse an ISO instant → "h:mm a" in Africa/Nairobi; blank on failure. */
+private fun schedTime(iso: String?): String {
+    if (iso.isNullOrBlank()) return ""
+    val zone = ZoneId.of("Africa/Nairobi")
+    val fmt = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+    return runCatching { Instant.parse(iso).atZone(zone).format(fmt) }
+        .recoverCatching { OffsetDateTime.parse(iso).atZoneSameInstant(zone).format(fmt) }
+        .getOrDefault("")
 }

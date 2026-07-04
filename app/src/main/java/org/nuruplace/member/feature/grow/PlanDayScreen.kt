@@ -1,0 +1,624 @@
+// Plan-day screen — the FRESH Figma DayReader ported from iOS `PlanDayView`
+// (ReadingPlansView.swift 743–1024) + `PLSegmentRow`/`PLConfettiBurst`
+// (ReadingPlanCards.swift 423–516). Navy-gradient header (back · "DAY N" · day
+// title · gold progress), a scripture-style content card, the day's real
+// segments as highlighted rows (tap → onOpenSegment), a server-backed
+// reflection textarea (GET pre-fills; POST upserts; button flips to "Update"),
+// and a sticky gold "Mark day complete" bar that celebrates with a confetti
+// burst. Server-authoritative gating/scoring (§1.1) — this screen only reflects
+// what the API records.
+package org.nuruplace.member.feature.grow
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight.Companion.Bold
+import androidx.compose.ui.text.font.FontWeight.Companion.Medium
+import androidx.compose.ui.text.font.FontWeight.Companion.Normal
+import androidx.compose.ui.text.font.FontWeight.Companion.SemiBold
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.CompleteDayBody
+import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.PlanSegment
+import org.nuruplace.member.data.net.ReadingPlanDay
+import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.ui.theme.Spacing
+import java.util.UUID
+import kotlin.random.Random
+
+/**
+ * Reading-plan DAY reader. Loads the plan detail, isolates [dayNumber], and
+ * renders the header/scripture/segments/reflection stack over a pinned complete
+ * bar. Segment taps bubble up via [onOpenSegment] (the index into the day's
+ * segment list). The gold CTA marks the day complete server-side, then fires a
+ * confetti burst; once complete it reads "Day complete 🎉" and taps [onBack].
+ */
+@Composable
+fun PlanDayScreen(
+    planId: String,
+    dayNumber: Int,
+    onBack: () -> Unit,
+    onOpenSegment: (Int) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+
+    var day by remember { mutableStateOf<ReadingPlanDay?>(null) }
+    var segments by remember { mutableStateOf<List<PlanSegment>>(emptyList()) }
+    val completedSegments = remember { mutableStateListOf<String>() }
+    var dayCompleted by remember { mutableStateOf(false) }
+    var justDone by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+
+    // Reflection state (server-backed; GET pre-fills, POST upserts).
+    var reflectionText by remember { mutableStateOf("") }
+    var hasSavedReflection by remember { mutableStateOf(false) }
+    var reflectionSaving by remember { mutableStateOf(false) }
+    var reflectionJustSaved by remember { mutableStateOf(false) }
+
+    // Load the plan + isolate this day, then pre-fill the reflection.
+    LaunchedEffect(planId, dayNumber) {
+        val detail: ReadingPlanDetail? = runCatching { Net.client.api.plan(planId) }.getOrNull()
+        val d = detail?.days?.firstOrNull { it.dayNumber == dayNumber }
+        day = d
+        val segs = d?.segments ?: emptyList()
+        segments = segs
+        completedSegments.clear()
+        completedSegments.addAll(segs.filter { it.completed }.map { it.segmentId })
+        dayCompleted = d?.completed == true
+
+        val existing = runCatching { Net.client.api.dayReflection(planId, dayNumber) }.getOrNull()?.data?.body
+        if (!existing.isNullOrEmpty()) {
+            hasSavedReflection = true
+            if (reflectionText.isEmpty()) reflectionText = existing
+        }
+    }
+
+    val reference = day?.reference ?: ""
+    val title = day?.title ?: "Day $dayNumber"
+    val progress =
+        if (dayCompleted) 1f
+        else if (segments.isEmpty()) 0f
+        else completedSegments.size.toFloat() / segments.size.toFloat()
+
+    // First not-yet-completed segment → gets the "Start" pill.
+    val nextId =
+        if (dayCompleted) null
+        else segments.firstOrNull { it.segmentId !in completedSegments }?.segmentId
+
+    Box(Modifier.fillMaxSize().background(PL.cream)) {
+        Column(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                DayHeader(dayNumber = dayNumber, reference = reference, title = title, progress = progress, onBack = onBack)
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    VerseBlock(reference = reference, content = day?.content)
+                    SegmentsCard(
+                        segments = segments,
+                        completedIds = completedSegments,
+                        nextId = nextId,
+                        onOpenSegment = onOpenSegment,
+                    )
+                    ReflectionCard(
+                        text = reflectionText,
+                        onTextChange = { reflectionText = it },
+                        hasSaved = hasSavedReflection,
+                        saving = reflectionSaving,
+                        justSaved = reflectionJustSaved,
+                        onSave = {
+                            val trimmed = reflectionText.trim().take(4000)
+                            if (trimmed.isNotEmpty() && !reflectionSaving) {
+                                reflectionSaving = true
+                                scope.launch {
+                                    val ok = runCatching {
+                                        Net.client.api.saveDayReflection(
+                                            planId, dayNumber,
+                                            SaveReflectionBody(trimmed, UUID.randomUUID().toString()),
+                                        )
+                                    }.isSuccess
+                                    reflectionSaving = false
+                                    if (ok) {
+                                        hasSavedReflection = true
+                                        reflectionJustSaved = true
+                                        delay(2200)
+                                        reflectionJustSaved = false
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+
+            FooterBar(
+                complete = dayCompleted || justDone,
+                busy = busy,
+                onComplete = {
+                    if (!busy) {
+                        busy = true
+                        scope.launch {
+                            val ok = runCatching { Net.client.api.completePlanDay(planId, CompleteDayBody(dayNumber)) }.isSuccess
+                            busy = false
+                            if (ok) {
+                                dayCompleted = true
+                                justDone = true
+                            }
+                        }
+                    }
+                },
+                onBack = onBack,
+            )
+        }
+
+        if (justDone) PLConfettiBurst()
+    }
+}
+
+// MARK: navy header (fresh DayReader) — 788-829
+
+@Composable
+private fun DayHeader(
+    dayNumber: Int,
+    reference: String,
+    title: String,
+    progress: Float,
+    onBack: () -> Unit,
+) {
+    val animatedProgress by animateFloatAsState(targetValue = progress.coerceIn(0f, 1f), label = "dayProgress")
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+            .background(PL.navyGrad)
+            // Scaffold already insets content below the status bar; just a small top pad.
+            .padding(horizontal = 20.dp)
+            .padding(top = 12.dp, bottom = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.10f))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Text("DAY $dayNumber", style = plInter(10, Bold, 1.8f), color = PL.gold)
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.size(36.dp))
+        }
+        Text(
+            reference,
+            style = plInter(11),
+            color = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Text(
+            title,
+            style = plSerif(23, SemiBold, -0.46f),
+            color = Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        // Thin 4dp progress bar — track white@20% capsule + gold fill.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color.White.copy(alpha = 0.2f)),
+        ) {
+            if (animatedProgress > 0f) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(animatedProgress)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(PL.goldProgressGrad),
+                )
+            }
+        }
+    }
+}
+
+// MARK: scripture / day content card — 833-852
+
+@Composable
+private fun VerseBlock(reference: String, content: String?) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(PL.highlight)
+            .border(1.dp, PL.gold.copy(alpha = 0.25f), RoundedCornerShape(22.dp))
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Filled.MenuBook, null, tint = PL.refInk, modifier = Modifier.size(12.dp))
+            Text(
+                reference.uppercase(),
+                style = plInter(11, Bold, 1.4f),
+                color = PL.refInk,
+            )
+        }
+        if (!content.isNullOrEmpty()) {
+            Text(
+                content,
+                style = plSerif(17, Normal, -0.17f, italic = true)
+                    .copy(lineHeight = 25.sp),
+                color = PL.navy,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+// MARK: segments (real day flow → onOpenSegment) — 856-881
+
+@Composable
+private fun SegmentsCard(
+    segments: List<PlanSegment>,
+    completedIds: List<String>,
+    nextId: String?,
+    onOpenSegment: (Int) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White)
+            .border(1.dp, PL.border, RoundedCornerShape(22.dp))
+            .padding(16.dp),
+    ) {
+        PLOverline("WORK THROUGH TODAY", color = PL.goldDeep, kerning = 1.4f)
+        Column(
+            Modifier.padding(top = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            segments.forEachIndexed { index, seg ->
+                PLSegmentRow(
+                    segment = seg,
+                    done = seg.segmentId in completedIds,
+                    isNext = seg.segmentId == nextId,
+                    onTap = { onOpenSegment(index) },
+                )
+            }
+        }
+    }
+}
+
+// MARK: plan-day segment row — ReadingPlanCards.swift 423-459
+
+@Composable
+private fun PLSegmentRow(
+    segment: PlanSegment,
+    done: Boolean,
+    isNext: Boolean,
+    onTap: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (isNext) PL.highlight else PL.surface)
+            .border(1.dp, if (isNext) PL.gold.copy(alpha = 0.27f) else Color.Transparent, RoundedCornerShape(16.dp))
+            .clickable(onClick = onTap)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // 36dp icon tile.
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (done) PL.gold else Color.White)
+                .then(if (done) Modifier else Modifier.border(1.dp, PL.border, RoundedCornerShape(12.dp))),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (done) {
+                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
+            } else {
+                Icon(segmentIcon(segment.kind), null, tint = PL.gold, modifier = Modifier.size(15.dp))
+            }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                segment.title,
+                style = plInter(12, SemiBold),
+                color = PL.navy,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                segment.kind.replaceFirstChar { it.uppercase() },
+                style = plInter(11),
+                color = PL.ink3,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (isNext) {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(PL.gold)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text("Start", style = plInter(9, Bold), color = PL.navy)
+            }
+        } else {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+/** kind → glyph, mirroring iOS `segmentIcon` (883-892). */
+private fun segmentIcon(kind: String): ImageVector = when (kind.lowercase()) {
+    "video" -> Icons.Filled.PlayArrow
+    "reading" -> Icons.Filled.MenuBook
+    "devotional" -> Icons.Filled.WbSunny
+    "talk" -> Icons.Filled.ChatBubbleOutline
+    "scripture" -> Icons.Filled.FormatQuote
+    else -> Icons.Filled.MenuBook
+}
+
+// MARK: reflection — the Figma textarea, backed by the real endpoint — 898-962
+
+@Composable
+private fun ReflectionCard(
+    text: String,
+    onTextChange: (String) -> Unit,
+    hasSaved: Boolean,
+    saving: Boolean,
+    justSaved: Boolean,
+    onSave: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.White)
+            .border(1.dp, PL.border, RoundedCornerShape(22.dp))
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PLOverline("REFLECTION", color = PL.goldDeep, kerning = 1.4f)
+            Spacer(Modifier.weight(1f))
+            AnimatedVisibility(visible = justSaved, enter = fadeIn(), exit = fadeOut()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
+                    Text("Saved", style = plInter(10, Bold), color = Color(0xFF15803D))
+                }
+            }
+        }
+        Text(
+            "What is God showing you today?",
+            style = plSerif(16, Medium, -0.16f, italic = true),
+            color = PL.navy,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        // Multiline field — placeholder overlays an empty field.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(PL.surface)
+                .border(1.dp, PL.border, RoundedCornerShape(16.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            if (text.isEmpty()) {
+                Text("Write it down while it's fresh…", style = plInter(13), color = PL.ink3)
+            }
+            BasicTextField(
+                value = text,
+                onValueChange = onTextChange,
+                textStyle = plInter(13).copy(color = PL.navy),
+                cursorBrush = SolidColor(PL.gold),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // Save / Update button — disabled (dimmed) when empty.
+        val empty = text.trim().isEmpty()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(PL.gold.copy(alpha = 0.08f))
+                .border(1.dp, PL.gold.copy(alpha = 0.27f), RoundedCornerShape(16.dp))
+                .alpha(if (empty || saving) 0.5f else 1f)
+                .clickable(enabled = !empty && !saving, onClick = onSave)
+                .padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Edit, null, tint = PL.refInk, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (hasSaved) "Update" else "Save reflection",
+                style = plInter(12, Bold),
+                color = PL.refInk,
+            )
+        }
+    }
+}
+
+// MARK: sticky footer — mark complete → confetti → tap to go back — 966-1023
+
+@Composable
+private fun FooterBar(
+    complete: Boolean,
+    busy: Boolean,
+    onComplete: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Color.White),
+    ) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 12.dp, bottom = Spacing.tabBarSpace)
+                .shadow(10.dp, RoundedCornerShape(16.dp), spotColor = PL.gold.copy(alpha = 0.45f), ambientColor = PL.gold.copy(alpha = 0.45f))
+                .clip(RoundedCornerShape(16.dp))
+                .background(PL.goldCtaGrad)
+                .height(48.dp)
+                .clickable(enabled = !busy) { if (complete) onBack() else onComplete() },
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (complete) {
+                Text("Day complete 🎉", style = plInter(14, Bold), color = PL.navy)
+            } else {
+                Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Mark day complete", style = plInter(14, Bold), color = PL.navy)
+            }
+        }
+    }
+}
+
+// MARK: lightweight confetti burst — ReadingPlanCards.swift 463-516
+
+private data class ConfettiPiece(
+    val dx: Float,
+    val dy: Float,
+    val w: Float,
+    val h: Float,
+    val spin: Float,
+    val color: Color,
+)
+
+/**
+ * A few gold/navy rects "falling" from near the top — a lightweight take on the
+ * iOS `PLConfettiBurst`. Kicks its flight on the next frame (like iOS) so the
+ * animation actually plays instead of snapping to its end state, then fades.
+ */
+@Composable
+private fun PLConfettiBurst() {
+    val palette = listOf(PL.gold, PL.goldLight, PL.navy, Color.White)
+    val pieces = remember {
+        List(28) { i ->
+            ConfettiPiece(
+                dx = Random.nextFloat() * 340f - 170f,
+                dy = 180f + Random.nextFloat() * 380f,
+                w = 5f + Random.nextFloat() * 2f,
+                h = 9f + Random.nextFloat() * 4f,
+                spin = Random.nextFloat() * 1080f - 540f,
+                color = palette[i % palette.size],
+            )
+        }
+    }
+    // 0 → 1 flight progress (kicked next-frame), plus a late fade.
+    var t by remember { mutableStateOf(0f) }
+    var fade by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // Kick on the next frame so the animation isn't coalesced to its end.
+        withFrameNanos { }
+        val start = withFrameNanos { it }
+        val durationNanos = 1_600_000_000f
+        while (true) {
+            val now = withFrameNanos { it }
+            val elapsed = (now - start).toFloat()
+            t = (elapsed / durationNanos).coerceIn(0f, 1f)
+            if (elapsed >= 1_150_000_000f) fade = true
+            if (t >= 1f) break
+        }
+    }
+    val fadeAlpha by animateFloatAsState(
+        targetValue = if (fade) 0f else 1f,
+        animationSpec = tween(durationMillis = 450, easing = LinearEasing),
+        label = "confettiFade",
+    )
+    // easeOut on the flight fraction.
+    val eased = 1f - (1f - t) * (1f - t)
+    Box(Modifier.fillMaxSize()) {
+        pieces.forEach { p ->
+            Box(
+                Modifier
+                    .graphicsLayer {
+                        // dx/dy are dp-magnitude (from the iOS points); px inside graphicsLayer.
+                        val startY = size.height * 0.18f
+                        val endY = p.dy.dp.toPx()
+                        translationX = size.width / 2f + p.dx.dp.toPx() * eased - (p.w.dp.toPx() / 2f)
+                        translationY = startY + (endY - startY) * eased
+                        rotationZ = p.spin * eased
+                        alpha = fadeAlpha
+                    }
+                    .size(width = p.w.dp, height = p.h.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(p.color),
+            )
+        }
+    }
+}

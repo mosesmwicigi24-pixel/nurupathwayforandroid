@@ -42,6 +42,11 @@ interface MemberApi {
     @POST("modules/{id}/complete")
     suspend fun completeModule(@Path("id") moduleId: String, @Body body: CompleteBody): CompleteResult
 
+    // Standalone reflection (the "Reflect" gate step; persists even for quiz modules,
+    // which complete via the quiz not completeModule). Reuses SaveReflectionBody.
+    @POST("modules/{id}/reflection")
+    suspend fun submitModuleReflection(@Path("id") moduleId: String, @Body body: SaveReflectionBody): Unit
+
     // --- Module engagement heartbeat (reading/audio/video seconds + resume page) ---
     @GET("modules/{id}/engagement")
     suspend fun moduleEngagement(@Path("id") moduleId: String): ModuleEngagement
@@ -89,7 +94,13 @@ interface MemberApi {
     suspend fun completePlanDay(@Path("id") planId: String, @Body body: CompleteDayBody): Unit
 
     @POST("growth/segments/{id}/complete")
-    suspend fun completeSegment(@Path("id") segmentId: String): Unit
+    suspend fun completeSegment(@Path("id") segmentId: String): SegmentCompleteResult
+
+    @GET("growth/plans/{id}/days/{n}/reflection")
+    suspend fun dayReflection(@Path("id") planId: String, @Path("n") dayNumber: Int): PlanDayReflectionEnv
+
+    @POST("growth/plans/{id}/days/{n}/reflection")
+    suspend fun saveDayReflection(@Path("id") planId: String, @Path("n") dayNumber: Int, @Body body: SaveReflectionBody): PlanDayReflection
 
     // --- Prayer journal (private, §5.4) ---
     @GET("me/prayers")
@@ -222,6 +233,9 @@ interface MemberApi {
 
     @GET("me/achievements")
     suspend fun achievements(): Achievements
+
+    @GET("certificates")
+    suspend fun certificates(): Envelope<Certificate>
 
     // --- Recurring giving schedules ---
     @GET("giving/schedules")

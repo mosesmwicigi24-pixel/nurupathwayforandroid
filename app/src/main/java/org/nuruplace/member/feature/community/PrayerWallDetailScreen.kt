@@ -1,21 +1,28 @@
-// Prayer wall detail — one request + its comments, with a comment composer. Port
-// of the iOS PrayerWallDetailView.
+// Prayer wall detail — one request + its comments, under a navy header, with a
+// pinned comment composer. Port of the iOS PrayerWallDetailView.
 package org.nuruplace.member.feature.community
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,67 +32,174 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerCommentBody
 import org.nuruplace.member.data.net.PrayerWallDetail
+import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.ui.components.AsyncContent
-import org.nuruplace.member.ui.components.NuruCard
-import org.nuruplace.member.ui.components.PrimaryButton
-import org.nuruplace.member.ui.components.ScreenHeader
-import org.nuruplace.member.ui.theme.Nuru
-import org.nuruplace.member.ui.theme.NuruType
-import org.nuruplace.member.ui.theme.Radii
-import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.components.GrowPal
+import org.nuruplace.member.ui.components.gInter
+import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.util.relTime
 import java.util.UUID
 
+private val Capsule = RoundedCornerShape(999.dp)
+
 @Composable
 fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
-    AsyncContent(key = postId, load = { Net.client.api.prayerWallGet(postId) }) { detail: PrayerWallDetail, reload ->
-        val scope = rememberCoroutineScope()
-        var comment by remember { mutableStateOf("") }
-        var busy by remember { mutableStateOf(false) }
-        val p = detail.post
+    Column(Modifier.fillMaxSize().background(GrowPal.coolPaper)) {
+        AsyncContent(key = postId, load = { Net.client.api.prayerWallGet(postId) }) { detail: PrayerWallDetail, reload ->
+            val scope = rememberCoroutineScope()
+            val p = detail.post
 
-        Column(Modifier.fillMaxSize().background(Nuru.paper)) {
-            ScreenHeader(p.title ?: "Prayer request", kicker = p.authorName, onBack = onBack)
+            // Header
+            Row(
+                Modifier.fillMaxWidth().background(GrowPal.navy)
+                    .padding(horizontal = 24.dp).padding(top = 12.dp, bottom = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                Text("Prayer", style = gSerif(20, FontWeight.SemiBold), color = Color.White)
+            }
+
+            // Content
             LazyColumn(
                 Modifier.fillMaxWidth().weight(1f),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
-                    NuruCard {
-                        Text(p.body, style = NuruType.bodyLg, color = Nuru.ink)
-                        Spacer(Modifier.height(Spacing.xs))
-                        Text("🙏 ${p.prayCount} praying · ${relTime(p.createdAt)}", style = NuruType.micro, color = Nuru.ink400)
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(GrowPal.white)
+                            .border(1.dp, GrowPal.border, RoundedCornerShape(24.dp))
+                            .padding(16.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Avatar(p.authorName, p.authorAvatar, 40.dp)
+                            Column {
+                                Text(p.authorName, style = gInter(12, FontWeight.Bold), color = GrowPal.ink)
+                                Text(relTime(p.createdAt), style = gInter(11), color = GrowPal.ink400)
+                            }
+                        }
+                        p.title?.let {
+                            Text(it, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.navy, modifier = Modifier.padding(top = 8.dp))
+                        }
+                        Text(
+                            p.body,
+                            style = gInter(16).copy(lineHeight = 24.sp),
+                            color = GrowPal.ink,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        Row(
+                            Modifier.padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(
+                                Modifier.clip(Capsule)
+                                    .background(if (p.iPrayed) GrowPal.goldChipBg else GrowPal.surface)
+                                    .border(1.dp, if (p.iPrayed) GrowPal.gold else GrowPal.border, Capsule)
+                                    .clickable {
+                                        scope.launch {
+                                            try {
+                                                Net.client.api.prayerWallReact(p.postId, ReactBody("pray")); reload()
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("🙏", fontSize = 15.sp)
+                                    Text(
+                                        "${p.prayCount} praying",
+                                        style = gInter(12, FontWeight.Bold),
+                                        color = if (p.iPrayed) GrowPal.navyDeep else GrowPal.ink600,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 items(detail.comments, key = { it.commentId }) { c ->
-                    NuruCard {
-                        Text(c.authorName, style = NuruType.label, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
-                        Text(c.body, style = NuruType.body, color = Nuru.ink)
-                        Text(relTime(c.createdAt), style = NuruType.micro, color = Nuru.ink400)
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(GrowPal.white)
+                            .border(1.dp, GrowPal.border, RoundedCornerShape(24.dp))
+                            .padding(16.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Avatar(c.authorName, c.authorAvatar, 28.dp)
+                            Column {
+                                Text(c.authorName, style = gInter(12, FontWeight.Bold), color = GrowPal.ink)
+                                Text(relTime(c.createdAt), style = gInter(11), color = GrowPal.ink400)
+                            }
+                        }
+                        Text(
+                            c.body,
+                            style = gInter(13).copy(lineHeight = 18.sp),
+                            color = GrowPal.ink600,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().background(Nuru.white).padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(comment, { comment = it }, placeholder = { Text("Encourage them…") }, singleLine = true, shape = RoundedCornerShape(Radii.control), modifier = Modifier.weight(1f))
-                Spacer(Modifier.height(Spacing.sm))
-                PrimaryButton("Send", loading = busy, enabled = comment.isNotBlank(), modifier = Modifier.width(96.dp), onClick = {
-                    if (!busy) {
-                        busy = true
-                        scope.launch {
-                            try {
-                                Net.client.api.prayerWallComment(postId, PrayerCommentBody(UUID.randomUUID().toString(), comment.trim(), UUID.randomUUID().toString()))
-                                comment = ""; reload()
-                            } catch (_: Exception) {} finally { busy = false }
-                        }
-                    }
-                })
+
+            // Composer bar
+            var text by remember { mutableStateOf("") }
+            Row(
+                Modifier.fillMaxWidth().background(GrowPal.coolPaper)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    Modifier.weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GrowPal.white)
+                        .border(1.dp, GrowPal.border, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                ) {
+                    if (text.isBlank()) Text("Encourage them…", style = gInter(14), color = GrowPal.ink400)
+                    BasicTextField(
+                        text, { text = it },
+                        textStyle = gInter(14).copy(color = GrowPal.ink),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(GrowPal.navy)
+                        .clickable {
+                            if (text.isNotBlank()) {
+                                val body = text
+                                scope.launch {
+                                    try {
+                                        Net.client.api.prayerWallComment(
+                                            postId,
+                                            PrayerCommentBody(UUID.randomUUID().toString(), body.trim(), UUID.randomUUID().toString()),
+                                        )
+                                        reload()
+                                    } catch (_: Exception) {}
+                                }
+                                text = ""
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(17.dp))
+                }
             }
         }
     }

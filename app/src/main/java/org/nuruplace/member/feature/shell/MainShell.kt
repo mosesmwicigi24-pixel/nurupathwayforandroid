@@ -11,12 +11,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -42,7 +47,9 @@ import org.nuruplace.member.data.net.SubmitBody
 import org.nuruplace.member.feature.grow.DevotionalScreen
 import org.nuruplace.member.feature.grow.GrowHubScreen
 import org.nuruplace.member.feature.grow.MemoryVerseScreen
+import org.nuruplace.member.feature.grow.PlanDayScreen
 import org.nuruplace.member.feature.grow.PlanDetailScreen
+import org.nuruplace.member.feature.grow.PlanSegmentScreen
 import org.nuruplace.member.feature.grow.PrayerJournalScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
@@ -51,6 +58,7 @@ import org.nuruplace.member.feature.community.ChatThreadScreen
 import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
 import org.nuruplace.member.feature.community.PrayerWallScreen
+import org.nuruplace.member.feature.events.AllEventsCalendarScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
 import org.nuruplace.member.feature.events.EventsScreen
 import org.nuruplace.member.feature.events.NotificationsScreen
@@ -63,7 +71,8 @@ import org.nuruplace.member.feature.profile.GiftsScreen
 import org.nuruplace.member.feature.profile.ProfileScreen
 import org.nuruplace.member.feature.profile.ResourcesScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
-import org.nuruplace.member.feature.pathway.LevelsScreen
+import org.nuruplace.member.feature.pathway.LevelsMapScreen
+import org.nuruplace.member.feature.pathway.PathwayHubScreen
 import org.nuruplace.member.feature.pathway.ModuleScreen
 import org.nuruplace.member.feature.pathway.QuizScreen
 import org.nuruplace.member.feature.pathway.QuizVerdict
@@ -75,10 +84,12 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 
 private val TABS = listOf(
     Tab("home", "Home", Icons.Filled.Home),
-    Tab("pathway", "Pathway", Icons.AutoMirrored.Filled.List),
-    Tab("grow", "Grow", Icons.Filled.Favorite),
-    Tab("community", "Community", Icons.Filled.Person),
-    Tab("profile", "Profile", Icons.Filled.AccountBox),
+    Tab("pathway", "Pathway", Icons.Filled.MenuBook),
+    Tab("plans", "Plans", Icons.Filled.Bookmark),
+    Tab("events", "Events", Icons.Filled.CalendarMonth),
+    Tab("chat", "Chat", Icons.AutoMirrored.Filled.Chat),
+    Tab("give", "Give", Icons.Filled.VolunteerActivism),
+    Tab("profile", "Profile", Icons.Filled.Person),
 )
 
 @Composable
@@ -102,8 +113,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                                 popUpTo("home"); launchSingleTop = true
                             }
                         },
-                        icon = { Icon(tab.icon, tab.label) },
-                        label = { Text(tab.label, style = NuruType.micro) },
+                        icon = { Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp)) },
+                        label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
+                        alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Nuru.navyDeep,
                             selectedTextColor = Nuru.navyDeep,
@@ -117,19 +129,61 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         },
     ) { pad ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-            composable("home") { HomeScreen(me, onSignOut = { auth.signOut() }, onOpenNotifications = { nav.navigate("notifications") }, onOpenGive = { nav.navigate("give") }, onNavigate = { nav.navigate(it) }) }
-            composable("pathway") { LevelsScreen(me = me, onOpenLevel = { nav.navigate("level/$it") }) }
+            composable("home") {
+                HomeScreen(
+                    me,
+                    onSignOut = { auth.signOut() },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                    onOpenGive = { nav.navigate("give") },
+                    onNavigate = { nav.navigate(it) },
+                    onSelectTab = { r -> nav.navigate(r) { popUpTo("home"); launchSingleTop = true } },
+                )
+            }
+            composable("pathway") {
+                PathwayHubScreen(
+                    me = me,
+                    onOpenLevel = { nav.navigate("level/$it") },
+                    onOpenModule = { nav.navigate("module/$it") },
+                    onOpenExam = { nav.navigate("exam/$it") },
+                    onOpenMentor = { nav.navigate("mentor") },
+                    onOpenMap = { nav.navigate("pathway-map") },
+                )
+            }
+            composable("pathway-map") {
+                LevelsMapScreen(me = me, onOpenLevel = { nav.navigate("level/$it") }, onBack = { nav.popBackStack() })
+            }
             composable("grow") { GrowHubScreen(onOpen = { nav.navigate(it) }) }
             composable("devotional") { DevotionalScreen(onBack = { nav.popBackStack() }) }
             composable("memory-verses") { MemoryVerseScreen(onBack = { nav.popBackStack() }) }
             composable("plans") {
-                ReadingPlansScreen(onBack = { nav.popBackStack() }, onOpenPlan = { nav.navigate("plan/$it") })
+                ReadingPlansScreen(
+                    onOpenPlan = { nav.navigate("plan/$it") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                )
             }
             composable(
                 "plan/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
             ) { entry ->
-                PlanDetailScreen(planId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                val id = entry.arguments?.getString("id") ?: ""
+                PlanDetailScreen(planId = id, onBack = { nav.popBackStack() }, onOpenDay = { d -> nav.navigate("plan/$id/day/$d") })
+            }
+            composable(
+                "plan/{id}/day/{n}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val n = entry.arguments?.getInt("n") ?: 1
+                PlanDayScreen(planId = id, dayNumber = n, onBack = { nav.popBackStack() }, onOpenSegment = { i -> nav.navigate("plan/$id/day/$n/seg/$i") })
+            }
+            composable(
+                "plan/{id}/day/{n}/seg/{i}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }, navArgument("i") { type = NavType.IntType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val n = entry.arguments?.getInt("n") ?: 1
+                val i = entry.arguments?.getInt("i") ?: 0
+                PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
             }
             composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
@@ -144,7 +198,12 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 PrayerWallDetailScreen(postId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("chat") {
-                ChatInboxScreen(onBack = { nav.popBackStack() }, onOpenThread = { nav.navigate("chat/$it") }, onNewMessage = { nav.navigate("new-message") })
+                ChatInboxScreen(
+                    onOpenThread = { nav.navigate("chat/$it") },
+                    onNewMessage = { nav.navigate("new-message") },
+                    onOpenAssistant = { nav.navigate("assistant") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                )
             }
             composable("new-message") {
                 org.nuruplace.member.feature.community.NewMessageScreen(
@@ -159,7 +218,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 ChatThreadScreen(conversationId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("events") {
-                EventsScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
+                EventsScreen(
+                    onOpenEvent = { nav.navigate("event/$it") },
+                    onOpenCalendar = { nav.navigate("events-calendar") },
+                    onOpenAnnouncement = { nav.navigate("announcement/$it") },
+                    onOpenAnnouncements = { nav.navigate("announcements") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                )
+            }
+            composable("events-calendar") {
+                AllEventsCalendarScreen(onBack = { nav.popBackStack() }, onOpenEvent = { nav.navigate("event/$it") })
             }
             composable(
                 "event/{id}",

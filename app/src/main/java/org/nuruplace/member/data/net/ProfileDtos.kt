@@ -96,3 +96,14 @@ data class AssistantChatBody(val messages: List<AssistantMessage>)
 
 @Serializable
 data class AssistantReplyRes(val reply: String = "")
+
+// --- Certificates (GET /certificates — the caller's issued certificates) ---
+@Serializable
+data class Certificate(
+    val certificateId: String = "",
+    val levelNumber: Int? = null,
+    val verificationCode: String = "",
+    val pdfObjectKey: String = "",
+    val issuedAt: String = "",
+    val downloadUrl: String = "",
+)
