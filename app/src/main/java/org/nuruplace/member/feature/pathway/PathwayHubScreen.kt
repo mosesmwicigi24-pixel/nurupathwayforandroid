@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -176,7 +177,7 @@ fun PathwayHubScreen(
             }
             DisciplershipRow(onOpenMentor)
             Milestones(levels)
-            SummitCard(overallPct, levels.count { it.status != LevelStatus.COMPLETED })
+            SummitCard(overallPct, levels, firstName)
             Spacer(Modifier.height(Spacing.tabBarSpace))
         }
     }
@@ -523,31 +524,91 @@ private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
 }
 
 @Composable
-private fun SummitCard(overallPct: Int, levelsLeft: Int) {
+private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: String) {
     val reached = overallPct >= 100
+    val levelsLeft = levels.count { it.status != LevelStatus.COMPLETED }
+    // First time the summit is truly reached → a real celebration (once ever).
+    if (reached) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            org.nuruplace.member.ui.components.CelebrationCenter.fire(
+                org.nuruplace.member.ui.components.Moment(
+                    key = "commissioned",
+                    title = "You have been commissioned",
+                    subtitle = "Sent to make disciples — Matthew 28:19",
+                ),
+            )
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("THE SUMMIT · YOUR DESTINATION", style = PW.over(9, 1.62f), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
-        Box(Modifier.fillMaxWidth().height(256.dp).clip(RoundedCornerShape(24.dp))) {
-            FitImage("https://images.unsplash.com/photo-1513759565286-20e9c5fad06b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x400A1628), Color(0x800A1628), Color(0xEB0A1628)))))
+        Text("THE SUMMIT · WHERE THIS ROAD LEADS", style = PW.over(9, 1.62f), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
+        Box(
+            Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp))
+                // Reached earns a gold ceremonial ring; the road there stays quiet.
+                .border(if (reached) 1.5.dp else 0.dp, if (reached) PW.gold.copy(alpha = 0.85f) else Color.Transparent, RoundedCornerShape(24.dp)),
+        ) {
+            // Real sending: a worship gathering, hands raised, JESUS over the stage —
+            // visually verified (not picked blind from an ID).
+            FitImage("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x260A1628), Color(0x730A1628), Color(0xF20A1628)))))
             // status chip
-            Row(Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(999.dp)).background(if (reached) PW.gold else Color.White.copy(alpha = 0.2f)).padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(999.dp))
+                    .background(if (reached) PW.gold else Color.White.copy(alpha = 0.18f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (reached) Icon(Icons.Filled.Star, null, tint = PW.navy, modifier = Modifier.size(10.dp)) else Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(10.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (reached) "Reached" else "Locked", style = PW.over(9, 0f), color = if (reached) PW.navy else Color.White)
+                Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(9, 1f), color = if (reached) PW.navy else Color.White)
             }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(56.dp).clip(RoundedCornerShape(999.dp)).background(Color.White.copy(alpha = 0.08f)).border(1.dp, PW.gold.copy(alpha = 0.4f), RoundedCornerShape(999.dp)), contentAlignment = Alignment.Center) {
-                    Text("👑", style = TextStyle(fontSize = 26.sp))
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Ceremonial seal — double gold ring, medal, no emoji.
+                Box(
+                    Modifier.size(58.dp).clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = if (reached) 0.14f else 0.07f))
+                        .border(1.5.dp, PW.gold.copy(alpha = if (reached) 0.95f else 0.45f), RoundedCornerShape(999.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.size(46.dp).clip(RoundedCornerShape(999.dp))
+                            .border(1.dp, PW.goldLight.copy(alpha = if (reached) 0.8f else 0.35f), RoundedCornerShape(999.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.WorkspacePremium, null, tint = if (reached) PW.goldLight else PW.gold.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("COMMISSIONED", style = PW.over(10, 2.4f), color = PW.goldLight)
+                // The actual charge, not a caption — the words carry the weight.
+                Text(
+                    "\u201CGo therefore and make disciples of all nations\u2026\u201D",
+                    style = PW.serif(19, FontWeight.SemiBold, -0.2f).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, lineHeight = 26.sp),
+                    color = Color.White,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Text("MATTHEW 28:19", style = PW.over(9, 1.8f), color = Color.White.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.height(14.dp))
+                // The road itself: one dot per level, gold when walked.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    levels.forEach { lv ->
+                        val done = lv.status == LevelStatus.COMPLETED
+                        Box(
+                            Modifier.size(if (done) 9.dp else 7.dp).clip(RoundedCornerShape(999.dp))
+                                .background(if (done) PW.gold else Color.White.copy(alpha = 0.28f))
+                                .border(1.dp, if (done) PW.goldLight else Color.Transparent, RoundedCornerShape(999.dp)),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("THE SUMMIT", style = PW.over(8, 1.92f), color = PW.goldLight)
-                Text("Commissioned", style = PW.serif(22, FontWeight.Bold, -0.44f), color = Color.White, modifier = Modifier.padding(top = 1.dp))
-                Text("Sent to make disciples · Matthew 28:19", style = PW.t(11), color = Color.White.copy(alpha = 0.82f))
-                Spacer(Modifier.height(12.dp))
-                Box(Modifier.fillMaxWidth(0.72f)) { PWBar(overallPct, PW.goldGrad, Color.White.copy(alpha = 0.22f)) }
-                Spacer(Modifier.height(6.dp))
-                Text(if (reached) "You've been commissioned 🎉" else "$overallPct% of the way · $levelsLeft ${if (levelsLeft == 1) "level" else "levels"} to go", style = PW.t(10, FontWeight.Bold), color = PW.goldLight)
+                Text(
+                    if (reached) "$firstName, you have been commissioned \u2014 go." 
+                    else if (levelsLeft == 1) "One level between you and being sent."
+                    else "$levelsLeft levels between you and being sent.",
+                    style = PW.t(11, FontWeight.Bold),
+                    color = PW.goldLight,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
             }
         }
     }
