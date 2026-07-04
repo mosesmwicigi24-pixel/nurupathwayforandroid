@@ -6,6 +6,7 @@ package org.nuruplace.member.data.net
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -13,6 +14,10 @@ import retrofit2.http.Path
 interface MemberApi {
     @POST("auth/login")
     suspend fun login(@Body body: LoginBody): LoginResponse
+
+    // 204; revokes the refresh token server-side on sign-out.
+    @POST("auth/logout")
+    suspend fun logout(@Body body: LogoutBody): Unit
 
     @POST("auth/login/mfa")
     suspend fun completeMfa(@Body body: MfaBody): Session
@@ -28,6 +33,13 @@ interface MemberApi {
 
     @GET("me")
     suspend fun me(): MeResponse
+
+    // PATCH /me — profile self-edit (identity module). Body is a JsonObject so unset
+    // fields are OMITTED: the server's strict zod schema rejects explicit nulls
+    // (same precedent as reportModuleEngagement). Include row_version (optimistic
+    // concurrency) on every call.
+    @PATCH("me")
+    suspend fun updateMe(@Body body: kotlinx.serialization.json.JsonObject): MeResponse
 
     // --- Pathway (server-authoritative gating §1.9) ---
     @GET("me/pathway")
@@ -196,6 +208,10 @@ interface MemberApi {
     @POST("giving/intents")
     suspend fun giving(@Body body: GiveBody): GivingIntentResult
 
+    // Settle an approved PayPal order (order_id = the intent's provider_ref).
+    @POST("giving/paypal/capture")
+    suspend fun capturePayPal(@Body body: PayPalCaptureBody): PayPalCaptureRes
+
     @GET("giving/transactions/{id}")
     suspend fun givingDetail(@Path("id") transactionId: String): GivingDetail
 
@@ -330,6 +346,20 @@ interface MemberApi {
 
     @GET("radio/programs")
     suspend fun radioPrograms(): List<RadioProgram>
+
+    @GET("radio/programs/{id}")
+    suspend fun radioProgram(@Path("id") programId: String): RadioProgram
+
+    // kind ∈ heart | amen | fire; idempotent per client_event_id → same counts on replay.
+    @POST("radio/programs/{id}/react")
+    suspend fun radioReact(@Path("id") programId: String, @Body body: RadioReactBody): RadioReactRes
+
+    // Bare array on the wire (not enveloped).
+    @GET("radio/programs/{id}/comments")
+    suspend fun radioComments(@Path("id") programId: String): List<RadioComment>
+
+    @POST("radio/programs/{id}/comments")
+    suspend fun addRadioComment(@Path("id") programId: String, @Body body: RadioCommentBody): RadioComment
 
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")

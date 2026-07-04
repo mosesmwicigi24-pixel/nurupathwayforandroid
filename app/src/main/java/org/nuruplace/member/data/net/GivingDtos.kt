@@ -63,3 +63,10 @@ data class GiveBody(
     val phoneNumber: String? = null,
     val idempotencyKey: String,
 )
+
+/** POST /giving/paypal/capture — settles an approved PayPal order (money §5.6: online-only). */
+@Serializable
+data class PayPalCaptureBody(val orderId: String)
+
+@Serializable
+data class PayPalCaptureRes(val status: String = "")

@@ -338,3 +338,27 @@ data class SyncMutationResult(
     val code: String? = null,
     val detail: String? = null,
 )
+
+// --- Radio interactivity (react kinds are a fixed server enum, not arbitrary emoji) ---
+@Serializable
+data class RadioReactBody(val kind: String, val clientEventId: String)
+
+@Serializable
+data class RadioReactionCounts(val heart: Int = 0, val amen: Int = 0, val fire: Int = 0)
+
+@Serializable
+data class RadioReactRes(val counts: RadioReactionCounts = RadioReactionCounts())
+
+@Serializable
+data class RadioCommentBody(val body: String, val clientEventId: String)
+
+@Serializable
+data class RadioComment(
+    val id: String,
+    val programId: String = "",
+    val memberId: String = "",
+    val body: String = "",
+    val createdAt: String = "",
+    val authorName: String? = null,
+    val authorAvatarUrl: String? = null,
+)

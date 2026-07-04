@@ -80,3 +80,7 @@ data class MfaBody(val mfaToken: String, val code: String)
 
 @Serializable
 data class RefreshBody(val refreshToken: String)
+
+/** POST /auth/logout — best-effort refresh-token revocation on sign-out. */
+@Serializable
+data class LogoutBody(val refreshToken: String)
