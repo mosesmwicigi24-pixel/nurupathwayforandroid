@@ -77,3 +77,83 @@ data class HubNote(
     val metAt: String = "",
     val nextMeetingAt: String? = null,
 )
+
+// ── Discipler-facing (Instructor+; server scopes to the caller's disciple set,
+//    Admin unrestricted — requireRole + assertInScope in discipleship/index.ts) ──
+
+/** GET /disciples — roster + triage. Server pre-sorts needs-action first. */
+@Serializable
+data class RosterRes(
+    val data: List<RosterRow> = emptyList(),
+    val summary: RosterSummary = RosterSummary(),
+)
+
+@Serializable
+data class RosterSummary(val totalStudents: Int = 0, val awaitingAction: Int = 0)
+
+@Serializable
+data class RosterRow(
+    val userId: String = "",
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+    val cellName: String? = null,
+    val cellGroupId: String? = null,
+    val currentLevel: Int = 1,
+    /** thriving | steady | watch | at_risk (engagement band), or null. */
+    val band: String? = null,
+    val streakDays: Int = 0,
+    val daysSinceLastActivity: Int? = null,
+    val pendingReflections: Int = 0,
+    /** Level awaiting the discipler's usher, or null. */
+    val awaitingLevel: Int? = null,
+)
+
+/** GET /disciples/{id} — one student's full journey ({ data: … }). */
+@Serializable
+data class DossierEnv(val data: Dossier)
+
+@Serializable
+data class Dossier(
+    val member: DossierMember = DossierMember(),
+    val progression: HubProgression = HubProgression(),
+    val scores: HubScores = HubScores(),
+    val engagement: DossierEngagement = DossierEngagement(),
+    /** Discipler-visible reflections — INCLUDE the body (pastoral view). */
+    val reflections: List<DossierReflection> = emptyList(),
+    val recentActivity: List<ActivityEvent> = emptyList(),
+    /** Existing DM with this student, if any (never created by the GET). */
+    val dmConversationId: String? = null,
+)
+
+@Serializable
+data class DossierMember(
+    val userId: String = "",
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+    val cellName: String? = null,
+    val establishedAt: String? = null,
+    val joinedAt: String = "",
+)
+
+@Serializable
+data class DossierEngagement(
+    /** 0..100 (server rounds e_score×100), or null until computed. */
+    val eScore: Int? = null,
+    val band: String? = null,
+    val daysSinceLastActivity: Int? = null,
+)
+
+@Serializable
+data class DossierReflection(
+    val reflectionId: String = "",
+    val moduleId: String = "",
+    val moduleTitle: String = "",
+    val levelNumber: Int = 0,
+    val state: String = "",
+    val submittedAt: String = "",
+    val body: String? = null,
+    val feedbackNotes: String? = null,
+)
+
+@Serializable
+data class ActivityEvent(val kind: String = "", val occurredAt: String = "")

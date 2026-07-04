@@ -270,6 +270,15 @@ interface MemberApi {
     @GET("me/discipleship")
     suspend fun discipleship(): DiscipleshipEnv
 
+    // Discipler-facing (Instructor+): roster + one student's dossier. The server
+    // enforces the role and disciple-set scope (403 FORBIDDEN_SCOPE outside it);
+    // the client only hides the entry point for students.
+    @GET("disciples")
+    suspend fun disciples(): RosterRes
+
+    @GET("disciples/{id}")
+    suspend fun disciple(@Path("id") studentId: String): DossierEnv
+
     // Copy a private journal prayer onto the wall. Idempotent (re-share returns
     // the existing post). NEVER queued offline — it creates member-visible
     // content, and the server 404s an entry it hasn't synced yet.
