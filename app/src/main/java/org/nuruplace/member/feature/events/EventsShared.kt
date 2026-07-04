@@ -251,6 +251,17 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Text(cd, style = evInter(8, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
                 }
             }
+            // Rescheduled pill (top-end) — wire truth: a moved occurrence arrives
+            // with rescheduled=true and the NEW start/end already applied, so the
+            // pill is the member's only cue the time changed. (Cancelled
+            // occurrences never reach the client — dropped server-side.)
+            if (occ.rescheduled) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(12.dp)
+                        .clip(RoundedCornerShape(999.dp)).background(EV.goldTile)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) { Text("RESCHEDULED", style = evInter(8, FontWeight.Bold, 1f), color = EV.navy) }
+            }
             // Category tag (bottom-end)
             occ.category?.takeIf { it.isNotBlank() }?.let { c ->
                 Box(
