@@ -188,6 +188,19 @@ private fun PrayerCard(p: PrayerWallPost, onOpen: () -> Unit, onPray: () -> Unit
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
         )
+        // Voice-prayer tag — iOS parity: audio_url on the wire earns a passive
+        // chip (no client renders the waveform yet).
+        if (!p.audioUrl.isNullOrBlank()) {
+            Row(
+                Modifier.padding(top = 8.dp).clip(Capsule).background(GrowPal.surface)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("🎙", fontSize = 12.sp)
+                Text("Voice prayer", style = gInter(11), color = GrowPal.ink400)
+            }
+        }
         Row(
             Modifier.padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
