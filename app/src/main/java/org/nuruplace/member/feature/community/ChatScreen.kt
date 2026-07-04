@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
@@ -38,8 +40,10 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -60,8 +64,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.BroadcastBody
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.DiscoverSpace
@@ -86,6 +92,7 @@ fun ChatInboxScreen(
     onNewMessage: () -> Unit,
     onOpenAssistant: () -> Unit,
     onOpenNotifications: () -> Unit,
+    isStaff: Boolean = false,
 ) {
     AsyncContent(load = {
         val inbox = Net.client.api.chatInbox()
@@ -241,6 +248,7 @@ fun ChatInboxScreen(
                         Segment(0, "#My Space", spaces.size, tab) { tab = 0 }
                         Segment(1, "DM", dms.size, tab) { tab = 1 }
                         Segment(2, "My Groups", groups.size, tab) { tab = 2 }
+                        if (isStaff) Segment(3, "Broadcast", null, tab) { tab = 3 }
                     }
 
                     // Tab body
@@ -261,11 +269,12 @@ fun ChatInboxScreen(
                                 onOpenThread = onOpenThread,
                                 onStartDm = { startDm(it) },
                             )
-                            else -> GroupsTab(
+                            2 -> GroupsTab(
                                 groups = groups,
                                 query = query,
                                 onOpenThread = onOpenThread,
                             )
+                            else -> BroadcastTab()
                         }
                     }
                 }
@@ -416,7 +425,7 @@ private fun VerseCard(verse: TailoredVerse?) {
 private fun androidx.compose.foundation.layout.RowScope.Segment(
     index: Int,
     label: String,
-    count: Int,
+    count: Int?,
     tab: Int,
     onSelect: () -> Unit,
 ) {
@@ -432,16 +441,18 @@ private fun androidx.compose.foundation.layout.RowScope.Segment(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(label, style = cInter(12, FontWeight.SemiBold), color = if (on) Color.White else CHAT.ink600)
-            Box(
-                Modifier
-                    .clip(Capsule)
-                    .background(if (on) CHAT.gold else CHAT.surface)
-                    .defaultMinSize(minWidth = 18.dp)
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(count.toString(), style = cInter(10, FontWeight.Bold), color = if (on) CHAT.navy else CHAT.ink500)
+            Text(label, style = cInter(12, FontWeight.SemiBold), color = if (on) Color.White else CHAT.ink600, maxLines = 1)
+            if (count != null) {
+                Box(
+                    Modifier
+                        .clip(Capsule)
+                        .background(if (on) CHAT.gold else CHAT.surface)
+                        .defaultMinSize(minWidth = 18.dp)
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(count.toString(), style = cInter(10, FontWeight.Bold), color = if (on) CHAT.navy else CHAT.ink500)
+                }
             }
         }
     }
@@ -519,7 +530,6 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 MemberStack(avatarUrl = c.avatarUrl, title = c.title, idx = idx, memberCount = c.memberCount)
-                MemberCountPill(c.memberCount)
                 val topic = c.topic
                 if (!topic.isNullOrBlank()) {
                     Text(
@@ -585,7 +595,6 @@ private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, onJoin: (String) -> Uni
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 MemberStack(avatarUrl = null, title = d.title, idx = idx + 2, memberCount = d.memberCount)
-                MemberCountPill(d.memberCount)
             }
         }
         JoinButton { onJoin(d.conversationId) }
@@ -856,6 +865,161 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
     }
 }
 
+// ── Tab 3: Broadcast (staff only — Instructor+) ──
+// POST chat/broadcast fans the message out as INDIVIDUAL DMs from the sender;
+// members reply 1:1, never as a group. Idempotent on client_mutation_id.
+@Composable
+private fun BroadcastTab() {
+    val scope = rememberCoroutineScope()
+    var draft by remember { mutableStateOf("") }
+    var confirming by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var sentTo by remember { mutableStateOf<Int?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun send() {
+        confirming = false
+        sending = true
+        error = null
+        scope.launch {
+            runCatching {
+                Net.client.api.broadcast(
+                    BroadcastBody(body = draft.trim(), clientMutationId = java.util.UUID.randomUUID().toString()),
+                )
+            }.onSuccess { res ->
+                sentTo = res.sent
+                draft = ""
+            }.onFailure {
+                error = "Couldn't send the broadcast. Please try again."
+            }
+            sending = false
+        }
+    }
+
+    Section("BROADCAST", Icons.Filled.Campaign)
+
+    // Navy explainer card
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(CHAT.selectedSeg),
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(CHAT.gold.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Campaign, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Message every member", style = cSerif(15, FontWeight.SemiBold, -0.16f), color = Color.White)
+                Text(
+                    "Reaches every member as a personal message from you. Replies come back to you one-on-one.",
+                    style = cInter(11).copy(lineHeight = 16.sp),
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+
+    // Composer
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(CHAT.white)
+            .border(1.dp, CHAT.border, RoundedCornerShape(20.dp))
+            .padding(14.dp),
+    ) {
+        BasicTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            textStyle = cInter(14).copy(color = CHAT.navy, lineHeight = 20.sp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 110.dp),
+            decorationBox = { inner ->
+                if (draft.isBlank()) {
+                    Text("Write your message to everyone…", style = cInter(14), color = CHAT.faint)
+                }
+                inner()
+            },
+        )
+    }
+
+    // Gold send button
+    val canSend = draft.isNotBlank() && !sending
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(Capsule)
+            .background(if (canSend) CHAT.storyRing else chatTileBrush(CHAT.gold.copy(alpha = 0.35f)))
+            .clickable(enabled = canSend) { confirming = true }
+            .padding(vertical = 13.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (sending) "Sending…" else "Send to everyone",
+            style = cInter(13, FontWeight.Bold),
+            color = CHAT.navy,
+        )
+    }
+
+    val delivered = sentTo
+    if (delivered != null) {
+        Text(
+            "Delivered to $delivered members 🎉",
+            style = cInter(12, FontWeight.SemiBold),
+            color = CHAT.activeText,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
+    }
+    val err = error
+    if (err != null) {
+        Text(
+            err,
+            style = cInter(12, FontWeight.Medium),
+            color = Color(0xFFB42318),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            containerColor = CHAT.white,
+            title = { Text("Broadcast to all members?", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+            text = {
+                Text(
+                    "Every member receives this as a personal message from you.",
+                    style = cInter(13).copy(lineHeight = 19.sp),
+                    color = CHAT.ink600,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { send() }) {
+                    Text("Send", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text("Cancel", style = cInter(13, FontWeight.Medium), color = CHAT.ink500)
+                }
+            },
+        )
+    }
+}
+
 // ── Shared building blocks (hub-private) ──
 @Composable
 private fun GroupedCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
@@ -908,18 +1072,28 @@ private fun UnreadBadge(n: Int) {
     }
 }
 
-/** Overlapping 18dp avatar-circle stack — first circle shows the space photo (or its initial), the rest are tinted placeholders. */
+/**
+ * Overlapping avatar cascade — identical 20dp circles offset by -7dp (~1/3 diameter),
+ * each with a 2dp white ring, later circles drawn ON TOP of earlier (zIndex ramps up),
+ * finished by a white count pill (same 20dp height, capsule, thin border, bold navy
+ * number) overlapping the last circle at the same -7dp. Owner's reference cascade.
+ * First circle shows the space photo (or its initial); the rest are tinted placeholders.
+ */
 @Composable
 private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCount: Int) {
     val circles = minOf(3, maxOf(1, memberCount))
-    Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy((-7).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         repeat(circles) { i ->
             Box(
                 Modifier
-                    .size(18.dp)
+                    .zIndex(i.toFloat())
+                    .size(20.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
                     .background(chatTileBrush(chatRowTint(idx + i)))
-                    .border(1.5.dp, CHAT.white, androidx.compose.foundation.shape.CircleShape),
+                    .border(2.dp, CHAT.white, androidx.compose.foundation.shape.CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 if (i == 0 && !avatarUrl.isNullOrBlank()) {
@@ -929,20 +1103,19 @@ private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCoun
                 }
             }
         }
-    }
-}
-
-/** White capsule with the space's member count. */
-@Composable
-private fun MemberCountPill(count: Int) {
-    Box(
-        Modifier
-            .clip(Capsule)
-            .background(CHAT.white)
-            .border(1.dp, CHAT.border, Capsule)
-            .padding(horizontal = 7.dp, vertical = 2.dp),
-    ) {
-        Text(count.toString(), style = cInter(9, FontWeight.SemiBold), color = CHAT.ink600)
+        // Final element of the stack: the member-count pill, layered above the circles.
+        Box(
+            Modifier
+                .zIndex(circles.toFloat())
+                .height(20.dp)
+                .clip(Capsule)
+                .background(CHAT.white)
+                .border(1.dp, CHAT.border, Capsule)
+                .padding(horizontal = 7.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(memberCount.toString(), style = cInter(9, FontWeight.Bold), color = CHAT.navy)
+        }
     }
 }
 

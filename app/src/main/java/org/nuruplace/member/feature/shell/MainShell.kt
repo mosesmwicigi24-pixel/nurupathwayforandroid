@@ -228,6 +228,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNewMessage = { nav.navigate("new-message") },
                     onOpenAssistant = { nav.navigate("assistant") },
                     onOpenNotifications = { nav.navigate("notifications") },
+                    isStaff = me?.profile?.role in setOf("Instructor", "Admin", "SuperAdmin"),
                 )
             }
             composable("new-message") {

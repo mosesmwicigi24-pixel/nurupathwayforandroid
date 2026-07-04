@@ -181,6 +181,12 @@ interface MemberApi {
     @POST("chat/dms")
     suspend fun createDm(@Body body: DmBody): DmRes
 
+    // Staff-only (Instructor+ — Students get 403): one message delivered to every
+    // active member as an individual DM from the sender. Idempotent on
+    // client_mutation_id; returns how many members it reached.
+    @POST("chat/broadcast")
+    suspend fun broadcast(@Body body: BroadcastBody): BroadcastRes
+
     @POST("chat/spaces/{id}/join")
     suspend fun joinChatSpace(@Path("id") conversationId: String): Unit
 

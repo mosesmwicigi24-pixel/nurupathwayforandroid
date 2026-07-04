@@ -186,3 +186,13 @@ data class DmBody(val userId: String)
 
 @Serializable
 data class DmRes(val conversationId: String = "")
+
+// Staff broadcast (POST chat/broadcast, Instructor+). Server zod: body 1..20000,
+// msg_type "text"|"image" (default text), attachment_url optional NOT nullable
+// (so it's omitted here — same explicitNulls trap as SendVoiceBody above),
+// client_mutation_id uuid. Fans out as individual DMs; replies come back 1:1.
+@Serializable
+data class BroadcastBody(val body: String, val msgType: String = "text", val clientMutationId: String)
+
+@Serializable
+data class BroadcastRes(val sent: Int = 0, val duplicate: Boolean = false)
