@@ -45,6 +45,14 @@ data class UserProfile(
     val countryCode: String? = null,
     val avatarUrl: String? = null,
     val mfaEnabled: Boolean? = null,
+    // Full getMe wire shape (identity/service.ts) — served but previously dropped.
+    // socials is a free-form JSON object ({platform: handle}); role_keys are the
+    // RBAC grants behind `role`; account_status is active|suspended|….
+    val socials: kotlinx.serialization.json.JsonObject? = null,
+    val accountStatus: String? = null,
+    @kotlinx.serialization.SerialName("require_2fa") val require2fa: Boolean? = null,
+    val createdAt: String? = null,
+    val roleKeys: List<String> = emptyList(),
     val rowVersion: Int = 0,
 )
 
