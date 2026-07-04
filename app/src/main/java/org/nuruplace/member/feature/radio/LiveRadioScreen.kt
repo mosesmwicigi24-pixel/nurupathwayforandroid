@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -126,27 +127,21 @@ private val Capsule = RoundedCornerShape(999.dp)
 @Composable
 fun LiveRadioScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val player = remember { androidx.media3.exoplayer.ExoPlayer.Builder(context).build() }
-    var playing by remember { mutableStateOf(false) }
-    var currentUrl by remember { mutableStateOf<String?>(null) }
-    var muted by remember { mutableStateOf(false) }
+    // Playback lives in RadioService (a foreground media service) via the shared
+    // RadioController — so audio, the notification and lock-screen controls all
+    // keep going when this screen closes or the phone locks. This screen never
+    // owns a player; it binds once and drives the controller. (iOS parity:
+    // RadioCenter.shared.) The `nowTitle`/`nowArtist` fed to tune() label the
+    // media notification.
+    DisposableEffect(Unit) { RadioController.bind(context); onDispose { } }
+    val radioState by RadioController.state.collectAsState()
+    val playing = radioState.playing
+    val currentUrl = radioState.url
+    val muted = radioState.muted
+    var nowTitle by remember { mutableStateOf("Nuru Radio") }
+    var nowArtist by remember { mutableStateOf("") }
 
-    DisposableEffect(Unit) {
-        val l = object : androidx.media3.common.Player.Listener {
-            override fun onIsPlayingChanged(v: Boolean) { playing = v }
-        }
-        player.addListener(l)
-        onDispose { player.removeListener(l); player.release() }
-    }
-    LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
-
-    fun toggle(url: String) {
-        if (currentUrl == url && player.isPlaying) { player.pause(); return }
-        if (currentUrl != url) {
-            player.setMediaItem(androidx.media3.common.MediaItem.fromUri(url)); player.prepare(); currentUrl = url
-        }
-        player.play()
-    }
+    fun toggle(url: String) = RadioController.toggle(url, nowTitle, nowArtist)
 
     // Elapsed timer: reset the origin whenever a fresh playback starts, tick every second.
     var startedAt by remember { mutableLongStateOf(0L) }
@@ -212,10 +207,15 @@ fun LiveRadioScreen(onBack: () -> Unit) {
                     Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    // Feed the live program's name into the media notification.
+                    LaunchedEffect(now?.title, now?.speaker) {
+                        nowTitle = now?.title?.takeIf { it.isNotBlank() } ?: "Nuru Radio"
+                        nowArtist = now?.speaker.orEmpty()
+                    }
                     Centerpiece(now, Modifier.padding(top = 12.dp))
                     Titles(now)
                     ProgressLine(now, programs, elapsed, Modifier.padding(top = 20.dp))
-                    TransportRow(now, playing, muted, onMute = { muted = !muted }, onPlay = { now?.streamUrl?.let(::toggle) }, Modifier.padding(top = 20.dp))
+                    TransportRow(now, playing, muted, onMute = { RadioController.toggleMute() }, onPlay = { now?.streamUrl?.let(::toggle) }, Modifier.padding(top = 20.dp))
                     if (now?.live == true) StatChips(now, Modifier.padding(top = 20.dp))
                     SegmentedTabs(tab, onSelect = { tab = it }, Modifier.padding(top = 24.dp))
                     Box(Modifier.padding(top = 16.dp).fillMaxWidth()) {
