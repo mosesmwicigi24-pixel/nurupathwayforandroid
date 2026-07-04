@@ -49,3 +49,7 @@ data class Achievements(val streak: Streak = Streak(), val badges: List<Badge> =
 
 @Serializable
 data class RhythmBody(val kind: String)
+
+/** GET /me/home/greeting — Nuru's daily one-line word for this member. */
+@Serializable
+data class DailyGreeting(val greeting: String = "")

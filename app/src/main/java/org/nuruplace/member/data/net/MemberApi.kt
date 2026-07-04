@@ -251,6 +251,10 @@ interface MemberApi {
     @GET("me/home/verse")
     suspend fun homeVerse(): TailoredVerse
 
+    // Nuru's warm daily-greeting line (cached per day server-side).
+    @GET("me/home/greeting")
+    suspend fun homeGreeting(): DailyGreeting
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 

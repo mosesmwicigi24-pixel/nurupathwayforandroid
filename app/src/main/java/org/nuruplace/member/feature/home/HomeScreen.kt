@@ -45,10 +45,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Achievements
@@ -107,9 +109,13 @@ fun HomeScreen(
     var prayers by remember { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
     var radio by remember { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
+    var personalWord by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
+        // Nuru's daily word — a blessing written for THIS member (server-side,
+        // grounded in their streak/level/prayers, cached per day). iOS parity.
+        personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
         next = runCatching { Net.client.api.nextAction().action }.getOrNull()
         verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
@@ -142,6 +148,7 @@ fun HomeScreen(
             streak = streak?.streak?.current ?: 0,
             level = level,
             overallPct = scores?.overall?.score ?: 0,
+            personalWord = personalWord,
             onBell = onOpenNotifications,
             onRadio = { onNavigate("radio") },
         )
@@ -191,6 +198,7 @@ private fun HomeHeader(
     streak: Int,
     level: Int,
     overallPct: Int,
+    personalWord: String? = null,
     onBell: () -> Unit,
     onRadio: () -> Unit,
 ) {
@@ -227,6 +235,19 @@ private fun HomeHeader(
         }
         Spacer(Modifier.height(Spacing.md))
         Text("$greeting, $firstName.", style = NuruType.greeting, color = Nuru.navy)
+        // Nuru's daily word (GET /me/home/greeting) — hanging gold quote + serif
+        // voice, mirroring iOS HomePersonalWord. Absent until the wire answers.
+        personalWord?.let { word ->
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Top) {
+                Text("“", style = NuruType.title, color = Nuru.gold)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    word,
+                    style = NuruType.body.copy(fontStyle = FontStyle.Italic, lineHeight = 20.sp),
+                    color = Nuru.ink600,
+                )
+            }
+        }
         Spacer(Modifier.height(Spacing.sm))
         // Level jewel capsule
         Row(
