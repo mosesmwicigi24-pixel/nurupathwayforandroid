@@ -32,7 +32,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
@@ -262,6 +264,11 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PersonalInformationCard(p, onEdit = { editing = it })
+            // Discipler console entry — staff only. The server enforces the role
+            // (requireRole Instructor on /disciples); this just hides the door.
+            if (p?.role in setOf("Instructor", "Admin", "SuperAdmin")) {
+                DisciplesEntryCard { onOpen("disciples") }
+            }
             AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             MilestonesCard(me)
@@ -719,6 +726,32 @@ private fun LanguagesRow() {
                 }
             }
         }
+    }
+}
+
+// ── Discipler console entry (staff only) ────────────────────────────────────
+@Composable
+private fun DisciplesEntryCard(onOpen: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(PROF.navy)
+            .clickable { onOpen() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PROF.gold),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Groups, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(20.dp)) }
+        Column(Modifier.weight(1f)) {
+            Text("SHEPHERD THE FLOCK", style = pInter(8, FontWeight.Bold, 1.28f), color = PROF.gold)
+            Text("Your disciples", style = pInter(14, FontWeight.SemiBold), color = Color.White)
+            Text("Roster, journeys & pending reflections", style = pInter(11), color = Color.White.copy(alpha = 0.7f))
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
     }
 }
 

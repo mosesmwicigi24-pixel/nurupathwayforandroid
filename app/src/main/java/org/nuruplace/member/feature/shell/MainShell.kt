@@ -194,6 +194,23 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenChat = { conversationId -> nav.navigate("chat/$conversationId") },
                 )
             }
+            // Discipler-facing (Instructor+; server enforces role + scope).
+            composable("disciples") {
+                org.nuruplace.member.feature.discipleship.DisciplerRosterScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenStudent = { id -> nav.navigate("disciples/$id") },
+                )
+            }
+            composable(
+                "disciples/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.discipleship.DisciplerDossierScreen(
+                    studentId = entry.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { conversationId -> nav.navigate("chat/$conversationId") },
+                )
+            }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
             composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
             composable("prayer-wall") {
