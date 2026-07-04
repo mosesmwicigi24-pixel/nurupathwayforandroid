@@ -40,10 +40,16 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -61,7 +67,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -526,6 +535,8 @@ private fun TwoFactorRow() {
 // Change password — inline expandable panel (preserves original validation).
 // ════════════════════════════════════════════════════════════════════════════
 
+private const val MIN_PASSWORD_LEN = 8
+
 @Composable
 private fun ChangePasswordSection() {
     val scope = rememberCoroutineScope()
@@ -533,44 +544,73 @@ private fun ChangePasswordSection() {
     var next by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var msg by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var success by remember { mutableStateOf(false) }
+
+    // Success confirmation — replaces the form so the member gets a clear signal.
+    if (success) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)).background(PROF.successBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.CheckCircle, PROF.success, 26.dp)
+            }
+            Text(
+                "Your password has been changed.",
+                style = pInter(14, FontWeight.SemiBold),
+                color = PROF.successText,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "Use your new password next time you sign in.",
+                style = pInter(11),
+                color = PROF.sub,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        return
+    }
 
     Column(Modifier.padding(top = 4.dp, bottom = 4.dp)) {
-        OutlinedTextField(
-            current,
-            { current = it },
-            label = { Text("Current password") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
+        Text(
+            "Enter your current password, then choose a new one (at least $MIN_PASSWORD_LEN characters).",
+            style = pInter(11),
+            color = PROF.sub,
+            modifier = Modifier.padding(bottom = 10.dp),
+        )
+        PasswordField(
+            value = current,
+            onValueChange = { current = it; error = null },
+            label = "Current password",
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            next,
-            { next = it },
-            label = { Text("New password") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
+        PasswordField(
+            value = next,
+            onValueChange = { next = it; error = null },
+            label = "New password",
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            confirm,
-            { confirm = it },
-            label = { Text("Confirm new password") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
+        PasswordField(
+            value = confirm,
+            onValueChange = { confirm = it; error = null },
+            label = "Confirm new password",
         )
-        msg?.let {
+        error?.let {
             Spacer(Modifier.height(6.dp))
-            Text(it, style = pInter(11), color = if (it.startsWith("Password")) PROF.successText else PROF.danger)
+            Text(it, style = pInter(11), color = PROF.danger)
         }
-        Spacer(Modifier.height(8.dp))
-        val enabled = current.isNotBlank() && next.length >= 8 && !busy
+        Spacer(Modifier.height(10.dp))
+        val filled = current.isNotBlank() && next.isNotBlank() && confirm.isNotBlank()
+        val enabled = filled && !busy
         Box(
             Modifier
                 .fillMaxWidth()
@@ -579,16 +619,19 @@ private fun ChangePasswordSection() {
                 .border(1.dp, PROF.border, RoundedCornerShape(14.dp))
                 .clickable(enabled = enabled) {
                     when {
-                        next.length < 8 -> msg = "New password must be at least 8 characters."
-                        next != confirm -> msg = "New passwords don't match."
+                        next.length < MIN_PASSWORD_LEN ->
+                            error = "New password must be at least $MIN_PASSWORD_LEN characters."
+                        next != confirm ->
+                            error = "New passwords don't match."
                         else -> {
+                            error = null
                             busy = true
                             scope.launch {
                                 try {
                                     Net.client.api.changePassword(ChangePasswordBody(current.trim(), next))
-                                    msg = "Password updated."; current = ""; next = ""; confirm = ""
+                                    success = true
                                 } catch (ex: Exception) {
-                                    msg = ApiException.message(ex)
+                                    error = ApiException.message(ex)
                                 } finally {
                                     busy = false
                                 }
@@ -599,9 +642,48 @@ private fun ChangePasswordSection() {
                 .padding(vertical = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text("Update password", style = pInter(14, FontWeight.SemiBold), color = if (enabled) Color.White else PROF.sub)
+            if (busy) {
+                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+            } else {
+                Text(
+                    "Change password",
+                    style = pInter(14, FontWeight.SemiBold),
+                    color = if (enabled) Color.White else PROF.sub,
+                )
+            }
         }
     }
+}
+
+/** Password input with a show/hide eye toggle, styled to the profile palette. */
+@Composable
+private fun PasswordField(value: String, onValueChange: (String) -> Unit, label: String) {
+    var visible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, style = pInter(13)) },
+        singleLine = true,
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        trailingIcon = {
+            IconButton(onClick = { visible = !visible }) {
+                Icon(
+                    if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    PROF.sub,
+                    22.dp,
+                )
+            }
+        },
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = PROF.gold,
+            unfocusedBorderColor = PROF.border,
+            focusedLabelColor = PROF.kicker,
+            cursorColor = PROF.navy,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 // ════════════════════════════════════════════════════════════════════════════
