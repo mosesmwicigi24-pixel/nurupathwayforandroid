@@ -161,6 +161,10 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
 
                 e.description?.takeIf { it.isNotBlank() }?.let { AboutCard(it) }
 
+                // Gallery strip — wire serves images=[primary,…gallery]; the hero
+                // already shows images[0], so only extra shots earn the strip.
+                e.images.drop(1).takeIf { it.isNotEmpty() }?.let { GalleryStrip(it) }
+
                 e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it) }
 
                 RsvpCard(e, setRsvp)
@@ -364,6 +368,36 @@ private fun AboutCard(description: String) {
         EVOverline("About this gathering")
         Spacer(Modifier.height(8.dp))
         Text(description, style = evInter(13).copy(lineHeight = 19.sp), color = EV.body)
+    }
+}
+
+// ── Gallery strip ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun GalleryStrip(urls: List<String>) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(EV.white)
+            .border(1.dp, EV.borderSoft, RoundedCornerShape(22.dp))
+            .padding(16.dp),
+    ) {
+        EVOverline("Gallery")
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(urls.size) { i ->
+                AsyncImage(
+                    model = urls[i],
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .width(148.dp)
+                        .height(100.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                )
+            }
+        }
     }
 }
 

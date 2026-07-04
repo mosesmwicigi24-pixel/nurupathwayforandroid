@@ -18,6 +18,11 @@ data class CalendarOccurrence(
     val primaryImageUrl: String? = null,
     val startAt: String = "",
     val endAt: String = "",
+    // Wire truth (calendar/service.ts projectRange): cancelled occurrences are
+    // dropped server-side; a moved one arrives with rescheduled=true (+ the new
+    // start/end already applied). status is the series status (draft|active).
+    val status: String = "active",
+    val rescheduled: Boolean = false,
     val going: Int = 0,
     val attendees: List<EventAttendee>? = null,
 )
@@ -34,6 +39,9 @@ data class EventDetail(
     val location: String? = null,
     val category: String? = null,
     val primaryImageUrl: String? = null,
+    // Wire truth (calendar/service.ts getEvent): [primary, …gallery] — feeds the
+    // detail image carousel. primaryImageUrl stays for the hero fallback.
+    val images: List<String> = emptyList(),
     val videoUrl: String? = null,
     val rsvpCounts: RsvpCounts = RsvpCounts(),
     val myRsvp: String? = null,
