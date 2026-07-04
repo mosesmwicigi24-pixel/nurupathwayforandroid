@@ -145,7 +145,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenLevel = { nav.navigate("level/$it") },
                     onOpenModule = { nav.navigate("module/$it") },
                     onOpenExam = { nav.navigate("exam/$it") },
-                    onOpenMentor = { nav.navigate("mentor") },
+                    // The hub row says "Your Discipleship Hub" — route it there
+                    // (iOS PathwayDisciplershipRow → discipleshipHub), not to Mentor.
+                    onOpenMentor = { nav.navigate("discipleship") },
                     onOpenMap = { nav.navigate("pathway-map") },
                 )
             }
@@ -186,6 +188,12 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
             }
             composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
+            composable("discipleship") {
+                org.nuruplace.member.feature.discipleship.DiscipleshipHubScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { conversationId -> nav.navigate("chat/$conversationId") },
+                )
+            }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
             composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
             composable("prayer-wall") {
