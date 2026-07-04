@@ -28,7 +28,7 @@ Status: ☐ open · ◐ in progress · ✅ fixed (commit) · ✖ rejected (reaso
 | 7 | Chat prayer chip | `ChatMessage.aiTag == "prayer"` → iOS shows "🙏 I'm praying" chip; Android ignores `aiTag`. Resolved via #14. | ✅ eabbeca |
 | 8 | Radio extras | iOS radio uses reactions/chat/remind-me (verify endpoints); Android renders them inert. Resolved via #11. | ✅ d3616ec |
 
-| 6b | Prayer detail 5-emoji reaction bar | Wire accepts arbitrary emoji; iOS detail shows 🙏❤️🕊️🙌✨ per-emoji chips from reactions[]. | ☐ |
+| 6b | Prayer detail 5-emoji reaction bar | Wire accepts arbitrary emoji; iOS detail shows 🙏❤️🕊️🙌✨ per-emoji chips from reactions[]. Verified live: 🙏2 ❤️3 highlighted as mine, rest neutral. | ✅ f7e805c |
 | 9 | Giving receipt_code | financial/service.ts serves receipt_code on history+detail; DTOs dropped it. Statement "Ref …" line + receipt Reference now use it. | ✅ bf0bed2 |
 | 10 | PATCH /me profile editing | identity/index.ts:160; body full_name/phone_number/gender/city/country_code/date_of_birth/… + row_version (strict zod — omit unset fields; explicit null rejected). iOS EditFieldSheet is the blueprint. Live verify caught: PATCH returns ONLY {user_id,row_version} (service.ts:670) — parse UpdateMeRes + refetch /me. Verified on emulator vs prod (City save round-trips clean, fresh row_version retained). | ✅ 7917aa7 + 7e82595 |
 | 11 | Radio react/comments/program | radio/index.ts:163-177: react kind∈heart\|amen\|fire (+client_event_id) → {counts}; comments GET/POST; program GET. Verified live on air: heart tap → server counts 3/2/2 "7 reactions today"; comment "Amen from Android" posted + rendered from refetch with avatar. | ✅ d3616ec |
@@ -36,9 +36,9 @@ Status: ☐ open · ◐ in progress · ✅ fixed (commit) · ✖ rejected (reaso
 | 13 | POST /auth/logout | refresh-token revocation on sign-out (security); Android sign-out was local-only. AuthStore.signOut now revokes best-effort (never blocks local sign-out). | ✅ c989178 |
 | 14 | Chat prayer chip (ai_tag) | ChatMessage.ai_tag=="prayer" → iOS PrayerChip; Android decoded aiTag but never rendered. Chip shows "🙏 I'm praying"/"🙏 Praying · N" and posts the 🙏 reaction. | ✅ eabbeca |
 | 15 | Chat send attachments/replies | send schema accepts attachment_url/attachment_meta/reply_to_id; Android SendMessageBody omits all three; ChatConversation lacks last_duration. | ☐ |
-| 16 | UserProfile drops socials/account_status/role_keys | identity/service.ts:567-570 serves them; PATCH round-trip would lose socials. | ☐ |
-| 17 | EventDetail images[] gallery | wire returns images[]=[primary,…gallery]; Android shows primary only. | ☐ |
-| 18 | Calendar occurrence status/rescheduled | wire serves status + rescheduled; a moved/cancelled occurrence renders as normal. | ☐ |
+| 16 | UserProfile drops socials/account_status/role_keys | identity/service.ts getMe serves socials/account_status/require_2fa/created_at/role_keys; client dropped all. Now decoded (require_2fa via @SerialName — digit defeats the snake-case strategy). PATCH-loss risk was already avoided by the JsonObject body. | ✅ ad55e82 |
+| 17 | EventDetail images[] gallery | wire returns images[]=[primary,…gallery]; Android showed primary only. Gallery strip card renders images[1:]; compile-verified (no gallery data in prod yet — decode-safe default). | ✅ aa82f79 |
+| 18 | Calendar occurrence status/rescheduled | projectRange drops cancelled occurrences; moved ones carry rescheduled=true with new start/end applied. RESCHEDULED pill (top-end of card cover) surfaces it; compile-verified (no moved occurrence in prod yet — decode-safe default). | ✅ 1856c94 |
 | 19 | Prayer audio_waveform | posts+comments carry audio_url+audio_waveform; Android drops waveform. | ☐ |
 | 20 | Smaller adds | verse reactions (home/index.ts:38,43) · giving statement/receipt PDFs · /me/home/greeting · /badges catalogue · /scripture lookup · share-prayer-to-wall · /home/featured-event · TailoredVerse.mood · cert PDF authed fetch · screen telemetry · chat broadcast+attachments sign (staff) · community threads · /me/discipleship. | ☐ backlog |
 
@@ -63,9 +63,14 @@ Status: ☐ open · ◐ in progress · ✅ fixed (commit) · ✖ rejected (reaso
 - `7917aa7` — feat(profile): field editing via PATCH /me edit sheet (#5/#10)
 - `7aaa4e9` — fix(give): PayPal order capture so gifts settle (#12)
 - `7e82595` — fix(profile): PATCH /me returns {user_id,row_version}; refetch /me (#10, found by live verify)
+- `f7e805c` — feat(prayer-wall): 5-emoji quick-reaction bar on detail (#6b)
+- `aa82f79` — feat(events): images[] gallery strip on event detail (#17)
+- `1856c94` — feat(events): RESCHEDULED pill on occurrence cards (#18)
+- `ad55e82` — feat(identity): decode full getMe profile — socials/account_status/require_2fa/created_at/role_keys (#16)
 
 ## Live verification (emulator vs prod, 2026-07-04)
 
 - Events: header "1 you're going" · RSVPs segment [1] · Your RSVPs lists Sunday Service · TIME "9:00 AM – 1:00 PM".
 - Profile: City edit sheet opens seeded ("Nairobi"), Save round-trips PATCH /me → refetch, sheet dismisses clean.
 - Radio (on air, "Night Worship hour"): heart react → server aggregate counts ❤️3 🙏2 🙌2 ("7 reactions today"); comment "Amen from Android" posted and re-rendered from the server with author name + avatar.
+- Prayer detail: 5-emoji bar live — 🙏2 ❤️3 rendered gold (mine=true from the wire), 🕊️🙌✨ neutral; wall list "2 praying" confirms the Wave-1 🙏 fix is counting.
