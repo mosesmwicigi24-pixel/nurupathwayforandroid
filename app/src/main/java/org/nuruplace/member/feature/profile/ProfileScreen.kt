@@ -272,9 +272,29 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     clipboard.setText(AnnotatedString(code))
                     copiedCode = code
                 },
-                onDownload = { url ->
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                onDownload = { cert ->
+                    // download_url is a RELATIVE, auth-required media path — a browser
+                    // ACTION_VIEW 401s. Fetch through the authed client, stash in
+                    // cache/shared, and hand a content:// URI to a PDF viewer.
+                    scope.launch {
+                        runCatching {
+                            val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                val body = Net.client.api.certificatePdf(cert.verificationCode)
+                                val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
+                                val f = java.io.File(dir, "nuru-certificate-${cert.verificationCode}.pdf")
+                                body.byteStream().use { input -> f.outputStream().use { input.copyTo(it) } }
+                                f
+                            }
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", bytes,
+                            )
+                            val view = Intent(Intent.ACTION_VIEW)
+                                .setDataAndType(uri, "application/pdf")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            context.startActivity(
+                                Intent.createChooser(view, "Open certificate").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
                     }
                 },
             )
@@ -964,7 +984,7 @@ private fun CertificatesCard(
     certs: List<Certificate>,
     copiedCode: String?,
     onCopy: (String) -> Unit,
-    onDownload: (String) -> Unit,
+    onDownload: (Certificate) -> Unit,
 ) {
     SectionCard {
         SectionTitle(Icons.Filled.Verified, "CERTIFICATES")
@@ -998,7 +1018,7 @@ private fun CertificateCard(
     c: Certificate,
     copied: Boolean,
     onCopy: (String) -> Unit,
-    onDownload: (String) -> Unit,
+    onDownload: (Certificate) -> Unit,
 ) {
     val levelLabel = (c.levelNumber?.toString() ?: "")
     Column(
@@ -1089,7 +1109,7 @@ private fun CertificateCard(
                     .height(36.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(PROF.gold)
-                    .clickable { onDownload(c.downloadUrl) },
+                    .clickable { onDownload(c) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
