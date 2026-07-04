@@ -74,3 +74,19 @@ Status: ☐ open · ◐ in progress · ✅ fixed (commit) · ✖ rejected (reaso
 - Profile: City edit sheet opens seeded ("Nairobi"), Save round-trips PATCH /me → refetch, sheet dismisses clean.
 - Radio (on air, "Night Worship hour"): heart react → server aggregate counts ❤️3 🙏2 🙌2 ("7 reactions today"); comment "Amen from Android" posted and re-rendered from the server with author name + avatar.
 - Prayer detail: 5-emoji bar live — 🙏2 ❤️3 rendered gold (mine=true from the wire), 🕊️🙌✨ neutral; wall list "2 praying" confirms the Wave-1 🙏 fix is counting.
+
+## iOS mini-pass (nuru-member-ios, 2026-07-04)
+
+Auditor's "iOS lags" list re-checked against the code — most items were already
+covered (peerUserId → createDm; ChatPerson flair renders in ChatView; radio
+reconciles POST /react counts). Real gaps found + fixed (commit `41cb7fc`,
+pushed to main with the stranded discipleship commit `0b39f72`):
+
+- EventDetail never decoded `images[]` and never rendered `videoUrl` (model
+  field existed, view ignored it) → gallery rail + universal-player video tile.
+- CalendarOccurrence didn't decode `status`/`rescheduled` → RESCHEDULED gold
+  pill in the card's status slot (same slot as LIVE / "Filling fast").
+- PATCH /me response shape checked: iOS decodes `EmptyResponse` + refetches via
+  auth.loadProfile() — already safe; only Android had the MeResponse mis-typing.
+
+`xcodebuild` simulator build green.
