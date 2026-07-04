@@ -59,6 +59,7 @@ import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.CellSummary
 import org.nuruplace.member.data.net.Discipler
 import org.nuruplace.member.data.net.FeaturedAnnouncement
+import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
@@ -117,6 +118,7 @@ fun HomeScreen(
     var personalWord by remember { mutableStateOf<String?>(null) }
     var verseReactions by remember { mutableStateOf<VerseReactions?>(null) }
     var verseSaved by remember { mutableStateOf(false) }
+    var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
@@ -124,6 +126,7 @@ fun HomeScreen(
         // grounded in their streak/level/prayers, cached per day). iOS parity.
         personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
         verseReactions = runCatching { Net.client.api.verseReactions() }.getOrNull()
+        featuredEvent = runCatching { Net.client.api.featuredEvent().data }.getOrNull()
         next = runCatching { Net.client.api.nextAction().action }.getOrNull()
         verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
@@ -223,6 +226,7 @@ fun HomeScreen(
             ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
             scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
             GrowSection(onNavigate)
+            featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
             UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
             EncouragementCard(prayers.size)
             CohortSection(cohort) { onNavigate("cell-info") }
@@ -880,6 +884,35 @@ private fun GrowTile(title: String, sub: String, glyph: String, bg: Color, fg: C
         Column {
             Text(title, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
             Text(sub, style = NuruType.micro, color = Nuru.ink600)
+        }
+    }
+}
+
+@Composable
+private fun FeaturedGatheringCard(ev: FeaturedEvent, onOpen: () -> Unit) {
+    // The ONE admin-featured event (portal "feature on homepage" toggle) —
+    // previously served by GET /home/featured-event but rendered by no client.
+    val shape = RoundedCornerShape(20.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(Nuru.white).border(1.dp, Nuru.border, shape).clickable { onOpen() }) {
+        ev.primaryImageUrl?.let {
+            AsyncImage(model = it, contentDescription = null, modifier = Modifier.fillMaxWidth())
+        }
+        Column(Modifier.padding(Spacing.base)) {
+            CardKicker("⭐ Featured gathering")
+            Spacer(Modifier.height(Spacing.sm))
+            Text(ev.title, style = NuruType.featureTitle, color = Nuru.navy)
+            ev.description?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            val whenText = runCatching {
+                java.time.LocalDateTime.parse(ev.dtstartLocal.take(19))
+                    .format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
+            }.getOrDefault(ev.dtstartLocal)
+            Text(
+                listOfNotNull(whenText, ev.location?.takeIf { it.isNotBlank() }).joinToString("  ·  "),
+                style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

@@ -262,6 +262,10 @@ interface MemberApi {
     @POST("me/home/verse/reactions")
     suspend fun reactToVerse(@Body body: VerseReactionBody): VerseReactions
 
+    // The one admin-featured event for the mobile Home (portal toggle; may be null).
+    @GET("home/featured-event")
+    suspend fun featuredEvent(): FeaturedEventEnv
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 

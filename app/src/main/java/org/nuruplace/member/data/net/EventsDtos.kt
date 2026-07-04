@@ -48,6 +48,22 @@ data class EventDetail(
     val attendees: List<EventAttendee>? = null,
 )
 
+/** GET /home/featured-event — the ONE admin-featured event for the mobile Home
+ *  (portal "feature on homepage" toggle; partial unique index enforces one). */
+@Serializable
+data class FeaturedEvent(
+    val seriesId: String = "",
+    val title: String = "",
+    val description: String? = null,
+    val location: String? = null,
+    val category: String? = null,
+    val primaryImageUrl: String? = null,
+    val dtstartLocal: String = "",
+)
+
+@Serializable
+data class FeaturedEventEnv(val data: FeaturedEvent? = null)
+
 // --- Notifications ---
 @Serializable
 data class NotifPayload(
