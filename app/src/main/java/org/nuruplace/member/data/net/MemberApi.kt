@@ -436,6 +436,11 @@ interface MemberApi {
     @POST("radio/programs/{id}/comments")
     suspend fun addRadioComment(@Path("id") programId: String, @Body body: RadioCommentBody): RadioComment
 
+    // Live-listener presence heartbeat — the player pings this ~every 20s while it
+    // is actually playing a live program, so the studio roster shows real names.
+    @POST("radio/programs/{id}/listening")
+    suspend fun radioListening(@Path("id") programId: String): retrofit2.Response<Unit>
+
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")
     suspend fun syncPush(@Body body: SyncPushBody): SyncPushResult

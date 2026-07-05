@@ -367,6 +367,18 @@ fun LiveRadioScreen(onBack: () -> Unit) {
         ) { (nowPlaying, programs), _ ->
             val now = nowPlaying ?: programs.firstOrNull { it.live } ?: programs.firstOrNull()
 
+            // Live-listener presence — while we're actually playing a LIVE program,
+            // heartbeat every 20s so the studio roster shows this member by name.
+            LaunchedEffect(playing, now?.id, now?.live) {
+                val id = now?.id
+                if (playing && now?.live == true && id != null) {
+                    while (true) {
+                        runCatching { Net.client.api.radioListening(id) }
+                        kotlinx.coroutines.delay(20_000)
+                    }
+                }
+            }
+
             // ── Backdrop ──────────────────────────────────────────────────────
             val glowT = rememberInfiniteTransition(label = "glow")
             val goldAlpha by glowT.animateFloat(
