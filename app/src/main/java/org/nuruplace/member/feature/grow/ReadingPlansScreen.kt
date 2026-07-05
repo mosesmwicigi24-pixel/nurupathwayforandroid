@@ -111,6 +111,10 @@ fun ReadingPlansScreen(onOpenPlan: (String) -> Unit, onOpenNotifications: () -> 
         if (plans.isNotEmpty()) add(Triple("featured", "Featured for you", plans.take(8)))
         val short = plans.filter { it.dayCount <= 7 }
         if (short.isNotEmpty()) add(Triple("short", "Short reads · 7 days or less", short))
+        // Mid-length (8–13 days) — most study plans are 10-day, so without this
+        // bucket they'd fall between "short" and "long" and never appear in browse.
+        val mid = plans.filter { it.dayCount in 8..13 }
+        if (mid.isNotEmpty()) add(Triple("mid", "Mid-length journeys · about 10 days", mid))
         val long = plans.filter { it.dayCount >= 14 }
         if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
     }
