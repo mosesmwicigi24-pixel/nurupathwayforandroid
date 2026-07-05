@@ -65,7 +65,11 @@ class ApiClient(context: Context) {
 
     // Bare client (no authenticator) used only for the refresh call, so refresh
     // can never recurse into itself.
-    private val bareClient = OkHttpClient()
+    private val bareClient = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     private val authenticator = Authenticator { _, response ->
         if (responseCount(response) >= 2) return@Authenticator null   // already retried once — give up
@@ -104,6 +108,15 @@ class ApiClient(context: Context) {
     }
 
     private val okhttp = OkHttpClient.Builder()
+        // Bounded timeouts so a flaky/slow mobile network fails predictably with a
+        // clear message instead of hanging (which read as "the app froze" / an ANR
+        // and "can't connect"). Generous enough for a slow first login, capped by
+        // an overall callTimeout so no request ever hangs indefinitely.
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .addInterceptor(authInterceptor)
         .authenticator(authenticator)
         .addInterceptor(HttpLoggingInterceptor().apply {
