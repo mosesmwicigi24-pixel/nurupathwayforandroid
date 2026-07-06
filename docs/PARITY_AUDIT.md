@@ -194,5 +194,7 @@ Both member apps now write presence; web + iPad both read the real named roster.
 
 | 61 | Android APK 2.1.9-20 + personalized notification popup (iOS build 33) + talk-assist LIVE | Signed universal APK **NuruPathway-2.1.9-20.apk** (28 MB, CN=Nuru Place 37ed00…) on the Desktop — same code as 2.1.8-19 (docs-only commits since), bumped so devices holding 19 update. Talk-assist backend deployed to the VPS (43c6ee2; route answers 401 unauth — LIVE with the Groq key). iOS notification popup rebuilt as a personal card: greeting by name, the message, live quick stats (streak · level · plan day), template-aware encouragement, gold "Continue my journey" → active Pathway level. Installed: Pastor + Jackline. ✅ (android 6521656 · ios 70d68b5) |
 
+| 62 | "Mark all read" always legible (iOS build 34) | The all-read state dimmed the gold-on-navy pill to 40% opacity — an unreadable gray blob (owner report). Now: unread → full-strength navy pill, bright-gold bold label; all read → calm gold-tinted "All read" chip at full opacity. Installed: Pastor + Jackline. ✅ (ios 8ed16ec) |
+
 **Android parity DEBT (unchanged, restated):** entire Session-8 plans experience + this addendum (standalone Talk, notification deep-links, global Inter-Medium voice) are iOS-only. Backend/content items (22-plan catalogue, talk API) are shared and already live for Android.
 **Backlog (logged, not started):** CMS media authoring for Watch/Listen segments; eventId in notification payloads for per-event deep-links; Android plans-experience port.
