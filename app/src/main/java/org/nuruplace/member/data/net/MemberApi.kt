@@ -81,6 +81,10 @@ interface MemberApi {
     @POST("levels/{n}/exam/attempts")
     suspend fun submitLevelExam(@Path("n") levelNumber: Int, @Body body: SubmitBody): ExamResult
 
+    // This level's mastery out of 100: exam (50) + module quizzes (30) + participation (20).
+    @GET("me/levels/{n}/score")
+    suspend fun levelScore(@Path("n") levelNumber: Int): LevelScore
+
     // --- Grow: daily rhythm & Word (§1.7 writes are online-first for now) ---
     @GET("growth/devotional")
     suspend fun devotional(): Devotional

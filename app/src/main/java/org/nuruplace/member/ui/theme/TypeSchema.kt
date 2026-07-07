@@ -20,8 +20,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
-/** Canonical Inter (sans) style. `tracking` in sp; null = schema default. */
-fun nuruSans(size: Int, weight: FontWeight = FontWeight.Normal, tracking: Float? = null): TextStyle =
+/** Canonical Inter (sans) style. `tracking` in sp; null = schema default.
+ *  GLOBAL VOICE (owner-set, iOS build 28 parity): the DEFAULT body weight is
+ *  Inter **Medium** — the Pathway module-reader weight — so every title,
+ *  subtitle and paragraph app-wide carries the same warm reading presence.
+ *  Callers that pass an explicit SemiBold/Bold are unaffected. */
+fun nuruSans(size: Int, weight: FontWeight = FontWeight.Medium, tracking: Float? = null): TextStyle =
     TextStyle(
         fontFamily = Inter,
         fontWeight = weight,

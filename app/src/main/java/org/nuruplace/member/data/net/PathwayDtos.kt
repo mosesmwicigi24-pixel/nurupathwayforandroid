@@ -52,6 +52,9 @@ data class PathwayLevel(
     val completedModules: Int = 0,
     val minutes: Int = 0,
     val status: LevelStatus = LevelStatus.LOCKED,
+    // The level's final exam is live only once an admin publishes it. Defaults
+    // TRUE so payloads from a server that predates the gate keep showing the exam.
+    val examPublished: Boolean = true,
 )
 
 @Serializable
@@ -59,6 +62,24 @@ data class PathwaySummary(
     val currentLevel: Int = 1,
     val levels: List<PathwayLevel> = emptyList(),
 )
+
+/** A level's mastery out of 100 — exam (50) + module quizzes (30) + app
+ *  participation (20). Server-computed; the client only renders it. */
+@Serializable
+data class LevelScore(
+    val levelNumber: Int = 0,
+    val total: Int = 0,
+    val band: String = "",
+    val exam: ExamScorePart = ExamScorePart(),
+    val modules: ScorePart = ScorePart(),
+    val participation: ScorePart = ScorePart(),
+)
+
+@Serializable
+data class ScorePart(val score: Int = 0, val of: Int = 0, val rawPct: Int = 0)
+
+@Serializable
+data class ExamScorePart(val score: Int = 0, val of: Int = 0, val rawPct: Int = 0, val passed: Boolean = false)
 
 // --- Modules -------------------------------------------------------------
 @Serializable

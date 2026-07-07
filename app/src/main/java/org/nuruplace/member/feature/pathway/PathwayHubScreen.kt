@@ -335,7 +335,8 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
         modules.sortedWith(compareBy({ rank(it) }, { it.moduleSequenceNumber }))
     }
     val resume = ordered.firstOrNull { it.status == ModuleStatus.NEXT }
-    val examReady = ordered.isNotEmpty() && ordered.all { it.completed } && level.status != LevelStatus.COMPLETED
+    val examReady = ordered.isNotEmpty() && ordered.all { it.completed } &&
+        level.status != LevelStatus.COMPLETED && level.examPublished  // hidden until published
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {

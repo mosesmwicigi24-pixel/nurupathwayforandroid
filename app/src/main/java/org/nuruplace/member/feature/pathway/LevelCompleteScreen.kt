@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.data.net.LevelScore
 import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
@@ -44,7 +45,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 
-private data class CompleteBundle(val name: String, val level: PathwayLevel?, val next: PathwayLevel?)
+private data class CompleteBundle(val name: String, val level: PathwayLevel?, val next: PathwayLevel?, val score: LevelScore?)
 
 @Composable
 fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
@@ -53,7 +54,8 @@ fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
         load = {
             val name = runCatching { Net.client.api.me().profile.fullName }.getOrNull() ?: "Disciple"
             val levels = runCatching { Net.client.api.pathway().levels }.getOrDefault(emptyList())
-            CompleteBundle(name, levels.firstOrNull { it.levelNumber == levelNumber }, levels.firstOrNull { it.levelNumber == levelNumber + 1 })
+            val score = runCatching { Net.client.api.levelScore(levelNumber) }.getOrNull()
+            CompleteBundle(name, levels.firstOrNull { it.levelNumber == levelNumber }, levels.firstOrNull { it.levelNumber == levelNumber + 1 }, score)
         },
     ) { b: CompleteBundle, _ ->
         val enter = remember { Animatable(0f) }
@@ -97,6 +99,10 @@ fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
                 }
                 Spacer(Modifier.height(Spacing.md))
                 Text("Nuru Place Pathway", style = NuruType.caption, color = Nuru.onNavyFaint)
+                b.score?.let { s ->
+                    Spacer(Modifier.height(Spacing.lg))
+                    LevelScoreBreakdown(s)
+                }
             }
 
             // Next-level card + CTA.
@@ -118,6 +124,45 @@ fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
             } else {
                 Box(Modifier.fillMaxWidth().alpha(t)) { PrimaryButton("Continue", onClick = onContinue) }
             }
+        }
+    }
+}
+
+/** The level's mastery out of 100 — exam (50) + module quizzes (30) + app
+ *  participation (20). Gold on the ceremony navy, so the member sees where the
+ *  100 came from. */
+@Composable
+private fun LevelScoreBreakdown(s: LevelScore) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.control))
+            .background(Nuru.onNavy.copy(alpha = 0.05f))
+            .border(1.dp, Nuru.gold.copy(alpha = 0.25f), RoundedCornerShape(Radii.control))
+            .padding(Spacing.base),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("YOUR LEVEL SCORE", style = NuruType.micro, color = Nuru.gold.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text("${s.total}", style = NuruType.cardTitle, color = Nuru.gold, fontWeight = FontWeight.Bold)
+            Text(" / 100", style = NuruType.caption, color = Nuru.onNavyFaint)
+        }
+        ScoreRow("Exam", s.exam.score, s.exam.of)
+        ScoreRow("Modules", s.modules.score, s.modules.of)
+        ScoreRow("Participation", s.participation.score, s.participation.of)
+    }
+}
+
+@Composable
+private fun ScoreRow(label: String, got: Int, of: Int) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = NuruType.caption, color = Nuru.onNavyDim)
+            Spacer(Modifier.weight(1f))
+            Text("$got / $of", style = NuruType.caption, color = Nuru.gold, fontWeight = FontWeight.Bold)
+        }
+        Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(Nuru.onNavy.copy(alpha = 0.10f))) {
+            val frac = if (of > 0) (got.toFloat() / of).coerceIn(0f, 1f) else 0f
+            Box(Modifier.fillMaxWidth(frac).height(5.dp).clip(CircleShape).background(Nuru.gold))
         }
     }
 }

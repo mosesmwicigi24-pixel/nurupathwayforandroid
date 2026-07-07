@@ -152,7 +152,15 @@ fun LevelDetailScreen(
                     ) {
                         Text("You've finished every module in this level.", style = NuruType.body, color = Nuru.ink)
                         Spacer(Modifier.height(Spacing.md))
-                        PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
+                        // The exam gate stays hidden until an admin publishes it.
+                        if (level?.examPublished != false) {
+                            PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
+                        } else {
+                            Text(
+                                "Your discipler is preparing this level's exam. It will appear here once it's ready.",
+                                style = NuruType.caption, color = Nuru.ink600,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(Spacing.xxl))
