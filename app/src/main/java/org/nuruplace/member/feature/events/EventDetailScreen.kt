@@ -813,6 +813,17 @@ private fun PostRow(p: EventPost, onReact: (String) -> Unit) {
                 }
             }
             p.body?.let { Text(it, style = evInter(13), color = EV.body) }
+            // The attached photo — full width at its own aspect (FillWidth never
+            // crops; the card grows to fit it).
+            p.imageUrl?.let { url ->
+                Spacer(Modifier.height(8.dp))
+                AsyncImage(
+                    model = url,
+                    contentDescription = "Photo",
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                )
+            }
             Row(
                 Modifier.padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
