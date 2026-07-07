@@ -97,6 +97,7 @@ fun PlanDayScreen(
     dayNumber: Int,
     onBack: () -> Unit,
     onOpenSegment: (Int) -> Unit,
+    onTalkItOver: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
 
@@ -186,6 +187,10 @@ fun PlanDayScreen(
                             }
                         },
                     )
+                    // Talk it Over — the shared conversation for this day (iOS parity).
+                    if (segments.any { it.kind.lowercase() == "talk" }) {
+                        TalkItOverEntry(onClick = onTalkItOver)
+                    }
                 }
             }
 
@@ -621,5 +626,25 @@ private fun PLConfettiBurst() {
                     .background(p.color),
             )
         }
+    }
+}
+
+/** Entry to the shared "Talk it Over" conversation for this day (iOS parity). */
+@Composable
+private fun TalkItOverEntry(onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(PL.highlight)
+            .border(1.dp, PL.gold.copy(alpha = 0.3f), RoundedCornerShape(18.dp))
+            .clickable { onClick() }.padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(PL.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.ChatBubbleOutline, null, tint = PL.goldDeep, modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Talk it Over", style = plSerif(16, Medium), color = PL.navy)
+            Text("Share what God is showing you with the family", style = plInter(12), color = PL.blurb)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev)
     }
 }

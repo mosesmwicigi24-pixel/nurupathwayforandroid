@@ -191,7 +191,19 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 val id = entry.arguments?.getString("id") ?: ""
                 val n = entry.arguments?.getInt("n") ?: 1
-                PlanDayScreen(planId = id, dayNumber = n, onBack = { nav.popBackStack() }, onOpenSegment = { i -> nav.navigate("plan/$id/day/$n/seg/$i") })
+                PlanDayScreen(
+                    planId = id, dayNumber = n, onBack = { nav.popBackStack() },
+                    onOpenSegment = { i -> nav.navigate("plan/$id/day/$n/seg/$i") },
+                    onTalkItOver = { nav.navigate("plan/$id/day/$n/talk") },
+                )
+            }
+            composable(
+                "plan/{id}/day/{n}/talk",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val n = entry.arguments?.getInt("n") ?: 1
+                org.nuruplace.member.feature.grow.TalkItOverScreen(planId = id, dayNumber = n, onBack = { nav.popBackStack() })
             }
             composable(
                 "plan/{id}/day/{n}/seg/{i}",

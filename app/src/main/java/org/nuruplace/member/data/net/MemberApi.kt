@@ -119,6 +119,19 @@ interface MemberApi {
     @POST("growth/plans/{id}/days/{n}/reflection")
     suspend fun saveDayReflection(@Path("id") planId: String, @Path("n") dayNumber: Int, @Body body: SaveReflectionBody): PlanDayReflection
 
+    // --- Talk it Over (shared plan-day conversation) ---
+    @GET("growth/plans/{id}/days/{n}/talk")
+    suspend fun talkList(@Path("id") planId: String, @Path("n") dayNumber: Int): Envelope<TalkPost>
+
+    @POST("growth/plans/{id}/days/{n}/talk")
+    suspend fun talkPost(@Path("id") planId: String, @Path("n") dayNumber: Int, @Body body: TalkPostBody): TalkPost
+
+    @POST("growth/talk/{id}/like")
+    suspend fun talkLike(@Path("id") postId: String): TalkLikeRes
+
+    @POST("growth/plans/{id}/days/{n}/talk/assist")
+    suspend fun talkAssist(@Path("id") planId: String, @Path("n") dayNumber: Int, @Body body: TalkAssistBody): TalkAssistRes
+
     // --- Prayer journal (private, §5.4) ---
     @GET("me/prayers")
     suspend fun prayers(): Envelope<PrayerEntry>

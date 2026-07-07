@@ -175,3 +175,30 @@ data class VerseUpsertBody(
 /** POST /me/prayers/{id}/share-to-wall — 201 with the wall post id (idempotent). */
 @Serializable
 data class ShareToWallRes(val postId: String = "")
+
+// --- Talk it Over (the shared plan-day conversation) ---
+@Serializable
+data class TalkPost(
+    val postId: String,
+    val dayNumber: Int = 0,
+    val body: String = "",
+    val createdAt: String = "",
+    val userId: String = "",
+    val name: String = "",
+    val avatarUrl: String? = null,
+    val likeCount: Int = 0,
+    val liked: Boolean = false,
+)
+
+@Serializable
+data class TalkPostBody(val body: String)
+
+@Serializable
+data class TalkLikeRes(val liked: Boolean = false, val likeCount: Int = 0)
+
+/** POST …/talk/assist { draft? } → { suggestion } — AI compose help. */
+@Serializable
+data class TalkAssistBody(val draft: String? = null)
+
+@Serializable
+data class TalkAssistRes(val suggestion: String = "")

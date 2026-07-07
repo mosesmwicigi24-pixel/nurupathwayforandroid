@@ -170,8 +170,10 @@ fun HomeScreen(
         )
 
         Column(
+            // 20dp between feed cards (iOS build-31 warmth) — the 16dp base read
+            // congested with this many cards; each one gets room to breathe.
             Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
-            verticalArrangement = Arrangement.spacedBy(Spacing.base),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             if (pendingSync > 0) {
                 Text(
