@@ -196,6 +196,16 @@ Both member apps now write presence; web + iPad both read the real named roster.
 
 | 62 | "Mark all read" always legible (iOS build 34) | The all-read state dimmed the gold-on-navy pill to 40% opacity — an unreadable gray blob (owner report). Now: unread → full-strength navy pill, bright-gold bold label; all read → calm gold-tinted "All read" chip at full opacity. Installed: Pastor + Jackline. ✅ (ios 8ed16ec) |
 
+## Session 9b (2026-07-07) — quiz/exam submit fix (Android)
+
+**BUG (owner-reported, "Request body failed validation" on the exam):** Android's
+QuizScreen minted `client_mutation_id = "mut-<n>-<nanotime>"`, but the backend
+submit schema is `client_mutation_id: z.string().uuid()` — so EVERY module-quiz
+AND level-exam submit was rejected by validation (iOS was unaffected: it sends a
+real UUID). Fixed: `newId()` → `UUID.randomUUID().toString()`. APK **2.3.1 (vc23)**.
+The answer-shuffle work was NOT the cause (shuffling reorders choices; grading
+matches by id/text; submit shape unchanged).
+
 ## Session 9 (2026-07-07) — the level-exam feature + Android parity push
 
 **Backend (pathway #352 → deployed):** level exam `review→published` publish gate
