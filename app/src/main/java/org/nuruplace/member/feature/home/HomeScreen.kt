@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -164,6 +165,7 @@ fun HomeScreen(
             streak = streak?.streak?.current ?: 0,
             level = level,
             overallPct = scores?.overall?.score ?: 0,
+            trend = scores?.trend,
             personalWord = personalWord,
             onBell = onOpenNotifications,
             onRadio = { onNavigate("radio") },
@@ -251,6 +253,7 @@ private fun HomeHeader(
     streak: Int,
     level: Int,
     overallPct: Int,
+    trend: org.nuruplace.member.data.net.ScoreTrend? = null,
     personalWord: String? = null,
     onBell: () -> Unit,
     onRadio: () -> Unit,
@@ -282,8 +285,13 @@ private fun HomeHeader(
             Spacer(Modifier.width(Spacing.sm))
             CircleButton("📻", Nuru.dangerBg, onRadio)
             Spacer(Modifier.width(Spacing.sm))
-            ProgressRing(pct = overallPct, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
-                Text("$overallPct", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold)
+            Box {
+                ProgressRing(pct = overallPct, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
+                    Text("$overallPct", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold)
+                }
+                trend?.takeIf { it.delta != 0 }?.let { t ->
+                    TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
+                }
             }
         }
         Spacer(Modifier.height(Spacing.md))
@@ -403,6 +411,24 @@ private fun ProgressRing(
             drawArc(arc, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(sw, cap = StrokeCap.Round))
         }
         center()
+    }
+}
+
+/** A tiny ▲/▼ badge — points earned or lost vs the previous 28 days. */
+@Composable
+private fun TrendBadge(t: org.nuruplace.member.data.net.ScoreTrend, modifier: Modifier = Modifier) {
+    val up = !t.isDown
+    Row(
+        modifier.clip(RoundedCornerShape(999.dp))
+            .background(if (up) Color(0xFF16A34A) else Color(0xFFDC6B26))
+            .border(1.dp, Color.White, RoundedCornerShape(999.dp))
+            .padding(horizontal = 3.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            (if (up) "▲" else "▼") + kotlin.math.abs(t.delta),
+            style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -845,23 +871,45 @@ private fun ProgressCard(s: ScoresSummary, level: Int, onView: () -> Unit) {
             Column {
                 CardKicker("Overall growth")
                 Text(s.overall.band.ifBlank { "Sprouting" }.replaceFirstChar { it.uppercase() }, style = NuruType.featureTitle, color = Nuru.gold)
-                Text("Your rhythm across the disciplines", style = NuruType.caption, color = Nuru.ink600)
+                val t = s.trend
+                if (t != null) {
+                    val caption = when {
+                        t.delta == 0 -> "Holding steady vs last 28 days"
+                        t.isDown -> "▼ Down ${kotlin.math.abs(t.delta)} vs last 28 days"
+                        else -> "▲ Up ${t.delta} vs last 28 days"
+                    }
+                    Text(caption, style = NuruType.caption, color = if (t.isDown) Color(0xFFDC6B26) else if (t.isUp) Color(0xFF16A34A) else Nuru.ink600)
+                } else {
+                    Text("Your rhythm across the disciplines", style = NuruType.caption, color = Nuru.ink600)
+                }
             }
         }
         Spacer(Modifier.height(Spacing.base))
-        ScoreBar("Habits", s.habits.score, Nuru.gold)
-        ScoreBar("Word", s.word.score, Nuru.scoreWord)
-        ScoreBar("Prayer", s.prayer.score, Nuru.scorePrayer)
-        ScoreBar("Curriculum", s.curriculum.score, Nuru.homeNavy)
-        ScoreBar("Attendance", s.attendance.score, Nuru.success)
+        val d = s.trend?.domains
+        ScoreBar("Habits", s.habits.score, Nuru.gold, d?.get("habits"))
+        ScoreBar("Word", s.word.score, Nuru.scoreWord, d?.get("word"))
+        ScoreBar("Prayer", s.prayer.score, Nuru.scorePrayer, d?.get("prayer"))
+        ScoreBar("Curriculum", s.curriculum.score, Nuru.homeNavy, d?.get("curriculum"))
+        ScoreBar("Attendance", s.attendance.score, Nuru.success, d?.get("attendance"))
     }
 }
 
 @Composable
-private fun ScoreBar(label: String, value: Int, color: Color) {
+private fun ScoreBar(label: String, value: Int, color: Color, delta: Int? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.width(84.dp))
         Box(Modifier.weight(1f)) { ProgressBar(value, color, height = 8.dp) }
+        // A whisper of movement vs the previous 28 days, next to the score.
+        if (delta != null && delta != 0) {
+            Text(
+                (if (delta < 0) "▼" else "▲") + kotlin.math.abs(delta),
+                style = NuruType.micro, fontWeight = FontWeight.Bold,
+                color = if (delta < 0) Color(0xFFDC6B26) else Color(0xFF16A34A),
+                modifier = Modifier.width(28.dp), textAlign = TextAlign.End,
+            )
+        } else {
+            Spacer(Modifier.width(28.dp))
+        }
         Text("$value", style = NuruType.caption, color = Nuru.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(32.dp), textAlign = TextAlign.End)
     }
 }
