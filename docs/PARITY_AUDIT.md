@@ -219,6 +219,14 @@ shows the 50/30/20 breakdown; answers shuffle server-side (no client change).
 
 **Android APK 2.2.0 (versionCode 21)** carries #63–#66.
 
+**iOS home-screen widgets SHIPPED (build 36, ios 76840da):** the parked NuruWidgets
+WidgetKit target is now embedded — the owner signed an Apple ID into Xcode, so the
+appex bundle id provisions on the free team. Re-added the app→widget dependency +
+"Embed Foundation Extensions" phase and set the widget PRODUCT_NAME (was nil → empty
+".appex" / "multiple commands produce" error). Three branded doors (Pathway / Chat /
+Radio) open via nuru:// deep links. Installed on Jackline's iPhone; Pastor's iPhone
+reinstall (builds 35/36) pending its reconnection.
+
 **Remaining Android parity DEBT (the one large item):** the full FOUR-PAGE Plans
 journey rebuild — the story-arc Day hub (Watch/Listen → The Word → Respond → Talk),
 focused part readers with the reading progress bar + pace dot + night/sepia mode,
