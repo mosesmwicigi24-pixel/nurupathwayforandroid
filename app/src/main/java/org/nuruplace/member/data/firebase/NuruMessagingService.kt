@@ -37,9 +37,13 @@ class NuruMessagingService : FirebaseMessagingService() {
         val title = message.notification?.title ?: message.data["title"] ?: "Nuru Pathway"
         val body = message.notification?.body ?: message.data["body"] ?: return
         ensureChannel(this)
+        // Cold-tap deep link: compute the in-app destination from the push data and
+        // hand it to MainActivity (PendingDest) so a tray tap lands on the target,
+        // not just Home.
         val intent = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        destFor(message.data)?.let { intent.putExtra("nuru.dest", it) }
         val pending = PendingIntent.getActivity(
-            this, 0, intent,
+            this, System.identityHashCode(message), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -55,6 +59,25 @@ class NuruMessagingService : FirebaseMessagingService() {
 
     companion object {
         const val CHANNEL_ID = "nuru_default"
+
+        /** Push data → in-app nav route (mirrors NotificationsScreen.routeFor).
+         *  Null → open Home (nothing to deep-link to). */
+        fun destFor(data: Map<String, String>): String? {
+            data["moduleId"]?.takeIf { it.isNotBlank() }?.let { return "module/$it" }
+            data["announcementId"]?.takeIf { it.isNotBlank() }?.let { return "announcement/$it" }
+            data["levelNumber"]?.takeIf { it.isNotBlank() }?.let { return "level/$it" }
+            val t = (data["template"] ?: "").lowercase()
+            return when {
+                "prayer" in t -> "prayer-wall"
+                "verse" in t || "memory" in t -> "memory-verses"
+                "devotional" in t -> "devotional"
+                "give" in t || "giving" in t || "payment" in t -> "give"
+                "event" in t -> "events"
+                "badge" in t || "certificate" in t || "cert" in t -> "profile"
+                "reflection" in t || "level" in t -> "pathway"
+                else -> null
+            }
+        }
 
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

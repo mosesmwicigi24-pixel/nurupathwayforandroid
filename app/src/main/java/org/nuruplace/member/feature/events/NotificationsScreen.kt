@@ -6,6 +6,7 @@
 package org.nuruplace.member.feature.events
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +28,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,29 +42,36 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MarkReadBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationRow
 import org.nuruplace.member.data.net.NotificationsRes
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.relTime
 
-/** Map a notification to an in-app destination (mirrors the iOS deep-link routing). */
+/** Map a notification to its EXACT in-app destination (mirrors iOS deep-links).
+ *  Returns null when there is no in-app target — the caller then opens the
+ *  personalized read-and-continue popup instead of doing nothing. */
 private fun routeFor(n: NotificationRow): String? {
     n.payload?.moduleId?.let { return "module/$it" }
     n.payload?.announcementId?.let { return "announcement/$it" }
-    n.payload?.levelNumber?.let { return "pathway" }
     val t = n.template.lowercase()
+    // Level notifications land on the EXACT level (was the bare hub).
+    n.payload?.levelNumber?.let { return "level/$it" }
     return when {
         "prayer" in t -> "prayer-wall"
         "verse" in t || "memory" in t -> "memory-verses"
         "devotional" in t -> "devotional"
-        "give" in t || "giving" in t -> "give"
+        "give" in t || "giving" in t || "payment" in t -> "give"
         "event" in t -> "events"
+        "badge" in t || "certificate" in t || "cert" in t -> "profile"
+        "reflection" in t -> "pathway"
         else -> null
     }
 }
@@ -84,6 +98,15 @@ private fun toneFor(template: String): Tone {
 fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     AsyncContent(load = { Net.client.api.notifications() }) { res: NotificationsRes, reload ->
         val scope = rememberCoroutineScope()
+        // The notification opened in the read-and-continue popup (unroutable ones).
+        var popup by remember { mutableStateOf<NotificationRow?>(null) }
+        fun open(n: NotificationRow) {
+            if (n.isUnread) scope.launch {
+                runCatching { Net.client.api.markNotificationsRead(MarkReadBody(listOf(n.notificationId))); reload() }
+            }
+            val route = routeFor(n)
+            if (route != null) onNavigate(route) else popup = n
+        }
         Column(Modifier.fillMaxSize().background(Nuru.paper)) {
             // White app bar with count + Mark-all pill.
             Row(
@@ -118,12 +141,85 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
             } else {
                 LazyColumn(Modifier.fillMaxWidth()) {
                     items(res.data, key = { it.notificationId }) { n ->
-                        NotifRow(n, onClick = { routeFor(n)?.let(onNavigate) })
+                        NotifRow(n, onClick = { open(n) })
                         Box(Modifier.fillMaxWidth().height(1.dp).background(Nuru.border))
                     }
                 }
             }
         }
+        popup?.let { n ->
+            NotifDetailPopup(n, onContinue = { popup = null; onNavigate("pathway") }, onDismiss = { popup = null })
+        }
+    }
+}
+
+/** Live quick-stats + name for the popup card (best-effort). */
+private data class PopupStats(val name: String, val streak: Int, val level: String?, val plan: String?)
+
+/** The read-and-continue popup for notifications with no in-app target (iOS
+ *  build-33 parity): greets by name, carries the message, shows live quick stats
+ *  (streak · level · plan day), a word of encouragement and a gold "Continue my
+ *  journey" that opens the Pathway. */
+@Composable
+private fun NotifDetailPopup(n: NotificationRow, onContinue: () -> Unit, onDismiss: () -> Unit) {
+    val stats by produceState<PopupStats?>(initialValue = null) {
+        value = runCatching {
+            val name = Net.client.api.me().profile.fullName.split(" ").firstOrNull() ?: "Friend"
+            val streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
+            val pw = runCatching { Net.client.api.pathway() }.getOrNull()
+            val level = pw?.let { s -> s.levels.firstOrNull { it.status == LevelStatus.ACTIVE } ?: s.levels.firstOrNull { it.levelNumber == s.currentLevel } }
+            val levelStr = level?.let { "Level ${it.levelNumber} · ${it.completedModules}/${it.totalModules}" }
+            val plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled && it.completedAt == null } }.getOrNull()
+            val planStr = plan?.let { "Day ${it.currentDay ?: 1} of ${it.dayCount}" }
+            PopupStats(name, streak, levelStr, planStr)
+        }.getOrNull()
+    }
+    val name = stats?.name ?: "friend"
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.paper).padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Text("Grace and peace, $name.", style = NuruType.display, color = Nuru.navy)
+            // The notification itself, in a white card.
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.control)).background(Nuru.white)
+                    .border(1.dp, Nuru.border, RoundedCornerShape(Radii.control)).padding(Spacing.base),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                Text(n.payload?.title ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                    style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+                n.payload?.body?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
+            }
+            stats?.let { s ->
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    StatChip("🔥", if (s.streak > 0) "${s.streak} days with God" else "Begin today")
+                    s.level?.let { StatChip("📖", it) }
+                    s.plan?.let { StatChip("🔖", it) }
+                }
+            }
+            Text(encouragementFor(n), style = NuruType.body, color = Nuru.ink600)
+            PrimaryButton("Continue my journey", onClick = onContinue)
+            Box(Modifier.fillMaxWidth().clickable { onDismiss() }.padding(vertical = Spacing.sm), contentAlignment = Alignment.Center) {
+                Text("Dismiss", style = NuruType.caption, color = Nuru.ink400)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatChip(glyph: String, label: String) {
+    Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint).padding(horizontal = 10.dp, vertical = 6.dp)) {
+        Text("$glyph  $label", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+private fun encouragementFor(n: NotificationRow): String {
+    val t = n.template.lowercase()
+    return when {
+        "nudge" in t || "miss" in t -> "The road is still yours. One small step today — a verse, a prayer, a page — and you're walking again."
+        "badge" in t || "certificate" in t || "level" in t -> "God is faithful — and so were you. Keep walking; there's more ahead."
+        else -> "Every step counts. Keep going — God isn't finished with you."
     }
 }
 
