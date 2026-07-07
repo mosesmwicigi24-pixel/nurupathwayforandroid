@@ -254,3 +254,48 @@ notifications, Talk it Over, AND the Plans journey.
 
 **Android parity DEBT (unchanged, restated):** entire Session-8 plans experience + this addendum (standalone Talk, notification deep-links, global Inter-Medium voice) are iOS-only. Backend/content items (22-plan catalogue, talk API) are shared and already live for Android.
 **Backlog (logged, not started):** CMS media authoring for Watch/Listen segments; eventId in notification payloads for per-event deep-links; Android plans-experience port.
+
+---
+
+## Session 10 — the level exam is now a VISIBLE, LOCKED row in the trail
+
+**The ask (owner):** *"When I finish the last module of a level, it should take me
+to the level exam. I should SEE the exam on the trail — though it's locked until I
+finish everything above it. Visible, but not accessible until I'm granted that
+permission."* The previous model hid the exam container and used a separate gate,
+so members couldn't see where the exam was.
+
+**Backend (pathway#353, deployed):**
+- `listModulesForLevel` returns the `exit_exam` module again (was hidden). Its
+  `unlocked` = every content module done; `completed` = a passing
+  `level_exam_attempt` (never a read-to-complete). Only surfaced once
+  `levels.exam_status = 'published'`. Still kept OUT of the "finish every module"
+  exam gate so it can't deadlock the exam it fronts.
+- Pathway summary counts the exam row only when published, so `N of M done`
+  matches exactly what's visible in the trail.
+- Home next-action skips the exam container → once content is done it routes to
+  the Pathway tab (where the row lives), not the reader.
+- Prod data cleanup: deleted 2 stale `exit_exam` `module_progress` completions
+  left by the old deadlock's "mark complete" (an exam container must only be
+  "completed" by passing).
+- Tests: exam row visible+locked before content, unlocks after, flips to
+  completed on pass; hidden while in review. Full backend suite green.
+- Also de-flaked the calendar "next occurrence" test (anchored the series a week
+  ahead) — it had started failing by wall-clock.
+
+**iOS (build 37, ios main):** `LevelModule.isExam`; the hub `PWModuleRow` and the
+level-detail trail render the exam row distinctly (award glyph, gold tint, "Level
+exam · ready / locked / passed" captions, a "Start exam" pill) and stay visibly
+locked until unlocked; tapping the unlocked row opens the exam (`PathwayRoute.exam`)
+— including every resume/continue affordance, via a shared `openModuleId` router.
+Installed build 37 on Pastor's + Jackline's iPhones.
+
+**Android (APK 2.4.0 vc24, android main):** parity — `LevelModule.isExam`; hub
+`ModuleRow` + LevelDetail `ModuleStation` render the exam row distinctly (trophy,
+gold, exam captions, "Start exam"); the row / its Continue affordance opens the
+exam (`onOpenExam`/`onTakeExam`); the standalone exam gate/button is kept only as a
+fallback for levels with no exam module. On the Desktop as NuruMember-2.4.0.apk.
+
+**Blast radius:** member-facing → backend + iOS + Android. Admin (web portal +
+iPad) = N/A (the Review→Publish toggle already exists; this only changes how the
+member trail presents the published exam).
