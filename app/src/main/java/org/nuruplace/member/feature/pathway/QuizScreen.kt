@@ -353,6 +353,8 @@ private fun EmptyQuiz(onDone: () -> Unit) {
     }
 }
 
-// A stable-ish unique id without Math.random/UUID import noise.
-private var idCounter = 1000
-private fun newId(): String = "mut-${idCounter++}-${System.nanoTime()}"
+// The quiz/exam submit's client_mutation_id — the backend requires a real UUID
+// (client_mutation_id: z.string().uuid()); a "mut-…" string fails validation and
+// the whole submit is rejected ("Request body failed validation"). Matches iOS
+// (UUID().uuidString) and keeps replays idempotent (§2.1/§3.6).
+private fun newId(): String = java.util.UUID.randomUUID().toString()
