@@ -103,7 +103,11 @@ data class LevelModule(
     val status: ModuleStatus = ModuleStatus.LOCKED,
     val progress: Double = 0.0,
     val locked: Boolean = false,
-)
+) {
+    /** The level's capstone exam container — a visible, locked-until-ready row that
+     *  opens the level exam rather than a lesson reader. */
+    val isExam: Boolean get() = evaluationKind == "exit_exam"
+}
 
 @Serializable
 data class ModuleDetail(
