@@ -196,5 +196,36 @@ Both member apps now write presence; web + iPad both read the real named roster.
 
 | 62 | "Mark all read" always legible (iOS build 34) | The all-read state dimmed the gold-on-navy pill to 40% opacity — an unreadable gray blob (owner report). Now: unread → full-strength navy pill, bright-gold bold label; all read → calm gold-tinted "All read" chip at full opacity. Installed: Pastor + Jackline. ✅ (ios 8ed16ec) |
 
+## Session 9 (2026-07-07) — the level-exam feature + Android parity push
+
+**Backend (pathway #352 → deployed):** level exam `review→published` publish gate
+(levels.exam_status, migration 145; member exam hidden until published); server-side
+**answer-choice shuffling** for module quizzes AND level exams (correct answer no
+longer pinned to slot A; grade-safe by id/text); new **50/30/20 level score** —
+GET /me/levels/:n/score = exam(50) + module quizzes(30) + participation(20) = /100.
+Portal + iPad Quiz Builder got a Review/Publish toggle.
+
+**iOS (build 35):** PathwayLevel.exam_published gates the exam CTA; exam pass ceremony
+shows the 50/30/20 breakdown; answers shuffle server-side (no client change).
+
+**Android parity brought forward (this session):**
+
+| # | Item | Resolution |
+|---|------|------------|
+| 63 | Global Inter-Medium voice | TypeSchema nuruSans() default weight Normal→Medium — every title/subtitle/paragraph app-wide, matching iOS build 28. (android c3de136) |
+| 64 | Exam publish gate + 50/30/20 score | PathwayLevel.examPublished hides the exam CTA until published; LevelScore DTO + GET /me/levels/:n/score; the level-complete ceremony renders exam(50)+modules(30)+participation(20)=/100 with gold bars. Answer shuffle needs no client change (wire order is now server-shuffled). (android c3de136) |
+| 65 | Personalized notification popup + exact deep-links + FCM cold-tap | Unroutable notifications open a read-and-continue popup (greeting by name · live streak/level/plan chips · encouragement · "Continue my journey" → Pathway), matching iOS build 33; routeFor lands on the EXACT target (level/{n}, Profile for badge/cert, Give for payment); FCM cold-tap attaches nuru.dest so a tray tap deep-links instead of opening Home. (android 2fee413) |
+| 66 | Talk it Over + AI compose | New TalkItOverScreen (navy header · today's question serif card · response cards with encouragement hearts · pinned composer with an AI sparkle → /talk/assist). DTOs + 4 endpoints + nav route + entry card on PlanDayScreen. Home feed rhythm 16→20dp. (android 067c5bb) |
+
+**Android APK 2.2.0 (versionCode 21)** carries #63–#66.
+
+**Remaining Android parity DEBT (the one large item):** the full FOUR-PAGE Plans
+journey rebuild — the story-arc Day hub (Watch/Listen → The Word → Respond → Talk),
+focused part readers with the reading progress bar + pace dot + night/sepia mode,
+the plan-completion keepsake, and the Home/Plans resume banners + grace-first streak
+copy. Android's current 3-page plan reader still WORKS (progress bar, streak,
+confetti, reflection, and now a Talk it Over entry); this is a UX-parity gap, not a
+breakage. It's the iOS builds-8→28 arc and is the next major Android effort.
+
 **Android parity DEBT (unchanged, restated):** entire Session-8 plans experience + this addendum (standalone Talk, notification deep-links, global Inter-Medium voice) are iOS-only. Backend/content items (22-plan catalogue, talk API) are shared and already live for Android.
 **Backlog (logged, not started):** CMS media authoring for Watch/Listen segments; eventId in notification payloads for per-event deep-links; Android plans-experience port.
