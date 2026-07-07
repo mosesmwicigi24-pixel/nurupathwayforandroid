@@ -227,13 +227,20 @@ appex bundle id provisions on the free team. Re-added the app→widget dependenc
 Radio) open via nuru:// deep links. Installed on Jackline's iPhone; Pastor's iPhone
 reinstall (builds 35/36) pending its reconnection.
 
-**Remaining Android parity DEBT (the one large item):** the full FOUR-PAGE Plans
-journey rebuild — the story-arc Day hub (Watch/Listen → The Word → Respond → Talk),
-focused part readers with the reading progress bar + pace dot + night/sepia mode,
-the plan-completion keepsake, and the Home/Plans resume banners + grace-first streak
-copy. Android's current 3-page plan reader still WORKS (progress bar, streak,
-confetti, reflection, and now a Talk it Over entry); this is a UX-parity gap, not a
-breakage. It's the iOS builds-8→28 arc and is the next major Android effort.
+**Four-page Plans journey SHIPPED (android 0bfb302, APK 2.3.0 vc22):** the last
+big Android parity item is done. Rebuilt to the iOS Plans arc: PlanReaderKit
+(day/night reader palette + the reading progress hairline + right-rail pace dot +
+PlanProgressBus + palette-aware reader blocks); PlanDayScreen is now the story-arc
+DAY HUB (Watch/Listen → The Word → Respond → Talk it Over, each a tappable row with
+a Next pill / live tick); PlanPartReaderScreen (new — one focused part on a warm
+day/night canvas, The Word weaves Scripture+teaching+Go Deeper, Respond carries the
+prayer + reflection, "Finished" ticks the whole part); PlanKeepsakeScreen (new —
+plan-completion gold seal + Matthew 25:23). Nav: plan/{id}/day/{n}/part/{tag}/{i}
++ plan/{id}/keepsake. Android is now at iOS parity across font, exam feature,
+notifications, Talk it Over, AND the Plans journey.
+
+**Android APK history:** 2.1.9-20 (level-exam readiness) → 2.2.0-21 (#63-66) →
+**2.3.0-22 (four-page Plans journey)** on the Desktop.
 
 **Android parity DEBT (unchanged, restated):** entire Session-8 plans experience + this addendum (standalone Talk, notification deep-links, global Inter-Medium voice) are iOS-only. Backend/content items (22-plan catalogue, talk API) are shared and already live for Android.
 **Backlog (logged, not started):** CMS media authoring for Watch/Listen segments; eventId in notification payloads for per-event deep-links; Android plans-experience port.
