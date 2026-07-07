@@ -40,7 +40,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayArrow
@@ -96,8 +98,9 @@ fun PlanDayScreen(
     planId: String,
     dayNumber: Int,
     onBack: () -> Unit,
-    onOpenSegment: (Int) -> Unit,
+    onOpenPart: (part: String, index: Int) -> Unit = { _, _ -> },
     onTalkItOver: () -> Unit = {},
+    onPlanComplete: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
 
@@ -131,6 +134,10 @@ fun PlanDayScreen(
             if (reflectionText.isEmpty()) reflectionText = existing
         }
     }
+    // A part finished in its reader ticks its hub row the moment we return.
+    LaunchedEffect(Unit) {
+        PlanProgressBus.finished.collect { if (it !in completedSegments) completedSegments.add(it) }
+    }
 
     val reference = day?.reference ?: ""
     val title = day?.title ?: "Day $dayNumber"
@@ -148,48 +155,25 @@ fun PlanDayScreen(
         Column(Modifier.fillMaxSize().imePadding()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 DayHeader(dayNumber = dayNumber, reference = reference, title = title, progress = progress, onBack = onBack)
+                // THE DAY HUB — the day distilled into a story arc: Watch/Listen →
+                // The Word → Respond → Talk it Over (iOS PlanDayView parity). Each
+                // part reads on its own focused page and ticks here on return.
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    VerseBlock(reference = reference, content = day?.content)
-                    SegmentsCard(
-                        segments = segments,
-                        completedIds = completedSegments,
-                        nextId = nextId,
-                        onOpenSegment = onOpenSegment,
+                    val parts = hubParts(segments)
+                    val doneOf: (HubPart) -> Boolean = { p -> p.segs.all { it.segmentId in completedSegments || it.completed == true } }
+                    val nextPart = parts.firstOrNull { !doneOf(it) }
+                    Text(
+                        "TODAY'S JOURNEY · ${parts.size} PART${if (parts.size == 1) "" else "S"}",
+                        style = plInter(11, Bold, 1.8f), color = PL.catText,
                     )
-                    ReflectionCard(
-                        text = reflectionText,
-                        onTextChange = { reflectionText = it },
-                        hasSaved = hasSavedReflection,
-                        saving = reflectionSaving,
-                        justSaved = reflectionJustSaved,
-                        onSave = {
-                            val trimmed = reflectionText.trim().take(4000)
-                            if (trimmed.isNotEmpty() && !reflectionSaving) {
-                                reflectionSaving = true
-                                scope.launch {
-                                    val ok = runCatching {
-                                        Net.client.api.saveDayReflection(
-                                            planId, dayNumber,
-                                            SaveReflectionBody(trimmed, UUID.randomUUID().toString()),
-                                        )
-                                    }.isSuccess
-                                    reflectionSaving = false
-                                    if (ok) {
-                                        hasSavedReflection = true
-                                        reflectionJustSaved = true
-                                        delay(2200)
-                                        reflectionJustSaved = false
-                                    }
-                                }
-                            }
-                        },
-                    )
-                    // Talk it Over — the shared conversation for this day (iOS parity).
-                    if (segments.any { it.kind.lowercase() == "talk" }) {
-                        TalkItOverEntry(onClick = onTalkItOver)
+                    parts.forEach { p ->
+                        HubRow(
+                            part = p, done = doneOf(p), isNext = p === nextPart,
+                            onClick = { if (p.tag == "talk") onTalkItOver() else onOpenPart(p.tag, p.firstIndex) },
+                        )
                     }
                 }
             }
@@ -206,6 +190,9 @@ fun PlanDayScreen(
                             if (ok) {
                                 dayCompleted = true
                                 justDone = true
+                                // If this sealed the WHOLE plan, open the keepsake.
+                                val allDone = runCatching { Net.client.api.plan(planId).days.all { it.completed == true } }.getOrDefault(false)
+                                if (allDone) { delay(900); onPlanComplete() }
                             }
                         }
                     }
@@ -646,5 +633,89 @@ private fun TalkItOverEntry(onClick: () -> Unit) {
             Text("Share what God is showing you with the family", style = plInter(12), color = PL.blurb)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev)
+    }
+}
+
+// ── Day-hub story arc (iOS PlanDayView parity) ────────────────────────────────
+
+internal data class HubPart(
+    val id: String,
+    val tag: String,          // "media" | "word" | "respond" | "talk"
+    val label: String,
+    val icon: ImageVector,
+    val segs: List<PlanSegment>,
+    val firstIndex: Int,
+)
+
+private fun rankHub(s: PlanSegment): Int = when (s.kind.lowercase()) {
+    "video", "audio" -> 0
+    "scripture" -> 1
+    "talk" -> 3
+    "reading" -> 5
+    else -> if (s.title.lowercase().startsWith("pray")) 4 else 2
+}
+
+/** The day distilled into a story arc: media first (each its own row), then THE
+ *  WORD (Scripture + teaching + Go Deeper), then RESPOND (prayer + reflection),
+ *  then Talk it Over standalone. */
+internal fun hubParts(segments: List<PlanSegment>): List<HubPart> {
+    val sorted = segments.sortedWith(compareBy({ rankHub(it) }, { it.sort }))
+    val parts = mutableListOf<HubPart>()
+    sorted.forEachIndexed { i, s ->
+        if (rankHub(s) == 0) {
+            val audio = s.kind.lowercase() == "audio"
+            parts += HubPart(s.segmentId, "media", if (audio) "Listen" else "Watch", Icons.Filled.PlayArrow, listOf(s), i)
+        }
+    }
+    sorted.filter { rankHub(it) in listOf(1, 2, 5) }.let { word ->
+        if (word.isNotEmpty()) parts += HubPart("word", "word", "The Word", Icons.Filled.MenuBook, word, sorted.indexOf(word.first()))
+    }
+    sorted.filter { rankHub(it) == 4 }.let { respond ->
+        if (respond.isNotEmpty()) parts += HubPart("respond", "respond", "Respond", Icons.Filled.VolunteerActivism, respond, sorted.indexOf(respond.first()))
+    }
+    sorted.filter { rankHub(it) == 3 }.let { talk ->
+        if (talk.isNotEmpty()) parts += HubPart("talk", "talk", "Talk it Over", Icons.Filled.ChatBubbleOutline, talk, sorted.indexOf(talk.first()))
+    }
+    return parts
+}
+
+private fun hubSub(part: HubPart, done: Boolean): String {
+    if (done) return "Completed"
+    return when (part.tag) {
+        "media" -> if (part.label == "Listen") "Today's word + key takeaways" else "Begin with today's video"
+        "word" -> part.segs.firstOrNull { it.kind.lowercase() == "scripture" }?.reference?.let { "$it · Scripture & teaching" } ?: "Scripture & teaching"
+        "talk" -> "The family's conversation on today's word"
+        else -> "Prayer · your reflection"
+    }
+}
+
+@Composable
+private fun HubRow(part: HubPart, done: Boolean, isNext: Boolean, onClick: () -> Unit) {
+    val warm = done || isNext
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White)
+            .border(1.dp, if (isNext) PL.gold.copy(alpha = 0.35f) else PL.border, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(42.dp).clip(RoundedCornerShape(999.dp))
+                .background(if (warm) PL.gold.copy(alpha = 0.15f) else PL.blurb.copy(alpha = 0.07f))
+                .border(1.dp, if (done) PL.gold.copy(alpha = 0.5f) else if (isNext) PL.gold.copy(alpha = 0.4f) else PL.border, RoundedCornerShape(999.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(part.icon, null, tint = if (warm) PL.goldDeep else PL.blurb, modifier = Modifier.size(16.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(part.label, style = plInter(14, SemiBold), color = PL.navy)
+            Text(hubSub(part, done), style = plInter(11), color = if (done) PL.goldDeep else PL.blurb, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        when {
+            done -> Icon(Icons.Filled.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
+            isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Text("Next", style = plInter(10, Bold), color = PL.navy)
+            }
+            else -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(20.dp))
+        }
     }
 }

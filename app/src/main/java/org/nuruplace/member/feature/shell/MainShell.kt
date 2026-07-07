@@ -193,9 +193,23 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 val n = entry.arguments?.getInt("n") ?: 1
                 PlanDayScreen(
                     planId = id, dayNumber = n, onBack = { nav.popBackStack() },
-                    onOpenSegment = { i -> nav.navigate("plan/$id/day/$n/seg/$i") },
+                    onOpenPart = { tag, i -> nav.navigate("plan/$id/day/$n/part/$tag/$i") },
                     onTalkItOver = { nav.navigate("plan/$id/day/$n/talk") },
+                    onPlanComplete = { nav.navigate("plan/$id/keepsake") },
                 )
+            }
+            composable(
+                "plan/{id}/day/{n}/part/{tag}/{i}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType },
+                    navArgument("tag") { type = NavType.StringType }, navArgument("i") { type = NavType.IntType },
+                ),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val n = entry.arguments?.getInt("n") ?: 1
+                val tag = entry.arguments?.getString("tag") ?: "word"
+                val i = entry.arguments?.getInt("i") ?: 0
+                org.nuruplace.member.feature.grow.PlanPartReaderScreen(planId = id, dayNumber = n, part = tag, index = i, onBack = { nav.popBackStack() })
             }
             composable(
                 "plan/{id}/day/{n}/talk",
@@ -204,6 +218,21 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 val id = entry.arguments?.getString("id") ?: ""
                 val n = entry.arguments?.getInt("n") ?: 1
                 org.nuruplace.member.feature.grow.TalkItOverScreen(planId = id, dayNumber = n, onBack = { nav.popBackStack() })
+            }
+            composable(
+                "plan/{id}/keepsake",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                val id = entry.arguments?.getString("id") ?: ""
+                val kp = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Pair<String, Int>?>(null) }
+                androidx.compose.runtime.LaunchedEffect(id) {
+                    kp.value = runCatching { org.nuruplace.member.data.net.Net.client.api.plan(id) }.getOrNull()?.let { it.title to it.days.size }
+                }
+                kp.value?.let { (title, days) ->
+                    org.nuruplace.member.feature.grow.PlanKeepsakeScreen(planTitle = title, days = days) {
+                        nav.popBackStack("plans", inclusive = false)
+                    }
+                }
             }
             composable(
                 "plan/{id}/day/{n}/seg/{i}",
