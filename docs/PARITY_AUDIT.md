@@ -338,3 +338,30 @@ domain deltas on the bars. On the Desktop as NuruMember-2.5.0.apk.
 **Blast radius:** member-facing → backend + iOS + Android. Admin (portal/iPad) =
 N/A. Deferred (flagged, not done): adminops leader-side attendance uses the same
 dead `kind='attendance'` branch — a separate pastoral-metric decision.
+
+---
+
+## Session 12 — event wall "Hype the room": photo attach + bigger box + cleaner layout
+
+**The ask (owner):** the "Hype the room" buzz composer should have camera + upload
+image as a "+", maximize the text box, and reorganize the "You" tag and Post button.
+
+**Backend (pathway#355, deployed):** new `POST /me/media/image` — a generic member
+image → { url } upload (multipart 'file', images only, 5 MB), mirroring /me/avatar
+but not stored on the user. The event-post schema already accepted image_url, so
+composers just attach the returned URL.
+
+**iOS (build 39) + Android (APK 2.6.0 vc26):** the composer became a roomy card —
+- **"+" attach** opens Take Photo (camera) / Choose Photo (library); the picked
+  image is downscaled (≤1600px, JPEG ~0.82), previewed with a remove (×), uploaded
+  on Post, and attached as the post's image_url.
+- **Maximized text area** — multi-line (3…9 lines, min 76pt/dp) on its own row.
+- **Reorganized** — "You" in a header row above the text; action row is
+  attach · flame · —— · Post; a post now needs text OR a photo; Post shows a
+  spinner/"Posting" while uploading.
+- iOS: uploadPostImage + EvdCameraPicker (UIImagePickerController) + UIImage
+  downscale; createEventPost carries imageUrl. Android: uploadPostImage +
+  PickVisualMedia/TakePicture (FileProvider) + downscaleJpeg; EventPostBody.imageUrl.
+Installed iOS 39 on Pastor's iPhone; APK 2.6.0 on the Desktop.
+
+**Blast radius:** member-facing → backend + iOS + Android. Admin (portal/iPad) = N/A.
