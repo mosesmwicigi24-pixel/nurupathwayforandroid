@@ -335,7 +335,11 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
         modules.sortedWith(compareBy({ rank(it) }, { it.moduleSequenceNumber }))
     }
     val resume = ordered.firstOrNull { it.status == ModuleStatus.NEXT }
-    val examReady = ordered.isNotEmpty() && ordered.all { it.completed } &&
+    // When the level owns an exam container it IS the exam entry (a visible,
+    // locked-until-ready row) — the separate gate only serves levels that have
+    // no exam module authored.
+    val hasExamModule = ordered.any { it.isExam }
+    val examReady = !hasExamModule && ordered.isNotEmpty() && ordered.all { it.completed } &&
         level.status != LevelStatus.COMPLETED && level.examPublished  // hidden until published
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
@@ -343,7 +347,7 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
                 Text(level.title.uppercase(), style = PW.over(9, 1.62f), color = PW.goldDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${level.completedModules} of ${level.totalModules} done", style = PW.t(11), color = PW.ink2)
             }
-            resume?.let { r -> Text("Continue →", style = PW.over(10, 0f), color = PW.gold, modifier = Modifier.clickable { onOpenModule(r.moduleId) }) }
+            resume?.let { r -> Text("Continue →", style = PW.over(10, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(22.dp)),
@@ -353,7 +357,11 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
                 ordered.isEmpty() -> Text("Modules open as you progress.", style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 else -> {
                     ordered.forEachIndexed { i, m ->
-                        ModuleRow(m, last = (i == ordered.size - 1) && !examReady) { if (m.status != ModuleStatus.LOCKED) onOpenModule(m.moduleId) }
+                        ModuleRow(m, last = (i == ordered.size - 1) && !examReady) {
+                            if (m.status != ModuleStatus.LOCKED) {
+                                if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
+                            }
+                        }
                         if (i == 3 && ordered.size > 4) SurrenderFigure()
                     }
                     if (examReady) ExamGateRow(level.levelNumber) { onOpenExam(level.levelNumber) }
@@ -368,17 +376,36 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
     val done = m.status == ModuleStatus.COMPLETED
     val active = m.status == ModuleStatus.NEXT
     val locked = m.status == ModuleStatus.LOCKED
+    val exam = m.isExam
+    val caption = when {
+        exam && done -> "Level exam · passed"
+        exam && active -> "Level exam · ready — tap to begin"
+        exam -> "Finish every module to unlock the exam"
+        done -> "Completed"
+        active -> "In progress · tap to continue"
+        else -> "Locked"
+    }
     Column {
         Row(
-            Modifier.fillMaxWidth().background(if (active) PW.gold.copy(alpha = 0.05f) else Color.Transparent).clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth()
+                .background(if (active) PW.gold.copy(alpha = 0.05f) else if (exam) PW.gold.copy(alpha = 0.03f) else Color.Transparent)
+                .clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 Modifier.size(32.dp).clip(RoundedCornerShape(11.dp))
-                    .background(if (done) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.13f), PW.gold.copy(alpha = 0.13f))) else if (active) PW.goldGrad else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg))),
+                    .background(
+                        if (done) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.13f), PW.gold.copy(alpha = 0.13f)))
+                        else if (active) PW.goldGrad
+                        else if (exam) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.10f), PW.gold.copy(alpha = 0.10f)))
+                        else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg)),
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 when {
+                    exam && done -> Icon(Icons.Filled.EmojiEvents, null, tint = PW.goldDeep, modifier = Modifier.size(15.dp))
+                    exam && active -> Icon(Icons.Filled.EmojiEvents, null, tint = PW.navy, modifier = Modifier.size(15.dp))
+                    exam -> Icon(Icons.Filled.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(13.dp))
                     done -> Icon(Icons.Filled.Check, null, tint = PW.goldDeep, modifier = Modifier.size(15.dp))
                     active -> Icon(Icons.Filled.PlayArrow, null, tint = PW.navy, modifier = Modifier.size(16.dp))
                     else -> Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(13.dp))
@@ -386,11 +413,11 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(m.title, style = PW.t(13, if (active) FontWeight.Bold else FontWeight.Medium), color = if (locked) PW.ink2 else PW.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (done) "Completed" else if (active) "In progress · tap to continue" else "Locked", style = PW.t(9, if (active) FontWeight.Bold else FontWeight.Medium), color = if (active) PW.goldDeep else PW.ink3)
+                Text(m.title, style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(caption, style = PW.t(9, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
-                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Resume", style = PW.over(9, 0f), color = PW.gold) }
+                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(if (exam) "Start exam" else "Resume", style = PW.over(9, 0f), color = PW.gold) }
                 done -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
             }
         }

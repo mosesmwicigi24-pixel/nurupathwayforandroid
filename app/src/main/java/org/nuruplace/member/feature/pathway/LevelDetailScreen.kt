@@ -80,7 +80,12 @@ fun LevelDetailScreen(
         val total = level?.totalModules ?: modules.size
         val done = level?.completedModules ?: modules.count { it.completed }
         val pct = if (total > 0) done * 100 / total else 0
-        val allDone = modules.isNotEmpty() && modules.all { it.completed }
+        // The exam container is its own visible row in the trail — exclude it from
+        // "finished every module", and keep the standalone exam button only as a
+        // fallback for levels that have no exam module authored.
+        val hasExamModule = modules.any { it.isExam }
+        val content = modules.filter { !it.isExam }
+        val allDone = content.isNotEmpty() && content.all { it.completed }
         val nextIdx = modules.indexOfFirst { !it.completed && !(it.locked || it.status == ModuleStatus.LOCKED) }
 
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
@@ -141,12 +146,12 @@ fun LevelDetailScreen(
                             module = m,
                             isNext = i == nextIdx,
                             isLast = i == modules.lastIndex,
-                            onOpen = { onOpenModule(m.moduleId) },
+                            onOpen = { if (m.isExam) onTakeExam(levelNumber) else onOpenModule(m.moduleId) },
                         )
                     }
                 }
 
-                if (allDone) {
+                if (allDone && !hasExamModule) {
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.goldTint).padding(Spacing.base),
                     ) {
@@ -223,7 +228,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Kicker("Module ${module.moduleSequenceNumber}")
+                    Kicker(if (module.isExam) "Level exam" else "Module ${module.moduleSequenceNumber}")
                     Text(module.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 }
                 ModuleStatusPill(done, isNext)
@@ -246,7 +251,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                         Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy).padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Resume", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
+                        Text(if (module.isExam) "Start exam" else "Resume", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                     }
                 }
@@ -254,6 +259,9 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 when {
+                    module.isExam && done -> "Level exam · passed."
+                    module.isExam && isNext -> "Level exam · ready — tap to begin."
+                    module.isExam -> "Unlocks when you finish every module."
                     done -> "Completed — nicely done."
                     isNext -> "Pick up where you left off."
                     else -> "Unlocks when you finish the one before."
