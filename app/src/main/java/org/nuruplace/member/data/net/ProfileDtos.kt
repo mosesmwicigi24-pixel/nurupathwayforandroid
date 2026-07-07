@@ -14,6 +14,19 @@ data class GrowthScore(val score: Int = 0, val band: String? = null)
 @Serializable
 data class ScoreOverall(val score: Int = 0, val band: String = "")
 
+/** Rolling growth trend — this 28-day window vs the previous 28 days. */
+@Serializable
+data class ScoreTrend(
+    val windowDays: Int = 28,
+    val previous: Int = 0,
+    val delta: Int = 0,
+    val direction: String = "flat", // "up" | "down" | "flat"
+    val domains: Map<String, Int> = emptyMap(),
+) {
+    val isUp: Boolean get() = direction == "up"
+    val isDown: Boolean get() = direction == "down"
+}
+
 @Serializable
 data class ScoresSummary(
     val overall: ScoreOverall = ScoreOverall(),
@@ -22,6 +35,7 @@ data class ScoresSummary(
     val attendance: GrowthScore = GrowthScore(),
     val word: GrowthScore = GrowthScore(),
     val prayer: GrowthScore = GrowthScore(),
+    val trend: ScoreTrend? = null,
 )
 
 // --- Spiritual gifts ---
