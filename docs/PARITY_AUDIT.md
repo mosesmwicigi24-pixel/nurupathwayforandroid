@@ -299,3 +299,42 @@ fallback for levels with no exam module. On the Desktop as NuruMember-2.4.0.apk.
 **Blast radius:** member-facing → backend + iOS + Android. Admin (web portal +
 iPad) = N/A (the Review→Publish toggle already exists; this only changes how the
 member trail presents the published exam).
+
+---
+
+## Session 11 — Home ring = rolling 28-day growth score + trend; attendance fixed
+
+**The ask (owner):** the Home top ring should show the growth score (average of
+habit/word/prayer/curriculum/attendance), attendance was stuck at 0 on iOS, and
+add a **28-day rolling comparison** (Facebook-insights style) so the number shows
+whether you're growing or slipping.
+
+**Root causes found (read-only scan, two agents):**
+- iOS Home ring was bound to *pathway module-completion %* (hence a flat 100%),
+  not the growth score. Android's ring already used the growth score.
+- Attendance filtered `interaction_events.kind = 'attendance'` — a tag NOTHING
+  ever emits (check-ins are `check_in`), so its 0.20 weight sat at 0 and dragged
+  the composite down for every app-only member.
+- No time-trend anywhere: word/prayer/habits used 14d, attendance 30d, curriculum
+  lifetime; nothing compared periods.
+
+**Backend (pathway#354, deployed):** every domain now measured over a rolling
+28-day window ending at an `asOf` instant (default now) — relative to the request
+so it slides on its own. `all()` computes the composite for the current 28 days
+AND the previous 28 (`asOf − 28d`) and returns `trend {window_days, previous,
+delta, direction, domains}` — no stored history, two windows in one request.
+Attendance redefined as PRESENT DAYS = any in-app activity over the window
+(owner's call: app presence), target 20/28. Curriculum bounded by `asOf`. Weights
+unchanged (25/25/20/15/15).
+
+**iOS (build 38):** Home ring rebound to `scores.overall.score` + a ▲/▼ trend
+badge; "Your progress" card gets an "Up/Down N vs last 28 days" caption and
+per-domain deltas; `ScoresSummary.trend` (optional). Installed on Pastor's iPhone.
+
+**Android (APK 2.5.0 vc25, android main):** ring already showed the growth score;
+added `ScoreTrend` DTO, a ▲/▼ `TrendBadge` on the ring, the trend caption + per-
+domain deltas on the bars. On the Desktop as NuruMember-2.5.0.apk.
+
+**Blast radius:** member-facing → backend + iOS + Android. Admin (portal/iPad) =
+N/A. Deferred (flagged, not done): adminops leader-side attendance uses the same
+dead `kind='attendance'` branch — a separate pastoral-metric decision.
