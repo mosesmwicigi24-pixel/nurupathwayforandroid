@@ -58,6 +58,8 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Schedule
@@ -718,16 +720,24 @@ private fun BuzzCard(eventId: String) {
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Filled.Add, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
                         DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
-                            DropdownMenuItem(text = { Text("Take photo") }, onClick = {
-                                attachMenu = false
-                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
-                                    == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                ) launchCamera() else cameraPermLauncher.launch(Manifest.permission.CAMERA)
-                            })
-                            DropdownMenuItem(text = { Text("Choose photo") }, onClick = {
-                                attachMenu = false
-                                galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            })
+                            DropdownMenuItem(
+                                text = { Text("Take photo") },
+                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, null, modifier = Modifier.size(20.dp)) },
+                                onClick = {
+                                    attachMenu = false
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                                        == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) launchCamera() else cameraPermLauncher.launch(Manifest.permission.CAMERA)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Choose photo") },
+                                leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null, modifier = Modifier.size(20.dp)) },
+                                onClick = {
+                                    attachMenu = false
+                                    galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                            )
                         }
                     }
                     Box(
