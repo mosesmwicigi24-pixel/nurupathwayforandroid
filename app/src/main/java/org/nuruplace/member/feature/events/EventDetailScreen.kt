@@ -5,8 +5,28 @@
 // straight through. The content column overlaps the hero by 16dp.
 package org.nuruplace.member.feature.events
 
+import android.Manifest
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.provider.CalendarContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.FileProvider
+import java.io.ByteArrayOutputStream
+import java.io.File
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -542,21 +562,61 @@ private fun BuzzCard(eventId: String) {
             load = { Net.client.api.eventPosts(eventId).data },
         ) { posts: List<EventPost>, reloadBuzz ->
             val scope = rememberCoroutineScope()
+            val context = LocalContext.current
             var draft by remember { mutableStateOf("") }
             var busy by remember { mutableStateOf(false) }
+            var pickedBytes by remember { mutableStateOf<ByteArray?>(null) }
+            var pickedPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+            var attachMenu by remember { mutableStateOf(false) }
+
+            fun setPicked(raw: ByteArray?) {
+                if (raw == null) return
+                downscaleJpeg(raw, 1600)?.let { (jpeg, bmp) ->
+                    pickedBytes = jpeg
+                    pickedPreview = bmp.asImageBitmap()
+                }
+            }
+            val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+                if (uri != null) {
+                    setPicked(runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull())
+                }
+            }
+            var cameraTarget by remember { mutableStateOf<Uri?>(null) }
+            val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+                if (ok) {
+                    setPicked(cameraTarget?.let { u -> runCatching { context.contentResolver.openInputStream(u)?.use { it.readBytes() } }.getOrNull() })
+                }
+            }
+            fun launchCamera() {
+                val file = File.createTempFile("evt_", ".jpg", context.cacheDir)
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                cameraTarget = uri
+                cameraLauncher.launch(uri)
+            }
+            val cameraPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                if (granted) launchCamera()
+            }
 
             val post: () -> Unit = {
-                if (draft.isNotBlank() && !busy) {
+                if ((draft.isNotBlank() || pickedBytes != null) && !busy) {
                     busy = true
+                    val bodyText = draft.trim()
+                    val bytes = pickedBytes
                     scope.launch {
                         runCatching {
+                            var imageUrl: String? = null
+                            if (bytes != null) {
+                                val part = MultipartBody.Part.createFormData(
+                                    "file", "post.jpg", bytes.toRequestBody("image/jpeg".toMediaTypeOrNull()),
+                                )
+                                imageUrl = Net.client.api.uploadPostImage(part).url.ifBlank { null }
+                            }
                             Net.client.api.createEventPost(
                                 eventId,
-                                EventPostBody(UUID.randomUUID().toString(), draft.trim(), UUID.randomUUID().toString()),
+                                EventPostBody(UUID.randomUUID().toString(), bodyText.ifBlank { null }, imageUrl, UUID.randomUUID().toString()),
                             )
                         }
-                        draft = ""
-                        busy = false
+                        draft = ""; pickedBytes = null; pickedPreview = null; busy = false
                         reloadBuzz()
                     }
                 }
@@ -595,67 +655,101 @@ private fun BuzzCard(eventId: String) {
                 }
             }
 
-            // Composer
-            Row(
+            // Composer — a roomy card: "You" header, a big text area, an optional
+            // photo preview, then the attach (+) · flame · Post action row.
+            Column(
                 Modifier
                     .padding(top = 12.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
                     .background(Brush.linearGradient(listOf(EV.composerTop, EV.tile)))
                     .border(1.dp, EV.gold.copy(alpha = 0.28f), RoundedCornerShape(18.dp))
-                    .padding(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Brush.linearGradient(listOf(EV.navyInk, Color(0xFF163655)))),
-                    contentAlignment = Alignment.Center,
-                ) { Text("You", style = evInter(10, FontWeight.Bold), color = Color.White, textAlign = TextAlign.Center) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        Modifier.size(30.dp).clip(RoundedCornerShape(999.dp))
+                            .background(Brush.linearGradient(listOf(EV.navyInk, Color(0xFF163655)))),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(15.dp)) }
+                    Text("You", style = evInter(11, FontWeight.Bold), color = EV.ink.copy(alpha = 0.8f))
+                }
 
-                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 76.dp)
+                        .clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.7f))
+                        .border(1.dp, EV.gold.copy(alpha = 0.20f), RoundedCornerShape(12.dp))
+                        .padding(10.dp),
+                ) {
                     if (draft.isBlank()) {
-                        Text("Hype the room — say you're coming 🔥", style = evInter(13), color = EV.placeholder)
+                        Text("Hype the room — say you're coming 🔥", style = evInter(14), color = EV.placeholder)
                     }
                     BasicTextField(
                         value = draft,
                         onValueChange = { draft = it },
-                        textStyle = evInter(13).copy(color = EV.ink),
-                        maxLines = 4,
+                        textStyle = evInter(14).copy(color = EV.ink),
+                        maxLines = 9,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White)
-                        .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
-                        .clickable { draft += "🔥" },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.LocalFireDepartment, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(17.dp)) }
+                pickedPreview?.let { bmp ->
+                    Box(Modifier.fillMaxWidth()) {
+                        Image(
+                            bitmap = bmp, contentDescription = "Attached photo", contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(168.dp).clip(RoundedCornerShape(14.dp)),
+                        )
+                        Box(
+                            Modifier.align(Alignment.TopEnd).padding(8.dp).size(28.dp).clip(RoundedCornerShape(999.dp))
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .clickable { pickedBytes = null; pickedPreview = null },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.Close, "Remove photo", tint = Color.White, modifier = Modifier.size(15.dp)) }
+                    }
+                }
 
-                Row(
-                    Modifier
-                        .clip(Capsule)
-                        .background(EV.goldCta)
-                        .height(40.dp)
-                        .then(if (draft.isBlank() || busy) Modifier else Modifier.clickable { post() })
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val faded = draft.isBlank() || busy
-                    Text("Post", style = evInter(12, FontWeight.Bold), color = EV.ink.copy(alpha = if (faded) 0.55f else 1f))
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        "Post",
-                        tint = EV.ink.copy(alpha = if (faded) 0.55f else 1f),
-                        modifier = Modifier.size(15.dp),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box {
+                        Box(
+                            Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Color.White)
+                                .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
+                                .clickable { attachMenu = true },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.Add, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
+                        DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                            DropdownMenuItem(text = { Text("Take photo") }, onClick = {
+                                attachMenu = false
+                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                                    == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                ) launchCamera() else cameraPermLauncher.launch(Manifest.permission.CAMERA)
+                            })
+                            DropdownMenuItem(text = { Text("Choose photo") }, onClick = {
+                                attachMenu = false
+                                galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            })
+                        }
+                    }
+                    Box(
+                        Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Color.White)
+                            .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
+                            .clickable { draft += "🔥" },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.LocalFireDepartment, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(17.dp)) }
+
+                    Spacer(Modifier.weight(1f))
+
+                    val faded = (draft.isBlank() && pickedBytes == null) || busy
+                    Row(
+                        Modifier.clip(Capsule).background(EV.goldCta).height(40.dp)
+                            .then(if (faded) Modifier else Modifier.clickable { post() })
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(if (busy) "Posting" else "Post", style = evInter(12, FontWeight.Bold), color = EV.ink.copy(alpha = if (faded) 0.55f else 1f))
+                        if (!busy) Icon(Icons.AutoMirrored.Filled.Send, "Post", tint = EV.ink.copy(alpha = if (faded) 0.55f else 1f), modifier = Modifier.size(15.dp))
+                    }
                 }
             }
 
@@ -781,4 +875,21 @@ private fun CheckInFooter(occursAt: String, eventId: String, onCheckIn: (String)
             Text("Check-in opens when the event is live", style = evInter(13, FontWeight.SemiBold), color = Color(0xFF6A7686))
         }
     }
+}
+
+/** Decode, aspect-fit downscale (longest side ≤ maxDim), re-encode JPEG — keeps
+ *  buzz-photo uploads well under the 5 MB cap. Returns (jpegBytes, bitmap) for
+ *  upload + preview, or null if the bytes don't decode to an image. */
+private fun downscaleJpeg(bytes: ByteArray, maxDim: Int): Pair<ByteArray, Bitmap>? {
+    val src = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+    val longest = maxOf(src.width, src.height)
+    val scaled = if (longest > maxDim && longest > 0) {
+        val s = maxDim.toFloat() / longest
+        Bitmap.createScaledBitmap(src, (src.width * s).toInt().coerceAtLeast(1), (src.height * s).toInt().coerceAtLeast(1), true)
+    } else {
+        src
+    }
+    val out = ByteArrayOutputStream()
+    scaled.compress(Bitmap.CompressFormat.JPEG, 82, out)
+    return out.toByteArray() to scaled
 }

@@ -415,6 +415,12 @@ interface MemberApi {
     @POST("me/media/audio")
     suspend fun uploadVoiceNote(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): VoiceUploadRes
 
+    // Post images (multipart, field "file", images ≤5 MB) → { url } — a one-off
+    // attachment for composers (event wall "Hype the room" image_url).
+    @retrofit2.http.Multipart
+    @POST("me/media/image")
+    suspend fun uploadPostImage(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): VoiceUploadRes
+
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit
 

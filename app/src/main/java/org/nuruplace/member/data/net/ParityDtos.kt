@@ -110,7 +110,12 @@ data class EventPost(
 data class EventPostReactionResult(val cheerCount: Int = 0, val loveCount: Int = 0, val myReaction: String? = null)
 
 @Serializable
-data class EventPostBody(val postId: String, val body: String, val clientMutationId: String)
+data class EventPostBody(
+    val postId: String,
+    val body: String? = null,
+    val imageUrl: String? = null,
+    val clientMutationId: String,
+)
 
 @Serializable
 data class EventReactBody(val kind: String? = null)
