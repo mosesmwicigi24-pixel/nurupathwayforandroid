@@ -247,6 +247,13 @@ data class ExamResult(
     val duplicate: Boolean = false,
 )
 
+// --- Living curriculum (intelligence Phase 3) ----------------------------
+@Serializable
+data class LessonExplanation(val style: String = "", val body: String = "", val cached: Boolean = false)
+
+@Serializable
+data class QuizRemediationRes(val attemptId: String = "", val body: String = "", val missed: Int = 0, val cached: Boolean = false)
+
 // --- Request bodies + generic envelope ----------------------------------
 @Serializable
 data class Envelope<T>(val data: List<T> = emptyList())

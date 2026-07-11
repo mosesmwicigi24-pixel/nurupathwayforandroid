@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -75,12 +78,13 @@ fun QuizScreen(
     submit: suspend (answers: List<QuizAnswer>, clientMutationId: String) -> QuizVerdict,
     onDone: () -> Unit,
     onPassed: (() -> Unit)? = null,   // level exam: route to the level-complete ceremony
+    moduleId: String? = null,         // module quizzes only: unlocks "Review with Nuru" on a fail
 ) {
     AsyncContent(key = title, load = { loadQuestions() }) { questions, _ ->
         if (questions.isEmpty()) {
             EmptyQuiz(onDone)
         } else {
-            QuizFlow(title, questions, submit, onDone, onPassed)
+            QuizFlow(title, questions, submit, onDone, onPassed, moduleId)
         }
     }
 }
@@ -92,6 +96,7 @@ private fun QuizFlow(
     submit: suspend (List<QuizAnswer>, String) -> QuizVerdict,
     onDone: () -> Unit,
     onPassed: (() -> Unit)?,
+    moduleId: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     val values = remember { mutableStateMapOf<String, String>() }          // single / scale / text
@@ -137,7 +142,7 @@ private fun QuizFlow(
         // A passed level exam continues into the level-complete ceremony; a passed
         // module quiz (or manual review) just returns to the pathway.
         val onContinue = if (v.isPassed && onPassed != null) onPassed else onDone
-        ResultScreen(v, onDone = onContinue, onRetry = {
+        ResultScreen(v, moduleId = moduleId, onDone = onContinue, onRetry = {
             verdict = null; error = null; values.clear(); checks.clear(); idx = 0; mutationId = newId()
         })
         return
@@ -265,10 +270,10 @@ private fun OptionRow(text: String, selected: Boolean, multi: Boolean, onClick: 
 }
 
 @Composable
-private fun ResultScreen(v: QuizVerdict, onDone: () -> Unit, onRetry: () -> Unit) {
+private fun ResultScreen(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, onRetry: () -> Unit) {
     when {
         v.isPassed || v.requiresManualReview -> PassResult(v, onDone)
-        else -> FailResult(v, onDone, onRetry)
+        else -> FailResult(v, moduleId, onDone, onRetry)
     }
 }
 
@@ -311,7 +316,11 @@ private fun PassResult(v: QuizVerdict, onDone: () -> Unit) {
 
 /** Fail — light ground, review encouragement + Review/Retry (Figma fail result). */
 @Composable
-private fun FailResult(v: QuizVerdict, onDone: () -> Unit, onRetry: () -> Unit) {
+private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, onRetry: () -> Unit) {
+    var showCoach by remember { mutableStateOf(false) }
+    if (showCoach && moduleId != null) {
+        NuruCoachDialog(moduleId, onRetry = onRetry, onDismiss = { showCoach = false })
+    }
     Column(
         Modifier.fillMaxSize().background(Nuru.coolPaper).padding(Spacing.screen),
         verticalArrangement = Arrangement.Center,
@@ -330,6 +339,22 @@ private fun FailResult(v: QuizVerdict, onDone: () -> Unit, onRetry: () -> Unit) 
             style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(Spacing.xl))
+        if (moduleId != null) {
+            // Living curriculum: a short Nuru-composed review of exactly what
+            // tripped this attempt, then straight back to the retry.
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.button))
+                    .background(Brush.linearGradient(listOf(Color(0xFFC9A227), Color(0xFFB6862F))))
+                    .clickable { showCoach = true }.padding(vertical = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Review with Nuru", style = NuruType.cardCta, color = Nuru.navy)
+            }
+            Spacer(Modifier.height(Spacing.sm))
+        }
         Box(Modifier.fillMaxWidth()) { PrimaryButton("Review lesson", onClick = onDone) }
         Spacer(Modifier.height(Spacing.sm))
         Box(Modifier.clickable { onRetry() }.padding(Spacing.md)) {
