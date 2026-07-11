@@ -421,6 +421,22 @@ interface MemberApi {
     @POST("me/media/image")
     suspend fun uploadPostImage(@retrofit2.http.Part file: okhttp3.MultipartBody.Part): VoiceUploadRes
 
+    // Sunday Letters + AI consent (intelligence layer)
+    @GET("me/letters/latest")
+    suspend fun latestLetter(): LatestLetterRes
+
+    @GET("me/letters")
+    suspend fun letters(): Envelope<PastoralLetter>
+
+    @POST("me/letters/{id}/read")
+    suspend fun markLetterRead(@Path("id") letterId: String): LetterReadRes
+
+    @GET("me/ai")
+    suspend fun aiConsent(): AiConsentRes
+
+    @POST("me/ai/consent")
+    suspend fun setAiConsent(@Body body: AiConsentBody): AiConsentRes
+
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit
 

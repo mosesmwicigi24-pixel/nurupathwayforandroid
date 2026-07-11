@@ -122,6 +122,8 @@ fun HomeScreen(
     var verseReactions by remember { mutableStateOf<VerseReactions?>(null) }
     var verseSaved by remember { mutableStateOf(false) }
     var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
+    var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
+    var showLetter by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
@@ -135,6 +137,7 @@ fun HomeScreen(
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
         welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrNull()
         scores = runCatching { Net.client.api.scores() }.getOrNull()
+        letter = runCatching { Net.client.api.latestLetter().letter }.getOrNull()
         announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrNull()
         featuredCell = runCatching { Net.client.api.featuredCell().data }.getOrNull()
         disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
@@ -184,6 +187,13 @@ fun HomeScreen(
                 )
             }
             radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
+            // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
+            letter?.takeIf { it.isUnread }?.let { lt ->
+                LetterKnockCard(lt) { showLetter = true }
+                if (showLetter) {
+                    LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+                }
+            }
             if (reflectionDue) next?.let { ReflectionStrip(it) { onNavigate(routeFor(it)) } }
             next?.let { ResumeHero(it, level) { onNavigate(routeFor(it)) } }
             rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0) }
