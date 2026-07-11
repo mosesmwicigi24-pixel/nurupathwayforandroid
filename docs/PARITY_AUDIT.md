@@ -516,3 +516,34 @@ new migration with a Down section MUST carry the `-- Up Migration` header.
 
 **Parity deltas:** none — same cards, same slots, same behavior. Portal/iPad
 N/A (member-facing).
+
+## Session 17 — Location-first onboarding + pairing by city/country (10–50 km)
+**Date:** 2026-07-11 · **PRs:** pathway#361 (backend+portal, deployed, no
+migration) · iOS#56 (build 45) · Android#20 (2.12.0, vc32)
+
+**Product decision (recorded):** the ask was "grant location at install,
+automatically." Platforms make pre-granted permission impossible (OS-enforced
+runtime prompt) and DPA/store policy require a real choice — so the shipped
+design maximizes legitimate opt-in instead: a ONE-TIME warm invitation right
+after first login ("Be found by your church family") → OS prompt → coarse fix
+→ POST /me/location; thereafter geotags refresh SILENTLY on every app open
+(no member action ever again). Settings keeps the withdraw switch. Server
+still stores ONLY geohash6 (~1.2 km); coordinates discarded on ingest.
+
+**Backend/portal:** GET /admin/members/proximity gains group_by=radius|city|
+country. City = geohash center snapped to nearest gazetteer town ≤40 km
+(towns.ts: Kenya-dense + EA capitals + diaspora hubs — offline, deterministic,
+no geocoding service). Country = congregation's country (countries.name).
+Radius default 3→10 km, portal chips 10/20/30/50 (cap 50), Distance|City|
+Country segmented control. Tests 16/16 (new: Nairobi/Thika city snap, KE/UG
+country split). LIVE PROOF: prod grouped Jackline Njeri + Moses Nganga under
+"Kitengela" and all 4 opted-in members under "Kenya".
+
+**Clients (identical):** LocationInviteSheet/-Dialog (navy card, gold CTA,
+"~1 km area" honesty line) fired once post-login from RootView/MainShell;
+silent per-open refresh honors OS-level revocation. iOS LocationInvite.swift;
+Android LocationInvite.kt + AppPrefs.locationInviteShown.
+
+**Gotchas:** Android `by mutableStateOf` in MainShell needed the
+androidx.compose.runtime.setValue import; /usr/libexec/java_home has NO JDK
+registered on this Mac — use JAVA_HOME=/opt/homebrew/opt/openjdk@17 directly.
