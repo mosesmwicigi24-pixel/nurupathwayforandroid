@@ -474,3 +474,45 @@ ANTHROPIC_API_KEY lands in /opt/pathway/.env.
 **Parity deltas:** iOS has a pre-menu (confirmationDialog) before the explain
 sheet; Android opens the dialog directly with chips — same capability. iPad
 portal untouched (member-facing feature). Portal N/A.
+
+## Session 16 — AI PHASE 4: the liturgy Home + community intelligence
+**Date:** 2026-07-11 · **PRs:** pathway#360 (backend, migration 149) · iOS#54
+(build 44) · Android#19 (2.11.0, vc31)
+
+**Backend (migration 149: liturgies, community_moments, moment_blessings,
+prayer_nudges):**
+- `GET /v1/home/liturgy` — the prayer line for RIGHT NOW: part by EAT clock
+  (morning 04–11 / midday 11–16 / evening 16–21 / night), church season by
+  deterministic computus (Meeus/Jones/Butcher Easter; advent/christmas/lent/
+  easter/ordinary), Sunday flag. AI composes all four lines ONCE per
+  congregation per day (strict JSON, one call); model down → fixed fallback
+  served and never cached. Cron 01:00 UTC (=04:00 EAT).
+- Moments: nightly 00:45 UTC scan detects milestones straight from data
+  (module_progress, certificates, memory_verse_progress mastered,
+  reading_plan_progress completed) → community_moments, idempotent
+  UNIQUE(user,kind,ref). NO AI — titles deterministic. `GET /v1/community/
+  moments` (cong-scoped, 14d, blessing counts + my_blessing).
+- Blessings: `POST .../moments/{id}/bless` kind=amen|heart|fire, one per
+  member per moment (repeat switches, xmax=0 detects first), first bless
+  push-notifies the celebrated member. 403 FORBIDDEN_SCOPE cross-cong.
+- Prayer chains: */15 cron invites ≤3 covenant pray-ers per new wall post
+  (cell-mates ranked first, never the author), prayer_nudges = replay-safe,
+  LIMIT subtracts already-nudged so the cap holds across rescans.
+
+**Clients (identical placement):** LiturgyCard on Home right after the letter
+knock (navy card, gold "PART · SEASON" kicker, scripture pill, serif line);
+CelebrationsRail after the prayer wall (horizontal cards: avatar + first name +
+serif title + 🙌 ❤️ 🔥 chips, optimistic updates, gold ring on mine). iOS
+LiturgyCards.swift + MemberAPI+Liturgy.swift; Android LiturgyCards.kt + DTOs
+in HomeDtos.kt.
+
+**⚠️ CRITICAL MIGRATION LESSON (fixed in #360):** node-pg-migrate SQL files
+need BOTH `-- Up Migration` AND `-- Down Migration` markers. With ONLY the
+down marker (what pathway#359 added to 146–148), upSql = THE WHOLE FILE —
+fresh DBs created the intelligence tables then immediately ran the drops.
+Prod was safe (rows already in pgmigrations) but tests/CI/fresh envs silently
+lost every intelligence table. #360 adds the Up headers to 146–149. RULE: any
+new migration with a Down section MUST carry the `-- Up Migration` header.
+
+**Parity deltas:** none — same cards, same slots, same behavior. Portal/iPad
+N/A (member-facing).
