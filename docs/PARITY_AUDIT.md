@@ -408,3 +408,30 @@ output before using in curl headers).
 
 **Blast radius:** backend + iOS + Android. Portal/iPad = N/A this phase (Phase 2
 Flock Brief will land there).
+
+---
+
+## Session 14 — AI PHASE 2: the Shepherd's Pulse (LIVE)
+
+**Backend (pathway#357, deployed + migration 147):** signals engine — drift_risk
+(deterministic vs the member's own baseline), emotion (tier-fast AI over ≤36h of
+CONSENTED writing; tone + one line, never text), crisis (keyword prefilter + AI
+confirm, FAIL-SAFE; care-flag push to cell leaders + multiplier). Weekly Flock
+Brief per leader (celebrate/watch/reach-out-first + suggested opener), idempotent
+per leader+week. dailyGreeting now reads the freshest 48h heart signal. Leader-
+scoped routes (§5.4: leader_assignments ∪ relationship_tree) + Admin triggers.
+Crons: scan 03:30 EAT nightly; briefs Saturday 19:00 EAT. 6 new tests; suite green.
+
+**Portal:** new Flock Brief page (stationery brief + live signals table, severity
+chips, Ack, Admin run-now) under Intelligence nav. Deployed.
+
+**LIVE PROOF (first prod run):** drift caught "Moses Mwicigi has gone quiet —
+active ~3.0 days/week before, 0 in the last 7" (true — he's been building, not
+using the app); emotion read "Priscilla Wawira sounds hopeful: she feels God's
+presence" from a real reflection. 0 crises. **Flock Briefs pending activation:**
+leader_assignments is empty in prod — assign cell leaders in the portal and
+Saturday's cron (or the Run button) writes each leader's brief.
+
+**Blast radius:** backend + web portal. Member apps = N/A (member-facing effect
+is the emotion-aware morning greeting, server-side). iPad Flock Brief screen =
+deferred to next iPad iteration.
