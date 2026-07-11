@@ -10,6 +10,7 @@ import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface MemberApi {
     @POST("auth/login")
@@ -436,6 +437,15 @@ interface MemberApi {
 
     @POST("me/ai/consent")
     suspend fun setAiConsent(@Body body: AiConsentBody): AiConsentRes
+
+    // Living curriculum (intelligence Phase 3) — the lesson re-rendered
+    // (simple/swahili/story, server-cached per module+style) and "Review with
+    // Nuru" composed from the member's latest FAILED quiz attempt.
+    @GET("modules/{id}/explain")
+    suspend fun explainLesson(@Path("id") moduleId: String, @Query("style") style: String): LessonExplanation
+
+    @POST("modules/{id}/quiz/remediation")
+    suspend fun quizRemediation(@Path("id") moduleId: String): QuizRemediationRes
 
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit

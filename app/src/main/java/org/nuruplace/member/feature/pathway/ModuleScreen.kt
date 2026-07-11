@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Lock
@@ -138,6 +139,11 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     var reflectSaved by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Living curriculum — "hear it another way": the same lesson re-rendered by
+    // Nuru (simple / Kiswahili / story chips live inside the dialog). §1.9-gated
+    // server-side.
+    var explainOpen by remember { mutableStateOf(false) }
+    if (explainOpen) ExplainDialog(m.moduleId, initialStyle = "simple", onDismiss = { explainOpen = false })
 
     // Read progress from the scroll position; latch "reached end" so scrolling back up
     // doesn't un-fill the Read step.
@@ -173,7 +179,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     Box(Modifier.fillMaxSize().background(ML.cream)) {
         Column(Modifier.fillMaxSize().imePadding()) {
             if (!chromeHidden) {
-                Header(m, readMinutes, sectionCount, readDone, reflectDone, onBack = onBack, onExpand = { chromeHidden = true })
+                Header(m, readMinutes, sectionCount, readDone, reflectDone, onBack = onBack, onExpand = { chromeHidden = true }, onExplain = { explainOpen = true })
             }
             // Lesson content
             Column(
@@ -242,7 +248,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
 // ─────────────────────────── Header (chrome-visible) ───────────────────────────
 
 @Composable
-private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDone: Boolean, reflectDone: Boolean, onBack: () -> Unit, onExpand: () -> Unit) {
+private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDone: Boolean, reflectDone: Boolean, onBack: () -> Unit, onExpand: () -> Unit, onExplain: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(ML.headerGrad)
             .padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 20.dp),
@@ -252,6 +258,9 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 SquareBtn(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
                 Spacer(Modifier.weight(1f))
+                // "Hear it another way" — Nuru re-renders this lesson.
+                SquareBtn(Icons.Filled.AutoAwesome, "Hear it another way", onExplain)
+                Spacer(Modifier.width(8.dp))
                 SquareBtn(Icons.Filled.OpenInFull, "Reading mode", onExpand)
                 Spacer(Modifier.width(8.dp))
                 SquareBtn(Icons.Filled.Share, "Share") {}

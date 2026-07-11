@@ -423,6 +423,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         QuizVerdict(r.scoreAchieved, r.passMark, r.isPassed, r.requiresManualReview)
                     },
                     onDone = { nav.popBackStack() },
+                    moduleId = id,
                 )
             }
             composable(
