@@ -365,3 +365,46 @@ composers just attach the returned URL.
 Installed iOS 39 on Pastor's iPhone; APK 2.6.0 on the Desktop.
 
 **Blast radius:** member-facing → backend + iOS + Android. Admin (portal/iPad) = N/A.
+
+---
+
+## Session 13 — AI PHASE 1: the Member Story brain, story-aware Nuru, the Sunday Letter
+
+**The vision (owner: "lets build!"):** one understanding layer per member, every AI
+surface drinks from it — "one brain, many hands."
+
+**Backend (pathway#356, deployed + migration 146):**
+- `modules/intelligence`: ContentIndexService (Postgres FTS over OUR OWN teaching —
+  1,011 sources → 1,272 chunks live), StoryService (member_story = SQL facts + AI
+  narrative; nightly), LettersService (the Sunday Letter — weekly, idempotent per
+  user+week, notifications template sunday_letter), /me/letters* + /me/ai consent
+  covenant + /admin/intelligence/* triggers (Admin+).
+- Nuru assistant is STORY-AWARE: narrative + facts line + top-3 own-teaching chunks
+  with bracketed citations + crisis guardrails (Befrienders Kenya, discipler-first).
+- AnthropicProvider (Claude) preferred with tiers fast/standard/deep
+  (haiku/sonnet/opus, env-overridable); Groq/Gemini/Fake fallbacks. Prod currently
+  runs on the existing GROQ key until ANTHROPIC_API_KEY lands.
+- Crons: nightly reindex+story rebuild (03:00 EAT); Sunday Letters 16:00 EAT.
+- Covenant: prayer BODIES never reach a model (counts only); opt-out stops
+  written-content grounding, deletes the story, pauses letters.
+- LIVE PROOF: Moses's first letter written on prod (Exodus 3:14; names his actual
+  "God & His Nature" module, his upward trend, his prayer rhythm; points to his
+  discipler). 8 letters written for active members (week 2026-07-05).
+
+**iOS (build 42) + Android (APK 2.9.0 vc29):** Home "A letter was written for you"
+gold knock (unread only) → stationery reader (navy backdrop, cream paper, gold wax
+seal, scripture pill, serif body, share; marks read on open). Profile "NURU
+INTELLIGENCE" consent toggle with the covenant copy. Letters/consent API on both.
+
+**Install state:** APK 2.9.0 on the Desktop. iOS 42 built; Pastor's iPhone hit the
+developer-disk-image mount error (locked/asleep) and David's went offline — both
+take build 42 on next reconnect (build 41 still runs fine meanwhile; the letter
+knock is server-driven and appears as soon as 42 lands).
+
+**Ops notes:** admin triggers can be fired by minting a 15-min SuperAdmin JWT
+inside pathway-api-1 (node --input-type=commonjs, sign with JWT_SIGNING_KEY —
+NOT "JWT_SECRET"; container workdir /repo/packages/backend; strip \r from exec
+output before using in curl headers).
+
+**Blast radius:** backend + iOS + Android. Portal/iPad = N/A this phase (Phase 2
+Flock Brief will land there).
