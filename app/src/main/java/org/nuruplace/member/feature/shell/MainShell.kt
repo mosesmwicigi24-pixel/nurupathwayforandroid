@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -111,6 +112,19 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             nav.navigate(dest) { launchSingleTop = true }
         }
     }
+
+    // Location-first onboarding: invite ONCE right after first login; members
+    // already sharing get a silent geotag refresh every open instead.
+    var showLocationInvite by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!org.nuruplace.member.data.AppPrefs.locationInviteShown && !org.nuruplace.member.data.AppPrefs.shareLocation) {
+            kotlinx.coroutines.delay(1200) // let Home land first
+            org.nuruplace.member.data.AppPrefs.locationInviteShown = true
+            showLocationInvite = true
+        }
+    }
+    if (showLocationInvite) LocationInviteDialog(onDismiss = { showLocationInvite = false })
+    RefreshLocationIfSharing()
 
     Scaffold(
         containerColor = Nuru.paper,
