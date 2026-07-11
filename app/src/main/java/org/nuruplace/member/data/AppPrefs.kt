@@ -16,6 +16,7 @@ object AppPrefs {
     private const val FILE = "nuru_member_prefs"
     private const val KEY_TEXT_SCALE = "nuru.textScale"
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
+    private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
 
     private lateinit var prefs: SharedPreferences
 
@@ -42,4 +43,9 @@ object AppPrefs {
         shareLocation = on
         if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_SHARE_LOCATION, on).apply()
     }
+
+    /** One-time location-first onboarding invite (shown right after first login). */
+    var locationInviteShown: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_LOCATION_INVITE, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_LOCATION_INVITE, v).apply() }
 }
