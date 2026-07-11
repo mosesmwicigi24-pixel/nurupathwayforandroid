@@ -194,6 +194,8 @@ fun HomeScreen(
                     LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
                 }
             }
+            // 0c · The hour's prayer line (liturgy, Phase 4).
+            LiturgyCard()
             if (reflectionDue) next?.let { ReflectionStrip(it) { onNavigate(routeFor(it)) } }
             next?.let { ResumeHero(it, level) { onNavigate(routeFor(it)) } }
             rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0) }
@@ -238,6 +240,8 @@ fun HomeScreen(
                 )
             }
             if (prayers.isNotEmpty()) PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") })
+            // 5b · Celebrate the family (moments, Phase 4).
+            CelebrationsRail()
             MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
             featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
             if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }

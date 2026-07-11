@@ -447,6 +447,16 @@ interface MemberApi {
     @POST("modules/{id}/quiz/remediation")
     suspend fun quizRemediation(@Path("id") moduleId: String): QuizRemediationRes
 
+    // The liturgy Home + community intelligence (Phase 4)
+    @GET("home/liturgy")
+    suspend fun homeLiturgy(): HomeLiturgy
+
+    @GET("community/moments")
+    suspend fun communityMoments(): Envelope<CommunityMoment>
+
+    @POST("community/moments/{id}/bless")
+    suspend fun blessMoment(@Path("id") momentId: String, @Body body: BlessBody): BlessRes
+
     @POST("me/password")
     suspend fun changePassword(@Body body: ChangePasswordBody): Unit
 

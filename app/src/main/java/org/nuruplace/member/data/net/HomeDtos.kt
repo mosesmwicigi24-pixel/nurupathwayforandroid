@@ -67,3 +67,35 @@ data class RhythmBody(val kind: String)
 /** GET /me/home/greeting — Nuru's daily one-line word for this member. */
 @Serializable
 data class DailyGreeting(val greeting: String = "")
+
+// --- The liturgy Home + community intelligence (Phase 4) ---
+@Serializable
+data class HomeLiturgy(
+    val part: String = "morning",
+    val season: String = "ordinary",
+    val isSunday: Boolean = false,
+    val line: String = "",
+    val scriptureRef: String? = null,
+)
+
+@Serializable
+data class CommunityMoment(
+    val momentId: String = "",
+    val userId: String = "",
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+    val kind: String = "",
+    val title: String = "",
+    val occurredAt: String = "",
+    val amenCount: Int = 0,
+    val heartCount: Int = 0,
+    val fireCount: Int = 0,
+    val myBlessing: String? = null,
+)
+
+@Serializable
+data class BlessBody(val kind: String)
+
+@Serializable
+data class BlessRes(val blessed: Boolean = false, val kind: String = "")
+
