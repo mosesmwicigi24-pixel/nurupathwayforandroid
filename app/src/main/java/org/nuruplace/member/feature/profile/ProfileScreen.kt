@@ -272,6 +272,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             }
             AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
+            AiConsentCard()
             MilestonesCard(me)
             CertificatesCard(
                 certs = certs,
@@ -1193,4 +1194,55 @@ private fun certDate(iso: String?): String {
         // Fall back to date-only ISO (yyyy-MM-dd)
         java.time.LocalDate.parse(iso.take(10)).format(CERT_DATE_FMT)
     }.getOrDefault(iso)
+}
+
+
+// --- Nuru Intelligence: the personalization covenant (one switch) ---
+@androidx.compose.runtime.Composable
+private fun AiConsentCard() {
+    var optOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var loaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        optOut = runCatching { org.nuruplace.member.data.net.Net.client.api.aiConsent().optOut }.getOrDefault(false)
+        loaded = true
+    }
+    SectionCard {
+        SectionTitle(androidx.compose.material.icons.Icons.Filled.AutoAwesome, "NURU INTELLIGENCE")
+        androidx.compose.foundation.layout.Row(
+            androidx.compose.ui.Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f)) {
+                androidx.compose.material3.Text(
+                    "Personal companion & Sunday Letter",
+                    style = org.nuruplace.member.ui.theme.NuruType.rowTitle,
+                    color = org.nuruplace.member.ui.theme.Nuru.navy,
+                )
+                androidx.compose.material3.Text(
+                    "Nuru remembers your journey to walk with you personally. Your prayer journal is never read — ever. Turn this off and Nuru forgets your story, stops reading your reflections, and pauses your Sunday Letters.",
+                    style = org.nuruplace.member.ui.theme.NuruType.caption,
+                    color = org.nuruplace.member.ui.theme.Nuru.ink600,
+                )
+            }
+            androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(10.dp))
+            androidx.compose.material3.Switch(
+                checked = !optOut,
+                enabled = loaded,
+                onCheckedChange = { on ->
+                    optOut = !on
+                    scope.launch {
+                        runCatching {
+                            org.nuruplace.member.data.net.Net.client.api.setAiConsent(
+                                org.nuruplace.member.data.net.AiConsentBody(optOut = !on),
+                            )
+                        }
+                    }
+                },
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedTrackColor = org.nuruplace.member.ui.theme.Nuru.gold,
+                ),
+            )
+        }
+    }
 }

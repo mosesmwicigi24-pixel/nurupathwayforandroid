@@ -132,3 +132,28 @@ data class Certificate(
     val issuedAt: String = "",
     val downloadUrl: String = "",
 )
+
+// --- Sunday Letters + AI consent (intelligence layer, Phase 1) ---
+@Serializable
+data class PastoralLetter(
+    val letterId: String = "",
+    val weekOf: String = "",
+    val body: String = "",
+    val scriptureRef: String? = null,
+    val createdAt: String = "",
+    val readAt: String? = null,
+) {
+    val isUnread: Boolean get() = readAt == null
+}
+
+@Serializable
+data class LatestLetterRes(val letter: PastoralLetter? = null)
+
+@Serializable
+data class LetterReadRes(val letterId: String = "", val readAt: String = "")
+
+@Serializable
+data class AiConsentRes(val optOut: Boolean = false)
+
+@Serializable
+data class AiConsentBody(val optOut: Boolean)
