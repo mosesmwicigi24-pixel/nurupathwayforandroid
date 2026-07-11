@@ -435,3 +435,42 @@ Saturday's cron (or the Run button) writes each leader's brief.
 **Blast radius:** backend + web portal. Member apps = N/A (member-facing effect
 is the emotion-aware morning greeting, server-side). iPad Flock Brief screen =
 deferred to next iPad iteration.
+
+## Session 15 — AI PHASE 3: the living curriculum (LIVE)
+**Date:** 2026-07-11 · **PRs:** pathway#358 (backend, migration 148) + pathway#359
+(CI fix: down sections for migrations 146–148 — the reversibility gate had been
+red on main since Phase 2) · iOS#53 (build 43) · Android#18 (2.10.0, vc30)
+
+**Backend (deployed, migration 148 applied):**
+- `GET /v1/modules/:id/explain?style=simple|swahili|story` — the SAME lesson
+  re-rendered by Nuru; cached per (module, style) in `module_explanations`
+  (content, not personal data — generated once, served to everyone). §1.9-gated
+  via assertUnlocked.
+- `POST /v1/modules/:id/quiz/remediation` — "Review with Nuru": composed from
+  the member's latest FAILED attempt's exact misses (quiz_attempt_answers
+  is_correct=FALSE, ≤8), cached per attempt in `quiz_remediations`; teaches the
+  concepts, never dumps the answer key. VALIDATION_FAILED with no failed attempt.
+- `GET /v1/growth/memory-verses/due` — verse spaced repetition (no new schema):
+  <50% → 1d, <80% → 3d, ≥80% → 7d, mastered → 21d; weakest+stalest first.
+- Home next-action v2 (server-driven, zero client change): quiz_retry (62),
+  verse_review (58), gentle_return (84 on a ≤3d drift_risk signal + quiet day).
+
+**iOS (build 43):** QuizFailScreen gains gold "Review with Nuru" (sparkles) →
+NuruCoachSheet (stationery over navy, retry action). Reader header gains ✨ →
+confirmationDialog (Simple English / Kwa Kiswahili / As a story) → ExplainSheet
+with in-sheet style chips. New MemberAPI+Learning.swift.
+
+**Android (2.10.0):** same feature pair — FailResult gold "Review with Nuru"
+button → NuruCoachDialog; ModuleScreen header AutoAwesome button → ExplainDialog
+(style chips inside; no pre-menu — jumps straight to Simple). New endpoints in
+MemberApi + PathwayDtos; moduleId threaded QuizScreen→FailResult (level exams
+pass null — remediation is per-module).
+
+**LIVE PROOF:** prod smoke rendered Level 1 · Module 1 in Kiswahili ("Mungu na
+Asili Yake… 'Nimi Ni Yeye Aliye' (Kutoka 3:14)") and verses/due returned Moses'
+real due verse (Romans 12:2). Runs on the Groq/Llama fallback until
+ANTHROPIC_API_KEY lands in /opt/pathway/.env.
+
+**Parity deltas:** iOS has a pre-menu (confirmationDialog) before the explain
+sheet; Android opens the dialog directly with chips — same capability. iPad
+portal untouched (member-facing feature). Portal N/A.
