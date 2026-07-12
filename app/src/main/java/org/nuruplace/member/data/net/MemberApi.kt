@@ -447,6 +447,16 @@ interface MemberApi {
     @POST("modules/{id}/quiz/remediation")
     suspend fun quizRemediation(@Path("id") moduleId: String): QuizRemediationRes
 
+    // Wave 2 — a discipler's voice on the lesson + studying-together presence.
+    @POST("modules/{id}/voice-note")
+    suspend fun setModuleVoiceNote(@Path("id") moduleId: String, @Body body: VoiceNoteBody): VoiceNoteRes
+
+    @DELETE("modules/{id}/voice-note")
+    suspend fun deleteModuleVoiceNote(@Path("id") moduleId: String): kotlinx.serialization.json.JsonObject
+
+    @GET("community/presence")
+    suspend fun communityPresence(): CommunityPresence
+
     // The liturgy Home + community intelligence (Phase 4)
     @GET("home/liturgy")
     suspend fun homeLiturgy(): HomeLiturgy
