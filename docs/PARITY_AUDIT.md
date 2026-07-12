@@ -580,3 +580,8 @@ medallion; state moved to the fill + a 15-unit corner seal (navy check-seal =
 done, lock-seal = locked, navy ring = next). iOS 46 installed on Pastor's
 phone; Jackline offline (has 45, takes 46 next connect); APK 2.14.0 on
 Desktop.
+- **2.15.0 (vc35, android#23): lesson tables to iOS parity** — horizontal
+  scroller (108dp min columns), gold 14% header band, hairline row+column
+  dividers, cream ground, 14dp rounding, 12dp cell padding — mirrors iOS
+  MLTableBlock. (Screenshot 1 in the report was 2.12.0, pre-table-support;
+  2.13.0 rendered tables but flat.)
