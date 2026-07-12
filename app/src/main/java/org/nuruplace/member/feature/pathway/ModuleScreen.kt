@@ -148,6 +148,27 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     var explainOpen by remember { mutableStateOf(false) }
     // Finished modules fold the reflection to what was written; Edit unfolds it.
     var editingReflection by remember { mutableStateOf(false) }
+    var showRevisit by remember { mutableStateOf(false) }
+    if (showRevisit) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRevisit = false },
+            containerColor = Color.White,
+            title = { Text("You've completed this module", style = mlSerif(19, FontWeight.SemiBold), color = ML.navy) },
+            text = { Text("It is sealed — but you can still revisit what you wrote or try the quiz again.", style = ml(13), color = ML.secondary) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showRevisit = false; editingReflection = true }) {
+                    Text("Edit my reflection", style = ml(13, FontWeight.Bold), color = ML.navy)
+                }
+            },
+            dismissButton = {
+                if (m.requiresQuiz) {
+                    androidx.compose.material3.TextButton(onClick = { showRevisit = false; onTakeQuiz(m.moduleId) }) {
+                        Text("Retake the quiz", style = ml(13, FontWeight.Bold), color = ML.gold)
+                    }
+                }
+            },
+        )
+    }
     if (explainOpen) ExplainDialog(m.moduleId, initialStyle = "simple", onDismiss = { explainOpen = false })
 
     // Read progress from the scroll position; latch "reached end" so scrolling back up
@@ -198,7 +219,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 }
                 Spacer(Modifier.height(8.dp))
                 if (m.completed && !editingReflection) {
-                    ReflectionFolded(text = reflection) { editingReflection = true }
+                    ReflectionFolded(text = reflection) { showRevisit = true }
                 } else ReflectionCard(
                     value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false },
                     saved = reflectSaved,
@@ -583,25 +604,35 @@ private fun inline(text: String): androidx.compose.ui.text.AnnotatedString = bui
 // ─────────────────────────── Reflection card ───────────────────────────
 
 @Composable
-private fun ReflectionFolded(text: String, onEdit: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
-            .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("YOUR REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-            Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
-            Spacer(Modifier.width(3.dp))
-            Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D))
-            Spacer(Modifier.width(10.dp))
-            Box(
-                Modifier.clip(RoundedCornerShape(999.dp)).background(ML.gold.copy(alpha = 0.2f))
-                    .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(999.dp))
-                    .clickable { onEdit() }.padding(horizontal = 12.dp, vertical = 5.dp),
-            ) { Text("Edit", style = ml(11, FontWeight.Bold), color = ML.navy) }
+private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
+    Column {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
+                .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("YOUR REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
+                Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
+                Spacer(Modifier.width(3.dp))
+                Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = 22.sp)
         }
-        Spacer(Modifier.height(10.dp))
-        Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = 22.sp)
+        Spacer(Modifier.height(14.dp))
+        // The module is sealed — changing anything is intentional, one quiet door.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White)
+                    .border(1.dp, ML.border, RoundedCornerShape(999.dp))
+                    .clickable { onRevisit() }.padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.MenuBook, null, tint = ML.secondary, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Revisit this module", style = ml(13, FontWeight.SemiBold), color = ML.secondary)
+            }
+        }
     }
 }
 
