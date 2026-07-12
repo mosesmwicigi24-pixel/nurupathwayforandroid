@@ -585,3 +585,18 @@ Desktop.
   dividers, cream ground, 14dp rounding, 12dp cell padding — mirrors iOS
   MLTableBlock. (Screenshot 1 in the report was 2.12.0, pre-table-support;
   2.13.0 rendered tables but flat.)
+
+## Session 17d — "Hear it another way" 404 root-cause + reader space (iOS 48 · Android code-only)
+**PRs:** ios#59 · android#25. Field report: explain sheet always failed +
+endless spinner; reader bottom gate ate the screen and hid the reflection.
+- **ROOT CAUSE (iOS only):** `get("modules/X/explain?style=Y")` — the query
+  was inside the path, so appendingPathComponent percent-encoded the `?` →
+  `/explain%3Fstyle=…` → 404. The AI itself is FREE and healthy (Groq
+  composed simple + story for L1M1 instantly when hit correctly). Fix: pass
+  query via the client's query dict. RULE: never embed `?` in APIClient paths.
+- Explain sheet/dialog: spinner only while loading; failures show message +
+  "Try again" (Android uses a retryTick to re-arm the LaunchedEffect).
+- Bottom gate BOTH apps: segmented bar dropped (step chips carry state);
+  done state collapses to one line + CTA (~half height); iOS adds extra
+  clearance above the gate for the reflection card.
+- Build 48 verified ON-DEVICE (devicectl info apps → 48) and launched.
