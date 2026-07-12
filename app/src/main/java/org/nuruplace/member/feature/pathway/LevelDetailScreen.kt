@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -200,16 +201,36 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         // Node + connector column.
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                Modifier.size(36.dp).clip(RoundedCornerShape(Radii.pill))
-                    .background(if (done || isNext) Nuru.gold else Nuru.inputBg)
-                    .then(if (isNext) Modifier.border(2.dp, Nuru.navy, RoundedCornerShape(Radii.pill)) else Modifier),
-                contentAlignment = Alignment.Center,
-            ) {
-                when {
-                    done -> Icon(Icons.Filled.Check, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
-                    isNext -> Icon(Icons.Filled.PlayArrow, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
-                    else -> Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp))
+            // The module NUMBER never leaves the node — state lives in the
+            // medallion fill + a small corner seal (check when done, lock when
+            // locked); the next module keeps its navy ring.
+            Box(contentAlignment = Alignment.TopEnd) {
+                Box(
+                    Modifier.size(36.dp).clip(RoundedCornerShape(Radii.pill))
+                        .background(if (done || isNext) Nuru.gold else Nuru.inputBg)
+                        .then(if (isNext) Modifier.border(2.dp, Nuru.navy, RoundedCornerShape(Radii.pill)) else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "${module.moduleSequenceNumber}",
+                        style = NuruType.cardCta,
+                        color = when { done || isNext -> Nuru.navy; else -> Nuru.ink400 },
+                    )
+                }
+                if (done) {
+                    Box(
+                        Modifier.offset(x = 4.dp, y = (-3).dp).size(15.dp)
+                            .clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
+                            .border(1.5.dp, Nuru.white, RoundedCornerShape(Radii.pill)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Check, null, tint = Nuru.white, modifier = Modifier.size(9.dp)) }
+                } else if (locked) {
+                    Box(
+                        Modifier.offset(x = 4.dp, y = (-3).dp).size(15.dp)
+                            .clip(RoundedCornerShape(Radii.pill)).background(Nuru.inputBg)
+                            .border(1.5.dp, Nuru.white, RoundedCornerShape(Radii.pill)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(8.dp)) }
                 }
             }
             if (!isLast) {
