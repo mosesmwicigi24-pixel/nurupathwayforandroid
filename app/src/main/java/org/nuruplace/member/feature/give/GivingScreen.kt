@@ -131,6 +131,14 @@ private fun GiveTab(
 
     var fundId by remember { mutableStateOf("tithe") }
     var amountMajor by remember { mutableIntStateOf(1000) }
+    var customOpen by remember { mutableStateOf(false) }
+    if (customOpen) {
+        CustomAmountDialog(
+            initial = amountMajor,
+            onConfirm = { amountMajor = it; customOpen = false },
+            onDismiss = { customOpen = false },
+        )
+    }
     var freq by remember { mutableIntStateOf(2) } // 0 once / 1 weekly / 2 monthly
     val methods = remember { mutableStateListOf(*GIVE_METHODS.toTypedArray()) }
     var selectedMethod by remember { mutableStateOf("mpesa") }
@@ -268,7 +276,7 @@ private fun GiveTab(
                             color = GIVE.gold,
                             modifier = Modifier.clip(Capsule).background(GIVE.white)
                                 .border(1.dp, GIVE.gold, Capsule)
-                                .clickable { amountMajor += 500 }
+                                .clickable { customOpen = true }
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }
@@ -642,4 +650,46 @@ private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
             }
         }
     }
+}
+
+// Custom giving amount — a real editor (numeric keyboard, KSh, 1..2,000,000).
+@Composable
+private fun CustomAmountDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(initial.toString()) }
+    val parsed = text.filter { it.isDigit() }.take(7).toIntOrNull() ?: 0
+    val valid = parsed in 1..2_000_000
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = GIVE.white,
+        title = { Text("Enter amount", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { v -> text = v.filter { it.isDigit() }.take(7) },
+                    singleLine = true,
+                    prefix = { Text("KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
+                    textStyle = giSerif(24, FontWeight.SemiBold).copy(color = GIVE.navy),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (!valid && text.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Enter an amount between KSh 1 and KSh 2,000,000.", style = giInter(12), color = GIVE.sub)
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { if (valid) onConfirm(parsed) }, enabled = valid) {
+                Text("Set amount", style = giInter(14, FontWeight.Bold), color = if (valid) GIVE.gold else GIVE.sub)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel", style = giInter(14, FontWeight.SemiBold), color = GIVE.sub)
+            }
+        },
+    )
 }

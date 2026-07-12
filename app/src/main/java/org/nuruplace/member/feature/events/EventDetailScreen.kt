@@ -2,7 +2,9 @@
 // RSVP + "Who's coming" buzz feed + live check-in. Uses the shared `EV` palette /
 // primitives from EventsShared.kt (same package, no import). Server-authoritative
 // data via MemberApi; RSVP is an offline-queued write, buzz posts/reactions go
-// straight through. The content column overlaps the hero by 16dp.
+// straight through. The hero shows the full image un-cropped (height follows the
+// image's natural aspect, capped at 60% of the screen and letterboxed on the navy
+// gradient); the content column sits flush below it.
 package org.nuruplace.member.feature.events
 
 import android.Manifest
@@ -27,12 +29,14 @@ import java.io.File
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,7 +45,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -83,6 +86,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -177,8 +181,8 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .offset(y = (-16).dp)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 MetaCard(e, endAt, onAddToCalendar = addToCalendar, onShare = shareIntent)
@@ -207,96 +211,106 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
 
 @Composable
 private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 11f),
-    ) {
-        if (e.primaryImageUrl != null) {
-            AsyncImage(
-                model = e.primaryImageUrl,
-                contentDescription = e.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
-        } else {
+    // Natural aspect (w/h) of the loaded hero image — null until Coil reports it.
+    // Once known, the hero grows to show the FULL image un-cropped: height follows
+    // the intrinsic aspect, capped at 60% of the screen for very tall posters
+    // (letterboxed on the navy gradient, never cropped). While loading / no image
+    // we keep the original 16:11 placeholder frame.
+    var imageAspect by remember(e.primaryImageUrl) { mutableStateOf<Float?>(null) }
+    val maxHeroHeight = LocalConfiguration.current.screenHeightDp.dp * 0.6f
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val heroHeight = imageAspect?.let { ar -> (maxWidth / ar).coerceAtMost(maxHeroHeight) }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .then(if (heroHeight != null) Modifier.height(heroHeight) else Modifier.aspectRatio(16f / 11f))
+                .background(Brush.linearGradient(listOf(EV.navy700, EV.navy, evCategory(e.category)))),
+        ) {
+            if (e.primaryImageUrl != null) {
+                AsyncImage(
+                    model = e.primaryImageUrl,
+                    contentDescription = e.title,
+                    contentScale = ContentScale.Fit,
+                    onSuccess = { state ->
+                        val size = state.painter.intrinsicSize
+                        if (size.width > 0f && size.height > 0f) imageAspect = size.width / size.height
+                    },
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
+            // Scrim — kept for back/share + title/pill legibility over the image.
             Box(
                 Modifier
                     .matchParentSize()
-                    .background(Brush.linearGradient(listOf(EV.navy700, EV.navy, evCategory(e.category)))),
-            )
-        }
-        // Scrim
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(EV.navyBase.copy(alpha = 0.55f), EV.navyBase.copy(alpha = 0.10f), EV.navyBase.copy(alpha = 0.85f)),
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(EV.navyBase.copy(alpha = 0.55f), EV.navyBase.copy(alpha = 0.10f), EV.navyBase.copy(alpha = 0.85f)),
+                        ),
                     ),
-                ),
-        )
-        // Top chrome
-        Row(
-            Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
+            )
+            // Top chrome
+            Row(
                 Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.15f))
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
-            Box(
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.15f))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.15f))
+                        .clickable { onShare() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Share, "Share", tint = Color.White, modifier = Modifier.size(17.dp)) }
+            }
+            // Bottom overlay
+            Column(
                 Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.15f))
-                    .clickable { onShare() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Share, "Share", tint = Color.White, modifier = Modifier.size(17.dp)) }
-        }
-        // Bottom overlay
-        Column(
-            Modifier
-                .align(Alignment.BottomStart)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                e.category?.takeIf { it.isNotBlank() }?.let { c ->
-                    Box(
-                        Modifier
-                            .clip(Capsule)
-                            .background(evCategory(c).copy(alpha = 0.9f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                    ) { Text(c.uppercase(), style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White) }
-                }
-                if (isEventLive(e.occursAt)) {
-                    Box(
-                        Modifier
-                            .clip(Capsule)
-                            .background(EV.going)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    e.category?.takeIf { it.isNotBlank() }?.let { c ->
+                        Box(
+                            Modifier
+                                .clip(Capsule)
+                                .background(evCategory(c).copy(alpha = 0.9f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        ) { Text(c.uppercase(), style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White) }
+                    }
+                    if (isEventLive(e.occursAt)) {
+                        Box(
+                            Modifier
+                                .clip(Capsule)
+                                .background(EV.going)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
                         ) {
-                            Box(Modifier.size(4.dp).clip(Capsule).background(Color.White))
-                            Text("LIVE", style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.size(4.dp).clip(Capsule).background(Color.White))
+                                Text("LIVE", style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White)
+                            }
                         }
                     }
                 }
+                Text(e.title, style = evSerif(24, FontWeight.SemiBold, -0.72f), color = Color.White)
             }
-            Text(e.title, style = evSerif(24, FontWeight.SemiBold, -0.72f), color = Color.White)
         }
     }
 }
