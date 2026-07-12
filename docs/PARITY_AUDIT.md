@@ -611,3 +611,10 @@ Field design request: once finished, the reader should stop gating.
   words (read-only, Saved) with an Edit chip that unfolds the editor.
 - iOS 49 verified on-device; Android in #26, rides the next requested APK.
 - Deploy note: GHCR pull "denied" recurred → docker logout ghcr.io then pull.
+- **17f — sealed module + lower CTA (ios#61 build 50 · android#27, code-only):**
+  Start-the-quiz bar 24pt lower on iOS (tab-bar clearance shelf); completed
+  modules SEALED on both apps — folded reflection loses the Edit chip, one
+  quiet "Revisit this module" button opens the intentional dialog (Edit my
+  reflection / Retake the quiz). ALSO: the #60 squash DROPPED a commit (struct
+  defs) leaving iOS main uncompilable — restored in #61; lesson: after
+  push-then-merge chains, verify main compiles (grep the symbol) before moving on.
