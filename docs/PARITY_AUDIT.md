@@ -665,3 +665,28 @@ green; NO APK — accumulates for the next requested build.
 state after sharing (no full reload); iOS reloads the module. Same visible
 result. Home-echo whisper port + this wave's Android build remain queued
 behind "build android".
+
+## Session 20 — Companion Wave 3: footprints + Your Walk (pathway#367 · iOS #64/build 53 · Android #30 code-only)
+**Backend (pathway#367, NO migration, DEPLOYED):** `GET /modules/:id/
+footprints` — cell-mates (congregation fallback) who completed the module:
+≤5 first names + avatars newest-first + window-count total; self excluded,
+strangers invisible. `GET /me/walk` — the member's journey as ONE UNION ALL
+thread over real tables: began (enrollments.started_at), modules finished,
+reflections (140-char excerpt as quote), levels passed (DISTINCT ON first
+passing attempt), certificates (revoked excluded), verses mastered
+(best_match_pct), plans completed, badges; newest-first LIMIT 80. 4 tests.
+**LIVE PROOF:** Moses' prod walk returns 6 real events (3 verses, First
+Steps badge, "God & His Nature", began 25 Jun).
+**iOS (#64, build 53):** FootprintsStrip (overlapping avatars capsule) at
+the reader's first page ABOVE the Wave-2 voice note; YourWalkView — navy
+hero ("Look how far He has brought you"), gold thread, milestone nodes
+(began/level/certificate) filled gold, reflection quotes in Fraunces
+italic; PathwayWalkRow ("EVERY STEP, REMEMBERED") after DisciplershipRow;
+PathwayRoute.walk. GOTCHA: adding an enum case broke exhaustive switch in
+GrowView's PathwayRoute destination too — patch EVERY switch. Build 53
+device-verified on Pastor's iPhone + Jackline's + iPad.
+**Android (#30, code-only):** YourWalkScreen.kt port (Material icons:
+Flag/MenuBook/Edit/School/Verified/FormatQuote/Bookmark/EmojiEvents; NuruType
+has NO pageTitle/serifBody — use title/rowTitle.copy) + FootprintsStrip;
+WalkRow on hub (new onOpenWalk param) + route "your-walk" in MainShell;
+DTO dateLine regex. compileDebugKotlin green; NO APK (accumulates #22–#30).
