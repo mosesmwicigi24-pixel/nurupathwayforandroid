@@ -600,3 +600,14 @@ endless spinner; reader bottom gate ate the screen and hid the reflection.
   done state collapses to one line + CTA (~half height); iOS adds extra
   clearance above the gate for the reflection card.
 - Build 48 verified ON-DEVICE (devicectl info apps → 48) and launched.
+
+## Session 17e — Completed-module reading room (pathway#364 · iOS 49 · Android code-only)
+Field design request: once finished, the reader should stop gating.
+- Backend (deployed): GET /modules/{id} + completed / completed_at /
+  best_score (per-user, fetched OUTSIDE the shared content cache).
+- Both apps: finished modules drop the bottom gate entirely (full-height
+  reading); header Read|Reflect → ✓ COMPLETED · score% · d MMM yyyy · HH:mm
+  ribbon + navy Retake pill (quizzed modules); reflection folds to the saved
+  words (read-only, Saved) with an Edit chip that unfolds the editor.
+- iOS 49 verified on-device; Android in #26, rides the next requested APK.
+- Deploy note: GHCR pull "denied" recurred → docker logout ghcr.io then pull.
