@@ -547,3 +547,14 @@ Android LocationInvite.kt + AppPrefs.locationInviteShown.
 **Gotchas:** Android `by mutableStateOf` in MainShell needed the
 androidx.compose.runtime.setValue import; /usr/libexec/java_home has NO JDK
 registered on this Mac — use JAVA_HOME=/opt/homebrew/opt/openjdk@17 directly.
+
+## Session 17b — Android field fixes from Jackline's device (2.13.0)
+**Date:** 2026-07-11 · **PR:** android#21 (vc33)
+- **Give → Custom**: the chip silently did `amountMajor += 500` (no editor).
+  Now opens CustomAmountDialog — numeric keyboard, KSh prefix, digits-only,
+  bounds 1..2,000,000, "Set amount" confirm. iOS already had an editor.
+- **Lesson reader tables**: GFM pipe tables rendered as raw `|` text (seen on
+  L1 "Christian Living & Character" §1.3). parseMarkdown gains a table branch
+  (header row + `|---|` separator detection) + Md.Table renderer: bordered
+  14dp-radius table, bold header on ML.surface, hairline row dividers,
+  weight(1f) wrapping cells, ragged rows padded to header width.
