@@ -178,7 +178,11 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // (iOS PathwayDisciplershipRow → discipleshipHub), not to Mentor.
                     onOpenMentor = { nav.navigate("discipleship") },
                     onOpenMap = { nav.navigate("pathway-map") },
+                    onOpenWalk = { nav.navigate("your-walk") },
                 )
+            }
+            composable("your-walk") {
+                org.nuruplace.member.feature.pathway.YourWalkScreen(onBack = { nav.popBackStack() })
             }
             composable("pathway-map") {
                 LevelsMapScreen(me = me, onOpenLevel = { nav.navigate("level/$it") }, onBack = { nav.popBackStack() })
