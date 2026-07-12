@@ -99,3 +99,15 @@ data class BlessBody(val kind: String)
 @Serializable
 data class BlessRes(val blessed: Boolean = false, val kind: String = "")
 
+// --- Wave 1 echoes: the app remembers you ---
+@Serializable
+data class HomeEcho(
+    val kind: String = "",
+    val body: String = "",
+    val quote: String? = null,
+    val ref: String? = null,
+)
+
+@Serializable
+data class HomeEchoEnvelope(val echo: HomeEcho? = null)
+

@@ -196,6 +196,8 @@ fun HomeScreen(
             }
             // 0c · The hour's prayer line (liturgy, Phase 4).
             LiturgyCard()
+            // 0d · Today's echo — the app remembers you (Wave 1).
+            HomeEchoCard()
             if (reflectionDue) next?.let { ReflectionStrip(it) { onNavigate(routeFor(it)) } }
             next?.let { ResumeHero(it, level) { onNavigate(routeFor(it)) } }
             rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0) }
