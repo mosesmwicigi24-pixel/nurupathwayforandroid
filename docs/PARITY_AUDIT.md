@@ -751,3 +751,41 @@ NOT ported (deliberate): FirebaseAccountScreen (FCM plumbing). Statement/
 receipt PDFs stay native-rendered on iOS (divergent by design).
 Build 54 verified on Pastor's + Jackline's iPhones; iPad offline (owes 54
 + the staged Nuru Portal build from Session 21).
+
+## Session 23 — iOS SUPER-SMOOTH pass (ios#66 · build 55 · pathway#369 deployed)
+User: "iOS forgives nothing — make me love the iPhone version." 3 audit
+agents + EMPIRICAL simulator run (local backend :8080, seeded dev DB,
+computer-use drove login as student1@dev.local).
+**HEADLINE (root cause of every 'missing card' report):** HomeLiturgyCard,
+HomeEchoCard, CelebrationsRail, FootprintsStrip, CellPresenceLine were
+DEAD-BY-CONSTRUCTION on iOS — `Group { if let … }` renders EmptyView until
+data arrives and `.task` attached to an uninstalled view NEVER FIRES.
+Request census proved /home/liturgy, /home/echo, /community/moments were
+never called. Fix: zero-height Color.clear install-anchor in the empty
+branch. Re-proven live: liturgy card + Celebrate-the-family render on Home.
+SWIFT RULE: never hang .task off a conditionally-empty Group.
+**Voice engine (16 defects from adversarial review, all fixed):** 5-min
+autostop kept-not-discarded (ready-to-send strip); send failure = retained
+file + tap-to-retry (was silent loss); playback observes didPlayToEnd +
+asset duration (meta-less notes played exactly 1s; wedged 'playing');
+interruption observers both recorders; duration from recorder.currentTime
+(tick-counting undercounted while scrolling — timers now .common mode);
+threadShared.stop() on thread leave + before recording (was: audio playing
+over Home forever + mic recording the other note); hold-counted
+AVAudioSession release (playAndRecord lingered app-wide); guard record();
+mic-denied hint; waveformFor ceil-chunking (tail of 6-13s takes dropped);
+sheet swipe-dismiss cleanup (1Hz timer leaked for app lifetime); preview
+delegate; Redo stops preview.
+**Tolerance completed: 110 structs** (chat inbox/thread, events, giving,
+gifts, growth, quiz/exam, discipleship, radio, profile) — extension-init
+pattern preserves memberwise inits; gates fail CLOSED (locked ?? true,
+§1.9). **Feel:** Quiz+Module error traps get Go-back; Add-to-calendar
+ships a real .ics; Delete-account answers honestly; liturgy/echo/
+celebrations refetch on foreground (keep-alive tab shell showed
+yesterday's card forever); levels=[] → retry not 'Level 1 of 0';
+walk/announcements offline ≠ empty; AuthStore never nil-overwrites.
+**Backend (pathway#369 DEPLOYED, migration 152):** client_devices was
+plain-INSERT per launch — deduped to one row per (user, platform,
+COALESCE(model,'')) + upsert; census now honest (53 rows).
+Build 55 verified on Pastor's + Jackline's iPhones; iPad offline (owes 55
++ staged portal).
