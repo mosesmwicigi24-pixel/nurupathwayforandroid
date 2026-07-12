@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -436,29 +439,40 @@ private fun MarkdownView(md: String) {
                         }
                     }
                 }
-                is Md.Table -> Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                        .border(1.dp, ML.border, RoundedCornerShape(14.dp)),
-                ) {
-                    Row(Modifier.fillMaxWidth().background(ML.surface).padding(vertical = 9.dp)) {
-                        b.header.forEach { h ->
-                            Text(
-                                inline(h), style = ml(12, FontWeight.Bold), color = ML.navy,
-                                lineHeight = 16.sp,
-                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                            )
-                        }
-                    }
-                    b.rows.forEachIndexed { r, row ->
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
-                        Row(Modifier.fillMaxWidth().padding(vertical = 9.dp)) {
-                            // Pad/trim to the header width so a ragged row can't crash.
-                            (0 until b.header.size).forEach { c ->
+                // Mirrors iOS MLTableBlock: horizontal scroller, 108dp min
+                // columns, gold-tinted header band, hairline row + column
+                // dividers, cream ground, 14dp rounding.
+                is Md.Table -> Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    val minCol = 108.dp
+                    Column(
+                        Modifier.widthIn(min = minCol * b.header.size)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(ML.surface)
+                            .border(1.dp, ML.border, RoundedCornerShape(14.dp)),
+                    ) {
+                        Row(Modifier.background(ML.gold.copy(alpha = 0.14f)).height(IntrinsicSize.Min)) {
+                            b.header.forEachIndexed { i, h ->
+                                if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(ML.border))
                                 Text(
-                                    inline(row.getOrNull(c) ?: ""), style = ml(13), color = ML.bodyInk,
+                                    inline(h), style = ml(13, FontWeight.Bold), color = ML.navy,
                                     lineHeight = 17.sp,
-                                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                                    modifier = Modifier.weight(1f).widthIn(min = minCol)
+                                        .padding(horizontal = 10.dp, vertical = 12.dp),
                                 )
+                            }
+                        }
+                        b.rows.forEach { row ->
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
+                            Row(Modifier.height(IntrinsicSize.Min)) {
+                                (0 until b.header.size).forEach { c ->
+                                    if (c > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(ML.border))
+                                    Text(
+                                        inline(row.getOrNull(c) ?: ""), style = ml(13), color = ML.bodyInk,
+                                        lineHeight = 18.sp,
+                                        modifier = Modifier.weight(1f).widthIn(min = minCol)
+                                            .padding(horizontal = 10.dp, vertical = 12.dp),
+                                    )
+                                }
                             }
                         }
                     }
