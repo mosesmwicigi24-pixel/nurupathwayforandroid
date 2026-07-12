@@ -146,6 +146,8 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     // Nuru (simple / Kiswahili / story chips live inside the dialog). §1.9-gated
     // server-side.
     var explainOpen by remember { mutableStateOf(false) }
+    // Finished modules fold the reflection to what was written; Edit unfolds it.
+    var editingReflection by remember { mutableStateOf(false) }
     if (explainOpen) ExplainDialog(m.moduleId, initialStyle = "simple", onDismiss = { explainOpen = false })
 
     // Read progress from the scroll position; latch "reached end" so scrolling back up
@@ -182,7 +184,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     Box(Modifier.fillMaxSize().background(ML.cream)) {
         Column(Modifier.fillMaxSize().imePadding()) {
             if (!chromeHidden) {
-                Header(m, readMinutes, sectionCount, readDone, reflectDone, onBack = onBack, onExpand = { chromeHidden = true }, onExplain = { explainOpen = true })
+                Header(m, readMinutes, sectionCount, readDone, reflectDone, onBack = onBack, onExpand = { chromeHidden = true }, onExplain = { explainOpen = true }, onRetake = if (m.completed && m.requiresQuiz) ({ flush(); onTakeQuiz(m.moduleId) }) else null)
             }
             // Lesson content
             Column(
@@ -195,7 +197,9 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                     MarkdownView(page)
                 }
                 Spacer(Modifier.height(8.dp))
-                ReflectionCard(
+                if (m.completed && !editingReflection) {
+                    ReflectionFolded(text = reflection) { editingReflection = true }
+                } else ReflectionCard(
                     value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false },
                     saved = reflectSaved,
                     onSave = {
@@ -207,7 +211,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 )
                 Spacer(Modifier.height(24.dp))
             }
-            if (!chromeHidden) {
+            if (!chromeHidden && !m.completed) {
                 BottomGate(
                     doneCount = doneCount, readDone = readDone, reflectDone = reflectDone, complete = complete,
                     requiresQuiz = m.requiresQuiz, passMark = m.quizPassMark, busy = busy, error = error,
@@ -251,7 +255,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
 // ─────────────────────────── Header (chrome-visible) ───────────────────────────
 
 @Composable
-private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDone: Boolean, reflectDone: Boolean, onBack: () -> Unit, onExpand: () -> Unit, onExplain: () -> Unit) {
+private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDone: Boolean, reflectDone: Boolean, onBack: () -> Unit, onExpand: () -> Unit, onExplain: () -> Unit, onRetake: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(ML.headerGrad)
             .padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 20.dp),
@@ -275,7 +279,29 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
             Spacer(Modifier.width(8.dp))
             MetaPill(Icons.Filled.MenuBook, "$sectionCount section" + if (sectionCount == 1) "" else "s")
         }
-        Row(
+        if (m.completed) {
+            // Completed ribbon — ✓ COMPLETED · score · finish time · Retake.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(999.dp))
+                    .background(ML.gold.copy(alpha = 0.14f))
+                    .border(1.dp, ML.gold.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("COMPLETED", style = ml(10, FontWeight.Bold, 1.4f), color = ML.navy)
+                if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
+                m.finishedLine?.let { Spacer(Modifier.width(6.dp)); Text("· $it", style = ml(10), color = ML.secondary, maxLines = 1) }
+                Spacer(Modifier.weight(1f))
+                if (onRetake != null) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(999.dp)).background(ML.navy)
+                            .clickable { onRetake() }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) { Text("Retake", style = ml(11, FontWeight.Bold), color = Color.White) }
+                }
+            }
+        } else Row(
             Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(999.dp)).border(1.dp, ML.border, RoundedCornerShape(999.dp)),
         ) {
             Segment("Read", readDone, Modifier.weight(1f))
@@ -555,6 +581,29 @@ private fun inline(text: String): androidx.compose.ui.text.AnnotatedString = bui
 }
 
 // ─────────────────────────── Reflection card ───────────────────────────
+
+@Composable
+private fun ReflectionFolded(text: String, onEdit: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
+            .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("YOUR REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
+            Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
+            Spacer(Modifier.width(3.dp))
+            Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D))
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(ML.gold.copy(alpha = 0.2f))
+                    .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(999.dp))
+                    .clickable { onEdit() }.padding(horizontal = 12.dp, vertical = 5.dp),
+            ) { Text("Edit", style = ml(11, FontWeight.Bold), color = ML.navy) }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = 22.sp)
+    }
+}
 
 @Composable
 private fun ReflectionCard(value: String, onValue: (String) -> Unit, saved: Boolean, onSave: () -> Unit) {
