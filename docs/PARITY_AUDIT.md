@@ -690,3 +690,29 @@ Flag/MenuBook/Edit/School/Verified/FormatQuote/Bookmark/EmojiEvents; NuruType
 has NO pageTitle/serifBody — use title/rowTitle.copy) + FootprintsStrip;
 WalkRow on hub (new onOpenWalk param) + route "your-walk" in MainShell;
 DTO dateLine regex. compileDebugKotlin green; NO APK (accumulates #22–#30).
+
+## Session 21 — Leadership intelligence: the cockpit learns the waves (pathway#368 · portal DEPLOYED · iPad synced/staged)
+**Backend (pathway#368, no migration, DEPLOYED):** `/admin/analytics/
+intelligence` gains `formation`: totals (verses mastered/learning, plans,
+badges, all-time reading hours, readers_7d), 8-week weekly series
+(modules/reflections/verses/readers via generate_series), reflection stats
++ 8 latest excerpts (≥25 chars), companion counters 7d (echoes,
+welcome_backs, moments, blessings), voice-note coverage per congregation
+(pct of published modules), cells-reading-together (7d readers/members),
+level-exam pass rates. Plus `GET /admin/members/:id/walk` (perm
+members:view) reusing Wave-3 WalkService. 4 tests.
+**LIVE PROOF (prod):** readers_7d=30, 33.8 reading hours, 44 verses
+mastered, 13 badges; last week: 24 reflections + 33 verses + 30 readers;
+21 blessings 7d; Upperroom Media cell 9/10 reading. Voice notes [] (none
+recorded yet — table shows the coverage gap itself).
+**Portal (DEPLOYED, index-DLZO2GVe.js):** Member Intelligence + "Formation
+& companion" section (6-KPI strip, 4-series area chart, Voices of the
+flock excerpts, cells-reading progress bars, voice-note coverage table,
+exams BarList); Member Profile + "Their walk" gold-dot timeline
+(reflection TEXT omitted on that page per its §5.4 stance; excerpts live
+only in the Admin-gated cockpit, mirroring Reflection Queue access).
+**iPad (pathwayforipad d0e84c7):** its admin-web src was a stale #314-era
+mirror with ZERO unique files (verified) — wholesale src+shared rsync from
+pathway @efe5a97, ipad:build + cap sync green, Release App.app built; iPad
+went OFFLINE before install (was reachable earlier for member build 53) —
+staged at /tmp/portal-dd, rerun command in the sync commit message.
