@@ -637,3 +637,31 @@ blocks touch. Android whisper = next pass.
 4 real members already eligible — Jackline's "I'm praying that Holy Spirit
 will open my heart this week…" (6d) meets her on next open. iOS 51 verified
 on-device.
+
+## Session 19 — Companion Wave 2: discipler voice notes + cell presence (pathway#366 · iOS #63/build 52 · Android #29 code-only)
+**Backend (pathway#366, migration 151, DEPLOYED):** `module_voice_notes` —
+ONE note per (module, congregation), Instructor+ records/replaces (upsert),
+author-or-Admin deletes; module payload gains `voice_note {author_name,
+avatar_url, audio_url, duration_sec}` per the member's congregation (outside
+the shared content cache, beside the completion summary); `GET
+/community/presence` = cell-mates in module_engagement within 7d, self
+excluded, ≤3 first names, congregation fallback when cell-less. 6 tests
+(RBAC 403, upsert, cross-congregation invisibility, presence scoping).
+Upload rides the EXISTING `POST /me/media/audio` (multipart m4a, 5 MB).
+**iOS (#63, build 52):** VoiceNoteCard ("A WORD FROM <NAME>", avatar,
+AVPlayer play/pause, gold progress line, verseBg) on the reader's first page
+BEFORE video/audio; VoiceNoteLeaderRow + VoiceRecordSheet (AVAudioRecorder
+AAC m4a mono, 5-min cap, preview/redo, "Share with your congregation");
+CellPresenceLine on the Pathway hub. NSMicrophoneUsageDescription added
+(both configs). Build 52 device-VERIFIED on Pastor's iPhone + Jackline's
+iPhone + the iPad (all three reachable this session).
+**Android (#29, code-only per standing rule):** VoiceNote.kt port — same
+three composables on the EXISTING VoiceRecorder/VoicePlayer engine + the
+existing uploadVoiceNote; ModuleDetail.voiceNote additive; role check via
+me().profile.role in {Instructor, Admin, SuperAdmin} (mirrors the server
+ladder); Material icons (repo has no Lucide-compose). compileDebugKotlin
+green; NO APK — accumulates for the next requested build.
+**PARITY NOTE:** Android module screen shows the card via localVoiceNote
+state after sharing (no full reload); iOS reloads the module. Same visible
+result. Home-echo whisper port + this wave's Android build remain queued
+behind "build android".
