@@ -716,3 +716,38 @@ mirror with ZERO unique files (verified) — wholesale src+shared rsync from
 pathway @efe5a97, ipad:build + cap sync green, Release App.app built; iPad
 went OFFLINE before install (was reachable earlier for member build 53) —
 staged at /tmp/portal-dd, rerun command in the sync commit message.
+
+## Session 22 — REVERSE parity: Android→iOS backport (ios#65 · build 54)
+User: "some Android changes are not on iPhone — celebrate family, welcome
+back card etc." Two-agent deep audit (screens/Home cards + API/DTO
+tolerance), Android→iOS direction. FINDING: iOS Home already HAD every
+Android card incl. CelebrationsRail + HomeEchoCard (wired in feedSections,
+verified line-by-line; live prod moments JSON decodes with the exact iOS
+structs). The REAL differences:
+**(1) Chat voice messages — the one true feature gap.** iOS mic was a dead
+placeholder, received notes an inert "Voice note" pill. Ported: ChatVoice
+.swift (recorder w/ 10 Hz metering→live wave, waveformFor(64), 5-min cap;
+one-at-a-time player; WaveformBars w/ played-fraction fill;
+VoiceMessageBubble), composer recording strip (pulsing dot/wave/clock/
+cancel/send), send = existing uploadVoiceAudio → POST message w/
+{duration, waveform} meta; ChatMessage.attachmentMeta; inbox preview
+"Voice message · 0:42" via new lastDuration.
+**(2) Decode fragility — why Android shows cards iOS drops.** Android DTOs
+default EVERY field; iOS structs were strict and every feed fetch is try?
+— ONE sparse field silently blanks a whole card. Hardened tolerant
+decoders: CommunityMoment, HomeLiturgy, HomeEcho, RhythmToday,
+Achievements.Streak, GrowthScore, ScoresSummary.Overall, VerseReactions,
+PrayerWallPost(+audio_waveform), ChatMessage, PathwaySummary/Level,
+PlanDayReflection; CONFIRMED BUG: null occurs_at sank the whole /me/rsvps
+list (Android had made it nullable; iOS hadn't). GOTCHA: custom
+init(from:) suppresses memberwise inits — re-add them where optimistic UI
+constructs models (ChatMessage pending, RhythmToday default).
+**(3) Device census**: iOS now POSTs me/devices (platform/appVersion/
+model; push_token awaits APNs/paid program) — iPhones finally appear in
+Member Intelligence device analytics.
+**(4)** Home "View all" → real Announcements list (AnnouncementsAllView +
+AppRoute.announcementsList), was the generic inbox.
+NOT ported (deliberate): FirebaseAccountScreen (FCM plumbing). Statement/
+receipt PDFs stay native-rendered on iOS (divergent by design).
+Build 54 verified on Pastor's + Jackline's iPhones; iPad offline (owes 54
++ the staged Nuru Portal build from Session 21).
