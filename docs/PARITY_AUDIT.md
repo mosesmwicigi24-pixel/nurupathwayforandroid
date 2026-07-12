@@ -565,3 +565,9 @@ registered on this Mac — use JAVA_HOME=/opt/homebrew/opt/openjdk@17 directly.
   paragraph; structure untouched) applied to prod DB (8/11 modules) +
   canonical seed (pathway#362); RAG reindexed 1,011→1,273 chunks. Apps render
   from the DB, so text flows on next module open — no client change.
+- **Modules 1–6 structured to the M7 house style (pathway#363):** six parallel
+  reformat passes (headings/#-title/key-verse blockquote/Topic Outline/
+  attributed scripture blockquotes/lists), each verified verbatim by
+  word-stream diff. Prod DB updated (H2 counts M1:9 M2:8 M3:12 M4:14 M5:16
+  M6:11), RAG reindexed (1,275 chunks), canonical seed aligned. Content-only —
+  no app rebuild.
