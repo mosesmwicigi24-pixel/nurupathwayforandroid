@@ -323,13 +323,14 @@ private fun BottomGate(
             if (complete) "All steps done 🎉" else "$doneCount of 2 steps done",
             style = ml(11, FontWeight.Bold), color = if (complete) ML.overline else ML.navy,
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            GateSeg(readDone, Modifier.weight(1f))
-            GateSeg(reflectDone, Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            StepChip("Read", readDone)
-            StepChip("Reflect", reflectDone)
+        // The done state collapses to the celebratory line + CTA; in progress,
+        // the chips alone carry per-step state (the old bar duplicated them and
+        // cost a row of reading space).
+        if (!complete) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                StepChip("Read", readDone)
+                StepChip("Reflect", reflectDone)
+            }
         }
         error?.let { Text(it, style = ml(11), color = Color(0xFFB91C1C)) }
         when {

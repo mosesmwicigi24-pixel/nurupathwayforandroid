@@ -108,7 +108,8 @@ fun ExplainDialog(moduleId: String, initialStyle: String, onDismiss: () -> Unit)
     var style by remember { mutableStateOf(initialStyle) }
     var text by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(moduleId, style) {
+    var retryTick by remember { mutableStateOf(0) }
+    LaunchedEffect(moduleId, style, retryTick) {
         text = null; failed = false
         runCatching { Net.client.api.explainLesson(moduleId, style) }
             .onSuccess { text = it.body }
@@ -142,7 +143,15 @@ fun ExplainDialog(moduleId: String, initialStyle: String, onDismiss: () -> Unit)
                             body, style = LSBody, color = LSInkOnPaper,
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LSPaper).padding(20.dp),
                         )
-                        failed -> Text("Couldn't render this lesson right now.", style = NuruType.body, color = Color.White.copy(alpha = 0.85f))
+                        failed -> Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 20.dp)) {
+                            Text("Couldn't render this lesson right now.", style = NuruType.body, color = Color.White.copy(alpha = 0.85f))
+                            Spacer(Modifier.height(12.dp))
+                            Box(
+                                Modifier.clip(RoundedCornerShape(999.dp)).background(LSGold)
+                                    .clickable { retryTick++ }
+                                    .padding(horizontal = 22.dp, vertical = 10.dp),
+                            ) { Text("Try again", style = NuruType.cardCta, color = Color(0xFF1E2A1F)) }
+                        }
                         else -> LoadingRow("Rendering the lesson…")
                     }
                     Spacer(Modifier.height(26.dp))
