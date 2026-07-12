@@ -436,6 +436,33 @@ private fun MarkdownView(md: String) {
                         }
                     }
                 }
+                is Md.Table -> Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, ML.border, RoundedCornerShape(14.dp)),
+                ) {
+                    Row(Modifier.fillMaxWidth().background(ML.surface).padding(vertical = 9.dp)) {
+                        b.header.forEach { h ->
+                            Text(
+                                inline(h), style = ml(12, FontWeight.Bold), color = ML.navy,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            )
+                        }
+                    }
+                    b.rows.forEachIndexed { r, row ->
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
+                        Row(Modifier.fillMaxWidth().padding(vertical = 9.dp)) {
+                            // Pad/trim to the header width so a ragged row can't crash.
+                            (0 until b.header.size).forEach { c ->
+                                Text(
+                                    inline(row.getOrNull(c) ?: ""), style = ml(13), color = ML.bodyInk,
+                                    lineHeight = 17.sp,
+                                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
                 is Md.Quote -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
                     Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
                     Text("“${b.text}”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
@@ -452,6 +479,7 @@ private sealed interface Md {
     data class Bullet(val items: List<String>) : Md
     data class Numbered(val items: List<String>) : Md
     data class Quote(val text: String) : Md
+    data class Table(val header: List<String>, val rows: List<List<String>>) : Md
     data object Rule : Md
 }
 
@@ -470,6 +498,18 @@ private fun parseMarkdown(text: String): List<Md> {
             t.isEmpty() -> { flush(); i++ }
             t.startsWith("#") -> { flush(); val lvl = t.takeWhile { it == '#' }.length; out.add(Md.Heading(lvl.coerceIn(1, 6), t.dropWhile { it == '#' }.trim())); i++ }
             t == "---" || t == "***" || t == "___" -> { flush(); out.add(Md.Rule); i++ }
+            // GFM pipe table: header row, separator row (---), then data rows.
+            t.startsWith("|") && i + 1 < lines.size && lines[i + 1].trim().let { sep ->
+                sep.startsWith("|") && sep.replace("|", "").replace("-", "").replace(":", "").replace(" ", "").isEmpty() && sep.contains("-")
+            } -> {
+                flush()
+                fun cells(row: String): List<String> = row.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
+                val header = cells(t)
+                i += 2 // skip header + separator
+                val rows = mutableListOf<List<String>>()
+                while (i < lines.size && lines[i].trim().startsWith("|")) { rows.add(cells(lines[i])); i++ }
+                out.add(Md.Table(header, rows))
+            }
             t.startsWith(">") -> { flush(); val sb = StringBuilder(); while (i < lines.size && lines[i].trim().startsWith(">")) { sb.append(lines[i].trim().removePrefix(">").trim()).append(" "); i++ }; out.add(Md.Quote(sb.toString().trim())) }
             t.startsWith("- ") || t.startsWith("* ") || t.startsWith("• ") -> { flush(); val items = mutableListOf<String>(); while (i < lines.size) { val x = lines[i].trim(); if (x.startsWith("- ") || x.startsWith("* ") || x.startsWith("• ")) { items.add(x.drop(2).trim()); i++ } else break }; out.add(Md.Bullet(items)) }
             NUM.containsMatchIn(t) -> { flush(); val items = mutableListOf<String>(); while (i < lines.size) { val x = lines[i].trim(); val mm = NUM.find(x); if (mm != null) { items.add(x.substring(mm.value.length).trim()); i++ } else break }; out.add(Md.Numbered(items)) }
