@@ -618,3 +618,22 @@ Field design request: once finished, the reader should stop gating.
   reflection / Retake the quiz). ALSO: the #60 squash DROPPED a commit (struct
   defs) leaving iOS main uncompilable — restored in #61; lesson: after
   push-then-merge chains, verify main compiles (grep the symbol) before moving on.
+
+## Session 18 — Companion Wave 1: ECHOES (pathway#365 · iOS 51 · Android code-only)
+**"The app remembers me" — deliberately AI-FREE.** echo_log (migration 150,
+PK user+day) + EchoesService, GET /home/echo. Priorities: welcome_back (≥4
+quiet days via module_engagement, 7-day cooldown, Psalm 103 — grace never
+guilt) → reflection_echo (member's OWN words from 6–10 days ago quoted
+verbatim ≤220 chars, each reflection echoes ONCE ever) → anniversary (module
+completed exactly 30 days ago). Craft rules IN CODE: one echo/day (stable
+across refetches), specificity-or-silence (null when nothing true), nothing
+repeats. 5 tests.
+**Clients:** HomeEchoCard (verse-tinted card, serif quote behind a gold rule)
+under the liturgy on both apps; iOS adds the TEN-MINUTE WHISPER — one soft
+navy line slides up after 10 continuous minutes in a lesson (6-line scripture
+pool rotating by day-of-year), holds 9s, fades, once per module open, never
+blocks touch. Android whisper = next pass.
+**LIVE PROOF:** deployed; Moses' echo correctly null (nothing specific true);
+4 real members already eligible — Jackline's "I'm praying that Holy Spirit
+will open my heart this week…" (6d) meets her on next open. iOS 51 verified
+on-device.
