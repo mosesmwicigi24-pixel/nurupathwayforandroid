@@ -148,6 +148,14 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     var explainOpen by remember { mutableStateOf(false) }
     // Finished modules fold the reflection to what was written; Edit unfolds it.
     var editingReflection by remember { mutableStateOf(false) }
+    // Wave 2 — the freshly-shared voice note (until the next module fetch)
+    // and whether this member may leave one (Instructor+, server-enforced).
+    var localVoiceNote by remember { mutableStateOf<org.nuruplace.member.data.net.ModuleVoiceNote?>(null) }
+    var canLeaveVoiceNote by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        canLeaveVoiceNote = runCatching { Net.client.api.me().profile.role }.getOrNull() in
+            setOf("Instructor", "Admin", "SuperAdmin")
+    }
     var showRevisit by remember { mutableStateOf(false) }
     if (showRevisit) {
         androidx.compose.material3.AlertDialog(
@@ -212,6 +220,12 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                // A word from the member's own discipler — the human voice
+                // before any produced media (Wave 2). Leaders can record.
+                (localVoiceNote ?: m.voiceNote)?.let { VoiceNoteCard(it) }
+                if (canLeaveVoiceNote) {
+                    VoiceNoteLeaderRow(m.moduleId, localVoiceNote ?: m.voiceNote) { localVoiceNote = it }
+                }
                 m.keyVerses?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { KeyVerseCard(it) }
                 m.pages.forEachIndexed { i, page ->
                     SectionHeader(i + 1, sectionCount)

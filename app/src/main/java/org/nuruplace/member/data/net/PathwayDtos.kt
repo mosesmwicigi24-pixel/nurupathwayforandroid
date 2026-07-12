@@ -132,6 +132,9 @@ data class ModuleDetail(
     val completed: Boolean = false,
     val completedAt: String? = null,
     @Serializable(with = FlexIntSerializer::class) val bestScore: Int = -1,
+    // A discipler's voice note on this lesson — one per congregation
+    // (companion Wave 2, additive; null on older servers).
+    val voiceNote: ModuleVoiceNote? = null,
 ) {
     val requiresQuiz: Boolean get() = evaluationKind.lowercase().contains("quiz")
 
@@ -282,3 +285,25 @@ data class QuizAnswer(val questionId: String, val givenAnswer: String)
 
 @Serializable
 data class SubmitBody(val clientMutationId: String, val answers: List<QuizAnswer>)
+
+// --- Wave 2: "a word from your discipler" + cell reading presence ---
+@Serializable
+data class ModuleVoiceNote(
+    val authorName: String = "",
+    val avatarUrl: String? = null,
+    val audioUrl: String = "",
+    @Serializable(with = FlexIntSerializer::class) val durationSec: Int = 0,
+)
+
+@Serializable
+data class VoiceNoteBody(val audioUrl: String, val durationSec: Int)
+
+@Serializable
+data class VoiceNoteRes(val noteId: String = "")
+
+@Serializable
+data class CommunityPresence(
+    @Serializable(with = FlexIntSerializer::class) val count: Int = 0,
+    val names: List<String> = emptyList(),
+    val scope: String = "cell",
+)

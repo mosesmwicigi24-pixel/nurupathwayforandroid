@@ -166,6 +166,8 @@ fun PathwayHubScreen(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
+            // Studying together, apart (Wave 2) — renders nothing when quiet.
+            CellPresenceLine()
             JourneyRail(levels, selNum ?: -1, onSelect = { selected = it }, onMap = onOpenMap)
             selLevel?.let { lv ->
                 SelectedModules(
