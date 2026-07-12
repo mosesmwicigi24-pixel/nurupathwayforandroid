@@ -451,6 +451,9 @@ interface MemberApi {
     @GET("home/liturgy")
     suspend fun homeLiturgy(): HomeLiturgy
 
+    @GET("home/echo")
+    suspend fun homeEcho(): HomeEchoEnvelope
+
     @GET("community/moments")
     suspend fun communityMoments(): Envelope<CommunityMoment>
 

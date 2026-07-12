@@ -43,6 +43,9 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.BlessBody
 import org.nuruplace.member.data.net.CommunityMoment
 import org.nuruplace.member.data.net.HomeLiturgy
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import org.nuruplace.member.data.net.HomeEcho
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.feature.community.Avatar
 import org.nuruplace.member.ui.theme.Nuru
@@ -170,6 +173,50 @@ private fun BlessChip(emoji: String, count: Int, mine: Boolean, onTap: () -> Uni
         if (count > 0) {
             Spacer(Modifier.width(4.dp))
             Text("$count", style = NuruType.micro, fontWeight = FontWeight.Bold, color = if (mine) Nuru.navy else Nuru.ink600)
+        }
+    }
+}
+
+// Wave 1 — the echo card: the app remembers you. One moment per day, chosen
+// server-side from the member's own history; renders nothing on null.
+@Composable
+fun HomeEchoCard() {
+    var echo by remember { mutableStateOf<HomeEcho?>(null) }
+    LaunchedEffect(Unit) { echo = runCatching { Net.client.api.homeEcho().echo }.getOrNull() }
+    val e = echo ?: return
+    val kicker = when (e.kind) {
+        "welcome_back" -> "WELCOME BACK"
+        "anniversary" -> "REMEMBER THIS DAY"
+        else -> "NURU REMEMBERS"
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFFFFF8E6))
+            .border(1.dp, LitGold.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("✨", style = NuruType.caption)
+            Spacer(Modifier.width(6.dp))
+            Text(kicker, style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(e.body, style = NuruType.body, color = Nuru.ink)
+        e.quote?.takeIf { it.isNotBlank() }?.let { q ->
+            Spacer(Modifier.height(8.dp))
+            Row {
+                Box(Modifier.width(3.dp).height(IntrinsicSize.Min).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(Nuru.gold))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "“$q”",
+                    style = NuruType.rowTitle.copy(fontSize = 16.sp, lineHeight = 24.sp),
+                    color = Nuru.navy,
+                )
+            }
+        }
+        e.ref?.takeIf { it.isNotBlank() }?.let { r ->
+            Spacer(Modifier.height(6.dp))
+            Text("— $r", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
         }
     }
 }
