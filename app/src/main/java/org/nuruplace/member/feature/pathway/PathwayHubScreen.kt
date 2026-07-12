@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -307,18 +308,33 @@ private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, onT
     val active = level.status == LevelStatus.ACTIVE
     Column(Modifier.width(68.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (active) "▾ You" else " ", style = PW.over(7, 0.7f), color = if (active) PW.gold else Color.Transparent, modifier = Modifier.height(12.dp))
+        // The level NUMBER never leaves the circle — completion becomes a corner
+        // check-seal; locked levels keep their number with a lock-seal.
         Box(contentAlignment = Alignment.Center) {
             if (selected) Box(Modifier.size(54.dp).clip(RoundedCornerShape(999.dp)).border(2.dp, PW.gold, RoundedCornerShape(999.dp)))
-            Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(999.dp))
-                    .background(if (done || active) PW.goldGrad else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg)))
-                    .then(if (active) Modifier.border(2.dp, PW.navy, RoundedCornerShape(999.dp)) else Modifier),
-                contentAlignment = Alignment.Center,
-            ) {
-                when {
-                    done -> Icon(Icons.Filled.Check, null, tint = PW.navy, modifier = Modifier.size(20.dp))
-                    active -> Text("$number", style = PW.t(13, FontWeight.Bold), color = PW.navy)
-                    else -> Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(15.dp))
+            Box(contentAlignment = Alignment.TopEnd) {
+                Box(
+                    Modifier.size(48.dp).clip(RoundedCornerShape(999.dp))
+                        .background(if (done || active) PW.goldGrad else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg)))
+                        .then(if (active) Modifier.border(2.dp, PW.navy, RoundedCornerShape(999.dp)) else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("$number", style = PW.t(15, FontWeight.Bold), color = if (done || active) PW.navy else PW.ink3)
+                }
+                if (done) {
+                    Box(
+                        Modifier.offset(x = 3.dp, y = (-2).dp).size(16.dp)
+                            .clip(RoundedCornerShape(999.dp)).background(PW.navy)
+                            .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(9.dp)) }
+                } else if (!active) {
+                    Box(
+                        Modifier.offset(x = 3.dp, y = (-2).dp).size(16.dp)
+                            .clip(RoundedCornerShape(999.dp)).background(PW.mutedBg)
+                            .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(8.dp)) }
                 }
             }
         }
@@ -392,23 +408,40 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                 .clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier.size(32.dp).clip(RoundedCornerShape(11.dp))
-                    .background(
-                        if (done) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.13f), PW.gold.copy(alpha = 0.13f)))
-                        else if (active) PW.goldGrad
-                        else if (exam) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.10f), PW.gold.copy(alpha = 0.10f)))
-                        else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg)),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                when {
-                    exam && done -> Icon(Icons.Filled.EmojiEvents, null, tint = PW.goldDeep, modifier = Modifier.size(15.dp))
-                    exam && active -> Icon(Icons.Filled.EmojiEvents, null, tint = PW.navy, modifier = Modifier.size(15.dp))
-                    exam -> Icon(Icons.Filled.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(13.dp))
-                    done -> Icon(Icons.Filled.Check, null, tint = PW.goldDeep, modifier = Modifier.size(15.dp))
-                    active -> Icon(Icons.Filled.PlayArrow, null, tint = PW.navy, modifier = Modifier.size(16.dp))
-                    else -> Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(13.dp))
+            // The module NUMBER stays put; state moves to a corner seal. The
+            // exam tile keeps its award identity.
+            Box(contentAlignment = Alignment.TopEnd) {
+                Box(
+                    Modifier.size(32.dp).clip(RoundedCornerShape(11.dp))
+                        .background(
+                            if (done) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.13f), PW.gold.copy(alpha = 0.13f)))
+                            else if (active) PW.goldGrad
+                            else if (exam) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.10f), PW.gold.copy(alpha = 0.10f)))
+                            else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg)),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (exam) Icon(Icons.Filled.EmojiEvents, null, tint = if (active) PW.navy else PW.goldDeep, modifier = Modifier.size(15.dp))
+                    else Text(
+                        "${m.moduleSequenceNumber}",
+                        style = PW.t(13, FontWeight.Bold),
+                        color = if (done) PW.goldDeep else if (active) PW.navy else PW.ink3,
+                    )
+                }
+                if (done) {
+                    Box(
+                        Modifier.offset(x = 4.dp, y = (-3).dp).size(13.dp)
+                            .clip(RoundedCornerShape(999.dp)).background(PW.navy)
+                            .border(1.2.dp, Color.White, RoundedCornerShape(999.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(7.dp)) }
+                } else if (!active) {
+                    Box(
+                        Modifier.offset(x = 4.dp, y = (-3).dp).size(13.dp)
+                            .clip(RoundedCornerShape(999.dp)).background(PW.mutedBg)
+                            .border(1.2.dp, Color.White, RoundedCornerShape(999.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(7.dp)) }
                 }
             }
             Spacer(Modifier.width(12.dp))
