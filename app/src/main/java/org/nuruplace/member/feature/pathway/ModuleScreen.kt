@@ -220,6 +220,9 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 40.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                // Footprints (Wave 3): cell-mates who already walked this
+                // module — quiet proof nobody reads alone. Absent when fresh.
+                FootprintsStrip(m.moduleId)
                 // A word from the member's own discipler — the human voice
                 // before any produced media (Wave 2). Leaders can record.
                 (localVoiceNote ?: m.voiceNote)?.let { VoiceNoteCard(it) }

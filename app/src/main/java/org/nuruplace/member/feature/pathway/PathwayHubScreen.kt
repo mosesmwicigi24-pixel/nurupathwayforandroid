@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -128,6 +129,7 @@ fun PathwayHubScreen(
     onOpenExam: (Int) -> Unit,
     onOpenMentor: () -> Unit,
     onOpenMap: () -> Unit,
+    onOpenWalk: () -> Unit,
 ) {
     var summary by remember { mutableStateOf<PathwaySummary?>(null) }
     var streak by remember { mutableIntStateOf(0) }
@@ -179,6 +181,7 @@ fun PathwayHubScreen(
                 )
             }
             DisciplershipRow(onOpenMentor)
+            WalkRow(onOpenWalk)
             Milestones(levels)
             SummitCard(overallPct, levels, firstName)
             Spacer(Modifier.height(Spacing.tabBarSpace))
@@ -674,5 +677,32 @@ private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: S
                 )
             }
         }
+    }
+}
+
+// Wave 3 — the door into Your Walk ("EVERY STEP, REMEMBERED").
+@Composable
+private fun WalkRow(onTap: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White)
+            .border(1.dp, PW.border, RoundedCornerShape(20.dp))
+            .clickable { onTap() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
+                .background(Brush.linearGradient(listOf(PW.navy, Color(0xFF1B3A5C)))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Flag, contentDescription = null, tint = PW.gold, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("EVERY STEP, REMEMBERED", style = NuruType.micro.copy(fontSize = 8.sp), color = PW.goldDeep, fontWeight = FontWeight.Bold, letterSpacing = 1.28.sp)
+            Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2, maxLines = 1)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = PW.ink3, modifier = Modifier.size(18.dp))
     }
 }

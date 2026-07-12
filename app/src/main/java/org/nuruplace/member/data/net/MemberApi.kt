@@ -447,6 +447,13 @@ interface MemberApi {
     @POST("modules/{id}/quiz/remediation")
     suspend fun quizRemediation(@Path("id") moduleId: String): QuizRemediationRes
 
+    // Wave 3 — footprints on the trail + Your Walk (all counted, never guessed).
+    @GET("modules/{id}/footprints")
+    suspend fun moduleFootprints(@Path("id") moduleId: String): FootprintsRes
+
+    @GET("me/walk")
+    suspend fun myWalk(): WalkRes
+
     // Wave 2 — a discipler's voice on the lesson + studying-together presence.
     @POST("modules/{id}/voice-note")
     suspend fun setModuleVoiceNote(@Path("id") moduleId: String, @Body body: VoiceNoteBody): VoiceNoteRes

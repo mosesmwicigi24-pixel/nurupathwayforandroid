@@ -307,3 +307,39 @@ data class CommunityPresence(
     val names: List<String> = emptyList(),
     val scope: String = "cell",
 )
+
+// --- Wave 3: footprints on the trail + Your Walk ---
+@Serializable
+data class Footprint(
+    val firstName: String = "",
+    val avatarUrl: String? = null,
+    val completedAt: String = "",
+)
+
+@Serializable
+data class FootprintsRes(
+    @Serializable(with = FlexIntSerializer::class) val count: Int = 0,
+    val scope: String = "cell",
+    val footprints: List<Footprint> = emptyList(),
+)
+
+@Serializable
+data class WalkEvent(
+    val kind: String = "",     // began|module|reflection|level|certificate|verse|plan|badge
+    val title: String = "",
+    val detail: String? = null,
+    val quote: String? = null,
+    val occurredAt: String = "",
+) {
+    /** "2 Jul 2026" from the ISO/Postgres timestamp. */
+    val dateLine: String get() {
+        val m = Regex("(\\d{4})-(\\d{2})-(\\d{2})").find(occurredAt) ?: return ""
+        val (y, mo, d) = m.destructured
+        val months = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+        val name = months.getOrNull(mo.toInt() - 1) ?: return ""
+        return "${d.toInt()} $name $y"
+    }
+}
+
+@Serializable
+data class WalkRes(val data: List<WalkEvent> = emptyList())
