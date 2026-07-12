@@ -558,3 +558,10 @@ registered on this Mac — use JAVA_HOME=/opt/homebrew/opt/openjdk@17 directly.
   (header row + `|---|` separator detection) + Md.Table renderer: bordered
   14dp-radius table, bold header on ML.surface, hairline row dividers,
   weight(1f) wrapping cells, ragged rows padded to header width.
+- **Content reflow (both apps, no rebuild):** Level 1 lesson bodies carried
+  `\n\n` paragraph breaks MID-SENTENCE (docx→text import artifact — verified
+  at byte level in prod). Conservative joiner (merge only lowercase-starting
+  blocks or orphaned `(citation)` blocks; `N)` markers get their own
+  paragraph; structure untouched) applied to prod DB (8/11 modules) +
+  canonical seed (pathway#362); RAG reindexed 1,011→1,273 chunks. Apps render
+  from the DB, so text flows on next module open — no client change.
