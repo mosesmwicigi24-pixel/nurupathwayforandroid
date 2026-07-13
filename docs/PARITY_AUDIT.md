@@ -985,3 +985,13 @@ card right under the greeting header. The thin ON AIR radio bar stays pinned
 ABOVE it while a broadcast is live (never bury the live station); with no
 broadcast the video is the first card after the header. Member surface only,
 NO backend. iOS build 68 on iPhone17 (launched) + iPad; Android compiles.
+
+## Session 34 — verse of the day leads the feed (ios#77 · android#37)
+Owner: "put the verse of the day below the header card." The verse tableau
+now leads the feed — first card under the greeting, followed by the featured
+welcome video (Session 33). Order: header → ON AIR (live only, pinned) →
+VERSE → featured video → liturgy → … Member surface only, NO backend. iOS
+build 69 on iPhone17 (launched) + iPad; Android compiles (block relocated
+via brace-balanced move, single verse?.let confirmed). NOTE the running
+order of top-of-home requests this session: video-to-top (S33) then
+verse-to-top (S34) → verse ends up first, video second.
