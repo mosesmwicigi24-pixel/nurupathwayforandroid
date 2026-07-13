@@ -965,3 +965,14 @@ Box + AsyncImage matchParentSize + Shadow in TextStyle. iOS verified in-sim
 "Good evening" agreeing). DEPLOYED to prod (image 14:50Z, /home/liturgy
 returns art). iOS build 66 on Pastor's iPhone (launched) + iPad. Android
 compileDebugKotlin clean (no APK per build pref).
+
+## Session 32 — Nuru Pathway featured on the liturgy card (ios#75 · android#35)
+Owner: "make the nuru pathway featured next to evening ordinary." The
+liturgy card's hour kicker now carries the brand lockup right beside it:
+"EVENING · ORDINARY  [gold mark] Nuru Pathway ✓" (iOS uses the "N"
+BrandMark, Android the "✝" mark — each platform's own brand glyph). Member
+surface only, NO backend. First attempt kept the scripture ref on the top
+row → both truncated ("EVENING · OR…" / "Psalm 139:23…"); fix = move the
+citation to a right-aligned chip UNDER the prayer line so the hour + brand
+own the top row. Verified in-sim (evening tableau, full brand, no
+truncation). iOS build 67 on iPhone17 (launched) + iPad; Android compiles.
