@@ -213,6 +213,16 @@ fun HomeScreen(
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
+                // 0 · Featured welcome video — right under the header (owner ask); it
+                // IS the "start here" moment, so it leads the feed. The thin ON AIR
+                // bar stays pinned above it while a broadcast is live.
+                welcomeVideo?.let { w ->
+                    Entrance(entrance, 0) {
+                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
+                            if (w.isExternal) Unit else videoPlaying = true
+                        }, onExternal = { url -> })
+                    }
+                }
                 // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
                 letter?.takeIf { it.isUnread }?.let { lt ->
                     LetterKnockCard(lt) { showLetter = true }
@@ -228,13 +238,6 @@ fun HomeScreen(
                 next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
                 if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
-                welcomeVideo?.let { w ->
-                    Entrance(entrance, 5) {
-                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
-                            if (w.isExternal) Unit else videoPlaying = true
-                        }, onExternal = { url -> })
-                    }
-                }
                 verse?.let { v ->
                     Entrance(entrance, 6) {
                         VerseCard(
