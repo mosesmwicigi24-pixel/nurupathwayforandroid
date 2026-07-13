@@ -73,6 +73,9 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.data.net.PathwaySummary
 import org.nuruplace.member.ui.components.FitImage
+import org.nuruplace.member.ui.components.HomeSkeleton
+import org.nuruplace.member.ui.components.NuruRefreshBox
+import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
@@ -135,10 +138,19 @@ fun PathwayHubScreen(
     var streak by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<Int?>(null) }
     var modulesByLevel by remember { mutableStateOf<Map<Int, List<LevelModule>>>(emptyMap()) }
+    // One tick per full load — pull-to-refresh bumps it; `hubLoaded` keeps the
+    // first-paint skeleton from returning once the wire has answered.
+    var refreshTick by remember { mutableIntStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
+    var hubLoaded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTick) {
         summary = runCatching { Net.client.api.pathway() }.getOrNull()
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
+        // On refresh, drop the module cache — the trail effect below refetches.
+        if (refreshTick > 0) modulesByLevel = emptyMap()
+        refreshing = false
+        hubLoaded = true
     }
 
     val levels = summary?.levels ?: emptyList()
@@ -147,7 +159,7 @@ fun PathwayHubScreen(
     val selNum = selected ?: active?.levelNumber
     val selLevel = levels.firstOrNull { it.levelNumber == selNum } ?: active
 
-    LaunchedEffect(selNum) {
+    LaunchedEffect(selNum, modulesByLevel) {
         val n = selNum ?: return@LaunchedEffect
         if (modulesByLevel[n] == null) {
             val mods = runCatching { Net.client.api.levelModules(n).data }.getOrDefault(emptyList())
@@ -162,29 +174,37 @@ fun PathwayHubScreen(
     val activeMods = modulesByLevel[active?.levelNumber]
     val resume = activeMods?.let { it.firstOrNull { m -> m.status == ModuleStatus.NEXT } ?: it.firstOrNull { m -> !m.completed } ?: it.lastOrNull() }
 
-    Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
-        HubHeader(firstName, streak, active, levels, overallPct, resume, onOpenModule)
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            // Studying together, apart (Wave 2) — renders nothing when quiet.
-            CellPresenceLine()
-            JourneyRail(levels, selNum ?: -1, onSelect = { selected = it }, onMap = onOpenMap)
-            selLevel?.let { lv ->
-                SelectedModules(
-                    level = lv,
-                    modules = modulesByLevel[lv.levelNumber] ?: emptyList(),
-                    loading = modulesByLevel[lv.levelNumber] == null,
-                    onOpenModule = onOpenModule,
-                    onOpenExam = onOpenExam,
-                )
+    NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
+        Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
+            HubHeader(firstName, streak, active, levels, overallPct, resume, onOpenModule)
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                // First paint before the pathway summary lands → hold the hub's
+                // shape instead of an empty page.
+                if (!hubLoaded && summary == null) {
+                    HomeSkeleton()
+                    return@Column
+                }
+                // Studying together, apart (Wave 2) — renders nothing when quiet.
+                CellPresenceLine()
+                JourneyRail(levels, selNum ?: -1, onSelect = { selected = it }, onMap = onOpenMap)
+                selLevel?.let { lv ->
+                    SelectedModules(
+                        level = lv,
+                        modules = modulesByLevel[lv.levelNumber] ?: emptyList(),
+                        loading = modulesByLevel[lv.levelNumber] == null,
+                        onOpenModule = onOpenModule,
+                        onOpenExam = onOpenExam,
+                    )
+                }
+                DisciplershipRow(onOpenMentor)
+                WalkRow(onOpenWalk)
+                Milestones(levels)
+                SummitCard(overallPct, levels, firstName)
+                Spacer(Modifier.height(Spacing.tabBarSpace))
             }
-            DisciplershipRow(onOpenMentor)
-            WalkRow(onOpenWalk)
-            Milestones(levels)
-            SummitCard(overallPct, levels, firstName)
-            Spacer(Modifier.height(Spacing.tabBarSpace))
         }
     }
 }
@@ -408,7 +428,7 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
     }
     Column {
         Row(
-            Modifier.fillMaxWidth()
+            Modifier.fillMaxWidth().pressScale(0.98f)
                 .background(if (active) PW.gold.copy(alpha = 0.05f) else if (exam) PW.gold.copy(alpha = 0.03f) else Color.Transparent)
                 .clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -514,7 +534,7 @@ private fun SurrenderFigure() {
 @Composable
 private fun DisciplershipRow(onTap: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(20.dp)).clickable { onTap() }.padding(14.dp),
+        Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(20.dp)).clickable { onTap() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldGrad), contentAlignment = Alignment.Center) {
@@ -684,7 +704,7 @@ private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: S
 @Composable
 private fun WalkRow(onTap: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White)
+        Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(20.dp)).background(Color.White)
             .border(1.dp, PW.border, RoundedCornerShape(20.dp))
             .clickable { onTap() }
             .padding(14.dp),

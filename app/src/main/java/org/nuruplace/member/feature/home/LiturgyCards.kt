@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,6 +49,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import org.nuruplace.member.data.net.HomeEcho
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.feature.community.Avatar
+import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 
@@ -161,11 +164,12 @@ private fun MomentCard(m: CommunityMoment, onBless: (String) -> Unit) {
 
 @Composable
 private fun BlessChip(emoji: String, count: Int, mine: Boolean, onTap: () -> Unit) {
+    val view = LocalView.current
     Row(
-        Modifier.clip(RoundedCornerShape(999.dp))
+        Modifier.pressScale().clip(RoundedCornerShape(999.dp))
             .background(if (mine) LitGold.copy(alpha = 0.35f) else Nuru.tintBlue)
             .border(1.dp, if (mine) Color(0xFFC9A227).copy(alpha = 0.6f) else Color.Transparent, RoundedCornerShape(999.dp))
-            .clickable { onTap() }
+            .clickable { Haptics.tap(view); onTap() }
             .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

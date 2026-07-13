@@ -6,6 +6,9 @@
 // announcement, continue-level, progress ring, grow grid, upcoming, cohort, give.
 package org.nuruplace.member.feature.home
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,10 +82,13 @@ import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.ui.components.FitImage
+import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideo
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.Moment
+import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.openExternal
+import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
@@ -125,7 +133,12 @@ fun HomeScreen(
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    // One tick per full load — pull-to-refresh bumps it to re-run the batch;
+    // `loadedOnce` keeps the skeleton from ever returning after first paint.
+    var refreshTick by remember { mutableIntStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
+    var loadedOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshTick) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
         // Nuru's daily word — a blessing written for THIS member (server-side,
         // grounded in their streak/level/prayers, cached per day). iOS parity.
@@ -149,6 +162,8 @@ fun HomeScreen(
         val from = today.toString()
         val to = today.plusDays(45).toString()
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
+        refreshing = false
+        loadedOnce = true
 
         // Human moments — REAL server-truth milestones only; keys remember (once each).
         if ((rhythm?.doneCount ?: 0) >= 3) CelebrationCenter.fire(Moment("rhythm-$today", "Today's rhythm complete", "Prayer, Word and reflection — all before the day ended."))
@@ -161,102 +176,118 @@ fun HomeScreen(
     val pendingSync by Net.client.offline.pending.collectAsState()
     val level = me?.enrollment?.currentLevel ?: 1
     val reflectionDue = rhythm?.reflection == false
+    // Entrance choreography — the decision is captured once and the process
+    // flag flips, so a later return to Home composes instantly.
+    val entrance = remember { (!homeEntrancePlayed).also { homeEntrancePlayed = true } }
 
-    Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
-        HomeHeader(
-            firstName = me?.profile?.fullName?.substringBefore(' ') ?: "friend",
-            streak = streak?.streak?.current ?: 0,
-            level = level,
-            overallPct = scores?.overall?.score ?: 0,
-            trend = scores?.trend,
-            personalWord = personalWord,
-            onBell = onOpenNotifications,
-            onRadio = { onNavigate("radio") },
-        )
+    NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
+        Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
+            HomeHeader(
+                firstName = me?.profile?.fullName?.substringBefore(' ') ?: "friend",
+                streak = streak?.streak?.current ?: 0,
+                level = level,
+                overallPct = scores?.overall?.score ?: 0,
+                trend = scores?.trend,
+                personalWord = personalWord,
+                onBell = onOpenNotifications,
+                onRadio = { onNavigate("radio") },
+            )
 
-        Column(
-            // 20dp between feed cards (iOS build-31 warmth) — the 16dp base read
-            // congested with this many cards; each one gets room to breathe.
-            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            if (pendingSync > 0) {
-                Text(
-                    "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
-                    style = NuruType.micro, color = Nuru.eyebrow,
-                )
-            }
-            radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-            // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
-            letter?.takeIf { it.isUnread }?.let { lt ->
-                LetterKnockCard(lt) { showLetter = true }
-                if (showLetter) {
-                    LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+            Column(
+                // 20dp between feed cards (iOS build-31 warmth) — the 16dp base read
+                // congested with this many cards; each one gets room to breathe.
+                Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                if (pendingSync > 0) {
+                    Text(
+                        "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
+                        style = NuruType.micro, color = Nuru.eyebrow,
+                    )
                 }
+                // First paint with nothing loaded yet → hold the page's shape (no
+                // spinner, no pop); cards stagger in once the wire answers.
+                if (!loadedOnce && rhythm == null && next == null && verse == null && streak == null) {
+                    HomeSkeleton()
+                    Spacer(Modifier.height(Spacing.tabBarSpace))
+                    return@Column
+                }
+                radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
+                // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
+                letter?.takeIf { it.isUnread }?.let { lt ->
+                    LetterKnockCard(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+                    }
+                }
+                // 0c · The hour's prayer line (liturgy, Phase 4).
+                Entrance(entrance, 0) { LiturgyCard() }
+                // 0d · Today's echo — the app remembers you (Wave 1).
+                Entrance(entrance, 1) { HomeEchoCard() }
+                if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
+                next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
+                rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
+                welcomeVideo?.let { w ->
+                    Entrance(entrance, 5) {
+                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
+                            if (w.isExternal) Unit else videoPlaying = true
+                        }, onExternal = { url -> })
+                    }
+                }
+                verse?.let { v ->
+                    Entrance(entrance, 6) {
+                        VerseCard(
+                            v = v,
+                            reactions = verseReactions,
+                            saved = verseSaved,
+                            onReact = { emoji ->
+                                scope.launch {
+                                    runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
+                                        .onSuccess { verseReactions = it }
+                                }
+                            },
+                            onSave = {
+                                if (!verseSaved) scope.launch {
+                                    runCatching {
+                                        Net.client.api.saveVerse(
+                                            VerseUpsertBody(
+                                                savedVerseId = java.util.UUID.randomUUID().toString(),
+                                                reference = v.reference,
+                                                version = v.version,
+                                                verseText = v.text,
+                                                clientMutationId = java.util.UUID.randomUUID().toString(),
+                                            ),
+                                        )
+                                    }.onSuccess { verseSaved = true }
+                                }
+                            },
+                            onShare = {
+                                val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
+                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                }
+                                context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                            },
+                        )
+                    }
+                }
+                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                // 5b · Celebrate the family (moments, Phase 4).
+                CelebrationsRail()
+                MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
+                featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
+                if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }
+                announcement?.let { a -> FeaturedAnnouncementCard(a, onAll = { onNavigate("announcements") }, onOpen = { onNavigate("announcement/${a.announcementId}") }) }
+                ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
+                scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
+                GrowSection(onNavigate)
+                featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
+                UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
+                EncouragementCard(prayers.size)
+                CohortSection(cohort) { onNavigate("cell-info") }
+                GiveCard { onSelectTab("give") }
+                Spacer(Modifier.height(Spacing.tabBarSpace))
             }
-            // 0c · The hour's prayer line (liturgy, Phase 4).
-            LiturgyCard()
-            // 0d · Today's echo — the app remembers you (Wave 1).
-            HomeEchoCard()
-            if (reflectionDue) next?.let { ReflectionStrip(it) { onNavigate(routeFor(it)) } }
-            next?.let { ResumeHero(it, level) { onNavigate(routeFor(it)) } }
-            rhythm?.let { RhythmCard(it, streak?.streak?.current ?: 0) }
-            welcomeVideo?.let {
-                FeaturedVideo(it, videoPlaying, onPlay = { playable ->
-                    if (it.isExternal) Unit else videoPlaying = true
-                }, onExternal = { url -> })
-            }
-            verse?.let { v ->
-                VerseCard(
-                    v = v,
-                    reactions = verseReactions,
-                    saved = verseSaved,
-                    onReact = { emoji ->
-                        scope.launch {
-                            runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
-                                .onSuccess { verseReactions = it }
-                        }
-                    },
-                    onSave = {
-                        if (!verseSaved) scope.launch {
-                            runCatching {
-                                Net.client.api.saveVerse(
-                                    VerseUpsertBody(
-                                        savedVerseId = java.util.UUID.randomUUID().toString(),
-                                        reference = v.reference,
-                                        version = v.version,
-                                        verseText = v.text,
-                                        clientMutationId = java.util.UUID.randomUUID().toString(),
-                                    ),
-                                )
-                            }.onSuccess { verseSaved = true }
-                        }
-                    },
-                    onShare = {
-                        val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
-                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
-                        }
-                        context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
-                    },
-                )
-            }
-            if (prayers.isNotEmpty()) PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") })
-            // 5b · Celebrate the family (moments, Phase 4).
-            CelebrationsRail()
-            MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
-            featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
-            if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }
-            announcement?.let { a -> FeaturedAnnouncementCard(a, onAll = { onNavigate("announcements") }, onOpen = { onNavigate("announcement/${a.announcementId}") }) }
-            ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
-            scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
-            GrowSection(onNavigate)
-            featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
-            UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
-            EncouragementCard(prayers.size)
-            CohortSection(cohort) { onNavigate("cell-info") }
-            GiveCard { onSelectTab("give") }
-            Spacer(Modifier.height(Spacing.tabBarSpace))
         }
     }
 }
@@ -515,7 +546,7 @@ private fun ResumeHero(a: NextAction, level: Int, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(Spacing.md))
         Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onClick() }.padding(vertical = 14.dp),
+            Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onClick() }.padding(vertical = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text((a.ctaLabel.ifBlank { "Continue" }) + "  ›", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold)
@@ -662,7 +693,7 @@ private fun VerseCard(
             }
             Spacer(Modifier.width(4.dp))
             Row(
-                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+                Modifier.pressScale().clip(RoundedCornerShape(999.dp)).background(Nuru.white)
                     .border(1.dp, if (saved) Nuru.gold else Nuru.border, RoundedCornerShape(999.dp))
                     .clickable { onSave() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -673,7 +704,7 @@ private fun VerseCard(
                 Text(if (saved) "Saved" else "Save", style = NuruType.micro, color = if (saved) Nuru.gold else Nuru.navy, fontWeight = FontWeight.SemiBold)
             }
             Row(
-                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+                Modifier.pressScale().clip(RoundedCornerShape(999.dp)).background(Nuru.white)
                     .border(1.dp, Nuru.border, RoundedCornerShape(999.dp))
                     .clickable { onShare() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1137,7 +1168,7 @@ private fun GiveCard(onGive: () -> Unit) {
                 )
                 Spacer(Modifier.height(Spacing.base))
                 Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onGive() }.padding(vertical = 14.dp),
+                    Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onGive() }.padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) { Text("🤲  Give now  ›", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold) }
                 Spacer(Modifier.height(Spacing.sm))
@@ -1145,6 +1176,27 @@ private fun GiveCard(onGive: () -> Unit) {
             }
         }
     }
+}
+
+// ─────────────────────────── entrance ───────────────────────────
+
+// The Home entrance plays ONCE per process — back-navigation and tab returns
+// must not replay the choreography.
+private var homeEntrancePlayed = false
+
+/** Fade + 12dp rise, 40ms stagger by [index]; a plain pass-through once the
+ *  moment has passed. graphicsLayer only — zero layout shift after settling. */
+@Composable
+private fun Entrance(play: Boolean, index: Int, content: @Composable () -> Unit) {
+    if (!play) { content(); return }
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(index * 40L); settled = true }
+    val t by animateFloatAsState(
+        targetValue = if (settled) 1f else 0f,
+        animationSpec = tween(320, easing = FastOutSlowInEasing),
+        label = "homeEntrance",
+    )
+    Box(Modifier.graphicsLayer { alpha = t; translationY = (1f - t) * 12.dp.toPx() }) { content() }
 }
 
 // ─────────────────────────── helpers ───────────────────────────

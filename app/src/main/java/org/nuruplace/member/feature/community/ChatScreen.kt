@@ -74,6 +74,7 @@ import org.nuruplace.member.data.net.DiscoverSpace
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.ListSkeleton
 import java.time.LocalTime
 
 private val Capsule = RoundedCornerShape(999.dp)
@@ -94,7 +95,7 @@ fun ChatInboxScreen(
     onOpenNotifications: () -> Unit,
     isStaff: Boolean = false,
 ) {
-    AsyncContent(load = {
+    AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, load = {
         val inbox = Net.client.api.chatInbox()
         val people = runCatching { Net.client.api.chatPeople(null).people }.getOrDefault(emptyList())
         val name = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("")
