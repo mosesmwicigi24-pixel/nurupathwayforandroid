@@ -859,3 +859,16 @@ last iOS-only member feature. Android APK debt now #31-#32 since 2.16.0.
 Jackline (55) + iPad (56) offline this round — profiles all fresh from
 this week, they catch up on next reachability. TEST GOTCHAS: radio_programs
 uses id not program_id; category CHECK is capitalized ('Sermon').
+
+## Session 27 — Home cards fusing (ios#69 · build 58)
+Owner screenshot: ON AIR/liturgy/echo cards fused (~3pt gaps). ROOT CAUSE:
+the staggered-entrance 12pt rise (Session 24) could strand on rows after a
+scheduling race — measured gap 20−12=8pt, the confession number. FIX:
+1.8s after the rise, feedStaged flips false inside a disablesAnimations
+Transaction → all rows' offset/opacity become plain zeros, nothing left
+to mis-evaluate. PIXEL-verified (PIL scan at card-edge x=60: all gaps
+≥17.3pt page fill, none fused). Android immune — its entrance is
+graphicsLayer-only (no layout participation). DEBUG LESSON: eyeballing
+screenshot gaps misleads (ink text classifies as card fill) — scan card
+EDGES with exact fill colors. Build 58 → iPad ✓; Pastor+Jackline pending
+reachability.
