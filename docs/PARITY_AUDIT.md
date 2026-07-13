@@ -943,3 +943,25 @@ RoundedCornerShape(20.dp)` (HomeCard shares the literal) and corrupted the
 primitive — reverted the file and redid the VerseCard restructure with
 targeted Edits; lesson: never sed/python-replace a non-unique anchor in
 a large Compose file, use the Edit tool with surrounding context.
+
+## Session 31 — the liturgy hour beheld (pathway#373 · ios#74 · android#34)
+Owner: "in the ordinary can we have images change based on time of day —
+morning/noon/evening/night — like the verse?" The liturgy card now carries
+a PHOTOGRAPH of the hour it names. BACKEND (pathway#373): liturgy.ts gains
+LITURGY_ART (4 curated images per part) + pickLiturgyArt(part, dayKey) —
+deterministic per (part, EAT day) so the whole congregation shares the
+day's tableau and it rotates daily; current() returns art:{url,alt}. Since
+`part` IS the clock, the image tracks morning→dawn, midday→bright sky,
+evening→golden sunset, night→starfield. 16 images verified live AND
+visually reviewed on a per-part proof sheet — the review CAUGHT mislabels
+(a sleeping person + a spice board tagged morning; a knife board +
+eucalyptus tagged evening; mailboxes tagged midday) and replaced them.
+5/5 liturgy tests. CLIENTS: image behind a navy scrim (0.42→0.84) with the
+kicker + serif line shadowed for legibility over bright noon skies; owned+
+clipped frame (ios#72 ornament rule); falls back to the classic navy card
+offline. iOS: litBackground @ViewBuilder in LiturgyCards.swift; Android:
+Box + AsyncImage matchParentSize + Shadow in TextStyle. iOS verified in-sim
+(evening → golden wheat sunset under "EVENING · ORDINARY", header greeting
+"Good evening" agreeing). DEPLOYED to prod (image 14:50Z, /home/liturgy
+returns art). iOS build 66 on Pastor's iPhone (launched) + iPad. Android
+compileDebugKotlin clean (no APK per build pref).
