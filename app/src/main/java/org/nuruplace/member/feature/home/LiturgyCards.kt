@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -98,15 +99,40 @@ fun LiturgyCard() {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(partEmoji, style = NuruType.body)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(7.dp))
                 Text(
                     if (l.isSunday) "SUNDAY · $partLabel" else "$partLabel · ${l.season.uppercase()}",
                     style = NuruType.micro.copy(shadow = if (art != null) textShadow else null),
                     color = if (art != null) Color(0xFFF2DDA0) else LitGold,
-                    fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, maxLines = 1,
                 )
+                // Featured brand — this daily liturgy is Nuru Pathway's.
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Nuru.goldGradient),
+                    contentAlignment = Alignment.Center,
+                ) { Text("✝", color = Color.White, style = NuruType.micro) }
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Nuru Pathway",
+                    style = NuruType.micro.copy(shadow = if (art != null) textShadow else null),
+                    color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                )
+                Text("  ✔", style = NuruType.micro, color = Color(0xFFF2DDA0))
                 Spacer(Modifier.weight(1f))
-                l.scriptureRef?.let { ref ->
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                l.line,
+                style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp, shadow = if (art != null) textShadow else null),
+                color = Color.White,
+            )
+            // The citation rests under the line, right-aligned — the hour + brand
+            // own the top row without crowding (iOS parity).
+            l.scriptureRef?.let { ref ->
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
                     Text(
                         ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clip(RoundedCornerShape(999.dp))
@@ -115,12 +141,6 @@ fun LiturgyCard() {
                     )
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                l.line,
-                style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp, shadow = if (art != null) textShadow else null),
-                color = Color.White,
-            )
         }
     }
 }
