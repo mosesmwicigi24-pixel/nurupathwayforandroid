@@ -841,3 +841,21 @@ surprisingly flat (16-20th heaviest by count); cohorts Jun 16→11 active
 — a leadership finding); 12 untouched members; radio 18 weekly listeners.
 TEST GOTCHA: resetDb truncates migration-seeded lookups — tests must
 re-seed device_tiers rows.
+
+## Session 26 — C-layer CLOSED (pathway#371 deployed mig 155 · ios#68/build 57 · android#32 code-only)
+The last gap of the A+B+C program. **Backend:** radio_listeners
+.listen_seconds accumulated by the EXISTING 20s player heartbeat
+(elapsed-since-last-beat LEAST-capped 60s — resumed sessions can't book
+the gap); client_devices.network via me/devices (COALESCE keeps last
+known when clients omit); economics.connectivity split + radio
+minutes_all_time in the cockpit. KEY INSIGHT: radio minutes needed ZERO
+client work — the heartbeat was already there. **iOS (#68, build 57 on
+Pastor's phone):** one-shot NWPathMonitor sample (1s cap, Task.detached
+off the login path) → network on registration. **Android (#32):** same
+via ConnectivityManager (ACCESS_NETWORK_STATE added to manifest) + THE
+TEN-MINUTE WHISPER PORTED (600s → one of the six iOS lines, stable per
+module via floorMod hash, 9s fade, Fraunces italic on verse-bg) — the
+last iOS-only member feature. Android APK debt now #31-#32 since 2.16.0.
+Jackline (55) + iPad (56) offline this round — profiles all fresh from
+this week, they catch up on next reachability. TEST GOTCHAS: radio_programs
+uses id not program_id; category CHECK is capitalized ('Sermon').
