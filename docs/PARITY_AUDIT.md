@@ -976,3 +976,12 @@ row → both truncated ("EVENING · OR…" / "Psalm 139:23…"); fix = move the
 citation to a right-aligned chip UNDER the prayer line so the hour + brand
 own the top row. Verified in-sim (evening tableau, full brand, no
 truncation). iOS build 67 on iPhone17 (launched) + iPad; Android compiles.
+
+## Session 33 — featured welcome video leads the feed (ios#76 · android#36)
+Owner: "move this [Nuru Pathway FEATURED video] after the top/header card."
+The welcome video was buried ~7 cards down (below liturgy/echo/hero/rhythm/
+plan-resume); it's the "start here" moment, so it now leads the feed — first
+card right under the greeting header. The thin ON AIR radio bar stays pinned
+ABOVE it while a broadcast is live (never bury the live station); with no
+broadcast the video is the first card after the header. Member surface only,
+NO backend. iOS build 68 on iPhone17 (launched) + iPad; Android compiles.
