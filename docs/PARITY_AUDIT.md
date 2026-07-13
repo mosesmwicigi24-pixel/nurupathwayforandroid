@@ -815,3 +815,29 @@ confirm); staggered entrance (process flag, graphicsLayer-only).
 ✓ AND the staged Nuru Portal wrap (leadership intelligence cockpit)
 INSTALLED ✓ (Session 21 debt cleared). Jackline offline this round (on
 55; takes 56 when reachable). Android APK still parked (#22–#31 pending).
+
+## Session 25 — Analytics A+B+C SHIPPED (pathway#370 · migrations 153+154 · portal+iPad live)
+Executes the approved decision report in full. **A:** device_tiers lookup
+(~40 ILIKE patterns, longest wins, unmatched='unclassified'; ETHICS:
+aggregate capacity proxy only) + economics block (tiers, giving_by_tier
+via highest-tier-per-member DISTINCT ON, payday day-of-month buckets,
+provider split). **B:** auth_events (migration 154) + fire-and-forget
+INSERT at issueSession = true login telemetry; notification effectiveness
+derived from existing notifications.read_at (sent/read/median-min).
+**C (server-side):** reachout.untouched — zero inbound blessings/prayers
+30d visit list (pw.author_user_id NOT user_id — gotcha); radio reach.
+C client heartbeats (radio minutes, network sampling) RIDE THE NEXT APP
+BUILDS — not yet in clients.
+**Portal:** "Congregational economics" (tier donut NAVY/GOLD/TEAL, giving-
+by-capacity + widow's-mite line, payday BarChart, providers) + "Retention
+& reachout" (login KPIs w/ capturing-from-today, cohort bars, care list,
+radio); span-8 grid added. Deployed (index-Cx3wCZku.js); iPad wrap
+re-synced + INSTALLED.
+**FIRST LIVE READ (prod):** tiers 7 premium/14 mid/29 entry/1 unclassified;
+giving: premium 5 givers KES 20,640 of 16 gifts vs mid 1×KES 200 vs entry
+3×KES 3,200 — capacity-giving correlation REAL; 100% M-Pesa; payday spread
+surprisingly flat (16-20th heaviest by count); cohorts Jun 16→11 active
+(69%), Jul 41→22 (54%); notifications 163 sent/25 read (15%!, median 13.9h
+— a leadership finding); 12 untouched members; radio 18 weekly listeners.
+TEST GOTCHA: resetDb truncates migration-seeded lookups — tests must
+re-seed device_tiers rows.
