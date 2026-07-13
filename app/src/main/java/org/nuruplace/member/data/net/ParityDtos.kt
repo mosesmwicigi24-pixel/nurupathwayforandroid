@@ -3,6 +3,8 @@
 // Models + MemberAPI. snake_case via the global Json naming strategy.
 package org.nuruplace.member.data.net
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 // --- Auth ---
@@ -290,12 +292,17 @@ data class EventCheckInResult(val attendanceId: String = "", val duplicate: Bool
 data class LocationBody(val lat: Double, val lng: Double)
 
 // --- Device registration (FCM push token, §D-M9) ---
+// `network` is a one-shot census sample ("wifi" | "cellular" | "other") — the
+// server field is plain optional, so an unknown sample is OMITTED, not null
+// (EncodeDefault(NEVER) overrides the client's global encodeDefaults = true).
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class DeviceBody(
     val platform: String = "android",
     val appVersion: String? = null,
     val model: String? = null,
     val pushToken: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val network: String? = null,
 )
 
 // --- Radio (member player) ---

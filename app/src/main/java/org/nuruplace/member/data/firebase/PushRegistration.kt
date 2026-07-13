@@ -38,7 +38,7 @@ fun PushRegistration() {
         }
 
         val token = runCatching { fcmToken() }.getOrNull() ?: return@LaunchedEffect
-        runCatching { Net.client.api.registerDevice(NuruMessagingService.deviceBody(token)) }
+        runCatching { Net.client.api.registerDevice(NuruMessagingService.deviceBody(context, token)) }
     }
 }
 

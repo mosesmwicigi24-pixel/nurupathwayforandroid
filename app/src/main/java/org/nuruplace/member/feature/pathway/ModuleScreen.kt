@@ -9,6 +9,10 @@
 // completion + unlocking (§1.1). Uses a screen-local `ML` palette to match iOS 1:1.
 package org.nuruplace.member.feature.pathway
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -86,6 +90,8 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.SaveReflectionBody
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
 
 // Screen-local palette — iOS `enum ML` (ModuleView.swift), distinct from global Nuru.
@@ -105,6 +111,18 @@ private object ML {
     val goldGrad = Brush.linearGradient(listOf(gold, goldDeep))
     val headerGrad = Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
 }
+
+// The margin companion (Wave 1, iOS ModuleView.whisperLines verbatim): ONE soft
+// whisper per module open, after ten faithful minutes of reading. Scarcity is
+// what makes it land.
+private val WhisperLines = listOf(
+    "Ten quiet minutes. “Blessed is the one… who meditates on his law day and night.” — Psalm 1",
+    "You are still here. “Your word is a lamp for my feet.” — Psalm 119:105",
+    "Ten minutes given to the Word. “Man shall not live on bread alone.” — Matthew 4:4",
+    "Still reading. “Let the word of Christ dwell in you richly.” — Colossians 3:16",
+    "Ten unhurried minutes. “Be still, and know that I am God.” — Psalm 46:10",
+    "You stayed. “As newborn babes, desire the pure milk of the word.” — 1 Peter 2:2",
+)
 
 private fun ml(size: Int, w: FontWeight = FontWeight.Normal, ker: Float = 0f) =
     TextStyle(fontFamily = Inter, fontWeight = w, fontSize = size.sp, letterSpacing = ker.sp)
@@ -207,6 +225,19 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     }
     DisposableEffect(m.moduleId) { onDispose { flush() } }
 
+    // Ten continuous minutes on this module: one whisper, then silence. The line
+    // is picked by moduleId so it's stable per module, and shown at most once per
+    // screen entry (the effect body runs once per moduleId).
+    var whisperLine by remember(m.moduleId) { mutableStateOf<String?>(null) }
+    var whisperVisible by remember(m.moduleId) { mutableStateOf(false) }
+    LaunchedEffect(m.moduleId) {
+        delay(600_000)
+        whisperLine = WhisperLines[Math.floorMod(m.moduleId.hashCode(), WhisperLines.size)]
+        whisperVisible = true
+        delay(9_000)
+        whisperVisible = false
+    }
+
     val readMinutes = remember(m) { (m.pages.joinToString(" ").split(Regex("\\s+")).size / 200).coerceAtLeast(1) }
     val sectionCount = m.pages.size.coerceAtLeast(1)
 
@@ -286,6 +317,29 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                     .clickable { chromeHidden = false },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Filled.CloseFullscreen, "Exit reading mode", tint = Color.White, modifier = Modifier.size(18.dp)) }
+        }
+
+        // Ten-minute whisper — one non-interactive scriptural line floating above
+        // the gate area, fading in for ~9s, then gone (iOS whisper overlay).
+        AnimatedVisibility(
+            visible = whisperVisible,
+            enter = fadeIn(tween(400)),
+            exit = fadeOut(tween(600)),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Text(
+                whisperLine.orEmpty(),
+                style = NuruType.caption.copy(fontFamily = Fraunces, fontStyle = FontStyle.Italic),
+                color = ML.navy,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(horizontal = 28.dp)
+                    .padding(bottom = Spacing.tabBarSpace + 60.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFFFFF8E6))
+                    .border(1.dp, ML.gold.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+            )
         }
     }
 }

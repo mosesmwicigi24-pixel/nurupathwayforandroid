@@ -10,6 +10,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -30,7 +32,7 @@ class NuruMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         // Only register when there is a signed-in backend session (a JWT).
         if (!Net.client.vault.hasSession) return
-        scope.launch { runCatching { Net.client.api.registerDevice(deviceBody(token)) } }
+        scope.launch { runCatching { Net.client.api.registerDevice(deviceBody(this@NuruMessagingService, token)) } }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -91,11 +93,25 @@ class NuruMessagingService : FirebaseMessagingService() {
             }
         }
 
-        fun deviceBody(token: String) = DeviceBody(
+        fun deviceBody(context: Context, token: String) = DeviceBody(
             platform = "android",
             appVersion = org.nuruplace.member.BuildConfig.VERSION_NAME,
             model = Build.MODEL,
             pushToken = token,
+            network = networkKind(context),
         )
+
+        /** One-shot network sample for the device census: "wifi" | "cellular" |
+         *  "other" (connected via something else), null when offline/unknown.
+         *  Best-effort colour only — must never block or fail registration. */
+        private fun networkKind(context: Context): String? = runCatching {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val caps = cm.activeNetwork?.let(cm::getNetworkCapabilities) ?: return@runCatching null
+            when {
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                else -> "other"
+            }
+        }.getOrNull()
     }
 }
