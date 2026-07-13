@@ -34,8 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,33 +71,57 @@ fun LiturgyCard() {
     val partEmoji = when (l.part) {
         "morning" -> "🌅"; "midday" -> "☀️"; "evening" -> "🌆"; else -> "🌙"
     }
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
-            .padding(18.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(partEmoji, style = NuruType.body)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (l.isSunday) "SUNDAY · $partLabel" else "$partLabel · ${l.season.uppercase()}",
-                style = NuruType.micro, color = LitGold, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp,
+    // Home breathes with the hours: the card carries a photograph of the hour
+    // it names (dawn/noon/dusk/night) under a navy scrim so the serif stays
+    // legible. Image + scrim are matchParentSize inside the Box (never affect
+    // layout) and clipped to the card — the ornament rule (iOS ios#72 parity).
+    val art = l.art?.takeIf { it.url.isNotBlank() }
+    val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))) {
+        if (art != null) {
+            AsyncImage(
+                model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
             )
-            Spacer(Modifier.weight(1f))
-            l.scriptureRef?.let { ref ->
-                Text(
-                    ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White.copy(alpha = 0.12f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.verticalGradient(
+                        0f to Color(0xFF0A1C33).copy(alpha = 0.42f),
+                        0.5f to Color(0xFF0A1C33).copy(alpha = 0.50f),
+                        1f to Color(0xFF0A1C33).copy(alpha = 0.84f),
+                    ),
+                ),
+            )
+        } else {
+            Box(Modifier.matchParentSize().background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33)))))
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            l.line,
-            style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp),
-            color = Color.White,
-        )
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(partEmoji, style = NuruType.body)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (l.isSunday) "SUNDAY · $partLabel" else "$partLabel · ${l.season.uppercase()}",
+                    style = NuruType.micro.copy(shadow = if (art != null) textShadow else null),
+                    color = if (art != null) Color(0xFFF2DDA0) else LitGold,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                l.scriptureRef?.let { ref ->
+                    Text(
+                        ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+                            .background(Color.Black.copy(alpha = if (art != null) 0.22f else 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                l.line,
+                style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp, shadow = if (art != null) textShadow else null),
+                color = Color.White,
+            )
+        }
     }
 }
 
