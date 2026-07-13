@@ -59,6 +59,7 @@ import org.nuruplace.member.data.net.MyAnnouncement
 import org.nuruplace.member.data.net.MyRsvp
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.ListSkeleton
 import org.nuruplace.member.util.isoPlusDays
 import org.nuruplace.member.util.relTime
 import org.nuruplace.member.util.todayIso
@@ -84,7 +85,7 @@ fun EventsScreen(
     onOpenAnnouncements: () -> Unit,
     onOpenNotifications: () -> Unit,
 ) {
-    AsyncContent(load = {
+    AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, load = {
         val cal = runCatching { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }.getOrDefault(emptyList())
         val series = runCatching { Net.client.api.eventSeries().data }.getOrDefault(emptyList())
         val anns = runCatching { Net.client.api.myAnnouncements().data }.getOrDefault(emptyList())

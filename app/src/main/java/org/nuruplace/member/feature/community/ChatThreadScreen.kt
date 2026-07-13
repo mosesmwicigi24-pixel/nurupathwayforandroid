@@ -64,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,6 +94,7 @@ import org.nuruplace.member.data.net.SendVoiceBody
 import org.nuruplace.member.ui.components.AiDraftButton
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.FitImage
+import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.LiveWave
 import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.voiceClock
@@ -111,6 +113,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
     AsyncContent(key = conversationId, load = { Net.client.api.chatConversation(conversationId) }) { thread: ChatThreadDetail, reload ->
         val scope = rememberCoroutineScope()
         val context = LocalContext.current
+        val view = LocalView.current
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         val listState = rememberLazyListState()
@@ -131,6 +134,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         fun sendVoice() {
             if (busy) return
             val f = recorder.stop() ?: return
+            Haptics.confirm(view) // a voice note committed — the weightier tick
             val duration = recorder.elapsedSec.coerceAtLeast(1)
             val wave = recorder.waveformFor()
             busy = true
@@ -162,6 +166,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         fun send(text: String) {
             val t = text.trim()
             if (t.isBlank() || busy) return
+            Haptics.tap(view) // light tap — the message left your hands
             busy = true
             scope.launch {
                 try {
