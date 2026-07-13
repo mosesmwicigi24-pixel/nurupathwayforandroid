@@ -916,3 +916,30 @@ survive app reinstall — only a device reboot clears them; Simulator.app
 can run windowless (AppleScript sees 0 windows) — drive via simctl only.
 Build 64 built; Pastor's iPhone unavailable at press time — install on
 next reachability (Jackline 55, iPad 62 also pending).
+
+## Session 30 — the verse beheld: tableau + selah + share-as-picture (pathway#372 · ios#73 · android#33)
+Owner: "the cards are beautiful now — break the wall of text, something to
+behold." Verse-of-the-day becomes a PHOTOGRAPH carrying the verse.
+BACKEND (pathway#372): GET /me/home/verse now returns art:{url,alt} — a
+hand-curated, theme-matched image per (user,day), deterministic; mood-lib
+themes draw the union pool. CURATION DISCIPLINE: all 26 candidate URLs
+verified live AND every image visually reviewed on a rendered proof sheet
+(a "grapes" verse must never land on a plate of vegetables) — first pass
+had 3 mismatches (a Bible photo tagged "seedlings" etc.), fixed by eye.
+17/17 home tests (4 new). CLIENTS: VerseTableauHeader (216pt, white serif
+over a 3-stop scrim, owned+clipped frame per the ios#72 ornament rule) +
+SelahDivider (two gold hairlines meeting at a small cross) after rhythm
+and after progress — a rest for the eye + share-as-picture: iOS
+ImageRenderer @3x, Android Canvas 1080×1332 (both draw art+verse+ref+gold-
+cross brand line; text set by us, always crisp); both fall back to text
+share on render failure, and to the classic cream card when art is
+absent/offline. iOS verified in-sim (Isaiah 30:21 over a starfield;
+NURU_UITEST_TOP hoist hook for headless screenshots); Android
+compileDebugKotlin clean. DEPLOYED to prod (image 14:06Z, readyz 200;
+/me/home/verse returns art — Philippians 4:13 over a sunrise valley).
+iOS build 65 installed on Pastor's iPhone (launched) + iPad. GOTCHA: a
+scripted python multi-file edit hit the WRONG `val shape =
+RoundedCornerShape(20.dp)` (HomeCard shares the literal) and corrupted the
+primitive — reverted the file and redid the VerseCard restructure with
+targeted Edits; lesson: never sed/python-replace a non-unique anchor in
+a large Compose file, use the Edit tool with surrounding context.
