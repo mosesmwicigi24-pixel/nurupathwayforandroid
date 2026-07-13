@@ -789,3 +789,29 @@ plain-INSERT per launch — deduped to one row per (user, platform,
 COALESCE(model,'')) + upsert; census now honest (53 rows).
 Build 55 verified on Pastor's + Jackline's iPhones; iPad offline (owes 55
 + staged portal).
+
+## Session 24 — the signature-feel pass (ios#67/build 56 · android#31 code-only · iPad portal INSTALLED)
+UX thesis executed: iPhone = signature moments + motion grammar; Android =
+perceived-performance craft (its two cheap-feel tells: bare spinners, zero
+pull-to-refresh).
+**iOS (#67, build 56):** "Day sealed · well walked" — third rhythm item
+completing plays success haptic + one-shot gold radial sweep + persistent
+caption (witnessed transitions only; all-done first loads stay silent);
+numericText rolling digits on streak/bless counts; SCRUBBABLE voice
+waveforms (drag→frame-accurate seek, ticker yields to the finger,
+drag-on-silent plays-then-seeks); once-per-session staggered Home entrance
+(8 cards, 40ms, static flag survives the .id(textScale) rebuild; skeleton
+never plays it). Tab bar already had the intended haptic+spring — left
+alone. ALL motion gated on accessibilityReduceMotion.
+**Android (#31, code-only):** Skeleton.kt shimmer system (HomeSkeleton,
+ListSkeleton) replacing spinners on Home/Pathway/Chat/Events/PrayerWall;
+NuruRefreshBox (material3 1.3.0 PullToRefreshBox, gold) on all five +
+AsyncContent in-place reloads (kills the full-screen flash on every chat
+send/reaction — pre-existing wart); pressScale() physics (pointerInput
+watcher, sits before clip/background) on hero/verse/give/module rows/hub
+rows/bless chips; house-Haptics voice (bless tap, send tap, voice-send
+confirm); staggered entrance (process flag, graphicsLayer-only).
+**Devices:** Pastor's iPhone build 56 ✓; iPad CAME BACK — member build 56
+✓ AND the staged Nuru Portal wrap (leadership intelligence cockpit)
+INSTALLED ✓ (Session 21 debt cleared). Jackline offline this round (on
+55; takes 56 when reachable). Android APK still parked (#22–#31 pending).
