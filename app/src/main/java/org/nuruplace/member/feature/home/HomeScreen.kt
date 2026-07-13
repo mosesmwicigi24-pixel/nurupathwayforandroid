@@ -213,31 +213,8 @@ fun HomeScreen(
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-                // 0 · Featured welcome video — right under the header (owner ask); it
-                // IS the "start here" moment, so it leads the feed. The thin ON AIR
-                // bar stays pinned above it while a broadcast is live.
-                welcomeVideo?.let { w ->
-                    Entrance(entrance, 0) {
-                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
-                            if (w.isExternal) Unit else videoPlaying = true
-                        }, onExternal = { url -> })
-                    }
-                }
-                // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
-                letter?.takeIf { it.isUnread }?.let { lt ->
-                    LetterKnockCard(lt) { showLetter = true }
-                    if (showLetter) {
-                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
-                    }
-                }
-                // 0c · The hour's prayer line (liturgy, Phase 4).
-                Entrance(entrance, 0) { LiturgyCard() }
-                // 0d · Today's echo — the app remembers you (Wave 1).
-                Entrance(entrance, 1) { HomeEchoCard() }
-                if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
-                next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
-                rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
-                if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
+                // 0 · Today's verse leads the feed — right under the header (owner ask):
+                // the daily Word first, then the featured welcome video. ON AIR pinned above.
                 verse?.let { v ->
                     Entrance(entrance, 6) {
                         VerseCard(
@@ -292,6 +269,31 @@ fun HomeScreen(
                         )
                     }
                 }
+                // 0 · Featured welcome video — right under the header (owner ask); it
+                // IS the "start here" moment, so it leads the feed. The thin ON AIR
+                // bar stays pinned above it while a broadcast is live.
+                welcomeVideo?.let { w ->
+                    Entrance(entrance, 0) {
+                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
+                            if (w.isExternal) Unit else videoPlaying = true
+                        }, onExternal = { url -> })
+                    }
+                }
+                // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
+                letter?.takeIf { it.isUnread }?.let { lt ->
+                    LetterKnockCard(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+                    }
+                }
+                // 0c · The hour's prayer line (liturgy, Phase 4).
+                Entrance(entrance, 0) { LiturgyCard() }
+                // 0d · Today's echo — the app remembers you (Wave 1).
+                Entrance(entrance, 1) { HomeEchoCard() }
+                if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
+                next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
+                rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
+                if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
                 if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
