@@ -872,3 +872,17 @@ graphicsLayer-only (no layout participation). DEBUG LESSON: eyeballing
 screenshot gaps misleads (ink text classifies as card fill) — scan card
 EDGES with exact fill colors. Build 58 → iPad ✓; Pastor+Jackline pending
 reachability.
+
+## Session 28 — fusion, second strike → structural fix (ios#70 · build 60)
+The retire patch (S27) didn't hold on device (radio+liturgy fused again).
+Mechanism REMOVED instead of re-patched: (1) entrance is OPACITY-ONLY —
+the 12pt rise painted rows off their layout slot and two distinct races
+could strand it; fades can't move geometry, fusion now impossible by
+construction. (2) Feed rows keyed by STABLE ids (onair/liturgy/echo/…)
+not array offsets — the late-arriving radio bar inserted at index 0 and
+rebuilt every row's identity mid-flight (also kills the tear-down/refetch
+flash from the S23 audit's #18). LESSON: never animate layout-adjacent
+geometry on rows whose membership changes async; after two strikes,
+delete the mechanism. Build 60: Pastor ✓ iPad ✓, Jackline offline.
+Android unaffected in the field; its rise is graphicsLayer-only + Compose
+target-state animation (no coalescing race) — left as is, watch it.
