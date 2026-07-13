@@ -886,3 +886,33 @@ geometry on rows whose membership changes async; after two strikes,
 delete the mechanism. Build 60: Pastor ✓ iPad ✓, Jackline offline.
 Android unaffected in the field; its rise is graphicsLayer-only + Compose
 target-state animation (no coalescing race) — left as is, watch it.
+
+## Session 29 — fusion SOLVED: the liturgy glow circle (ios#72 · build 64)
+Third strike ended the case. With Moses' Android screenshot as reference
+("do like in the android"), pixel-forensics on his post-force-quit iOS
+screenshot showed ONLY two dead seams — radio→liturgy and liturgy→echo
+at 0pt — while echo→reflection and reflection→hero were healthy 20pt.
+REPRO AT LAST: seeded the LOCAL backend with a live radio program (the
+sim never had one — why every prior fix "passed" in sim: the corrupted
+seam was never on screen) + today's echo_log row; sim then rendered his
+phone exactly (3pt/3pt/20/20). onGeometryChange instrumentation proved
+LAYOUT PERFECT (every row at prev.maxY+20) — the PAINT lied: liturgy
+card reported h=116 but painted 150 = exactly its background ZStack's
+fixed 150×150 blurred glow Circle. A ZStack sizes to its largest child,
+so the background out-grew the card and spilled ±17pt of navy over both
+neighbouring gaps. Entrance animation empirically EXONERATED (removed →
+identical paint). FIX: gradient owns the size, glow in .overlay (never
+inflates), clip at card bounds — GivingStatementView's documented
+edge-spill pattern. Audited all .background(ZStack+fixed-frame) sites:
+ResourcesLibraryView safe (clips outside), rest clean. After: all four
+seams 20.0pt with entrance restored. Android N/A — Compose backgrounds
+are size-taking modifiers; its Home was always correct (the reference).
+NEW RIG (sim+DEBUG only, zero release impact): NURU_AUTOLOGIN=1 env
+auto-submits dev login AND suppresses the notif-permission alert →
+fully scripted screenshot verification (simctl launch + PIL seam scan).
+Sim gotchas: psql -c multi-statement is ONE transaction (echo seed error
+rolled back the radio insert silently); SpringBoard permission alerts
+survive app reinstall — only a device reboot clears them; Simulator.app
+can run windowless (AppleScript sees 0 windows) — drive via simctl only.
+Build 64 built; Pastor's iPhone unavailable at press time — install on
+next reachability (Jackline 55, iPad 62 also pending).
