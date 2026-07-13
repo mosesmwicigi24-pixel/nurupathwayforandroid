@@ -227,6 +227,7 @@ fun HomeScreen(
                 if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
                 next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
+                if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
                 welcomeVideo?.let { w ->
                     Entrance(entrance, 5) {
                         FeaturedVideo(w, videoPlaying, onPlay = { playable ->
@@ -263,10 +264,27 @@ fun HomeScreen(
                             },
                             onShare = {
                                 val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
-                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                    type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                fun shareText() {
+                                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
                                 }
-                                context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                                val art = v.art?.takeIf { it.url.isNotBlank() }
+                                if (art != null) {
+                                    // Render the tableau to a real photograph; fall back to
+                                    // the words if the render can't happen (offline, CDN hiccup).
+                                    scope.launch {
+                                        val ok = VerseImageShare.share(
+                                            context, art,
+                                            v.text ?: "Your word is a lamp to my feet, and a light for my path.",
+                                            v.reference, v.version,
+                                        )
+                                        if (!ok) shareText()
+                                    }
+                                } else {
+                                    shareText()
+                                }
                             },
                         )
                     }
@@ -280,6 +298,7 @@ fun HomeScreen(
                 announcement?.let { a -> FeaturedAnnouncementCard(a, onAll = { onNavigate("announcements") }, onOpen = { onNavigate("announcement/${a.announcementId}") }) }
                 ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
                 scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
+                if (scores != null) SelahDivider()   // — selah: a rest before Grow
                 GrowSection(onNavigate)
                 featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
                 UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
@@ -646,20 +665,31 @@ private fun VerseCard(
     onShare: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(20.dp)
+    val art = v.art?.takeIf { it.url.isNotBlank() }
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg).border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape).padding(Spacing.base),
+        Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg).border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                Text(v.version, style = NuruType.micro, color = Nuru.ink600)
+        if (art != null) {
+            // The tableau: the day's photograph carries the verse (owner ask —
+            // "something beautiful to behold" breaking the wall of text).
+            VerseTableauHeader(art = art, text = v.text, refLine = "${v.reference} · ${v.version}", version = v.version)
+        } else {
+            // No art (offline first paint / older backend): the classic cream reading.
+            Column(Modifier.padding(horizontal = Spacing.base).padding(top = Spacing.base)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
+                        Text(v.version, style = NuruType.micro, color = Nuru.ink600)
+                    }
+                }
+                Spacer(Modifier.height(Spacing.md))
+                v.text?.let { Text(it, style = NuruType.featureTitle, color = Nuru.navy) }
+                Spacer(Modifier.height(Spacing.sm))
+                Text("${v.reference} · ${v.version}", style = NuruType.caption, color = Nuru.metaGray, fontWeight = FontWeight.SemiBold)
             }
         }
-        Spacer(Modifier.height(Spacing.md))
-        v.text?.let { Text(it, style = NuruType.featureTitle, color = Nuru.navy) }
-        Spacer(Modifier.height(Spacing.sm))
-        Text("${v.reference} · ${v.version}", style = NuruType.caption, color = Nuru.metaGray, fontWeight = FontWeight.SemiBold)
+      Column(Modifier.padding(Spacing.base)) {
         v.reason?.takeIf { it.isNotBlank() }?.let {
             Spacer(Modifier.height(Spacing.sm))
             Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
@@ -715,6 +745,7 @@ private fun VerseCard(
                 Text("Share", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
             }
         }
+      }
     }
 }
 

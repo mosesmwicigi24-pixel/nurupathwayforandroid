@@ -31,6 +31,14 @@ data class TailoredVerse(
     // The season Nuru sensed (title-cased library theme) when mood-driven.
     val mood: String? = null,
     val text: String? = null,
+    // The day's tableau photograph (server-curated, theme-matched).
+    val art: VerseArt? = null,
+)
+
+@Serializable
+data class VerseArt(
+    val url: String = "",
+    val alt: String = "",
 )
 
 /** GET/POST /me/home/verse/reactions — community reactions on today's verse
