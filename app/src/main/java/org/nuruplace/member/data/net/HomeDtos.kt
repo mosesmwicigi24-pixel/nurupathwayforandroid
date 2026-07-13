@@ -84,6 +84,8 @@ data class HomeLiturgy(
     val isSunday: Boolean = false,
     val line: String = "",
     val scriptureRef: String? = null,
+    // The hour's tableau photograph (server-curated per part + day).
+    val art: VerseArt? = null,
 )
 
 @Serializable
