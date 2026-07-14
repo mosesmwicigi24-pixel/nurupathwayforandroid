@@ -58,6 +58,15 @@ import java.io.File
 
 private val GoldLight = Color(0xFFF2DDA0)
 
+/** The deep-navy veil laid over a tableau photograph so the type stays legible:
+ *  the image shows through (a bit hidden), deepening toward the base where the
+ *  text sits. Shared by the verse tableau and the liturgy card. */
+val DeepNavyBlockBrush = Brush.verticalGradient(
+    0f to Color(0xFF0A1628).copy(alpha = 0.48f),
+    0.45f to Color(0xFF0A1628).copy(alpha = 0.58f),
+    1f to Color(0xFF0A1628).copy(alpha = 0.92f),
+)
+
 @Composable
 fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: String) {
     Box(Modifier.fillMaxWidth().height(216.dp)) {
@@ -67,16 +76,8 @@ fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: S
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize(),
         )
-        // Legibility scrim — quiet at the top, certain at the base.
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.verticalGradient(
-                    0f to Color.Black.copy(alpha = 0.18f),
-                    0.35f to Color.Black.copy(alpha = 0.05f),
-                    1f to Color.Black.copy(alpha = 0.62f),
-                ),
-            ),
-        )
+        // Deep-navy veil — the type stays certain over any image.
+        Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
         Row(
             Modifier.align(Alignment.TopStart).fillMaxWidth().padding(Spacing.base),
             verticalAlignment = Alignment.CenterVertically,

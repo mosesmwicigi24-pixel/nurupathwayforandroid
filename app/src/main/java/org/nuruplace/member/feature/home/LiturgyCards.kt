@@ -78,57 +78,47 @@ fun LiturgyCard() {
     // layout) and clipped to the card — the ornament rule (iOS ios#72 parity).
     val art = l.art?.takeIf { it.url.isNotBlank() }
     val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))) {
-        if (art != null) {
+    if (art != null) {
+        // Taller tableau: the hour + brand at the top, the prayer line resting at
+        // the BOTTOM under the deep-navy block where the veil is deepest, so the
+        // type reads clearly (owner ask). matchParentSize behind, clipped.
+        Box(Modifier.fillMaxWidth().height(206.dp).clip(RoundedCornerShape(20.dp))) {
             AsyncImage(
                 model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
             )
-            Box(
-                Modifier.matchParentSize().background(
-                    Brush.verticalGradient(
-                        0f to Color(0xFF0A1C33).copy(alpha = 0.42f),
-                        0.5f to Color(0xFF0A1C33).copy(alpha = 0.50f),
-                        1f to Color(0xFF0A1C33).copy(alpha = 0.84f),
-                    ),
-                ),
+            Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
+            LitKicker(
+                Modifier.align(Alignment.TopStart).padding(18.dp),
+                partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
             )
-        } else {
-            Box(Modifier.matchParentSize().background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33)))))
-        }
-        Column(Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(partEmoji, style = NuruType.body)
-                Spacer(Modifier.width(7.dp))
+            Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
                 Text(
-                    if (l.isSunday) "SUNDAY · $partLabel" else "$partLabel · ${l.season.uppercase()}",
-                    style = NuruType.micro.copy(shadow = if (art != null) textShadow else null),
-                    color = if (art != null) Color(0xFFF2DDA0) else LitGold,
-                    fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, maxLines = 1,
+                    l.line,
+                    style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 27.sp, shadow = textShadow),
+                    color = Color.White,
                 )
-                // Featured brand — this daily liturgy is Nuru Pathway's.
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Nuru.goldGradient),
-                    contentAlignment = Alignment.Center,
-                ) { Text("✝", color = Color.White, style = NuruType.micro) }
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "Nuru Pathway",
-                    style = NuruType.micro.copy(shadow = if (art != null) textShadow else null),
-                    color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                )
-                Text("  ✔", style = NuruType.micro, color = Color(0xFFF2DDA0))
-                Spacer(Modifier.weight(1f))
+                l.scriptureRef?.let { ref ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+                            .background(Color.Black.copy(alpha = 0.28f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
             }
+        }
+    } else {
+        // Offline / older backend: the classic navy card, content-sized.
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
+                .padding(18.dp),
+        ) {
+            LitKicker(Modifier, partEmoji, partLabel, l.isSunday, l.season, onArt = false, textShadow = textShadow)
             Spacer(Modifier.height(10.dp))
-            Text(
-                l.line,
-                style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp, shadow = if (art != null) textShadow else null),
-                color = Color.White,
-            )
-            // The citation rests under the line, right-aligned — the hour + brand
-            // own the top row without crowding (iOS parity).
+            Text(l.line, style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp), color = Color.White)
             l.scriptureRef?.let { ref ->
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth()) {
@@ -136,12 +126,48 @@ fun LiturgyCard() {
                     Text(
                         ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clip(RoundedCornerShape(999.dp))
-                            .background(Color.Black.copy(alpha = if (art != null) 0.22f else 0.12f))
+                            .background(Color.White.copy(alpha = 0.12f))
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
             }
         }
+    }
+}
+
+/** The hour + Nuru Pathway brand row — shared by the tableau and the classic card. */
+@Composable
+private fun LitKicker(
+    modifier: Modifier = Modifier,
+    partEmoji: String,
+    partLabel: String,
+    isSunday: Boolean,
+    season: String,
+    onArt: Boolean,
+    textShadow: Shadow,
+) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(partEmoji, style = NuruType.body)
+        Spacer(Modifier.width(7.dp))
+        Text(
+            if (isSunday) "SUNDAY · $partLabel" else "$partLabel · ${season.uppercase()}",
+            style = NuruType.micro.copy(shadow = if (onArt) textShadow else null),
+            color = if (onArt) Color(0xFFF2DDA0) else LitGold,
+            fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, maxLines = 1,
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Nuru.goldGradient),
+            contentAlignment = Alignment.Center,
+        ) { Text("✝", color = Color.White, style = NuruType.micro) }
+        Spacer(Modifier.width(4.dp))
+        Text(
+            "Nuru Pathway",
+            style = NuruType.micro.copy(shadow = if (onArt) textShadow else null),
+            color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1,
+        )
+        Text("  ✔", style = NuruType.micro, color = Color(0xFFF2DDA0))
+        Spacer(Modifier.weight(1f))
     }
 }
 
