@@ -995,3 +995,18 @@ build 69 on iPhone17 (launched) + iPad; Android compiles (block relocated
 via brace-balanced move, single verse?.let confirmed). NOTE the running
 order of top-of-home requests this session: video-to-top (S33) then
 verse-to-top (S34) → verse ends up first, video second.
+
+## Session 35 — taller liturgy tableau + shared deep-navy block (ios#78 · android#38)
+Owner: on the ordinary/liturgy card, more image height + type at the bottom +
+a deep-navy block over the image so fonts read clearly; apply the same block
+to the verse. LITURGY: art path is now a 206pt tableau (was content-sized) —
+hour + Nuru Pathway brand at TOP, prayer line + citation at the BOTTOM where
+the veil is deepest; offline → classic navy card (kicker factored into
+litKicker/LitKicker). DEEP-NAVY BLOCK: shared DeepNavyBlock (iOS View) /
+DeepNavyBlockBrush (Android) — navy 0x0A1628 at 0.48→0.58→0.92 top→bottom;
+replaces the verse tableau's old BLACK scrim so both cards read as one family
+(image "a bit hidden", darkest at base). Verified in-sim: verse (Proverbs 2:6
+over tree canopy) + liturgy (Lamentations 3:22-23 over morning sunrise), type
+crisp. Member surface only, NO backend. iOS build 70 on iPhone17 (launched) +
+iPad. Android APK rebuilt → 2.18.1/vc39 (~/Desktop/NuruPlace-2.18.1.apk,
+V2-signed CN=Nuru Place, com.nuruplace) so testers get this too.
