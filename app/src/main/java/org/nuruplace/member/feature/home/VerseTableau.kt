@@ -62,9 +62,9 @@ private val GoldLight = Color(0xFFF2DDA0)
  *  the image shows through (a bit hidden), deepening toward the base where the
  *  text sits. Shared by the verse tableau and the liturgy card. */
 val DeepNavyBlockBrush = Brush.verticalGradient(
-    0f to Color(0xFF0A1628).copy(alpha = 0.48f),
+    0f to Color(0xFF0A1628).copy(alpha = 0.40f),
     0.45f to Color(0xFF0A1628).copy(alpha = 0.58f),
-    1f to Color(0xFF0A1628).copy(alpha = 0.92f),
+    1f to Color(0xFF0A1628).copy(alpha = 0.97f),
 )
 
 @Composable
