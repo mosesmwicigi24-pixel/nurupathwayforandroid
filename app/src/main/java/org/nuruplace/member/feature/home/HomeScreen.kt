@@ -222,9 +222,29 @@ fun HomeScreen(
                             reactions = verseReactions,
                             saved = verseSaved,
                             onReact = { emoji ->
+                                // Optimistic: reflect the tap at once (one per member/
+                                // day — tapping my own removes it, a different one
+                                // moves it), then reconcile; roll back on failure so a
+                                // dropped request never blanks the counts (iOS parity).
+                                val previous = verseReactions
+                                val cur = verseReactions ?: VerseReactions()
+                                val counts = cur.counts.toMutableMap()
+                                fun drop(e: String) {
+                                    val n = (counts[e] ?: 0) - 1
+                                    if (n > 0) counts[e] = n else counts.remove(e)
+                                }
+                                val newMine: String?
+                                if (cur.mine == emoji) {
+                                    drop(emoji); newMine = null
+                                } else {
+                                    cur.mine?.let { drop(it) }
+                                    counts[emoji] = (counts[emoji] ?: 0) + 1; newMine = emoji
+                                }
+                                verseReactions = VerseReactions(counts, newMine, counts.values.sum())
                                 scope.launch {
                                     runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
                                         .onSuccess { verseReactions = it }
+                                        .onFailure { verseReactions = previous }
                                 }
                             },
                             onSave = {
