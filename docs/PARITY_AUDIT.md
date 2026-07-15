@@ -1035,3 +1035,27 @@ profile (CONFIGURATION_BUILD_DIR=build/apponly), then RESTORED pbxproj (git
 clean). Durable fix = user re-adds the Apple ID in Xcode → Settings →
 Accounts (or the widget stays parked). devicectl install threw transient
 "Connection reset by peer" twice — just retry.
+
+## Session 37 — 30-day non-repeating liturgy art + taller/deeper tableau (pathway#374 · ios#80 · android#40)
+Owner: many hour-fitting images so a full month never repeats + stunning
+night; taller ordinary card + deeper navy block on both cards. BACKEND
+(pathway#374): each part pool 4→30 images (120 total). SOURCING: no Unsplash
+API key → pulled real photo IDs from unsplash.com/napi/search JSON via the
+in-app Browser (navigate to napi URL, parse document.body.innerText in-page
+— fetch() is CSP-blocked but navigation returns JSON; filter !premium&&!plus
+for free images.unsplash.com/photo-<id>). Downloaded 136+15 thumbs, built
+per-bucket proof sheets, VISUALLY culled to 30/bucket (sunrise queries
+return sunsets — eyes required). Night = aurora + Milky Way (owner: "ultra
+beautiful realistic"). pickLiturgyArt is now a 30-DAY ROTATION: epochDay
+(days since Unix epoch from the YYYY-MM-DD key) + PART_OFFSET {0,7,14,21},
+index steps +1/day so 30 days pass before any repeat; replaced the FNV-hash
+picker. 6/6 liturgy tests (new: pools≥30 & distinct; 30 consecutive days →
+30 distinct). CARDS: liturgy tableau 206→232pt; shared DeepNavyBlock deepens
+0.48→0.40 top / 0.92→0.97 base so the image is more hidden where the type
+sits at the bottom (applies to verse too). Verified in-sim (morning "Dawn
+mist in the valley", type crisp). DEPLOYED prod (image 06:49Z, /home/liturgy
+returns the new pool). iOS build 72 on iPhone17 (launched) + iPad; Android
+APK rebuilt 2.18.2/vc40 (~/Desktop, V2-signed CN=Nuru Place). REMINDER: iOS
+release build still needs the app-only workaround (widget signing blocked,
+Xcode Apple ID signed out) — build `-target NuruMember` with widget embed+dep
+temporarily stripped from a pbxproj copy, restore after.
