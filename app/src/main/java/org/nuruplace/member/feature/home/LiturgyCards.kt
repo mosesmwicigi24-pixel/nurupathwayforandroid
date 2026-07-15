@@ -82,7 +82,7 @@ fun LiturgyCard() {
         // Taller tableau: the hour + brand at the top, the prayer line resting at
         // the BOTTOM under the deep-navy block where the veil is deepest, so the
         // type reads clearly (owner ask). matchParentSize behind, clipped.
-        Box(Modifier.fillMaxWidth().height(206.dp).clip(RoundedCornerShape(20.dp))) {
+        Box(Modifier.fillMaxWidth().height(232.dp).clip(RoundedCornerShape(20.dp))) {
             AsyncImage(
                 model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
