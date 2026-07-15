@@ -1010,3 +1010,28 @@ over tree canopy) + liturgy (Lamentations 3:22-23 over morning sunrise), type
 crisp. Member surface only, NO backend. iOS build 70 on iPhone17 (launched) +
 iPad. Android APK rebuilt → 2.18.1/vc39 (~/Desktop/NuruPlace-2.18.1.apk,
 V2-signed CN=Nuru Place, com.nuruplace) so testers get this too.
+
+## Session 36 — verse reactions feel instant (fix; ios#79 · android#39)
+Owner: "on iPhone the verse-of-the-day reactions are not working." DIAGNOSIS
+(not a backend bug): verified the round trip end-to-end — POST ❤️→🔥 moves +
+persists on the LIVE server; path/auth-refresh/decoder all fine. The real
+issue was client UX: reactVerse waited on the full server round trip with NO
+optimistic feedback, and `try?`/getOrNull swallowed any hiccup into nil —
+BLANKING the counts — so a tap read as "nothing happened." FIX: both clients
+apply the one-per-day toggle OPTIMISTICALLY (tapped chip highlights + count
+moves at once), then reconcile with the server and ROLL BACK to the prior
+counts on failure. iOS: VerseReactions gained an explicit init() (custom
+init(from:) had suppressed the default). Verified in-sim via a NURU_UITEST_
+REACT hook (console: ❤️→🔥 moved+persisted). iOS build 71 on iPhone17
+(launched) + iPad.
+  GOTCHA (iOS device build): xcodebuild release FAILED "No Accounts / No
+profiles for org.nuruplace.member.NuruWidgets" — Xcode's Apple ID session is
+signed out, so it can't MINT the embedded widget-extension profile (no cached
+one; only member+portal app profiles are cached, member valid to 2026-07-18).
+The signing CERT + free team (SGC7566QY6) are still present. WORKAROUND used:
+temporarily removed the NuruWidgets embed-build-file + PBXTargetDependency
+from a pbxproj COPY, built `-target NuruMember` alone with the cached member
+profile (CONFIGURATION_BUILD_DIR=build/apponly), then RESTORED pbxproj (git
+clean). Durable fix = user re-adds the Apple ID in Xcode → Settings →
+Accounts (or the widget stays parked). devicectl install threw transient
+"Connection reset by peer" twice — just retry.
