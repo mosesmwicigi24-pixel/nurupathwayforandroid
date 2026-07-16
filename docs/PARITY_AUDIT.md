@@ -1059,3 +1059,36 @@ APK rebuilt 2.18.2/vc40 (~/Desktop, V2-signed CN=Nuru Place). REMINDER: iOS
 release build still needs the app-only workaround (widget signing blocked,
 Xcode Apple ID signed out) — build `-target NuruMember` with widget embed+dep
 temporarily stripped from a pbxproj copy, restore after.
+
+## Session 38 — portal Chat ⋮ menu: edit/delete my own, moderate others (2026-07-16)
+Owner: "make the chats editable, delete by having three dots and the attached
+functions" (screenshot: portal Operations → Chat). PORTAL-ONLY change — the
+admin surface is web + iPad, so both repos got a byte-identical sync
+(pathway#375, pathwayforipad#3, base feat/macbook-version — `gh pr create`
+defaulted the base to main and dragged in 93 unrelated files until retargeted;
+ALWAYS check `gh pr view --json baseRefName` when the source branch is not
+main). NO backend/OpenAPI change: PATCH+DELETE /chat/messages/:id were already
+live, already author-only (`WHERE message_id=$1 AND author_user_id=$2`),
+already in openapi.yaml, already covered by backend/test/chat.test.ts:50. The
+portal previously showed always-visible Flag/Remove on OTHERS' messages and
+nothing at all on your own. Now every row has a hover ⋮ whose contents follow
+what the server permits: mine → Edit/Delete; other → Flag|Dismiss + Remove;
+removed → Restore. A moderator never rewrites another's words. Edit is inline
+(Enter saves, Shift+Enter newline, Esc cancels) + "edited" marker from
+is_edited. Delete confirms — the thread filters `deleted_at IS NULL` so it is
+gone for everyone (vs moderator Remove = is_hidden, restorable: different verb,
+different button). Menu FLIPS downward within 96px of the scroller top, else
+`overflow-y-auto` clips it. Verified: typecheck+lint+vite build clean; deployed
+to /var/www/pathway-portal and confirmed the LIVE gzipped bundle carries the new
+strings (curl --compressed https://pathway.nuruplace.org/assets/index-*.js —
+note assets are at /assets/, NOT /portal/assets/, which silently returns the
+417-byte SPA fallback and reads as "code missing").
+
+GAP FOUND (not fixed — different surface, not what was asked): neither the iOS
+nor the Android member app references editMessage/deleteMessage. Leaders can
+now edit/delete their own messages from the portal; a MEMBER still cannot take
+back or fix a message from their own phone, though the backend has supported it
+all along. I had asserted in pathway#375 that the member apps "already have
+their own message menus" — that was wrong and is corrected in a PR comment.
+Real work, cheap: MemberAPI.editMessage/deleteMessage + a long-press menu on
+own bubbles, iOS + Android.
