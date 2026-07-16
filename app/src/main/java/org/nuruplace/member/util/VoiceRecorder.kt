@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -101,9 +102,17 @@ class VoiceRecorder {
         return if (ok && f != null && f.length() > 0) f else { f?.delete(); null }
     }
 
-    /** Stops recording and discards the file. */
+    /** Stops recording and discards the file. Safe mid-session — the scope
+     *  survives so another take can start. */
     fun cancel() {
         stop()?.delete()
+    }
+
+    /** Final teardown (onDispose ONLY): discard any take AND cancel the scope.
+     *  Not for mid-session use — a cancelled scope records nothing ever again. */
+    fun release() {
+        cancel()
+        scope.cancel()
     }
 
     /**
@@ -182,5 +191,8 @@ class VoicePlayer {
         durationSec = 0
     }
 
-    fun release() = stop()
+    fun release() {
+        stop()
+        scope.cancel()   // stop() alone leaked the Main-dispatcher scope per instance
+    }
 }
