@@ -1201,6 +1201,7 @@ private fun certDate(iso: String?): String {
 @androidx.compose.runtime.Composable
 private fun AiConsentCard() {
     var optOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var consentSaveFailed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var loaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -1230,18 +1231,33 @@ private fun AiConsentCard() {
                 checked = !optOut,
                 enabled = loaded,
                 onCheckedChange = { on ->
+                    val previous = optOut
                     optOut = !on
+                    consentSaveFailed = false
                     scope.launch {
+                        // Consent must never lie: if the server didn't record
+                        // it, don't display it.
                         runCatching {
                             org.nuruplace.member.data.net.Net.client.api.setAiConsent(
                                 org.nuruplace.member.data.net.AiConsentBody(optOut = !on),
                             )
+                        }.onFailure {
+                            optOut = previous
+                            consentSaveFailed = true
                         }
                     }
                 },
                 colors = androidx.compose.material3.SwitchDefaults.colors(
                     checkedTrackColor = org.nuruplace.member.ui.theme.Nuru.gold,
                 ),
+            )
+        }
+        if (consentSaveFailed) {
+            androidx.compose.material3.Text(
+                "Couldn't save that — check your connection and try again.",
+                style = org.nuruplace.member.ui.theme.NuruType.micro,
+                color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
