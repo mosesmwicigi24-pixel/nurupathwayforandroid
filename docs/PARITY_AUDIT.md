@@ -1145,3 +1145,62 @@ psql heredocs over ssh mangle '{}'::int[] — pipe a .sql file via `docker exec 
 instead. Sim UI automation is unavailable (computer-use screenshot needs macOS
 Screen Recording permission; no idb) — `xcrun simctl io <udid> screenshot` still
 works for capture, and the sim's UDID is NOT the phone's.
+
+## Session 40 — Broadcast: identity, the SuperAdmin gate, the password (2026-07-16)
+Owner: a Broadcast "tab" for SuperAdmin; replies come home; invite per-thread;
+"you need to enter the password to see / access the broadcast content"; and the
+bug report "I see it delivered to 40 people instead of 60".
+
+THE THING I GOT WRONG, TWICE: I told the owner the Broadcast tab "doesn't exist
+on any client". It has shipped on iOS since 96f25e6 (2 July) — segment, staff
+gate, composer. His "40 instead of 60" was not him reading my report; he had SENT
+a broadcast from that tab. ALWAYS grep the clients before claiming a feature is
+unbuilt; the backend having no consumer is not the same as the client having no
+screen.
+
+THE 40: prod = 60 members, 19 of them filed under NO congregation, minus the
+sender = 40 exactly. Cause was `z.enum([...]).default("congregation")` — a Zod
+default is applied BEFORE the service sees the request, so "didn't say" and "said
+congregation" arrive identical and cannot be told apart. Field is now optional;
+the service resolves it (SuperAdmin unasked → the whole church).
+
+BACKEND (pathway#377): chat_broadcasts parent row + chat_messages.broadcast_id
+(a broadcast had no identity — the copies were indistinguishable from hand-typed
+DMs, so nothing could be asked of one). Responses need no table: any message in a
+stamped copy's conversation, by the recipient, after it landed. SuperAdmin ONLY
+(Instructor+ → Admin+ → SuperAdmin over three corrections). Broadcast threads
+shielded from Admin oversight; invite is per-THREAD and the member is TOLD.
+Password step-up (pwd_at claim + /auth/confirm-password), carrying any MFA stamp
+across. Ticks: delivered (a fact — written server-side in one tx) vs seen (the
+existing read receipt). List opens on the last 4 + total. Fixed a latent replay
+bug: it returned a RECOUNT of today's membership, not what landed. 48 chat tests.
+
+iOS (ios#82, build 75): APIError.http gained `details` — FORBIDDEN_SCOPE alone
+cannot tell "confirm your password" from "you may not". setAccessToken (the
+obvious setSession(access:refresh:nil) would have WIPED the refresh token).
+confirmPassword bypasses send() (a 401 there auto-refreshes and REPLAYS the wrong
+password → two lockout attempts per typo). Draft + client_mutation_id survive the
+prompt, so confirm resumes THAT send. Gate narrowed `role != "Student"` →
+superadmin. NOTE: adding `details` broke SIX pattern matches across five screens,
+and Swift reported them as "failed to produce diagnostic; please submit a bug
+report" — NOT as the arity error they were. Budget a build per site.
+
+NEAR-MISS, the worst of the day: `git add packages/backend` swept two untracked
+files into #377 — including migrations/1758000000074_seed-plans-john-sermon-
+psalms.sql, an unreviewed 215-line seed that opens with DELETE FROM
+reading_plan_days. It had NEVER run; node-pg-migrate runs anything absent from
+pgmigrations REGARDLESS of number, so being stamped 074 while prod sat at 157
+protected nothing — the next deploy would have executed it, cascading through
+segments into members' reading_plan_segment_progress (the very data mig 156 had
+just made honest). Also collides with the existing 1758000000074_mfa-recovery-
+codes prefix. Caught it in the merge's file list, reverted off main BEFORE
+deploying, and verified by (a) `find` inside the built image and (b) count of
+reading_plan_days = 264 after migrate. LESSON: never `git add <dir>` — add
+explicit paths, and read the merge's file list.
+
+VERIFIED LIVE ON PROD: session alone → 403 + details.password_required (both read
+and send); pwd_at token → 200; Admin + pwd_at → 403 "Insufficient role"; mig 157
+applied; chat_broadcasts exists; 264 plan days intact.
+
+ANDROID: none of the broadcast work exists here — no segment, no composer, no
+models. Whole feature outstanding.
