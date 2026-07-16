@@ -69,6 +69,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var posting by remember { mutableStateOf(false) }
+    var postError by remember { mutableStateOf(false) }
     var aiBusy by remember { mutableStateOf(false) }
 
     // The day's question(s) come from the plan day's talk segment.
@@ -92,9 +93,11 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
         if (body.isBlank() || posting) return
         posting = true
         scope.launch {
-            runCatching { Net.client.api.talkPost(planId, dayNumber, TalkPostBody(body)) }.getOrNull()?.let {
-                posts.add(it); draft = ""
-            }
+            runCatching { Net.client.api.talkPost(planId, dayNumber, TalkPostBody(body)) }
+                .onSuccess { posts.add(it); draft = ""; postError = false }
+                // The kept draft alone is too quiet a signal that the post
+                // never left the phone — say it.
+                .onFailure { postError = true }
             posting = false
         }
     }
@@ -165,6 +168,13 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
             }
         }
 
+        if (postError) {
+            Text(
+                "Couldn't send — check your connection and try again.",
+                style = gInter(11), color = Color(0xFFB91C1C),
+                modifier = Modifier.fillMaxWidth().background(GrowPal.white).padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
         // Pinned composer with AI sparkle.
         Row(
             Modifier.fillMaxWidth().background(GrowPal.white).padding(horizontal = 16.dp, vertical = 10.dp),
