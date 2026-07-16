@@ -73,6 +73,11 @@ data class ReadingPlanDay(
     val content: String? = null,
     val segments: List<PlanSegment>? = null,
     val completed: Boolean? = null,
+    /** Server-decided: true while an earlier day is still unfinished. A locked
+     *  day arrives with its shape (title, reference, the kinds of its parts) but
+     *  its content and videoUrl withheld — there is nothing to render past the
+     *  gate even if a client tried. Absent on an older server → nothing locked. */
+    val locked: Boolean = false,
 )
 
 @Serializable
@@ -88,6 +93,9 @@ data class ReadingPlanDetail(
     val completedDays: List<Int>? = null,
     val enrolled: Boolean = false,
     val days: List<ReadingPlanDay> = emptyList(),
+    /** The first day not yet finished — the one day to point someone back to.
+     *  Null once the whole plan is done. */
+    val nextDay: Int? = null,
 )
 
 // --- Prayer journal ---

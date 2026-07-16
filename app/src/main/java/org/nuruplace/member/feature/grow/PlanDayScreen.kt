@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Check
@@ -151,6 +152,12 @@ fun PlanDayScreen(
         if (dayCompleted) null
         else segments.firstOrNull { it.segmentId !in completedSegments }?.segmentId
 
+    // The day's parts + the one still to do — shared by the hub rows AND the
+    // footer CTA, so the gold button can only carry you into the work.
+    val parts = hubParts(segments)
+    val doneOf: (HubPart) -> Boolean = { p -> p.segs.all { it.segmentId in completedSegments || it.completed == true } }
+    val nextPart = parts.firstOrNull { !doneOf(it) }
+
     Box(Modifier.fillMaxSize().background(PL.cream)) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -162,9 +169,6 @@ fun PlanDayScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    val parts = hubParts(segments)
-                    val doneOf: (HubPart) -> Boolean = { p -> p.segs.all { it.segmentId in completedSegments || it.completed == true } }
-                    val nextPart = parts.firstOrNull { !doneOf(it) }
                     Text(
                         "TODAY'S JOURNEY · ${parts.size} PART${if (parts.size == 1) "" else "S"}",
                         style = plInter(11, Bold, 1.8f), color = PL.catText,
@@ -181,6 +185,10 @@ fun PlanDayScreen(
             FooterBar(
                 complete = dayCompleted || justDone,
                 busy = busy,
+                nextPartLabel = nextPart?.label,
+                onOpenNext = {
+                    nextPart?.let { p -> if (p.tag == "talk") onTalkItOver() else onOpenPart(p.tag, p.firstIndex) }
+                },
                 onComplete = {
                     if (!busy) {
                         busy = true
@@ -508,6 +516,12 @@ private fun ReflectionCard(
 private fun FooterBar(
     complete: Boolean,
     busy: Boolean,
+    /** The part still to do, if any — while one remains, the gold button is the
+     *  way INTO it. A day is finished by DOING it, not by declaring it, so the
+     *  button no longer offers to seal a day nobody has walked. (The server
+     *  refuses that too: 409 CONTENT_INCOMPLETE.) */
+    nextPartLabel: String?,
+    onOpenNext: () -> Unit,
     onComplete: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -526,16 +540,28 @@ private fun FooterBar(
                 .clip(RoundedCornerShape(16.dp))
                 .background(PL.goldCtaGrad)
                 .height(48.dp)
-                .clickable(enabled = !busy) { if (complete) onBack() else onComplete() },
+                .clickable(enabled = !busy) {
+                    when {
+                        complete -> onBack()
+                        nextPartLabel != null -> onOpenNext()
+                        else -> onComplete()
+                    }
+                },
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (complete) {
-                Text("Day complete 🎉", style = plInter(14, Bold), color = PL.navy)
-            } else {
-                Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Mark day complete", style = plInter(14, Bold), color = PL.navy)
+            when {
+                complete -> Text("Day complete 🎉", style = plInter(14, Bold), color = PL.navy)
+                nextPartLabel != null -> {
+                    Text("Continue · $nextPartLabel", style = plInter(14, Bold), color = PL.navy)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                }
+                else -> {
+                    Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Seal the day", style = plInter(14, Bold), color = PL.navy)
+                }
             }
         }
     }
