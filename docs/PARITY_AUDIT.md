@@ -1092,3 +1092,56 @@ all along. I had asserted in pathway#375 that the member apps "already have
 their own message menus" — that was wrong and is corrected in a PR comment.
 Real work, cheap: MemberAPI.editMessage/deleteMessage + a long-press menu on
 own bubbles, iOS + Android.
+
+## Session 39 — plans: a day is earned, and the days are walked in order (2026-07-16)
+Owner: "you open page one, it marks that you open... you can just read a little
+bit, and then you move out without completing all the three steps and the
+reflection... You cannot go to plan two, and then there is a message that
+encourages you to do plan one." Screenshots: Day 1 "Completed" in the overview
+while ALL THREE parts sat unticked; Day 2 showing "0 of 3 parts read" directly
+above a gold "Mark day complete" button.
+
+ROOT CAUSE (not a UI slip — the server did as told): POST /growth/plans/:id/
+complete-day set completed_days with NO segment check; it validated only
+day_number <= day_count. It self-enrolled, took ANY day in ANY order, and
+stamped whole-plan completed_at at cardinality >= day_count — a 10-day plan was
+finishable in 10 taps with nothing read. TWO completion paths never reconciled:
+completeSegment rolled up honestly (unread==0), complete-day just set the flag;
+planDetail ORed them (`segDone || completedDays.has(n)`) which is exactly why a
+day read "Completed" with 0 parts done. NO day gating existed anywhere —
+current_day is advisory bookkeeping nothing reads to authorize.
+
+BACKEND (pathway#376): completeDay now verifies every part read (409
+CONTENT_INCOMPLETE + parts_remaining) AND that the day exists (completed_days is
+a bare int[] with no FK — it recorded days that don't exist); day N gated on
+1..N-1 (409 GATE_LOCKED + next_day), enforced on completeSegment TOO (the day CTA
+is not the only door). planDetail returns locked per day + next_day, and
+withholds a locked day's content/video_url on the day AND every segment (§1.9
+hard-lock discipline — no client can render past the gate). Gate + badge now read
+ONE union so they can't drift. MIGRATION 156 rewrites the lying rows: prod had
+38 of 56 day-marks unearned across 11 members; dry-run 56→18, 0 rows gained days
+(only ever subtracts; segment-less days keep their mark). 5 new tests, VERIFIED
+FAILING against the old service (4/5). 655 pass, 0 regressions.
+
+CLIENTS (ios#81, android#42): "Mark day complete" is GONE. While a part remains
+the gold CTA is the way INTO it ("Continue · The Word") via the SAME link the row
+uses — it can only carry you into the work, never around it; all parts read →
+"Seal the day". Locked rows: lock glyph, alpha 0.55, "opens when today is done",
+tap → a warm dialog naming the day you're on and why this one waits (not an
+error). DTOs: ReadingPlanDay.locked + ReadingPlanDetail.nextDay, defaulting
+unlocked so an older server behaves as before.
+
+ALSO iOS-only (ios#81): Talk it Over composer sat UNDER the keyboard. Avoidance
+wasn't absent, it was DEFEATED — the composer was a VStack sibling in a ZStack
+whose other child was `PL.cream.ignoresSafeArea()`; a ZStack sizes to its LARGEST
+child, so the keyboard-ignoring Color inflated the stack full-screen and the
+VStack laid out to the screen bottom. SAME ornament lesson as the Home fusion
+(ios#72). Fixed to ChatThreadView's proven shape: .background(cream
+.ignoresSafeArea()) + composer in the ScrollView's .safeAreaInset(edge:.bottom).
+Android's PlanDayScreen already uses .imePadding() — not affected.
+
+OPS TRAPS: the prod PG container is `pathway-postgres-1` (NOT pathway-db-1);
+psql heredocs over ssh mangle '{}'::int[] — pipe a .sql file via `docker exec -i`
+instead. Sim UI automation is unavailable (computer-use screenshot needs macOS
+Screen Recording permission; no idb) — `xcrun simctl io <udid> screenshot` still
+works for capture, and the sim's UDID is NOT the phone's.

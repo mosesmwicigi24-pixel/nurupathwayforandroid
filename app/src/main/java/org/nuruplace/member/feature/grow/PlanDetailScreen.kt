@@ -34,12 +34,15 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -121,7 +125,34 @@ private fun PlanDetailContent(
     val done = d.days.count { it.completed == true }
     val allDone = d.days.isNotEmpty() && done >= d.days.size
     val firstIncomplete = d.days.firstOrNull { it.completed != true } ?: d.days.firstOrNull()
-    val nextDay = firstIncomplete?.dayNumber
+    // The server names the day you're on; fall back to our own reckoning if an
+    // older server didn't send it.
+    val nextDay = d.nextDay ?: firstIncomplete?.dayNumber
+
+    // Which locked day the member just reached for — drives the nudge back.
+    var lockedNudgeFor by remember { mutableStateOf<Int?>(null) }
+    lockedNudgeFor?.let { reached ->
+        val n = nextDay ?: 1
+        val title = d.days.firstOrNull { it.dayNumber == n }?.title
+        val named = if (title != null) "Day $n — $title" else "Day $n"
+        AlertDialog(
+            onDismissRequest = { lockedNudgeFor = null },
+            confirmButton = {
+                TextButton(onClick = { lockedNudgeFor = null }) {
+                    Text("Stay on Day $n", style = plInter(13, FontWeight.Bold), color = PL.goldDeep)
+                }
+            },
+            title = { Text("Day $reached is still ahead", style = plSerif(18, FontWeight.SemiBold), color = PL.navy) },
+            text = {
+                Text(
+                    "Finish $named first, and this one opens.\n\nThese days build on each other, so the plan waits for you rather than running ahead. One day at a time is the whole point.",
+                    style = plInter(13),
+                    color = PL.ink2,
+                )
+            },
+            containerColor = Color.White,
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         Column(
@@ -133,7 +164,11 @@ private fun PlanDetailContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 AboutCard(d)
-                WhatYoullRead(d = d, done = done, allDone = allDone, nextDay = nextDay, onOpenDay = onOpenDay)
+                WhatYoullRead(
+                    d = d, done = done, allDone = allDone, nextDay = nextDay,
+                    onOpenDay = onOpenDay,
+                    onLockedDay = { lockedNudgeFor = it },
+                )
                 PLFinishEarnCard(category = d.category, dayCount = d.dayCount)
                 Nudge()
             }
@@ -259,6 +294,7 @@ private fun WhatYoullRead(
     allDone: Boolean,
     nextDay: Int?,
     onOpenDay: (Int) -> Unit,
+    onLockedDay: (Int) -> Unit,
 ) {
     var showAll by remember { mutableStateOf(false) }
     val visible = if (showAll) d.days else d.days.take(4)
@@ -277,7 +313,9 @@ private fun WhatYoullRead(
                 PLDetailDayRow(
                     day = day,
                     isNext = !allDone && day.dayNumber == nextDay,
-                    onTap = { onOpenDay(day.dayNumber) },
+                    // The plan is walked, not skimmed: a locked day doesn't open,
+                    // it turns you back to the day you're on — kindly.
+                    onTap = { if (day.locked) onLockedDay(day.dayNumber) else onOpenDay(day.dayNumber) },
                 )
             }
             if (!showAll && d.days.size > 4) {
@@ -445,12 +483,16 @@ private fun PLFinishEarnCard(category: String?, dayCount: Int) {
 @Composable
 private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, onTap: () -> Unit) {
     val done = day.completed == true
+    // Not yet opened: an earlier day is still unfinished. Shown quietly — the
+    // road ahead is visible, it just isn't walkable yet.
+    val locked = day.locked
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(if (isNext) PL.highlight else PL.surface)
             .border(1.dp, if (isNext) PL.gold.copy(alpha = 0.27f) else Color.Transparent, RoundedCornerShape(16.dp))
             .clickable(onClick = onTap)
+            .alpha(if (locked) 0.55f else 1f)   // present, but plainly not yours yet
             .padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -481,7 +523,7 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, onTap: () -> Un
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${day.reference} · ~5 min read",
+                if (locked) "${day.reference} · opens when today is done" else "${day.reference} · ~5 min read",
                 style = plInter(11),
                 color = PL.ink3,
                 maxLines = 1,
@@ -495,6 +537,8 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, onTap: () -> Un
                 color = PL.navy,
                 modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
             )
+        } else if (locked) {
+            Icon(Icons.Filled.Lock, null, tint = PL.chev, modifier = Modifier.size(13.dp))
         } else {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         }
