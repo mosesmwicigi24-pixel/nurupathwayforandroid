@@ -140,4 +140,4 @@ private fun prettyLabel(key: String): String =
     key.replace('_', ' ').replaceFirstChar { it.uppercase() }
 
 private fun fmtNum(v: Double): String =
-    if (v == v.toLong().toDouble()) v.toLong().toString() else String.format("%.1f", v)
+    if (v == v.toLong().toDouble()) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
