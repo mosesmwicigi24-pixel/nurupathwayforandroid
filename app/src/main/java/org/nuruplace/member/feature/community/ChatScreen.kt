@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +70,6 @@ import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.BroadcastBody
-import org.nuruplace.member.data.net.ConfirmPasswordBody
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.DiscoverSpace
@@ -95,6 +96,7 @@ fun ChatInboxScreen(
     onOpenAssistant: () -> Unit,
     onOpenNotifications: () -> Unit,
     isStaff: Boolean = false,
+    onOpenBroadcast: (String) -> Unit = {},
 ) {
     AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, load = {
         val inbox = Net.client.api.chatInbox()
@@ -278,7 +280,7 @@ fun ChatInboxScreen(
                                 query = query,
                                 onOpenThread = onOpenThread,
                             )
-                            else -> BroadcastTab()
+                            else -> BroadcastTab(onOpenBroadcast = onOpenBroadcast)
                         }
                     }
                 }
@@ -872,22 +874,39 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
 // ── Tab 3: Broadcast (staff only — Instructor+) ──
 // POST chat/broadcast fans the message out as INDIVIDUAL DMs from the sender;
 // members reply 1:1, never as a group. Idempotent on client_mutation_id.
+// Below the composer sits the sent list (GET chat/broadcasts) — both routes
+// share the same §5.3 step-up sheet (BroadcastStepUp.kt), which tries the
+// fingerprint unlock before falling back to typing the password.
 @Composable
-private fun BroadcastTab() {
+private fun BroadcastTab(onOpenBroadcast: (String) -> Unit) {
     val scope = rememberCoroutineScope()
+    val stepUp = rememberBroadcastStepUp()
     var draft by remember { mutableStateOf("") }
     var confirming by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var sentTo by remember { mutableStateOf<Int?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    // Step-up (§5.3): the server opens the broadcast route only for a token with
-    // a fresh pwd_at. On 403 password_required we ask for the password, confirm
-    // it (the token is re-minted), and retry the SAME send — the mutation id is
-    // kept across the retry so the resend is idempotent.
-    var askingPassword by remember { mutableStateOf(false) }
-    var password by remember { mutableStateOf("") }
-    var passwordError by remember { mutableStateOf<String?>(null) }
+    // Held across a step-up so confirming and retrying resumes THIS send rather
+    // than starting a second one — a fresh id is minted only once a send lands.
     var mutationId by remember { mutableStateOf<String?>(null) }
+
+    var list by remember { mutableStateOf<org.nuruplace.member.data.net.BroadcastListRes?>(null) }
+    var listFailed by remember { mutableStateOf(false) }
+    var showAllSent by remember { mutableStateOf(false) }
+
+    fun loadList(limit: Int = 4) {
+        scope.launch {
+            runCatching { Net.client.api.broadcasts(limit) }
+                .onSuccess { list = it; listFailed = false }
+                .onFailure { e ->
+                    if (isPasswordRequired(e)) {
+                        stepUp.requestStepUp { loadList(limit) }
+                    } else if (list == null) {
+                        listFailed = true
+                    }
+                }
+        }
+    }
 
     fun send() {
         confirming = false
@@ -901,43 +920,20 @@ private fun BroadcastTab() {
                 sentTo = if (res.recipientCount > 0) res.recipientCount else res.sent
                 draft = ""
                 mutationId = null
+                sending = false
+                loadList(if (showAllSent) 100 else 4)   // the new one belongs at the top
             }.onFailure { e ->
-                val http = e as? retrofit2.HttpException
-                val body = runCatching { http?.response()?.errorBody()?.string() }.getOrNull().orEmpty()
-                if (http?.code() == 403 && "password_required" in body) {
-                    askingPassword = true    // draft + mutationId survive for the retry
+                sending = false
+                if (isPasswordRequired(e)) {
+                    stepUp.requestStepUp { send() }    // draft + mutationId survive for the retry
                 } else {
                     error = "Couldn't send the broadcast. Please try again."
                 }
             }
-            sending = false
         }
     }
 
-    fun confirmAndResend() {
-        if (password.isBlank()) return
-        sending = true
-        passwordError = null
-        scope.launch {
-            runCatching { Net.client.api.confirmPassword(ConfirmPasswordBody(password)) }
-                .onSuccess { res ->
-                    // Swap ONLY the access token — the refresh token stays.
-                    Net.client.vault.set(res.accessToken, Net.client.vault.refreshToken)
-                    password = ""
-                    askingPassword = false
-                    send()
-                }
-                .onFailure { e ->
-                    sending = false
-                    val code = (e as? retrofit2.HttpException)?.code()
-                    passwordError = when (code) {
-                        401 -> "That password isn't right."
-                        429 -> org.nuruplace.member.data.net.ApiException.message(e)
-                        else -> "Couldn't confirm. Please try again."
-                    }
-                }
-        }
-    }
+    LaunchedEffect(Unit) { loadList() }
 
     Section("BROADCAST", Icons.Filled.Campaign)
 
@@ -1062,54 +1058,86 @@ private fun BroadcastTab() {
         )
     }
 
-    // Step-up sheet — the server asked for the password before opening the
-    // broadcast. Cancelling keeps the draft; confirming resends the same send.
-    if (askingPassword) {
-        AlertDialog(
-            onDismissRequest = { if (!sending) { askingPassword = false; passwordError = null } },
-            containerColor = CHAT.white,
-            title = { Text("Confirm it's you", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "The Broadcast opens only for you. Enter your password to send.",
-                        style = cInter(13).copy(lineHeight = 19.sp),
-                        color = CHAT.ink600,
-                    )
-                    Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CHAT.paper)
-                            .border(1.dp, CHAT.border, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                    ) {
-                        if (password.isBlank()) Text("Password", style = cInter(13), color = CHAT.faint)
-                        BasicTextField(
-                            value = password,
-                            onValueChange = { password = it },
-                            textStyle = cInter(13).copy(color = CHAT.navy),
-                            singleLine = true,
-                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
-                            ),
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(CHAT.gold),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    val pe = passwordError
-                    if (pe != null) Text(pe, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318))
+    // Sent list — GET chat/broadcasts, under the composer (iOS BroadcastHome
+    // parity). Its own 403s route through the SAME step-up sheet below.
+    val sentList = list
+    if (sentList != null && sentList.data.isNotEmpty()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(CHAT.white)
+                .border(1.dp, CHAT.border, RoundedCornerShape(24.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("LAST POSTS SENT", style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.overline, modifier = Modifier.weight(1f))
+                if (sentList.total > sentList.data.size) {
+                    Text("${sentList.total} all-time", style = cInter(11), color = CHAT.ink600)
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { confirmAndResend() }, enabled = password.isNotBlank() && !sending) {
-                    Text(if (sending) "Confirming…" else "Confirm & send", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sentList.data.forEach { b -> BroadcastSentRow(b) { onOpenBroadcast(b.broadcastId) } }
+            }
+            if (!showAllSent && sentList.total > sentList.data.size) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { showAllSent = true; loadList(100) }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text("Show all ${sentList.total}", style = cInter(12, FontWeight.Bold), color = CHAT.goldDeep)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { askingPassword = false; passwordError = null }, enabled = !sending) {
-                    Text("Cancel", style = cInter(13, FontWeight.Medium), color = CHAT.ink500)
-                }
-            },
+            }
+        }
+    } else if (listFailed) {
+        Text(
+            "Couldn't load your broadcasts — pull to retry.",
+            style = cInter(12),
+            color = CHAT.ink600,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
         )
+    }
+
+    // Step-up sheet — the server asked the password be confirmed again before
+    // opening a broadcast route (send or the list above). Fingerprint-first
+    // when enrolled (BroadcastStepUp), typed as the fallback.
+    BroadcastStepUpDialog(stepUp, reason = "The Broadcast holds private conversations between you and every member. Confirm it's you to continue.")
+}
+
+/** One sent broadcast: its words, when, and the three numbers that matter. */
+@Composable
+private fun BroadcastSentRow(b: org.nuruplace.member.data.net.BroadcastSummary, onOpen: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(CHAT.paper)
+            .border(1.dp, CHAT.border, RoundedCornerShape(16.dp))
+            .clickable { onOpen() }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            b.body.ifBlank { "📎 Attachment" },
+            style = cSerif(14),
+            color = CHAT.navy,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Filled.People, contentDescription = null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+            Text("${b.recipientCount}", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
+            Icon(Icons.Filled.DoneAll, contentDescription = null, tint = Color(0xFF2F80ED), modifier = Modifier.size(13.dp))
+            Text("${b.seenCount} seen", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
+            Text("${b.repliedCount} replied", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
+            Spacer(Modifier.weight(1f))
+            Text(broadcastRelativeTime(b.createdAt), style = cInter(11), color = CHAT.ink600)
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = CHAT.ink600.copy(alpha = 0.6f), modifier = Modifier.size(13.dp))
+        }
     }
 }
 

@@ -212,3 +212,71 @@ data class ConfirmPasswordBody(val password: String)
 
 @Serializable
 data class ConfirmPasswordRes(val accessToken: String, val expiresIn: Int = 0, val confirmedAt: Long = 0)
+
+// GET chat/broadcasts — the last few sent, and how many there are in all. Same
+// step-up gate as the send itself: a 403 password_required here means the
+// 15-minute window lapsed since the composer opened.
+@Serializable
+data class BroadcastSummary(
+    val broadcastId: String,
+    val body: String = "",
+    val msgType: String = "text",
+    val attachmentUrl: String? = null,
+    // "all" (the whole church) | "congregation" (narrowed on purpose).
+    val audience: String = "all",
+    val recipientCount: Int = 0,
+    val seenCount: Int = 0,
+    val repliedCount: Int = 0,
+    val createdAt: String? = null,
+)
+
+@Serializable
+data class BroadcastListRes(val data: List<BroadcastSummary> = emptyList(), val total: Int = 0)
+
+// GET chat/broadcasts/{id} — the message, the church's answers, and the ticks.
+// A broadcast is delivered as an individual DM to every member, so each
+// response already carries the private thread it came from.
+@Serializable
+data class BroadcastResponseRow(
+    val messageId: String,
+    val conversationId: String,
+    val body: String = "",
+    val msgType: String = "text",
+    val attachmentUrl: String? = null,
+    val createdAt: String? = null,
+    val userId: String = "",
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+    // How many messages this person has written in the thread — 1 is a first
+    // word, more is a conversation already under way.
+    val fromThem: Int = 1,
+)
+
+// One person the broadcast reached — the ticks. `delivered` is always true (a
+// broadcast is written into every recipient's thread server-side in one
+// transaction, so arrival is a fact); `seen` means they opened the thread.
+@Serializable
+data class BroadcastRecipientRow(
+    val userId: String,
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+    val delivered: Boolean = true,
+    val deliveredAt: String? = null,
+    val seen: Boolean = false,
+    val seenAt: String? = null,
+)
+
+@Serializable
+data class BroadcastDetailRes(
+    val broadcastId: String,
+    val body: String = "",
+    val msgType: String = "text",
+    val attachmentUrl: String? = null,
+    val audience: String = "all",
+    val recipientCount: Int = 0,
+    val createdAt: String? = null,
+    val responses: List<BroadcastResponseRow> = emptyList(),
+    val recipients: List<BroadcastRecipientRow> = emptyList(),
+    val deliveredCount: Int = 0,
+    val seenCount: Int = 0,
+)

@@ -215,6 +215,14 @@ interface MemberApi {
     @POST("chat/broadcast")
     suspend fun broadcast(@Body body: BroadcastBody): BroadcastRes
 
+    // Same step-up gate as the send (§5.3) — a fresh pwd_at is required to read
+    // what was sent, not only to send it.
+    @GET("chat/broadcasts")
+    suspend fun broadcasts(@Query("limit") limit: Int = 4): BroadcastListRes
+
+    @GET("chat/broadcasts/{id}")
+    suspend fun broadcastDetail(@Path("id") broadcastId: String): BroadcastDetailRes
+
     @POST("chat/spaces/{id}/join")
     suspend fun joinChatSpace(@Path("id") conversationId: String): Unit
 
