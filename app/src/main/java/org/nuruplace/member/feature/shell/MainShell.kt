@@ -302,7 +302,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNewMessage = { nav.navigate("new-message") },
                     onOpenAssistant = { nav.navigate("assistant") },
                     onOpenNotifications = { nav.navigate("notifications") },
-                    isStaff = me?.profile?.role in setOf("Instructor", "Admin", "SuperAdmin"),
+                    // Broadcast is between the shepherd and the individual — SuperAdmin
+                    // only, not even Admins (product decision, 2026-07).
+                    isStaff = me?.profile?.role == "SuperAdmin",
                 )
             }
             composable("new-message") {

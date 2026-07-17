@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
@@ -184,8 +185,12 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
 
         LaunchedEffect(messages.size) { if (messages.isNotEmpty()) runCatching { listState.animateScrollToItem(messages.lastIndex) } }
 
+        // A DM carrying a message stamped with a broadcast_id is the pastor's own
+        // word to this member — dress it as "Talk with Pastor", not a plain DM.
+        val isPastorMail = thread.kind != "space" && messages.any { it.broadcastId != null && !it.mine }
+
         Column(Modifier.fillMaxSize().background(CHAT.threadBg).imePadding()) {
-            ThreadHeader(thread, onBack)
+            ThreadHeader(thread, isPastorMail, onBack)
             if (thread.kind == "space" && !thread.joined) {
                 Row(Modifier.fillMaxWidth().background(CHAT.canvas).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
                     Box(
@@ -205,6 +210,23 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                     if (thisDay != prevDay) DaySeparator(m.createdAt)
                     val runHead = i == 0 || messages[i - 1].authorUserId != m.authorUserId || chatDayKey(messages[i - 1].createdAt) != thisDay
                     MessageRow(m, thread.kind, runHead, player) { emoji -> react(m, emoji) }
+                }
+            }
+
+            // The privacy promise, right where the member types: a reply to the
+            // pastor's broadcast goes to the pastor alone.
+            if (isPastorMail) {
+                Row(
+                    Modifier.fillMaxWidth().background(CHAT.goldTint).padding(horizontal = 16.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+                    Text(
+                        "Only ${thread.title ?: "the pastor"} sees your reply",
+                        style = cInter(11, FontWeight.SemiBold),
+                        color = CHAT.goldDeep,
+                    )
                 }
             }
 
@@ -309,7 +331,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ThreadHeader(thread: ChatThreadDetail, onBack: () -> Unit) {
+private fun ThreadHeader(thread: ChatThreadDetail, isPastorMail: Boolean, onBack: () -> Unit) {
     Column {
         ChatCreamHeaderBox {
             Row(
@@ -337,7 +359,11 @@ private fun ThreadHeader(thread: ChatThreadDetail, onBack: () -> Unit) {
                     if (thread.kind == "dm") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("🕊️", fontSize = 10.sp)
-                            Text("Walking together in faith", style = cSerif(12, FontWeight.Medium).copy(fontStyle = FontStyle.Italic), color = CHAT.eyebrow, maxLines = 1)
+                            Text(
+                                if (isPastorMail) "Talk with Pastor" else "Walking together in faith",
+                                style = cSerif(12, FontWeight.Medium).copy(fontStyle = FontStyle.Italic),
+                                color = CHAT.eyebrow, maxLines = 1,
+                            )
                         }
                     } else {
                         Text(

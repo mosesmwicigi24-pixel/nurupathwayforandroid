@@ -1213,3 +1213,12 @@ additionally: offline-queue idempotency pinned by 3 tests, lint 7 errors → 0.
 iOS additionally: force-unwraps/try! purged from user paths, 14 dead symbols
 removed (incl. LevelGating.swift — server's .locked fields are the real §1.9
 enforcement), first XCTest target with 10 decoding-contract tests.
+
+## 2026-07-17 — Broadcast member parity lands on Android (PR: feat/broadcast-member-parity)
+Closes the "whole feature outstanding" gap for the member side + sender basics:
+broadcast_id on ChatMessage; Talk with Pastor dressing + gold "Only <pastor>
+sees your reply" ribbon; segment chips count unread (vanish at 0, reset on
+return); Broadcast tab SuperAdmin-only; send handles 403 password_required via
+/auth/confirm-password (same client_mutation_id on retry — idempotent).
+STILL iOS-only: the biometric lock (Keychain/Face ID), the last-4 sent list
+with ticks/responses detail, and the sent-card. Android sender = composer only.

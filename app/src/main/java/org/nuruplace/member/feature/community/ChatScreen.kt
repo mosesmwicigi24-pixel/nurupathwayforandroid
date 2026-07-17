@@ -68,6 +68,7 @@ import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.BroadcastBody
+import org.nuruplace.member.data.net.ConfirmPasswordBody
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.DiscoverSpace
@@ -246,9 +247,11 @@ fun ChatInboxScreen(
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Segment(0, "#My Space", spaces.size, tab) { tab = 0 }
-                        Segment(1, "DM", dms.size, tab) { tab = 1 }
-                        Segment(2, "My Groups", groups.size, tab) { tab = 2 }
+                        // Chips count UNREAD messages, not conversations, and vanish at
+                        // zero — "when they are open, the counter resets" (iOS parity).
+                        Segment(0, "#My Space", spaces.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 0 }
+                        Segment(1, "DM", dms.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 1 }
+                        Segment(2, "My Groups", groups.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 2 }
                         if (isStaff) Segment(3, "Broadcast", null, tab) { tab = 3 }
                     }
 
@@ -877,23 +880,62 @@ private fun BroadcastTab() {
     var sending by remember { mutableStateOf(false) }
     var sentTo by remember { mutableStateOf<Int?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Step-up (§5.3): the server opens the broadcast route only for a token with
+    // a fresh pwd_at. On 403 password_required we ask for the password, confirm
+    // it (the token is re-minted), and retry the SAME send — the mutation id is
+    // kept across the retry so the resend is idempotent.
+    var askingPassword by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var mutationId by remember { mutableStateOf<String?>(null) }
 
     fun send() {
         confirming = false
         sending = true
         error = null
+        val mid = mutationId ?: java.util.UUID.randomUUID().toString().also { mutationId = it }
         scope.launch {
             runCatching {
-                Net.client.api.broadcast(
-                    BroadcastBody(body = draft.trim(), clientMutationId = java.util.UUID.randomUUID().toString()),
-                )
+                Net.client.api.broadcast(BroadcastBody(body = draft.trim(), clientMutationId = mid))
             }.onSuccess { res ->
-                sentTo = res.sent
+                sentTo = if (res.recipientCount > 0) res.recipientCount else res.sent
                 draft = ""
-            }.onFailure {
-                error = "Couldn't send the broadcast. Please try again."
+                mutationId = null
+            }.onFailure { e ->
+                val http = e as? retrofit2.HttpException
+                val body = runCatching { http?.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+                if (http?.code() == 403 && "password_required" in body) {
+                    askingPassword = true    // draft + mutationId survive for the retry
+                } else {
+                    error = "Couldn't send the broadcast. Please try again."
+                }
             }
             sending = false
+        }
+    }
+
+    fun confirmAndResend() {
+        if (password.isBlank()) return
+        sending = true
+        passwordError = null
+        scope.launch {
+            runCatching { Net.client.api.confirmPassword(ConfirmPasswordBody(password)) }
+                .onSuccess { res ->
+                    // Swap ONLY the access token — the refresh token stays.
+                    Net.client.vault.set(res.accessToken, Net.client.vault.refreshToken)
+                    password = ""
+                    askingPassword = false
+                    send()
+                }
+                .onFailure { e ->
+                    sending = false
+                    val code = (e as? retrofit2.HttpException)?.code()
+                    passwordError = when (code) {
+                        401 -> "That password isn't right."
+                        429 -> org.nuruplace.member.data.net.ApiException.message(e)
+                        else -> "Couldn't confirm. Please try again."
+                    }
+                }
         }
     }
 
@@ -1014,6 +1056,56 @@ private fun BroadcastTab() {
             },
             dismissButton = {
                 TextButton(onClick = { confirming = false }) {
+                    Text("Cancel", style = cInter(13, FontWeight.Medium), color = CHAT.ink500)
+                }
+            },
+        )
+    }
+
+    // Step-up sheet — the server asked for the password before opening the
+    // broadcast. Cancelling keeps the draft; confirming resends the same send.
+    if (askingPassword) {
+        AlertDialog(
+            onDismissRequest = { if (!sending) { askingPassword = false; passwordError = null } },
+            containerColor = CHAT.white,
+            title = { Text("Confirm it's you", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "The Broadcast opens only for you. Enter your password to send.",
+                        style = cInter(13).copy(lineHeight = 19.sp),
+                        color = CHAT.ink600,
+                    )
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CHAT.paper)
+                            .border(1.dp, CHAT.border, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        if (password.isBlank()) Text("Password", style = cInter(13), color = CHAT.faint)
+                        BasicTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            textStyle = cInter(13).copy(color = CHAT.navy),
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(CHAT.gold),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    val pe = passwordError
+                    if (pe != null) Text(pe, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmAndResend() }, enabled = password.isNotBlank() && !sending) {
+                    Text(if (sending) "Confirming…" else "Confirm & send", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { askingPassword = false; passwordError = null }, enabled = !sending) {
                     Text("Cancel", style = cInter(13, FontWeight.Medium), color = CHAT.ink500)
                 }
             },
