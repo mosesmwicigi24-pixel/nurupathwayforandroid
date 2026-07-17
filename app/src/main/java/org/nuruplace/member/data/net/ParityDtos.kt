@@ -364,6 +364,19 @@ data class RadioReactRes(val counts: RadioReactionCounts = RadioReactionCounts()
 @Serializable
 data class RadioCommentBody(val body: String, val clientEventId: String)
 
+// --- Screen-view telemetry (POST /me/activity/screens — best-effort, silent;
+// iOS ScreenTracker parity) ---
+@Serializable
+data class ScreenEvent(
+    val screen: String,
+    val durationMs: Int,
+    val occurredAt: String,
+    val clientEventId: String,
+)
+
+@Serializable
+data class ScreenActivityBody(val events: List<ScreenEvent>)
+
 @Serializable
 data class RadioComment(
     val id: String,

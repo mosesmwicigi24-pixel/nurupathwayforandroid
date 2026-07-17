@@ -241,6 +241,10 @@ interface MemberApi {
     @POST("me/notifications/read")
     suspend fun markNotificationsRead(@Body body: MarkReadBody): Unit
 
+    // Screen-view dwell telemetry batch — best-effort, silent (iOS ScreenTracker parity).
+    @POST("me/activity/screens")
+    suspend fun screenActivity(@Body body: ScreenActivityBody): Unit
+
     // --- Giving (online-only, §5.6 — money is never queued) ---
     @GET("giving/history")
     suspend fun givingHistory(): Envelope<GivingRecord>

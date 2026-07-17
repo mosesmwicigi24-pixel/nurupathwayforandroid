@@ -105,6 +105,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     val onTab = TABS.any { it.route == route }
     val rootView = androidx.compose.ui.platform.LocalView.current
 
+    // Screen-view telemetry (POST /me/activity/screens) — silent, fire-and-forget
+    // (iOS RootView.onChange(of: tabs.selected) + ScreenTracker parity). Tracks
+    // every nav-graph destination change, not just tab switches.
+    androidx.compose.runtime.LaunchedEffect(route) {
+        route?.let { org.nuruplace.member.data.ScreenTracker.record(it.lowercase()) }
+    }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+        org.nuruplace.member.data.ScreenTracker.appDidEnterBackground()
+    }
+
     // Launcher-shortcut / notification destination (long-press icon → Radio,
     // Pathway, Prayer Wall, Give). Consumed once per intent.
     LaunchedEffect(Unit) {
