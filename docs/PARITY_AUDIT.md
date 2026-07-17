@@ -1231,3 +1231,26 @@ window is the only clock), composer with idempotent retry, last-4 with
 reach/seen/replied, response wall + tick ledger, open-thread navigation.
 Portal deployed to pathway.nuruplace.org (bundle index-BpDqHDH5.js).
 Biometrics remain iOS-only (portal/iPad gate = password).
+
+## 2026-07-18 — STANDARDIZATION ARC: every verified gap closed (both directions)
+Two forensic audits (iOS→Android and Android→iOS, code-verified, ledger treated
+as leads only) produced the full matrix; three waves closed it:
+- ios#86: iOS rose to Android's honesty standard (Settings + Talk it Over
+  visible failure text; welcome-video caption dedup guard).
+- android#46 (wave 2): Home resume banner + Live-now card + prayer-wall
+  carousel (GET /home/prayer-wall), scanner torch + permanent-denial→Settings,
+  radio Remind-me (the bell was a no-op), level encouragements
+  (GET /levels/{n}/encouragements), screen-dwell telemetry
+  (POST /me/activity/screens).
+- android#47 (wave 3): full Broadcast sender console — sent list, detail with
+  response wall + tick ledger, and FINGERPRINT unlock (Keystore AES-GCM,
+  setUserAuthenticationRequired + setInvalidatedByBiometricEnrollment ==
+  iOS biometryCurrentSet; BiometricPrompt+CryptoObject; wiped on 401/sign-out).
+Stale ledger claims cleared: Plans journey, Whisper, SRS, footprints, gifts,
+voice notes, MFA — all confirmed AT PARITY by code inspection.
+REMAINDER (deliberate, each its own arc): (1) cell Discussions board — absent
+on Android entirely (iOS DiscussionsView + offline-queued creates); (2) chat
+message edit/delete — missing on BOTH apps (portal-only); (3) Android offline
+queue is plaintext Room vs iOS encrypted store (touches 16 KB compliance +
+needs queue migration); (4) cosmetic: iOS grays the unseen tick where
+Android/portal use blue (product said blue).
