@@ -1222,3 +1222,12 @@ return); Broadcast tab SuperAdmin-only; send handles 403 password_required via
 /auth/confirm-password (same client_mutation_id on retry — idempotent).
 STILL iOS-only: the biometric lock (Keychain/Face ID), the last-4 sent list
 with ticks/responses detail, and the sent-card. Android sender = composer only.
+
+## 2026-07-17 — Broadcast console lands on portal + iPad (pathway#379 · pathwayforipad#4)
+The sender's console now exists on all three SuperAdmin surfaces: iOS member
+app (composer + Face ID lock), web portal /broadcast, native iPad Broadcast
+section. All share the same §5.3 contract: password gate first (server pwd_at
+window is the only clock), composer with idempotent retry, last-4 with
+reach/seen/replied, response wall + tick ledger, open-thread navigation.
+Portal deployed to pathway.nuruplace.org (bundle index-BpDqHDH5.js).
+Biometrics remain iOS-only (portal/iPad gate = password).
