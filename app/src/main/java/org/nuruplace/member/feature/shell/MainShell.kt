@@ -315,6 +315,18 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // Broadcast is between the shepherd and the individual — SuperAdmin
                     // only, not even Admins (product decision, 2026-07).
                     isStaff = me?.profile?.role == "SuperAdmin",
+                    onOpenBroadcast = { nav.navigate("broadcast/$it") },
+                )
+            }
+            composable(
+                "broadcast/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.community.BroadcastDetailScreen(
+                    broadcastId = entry.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    // A response's private thread — same route the inbox itself uses.
+                    onOpenThread = { nav.navigate("chat/$it") },
                 )
             }
             composable("new-message") {
