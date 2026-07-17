@@ -24,6 +24,10 @@ import org.nuruplace.member.R
  *   player) instead of a blank task.
  * - handleAudioBecomingNoisy pauses when headphones unplug — expected media UX.
  */
+// DefaultMediaNotificationProvider is media3 @UnstableApi — the standard,
+// documented way to brand the media notification; the opt-in acknowledges the
+// API may shift between media3 releases (pinned in gradle), nothing more.
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class RadioService : MediaSessionService() {
     private var session: MediaSession? = null
 

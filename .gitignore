@@ -13,3 +13,8 @@
 /keystore.properties
 *.keystore
 app/google-services.json
+
+# overnight hardening tooling (do not commit)
+OVERNIGHT_PROMPT.md
+run-overnight.sh
+.overnight/

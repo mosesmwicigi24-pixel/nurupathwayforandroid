@@ -335,7 +335,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
         var attached by remember { mutableStateOf<File?>(null) }
         var attachedWave by remember { mutableStateOf<List<Int>>(emptyList()) }
         var attachedDur by remember { mutableStateOf(0) }
-        DisposableEffect(Unit) { onDispose { recorder.cancel() } }
+        DisposableEffect(Unit) { onDispose { recorder.release() } }
         val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) recorder.start(context)
         }

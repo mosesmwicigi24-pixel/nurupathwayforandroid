@@ -87,11 +87,19 @@ import org.nuruplace.member.data.net.NotificationPreferences
 fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
+    var saveFailed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { prefs = runCatching { Net.client.api.notificationPreferences() }.getOrNull() }
 
     fun save(p: NotificationPreferences) {
+        val previous = prefs
         prefs = p
-        scope.launch { runCatching { Net.client.api.updateNotificationPreferences(p) } }
+        saveFailed = false
+        scope.launch {
+            // A toggle that shows a state the server never recorded is a lie —
+            // revert and say so instead.
+            runCatching { Net.client.api.updateNotificationPreferences(p) }
+                .onFailure { prefs = previous; saveFailed = true }
+        }
     }
 
     Column(
@@ -127,6 +135,13 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
         ) {
             SecurityCard(onOpenFirebase = { onOpen("firebase-account") })
             NotificationsCard(prefs = prefs, onSave = ::save)
+        if (saveFailed) {
+            Text(
+                "Couldn't save your preferences — check your connection and try again.",
+                style = pInter(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
             DisplayCard()
             LanguageCard()
             PrivacyCard()

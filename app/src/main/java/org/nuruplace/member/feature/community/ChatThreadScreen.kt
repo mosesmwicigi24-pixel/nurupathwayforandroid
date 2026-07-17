@@ -120,7 +120,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         val messages = thread.messages
         val recorder = remember { VoiceRecorder() }
         val player = remember { VoicePlayer() }
-        DisposableEffect(Unit) { onDispose { recorder.cancel(); player.release() } }
+        DisposableEffect(Unit) { onDispose { recorder.release(); player.release() } }
         val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) recorder.start(context)
         }

@@ -1204,3 +1204,12 @@ applied; chat_broadcasts exists; 264 plan days intact.
 
 ANDROID: none of the broadcast work exists here — no segment, no composer, no
 models. Whole feature outstanding.
+
+## 2026-07-17 — Overnight hardening (iOS PR #85 · Android PR #44)
+Same bug found independently on both platforms: the AI-consent toggle (and on
+Android three more write flows) claimed success before the server answered.
+Both now revert + surface failure — parity by symptom, not by port. Android
+additionally: offline-queue idempotency pinned by 3 tests, lint 7 errors → 0.
+iOS additionally: force-unwraps/try! purged from user paths, 14 dead symbols
+removed (incl. LevelGating.swift — server's .locked fields are the real §1.9
+enforcement), first XCTest target with 10 decoding-contract tests.
