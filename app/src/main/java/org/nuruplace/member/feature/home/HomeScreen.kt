@@ -299,6 +299,15 @@ fun HomeScreen(
                         }, onExternal = { url -> })
                     }
                 }
+                // 0b · Live now — a worship-ish gathering happening right now or
+                // starting within the hour (iOS HomeView.liveNowInfo/liveNowCard
+                // parity). Driven by the same calendar occurrences as Upcoming;
+                // no invented live-stream data, just a route to the real event.
+                liveNowInfo(upcoming)?.let { info ->
+                    Entrance(entrance, 1) {
+                        LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
+                    }
+                }
                 // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
                 letter?.takeIf { it.isUnread }?.let { lt ->
                     LetterKnockCard(lt) { showLetter = true }
@@ -558,6 +567,62 @@ private fun OnAirCard(r: RadioProgram, onOpen: () -> Unit) {
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) {
             Text("▶", color = Nuru.homeNavy, style = NuruType.body)
         }
+    }
+}
+
+// ─────────────────────────── Live now ───────────────────────────
+
+/** A worship-ish calendar occurrence that is live right now, or that starts
+ *  within the hour. [startsInMin] is null while live (iOS HomeView parity). */
+private data class LiveNowInfo(val occ: CalendarOccurrence, val startsInMin: Int?)
+
+private fun liveNowInfo(events: List<CalendarOccurrence>): LiveNowInfo? {
+    val now = ZonedDateTime.now()
+    for (occ in events) {
+        if (!isWorshipish(occ)) continue
+        val start = parseZdt(occ.startAt) ?: continue
+        val end = parseZdt(occ.endAt) ?: start.plusHours(2)
+        if (!start.isAfter(now) && !now.isAfter(end)) return LiveNowInfo(occ, null)
+        val mins = java.time.Duration.between(now, start).toMinutes().toInt()
+        if (mins in 1..60) return LiveNowInfo(occ, mins)
+    }
+    return null
+}
+
+private fun isWorshipish(occ: CalendarOccurrence): Boolean {
+    val hay = "${occ.category.orEmpty()} ${occ.title}".lowercase()
+    return listOf("worship", "service", "praise", "church").any { hay.contains(it) }
+}
+
+@Composable
+private fun LiveNowCard(info: LiveNowInfo, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Row(
+        Modifier.fillMaxWidth().pressScale().clip(shape).background(Nuru.homeNavyGradient)
+            .border(1.dp, Nuru.liveRed.copy(alpha = 0.4f), shape).clickable { onOpen() }.padding(Spacing.base),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.homeNavyDark), contentAlignment = Alignment.Center) {
+            if (info.occ.primaryImageUrl != null) {
+                AsyncImage(model = info.occ.primaryImageUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
+            } else {
+                Text("⛪", style = NuruType.title)
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (info.startsInMin == null) "● HAPPENING NOW" else "STARTING SOON · ${info.startsInMin}m",
+                style = NuruType.kicker,
+                color = if (info.startsInMin == null) Nuru.liveRed else Nuru.gold,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(info.occ.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            info.occ.location?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = NuruType.caption, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text("›", style = NuruType.title, color = Nuru.gold)
     }
 }
 
