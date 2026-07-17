@@ -23,9 +23,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
@@ -33,13 +35,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import org.nuruplace.member.data.net.LevelEncouragement
 import org.nuruplace.member.data.net.LevelModule
 import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MentorInfo
@@ -58,7 +64,36 @@ private data class LevelBundle(
     val level: PathwayLevel?,
     val modules: List<LevelModule>,
     val mentor: MentorInfo.Mentor?,
+    val encouragements: List<LevelEncouragement>,
 )
+
+/** One row of the trail — module cards and authored encouragement cards
+ *  interleave on the same gold rail (iOS LevelTrailItem parity). */
+private sealed class TrailItem {
+    data class Mod(val module: LevelModule, val moduleIndex: Int) : TrailItem()
+    data class Enc(val item: LevelEncouragement) : TrailItem()
+}
+
+/** Weaves encouragements in at their after_module_sequence slot: each lands
+ *  after the LAST module whose sequence <= its slot (tolerates sequence gaps),
+ *  0 (or a slot below every visible module) surfaces at the trail head, and a
+ *  slot past the last module trails it. Mirrors iOS LevelDetailViewModel.trailItems. */
+private fun weaveTrail(modules: List<LevelModule>, encouragements: List<LevelEncouragement>): List<TrailItem> {
+    if (encouragements.isEmpty()) return modules.mapIndexed { i, m -> TrailItem.Mod(m, i) }
+    val slots = mutableMapOf<Int, MutableList<LevelEncouragement>>()   // module index (-1 = trail head)
+    for (e in encouragements) {
+        val idx = if (e.afterModuleSequence <= 0) -1
+        else modules.indexOfLast { it.moduleSequenceNumber <= e.afterModuleSequence }
+        slots.getOrPut(idx) { mutableListOf() }.add(e)
+    }
+    val items = mutableListOf<TrailItem>()
+    items += (slots[-1] ?: emptyList()).map { TrailItem.Enc(it) }
+    modules.forEachIndexed { i, m ->
+        items += TrailItem.Mod(m, i)
+        items += (slots[i] ?: emptyList()).map { TrailItem.Enc(it) }
+    }
+    return items
+}
 
 @Composable
 fun LevelDetailScreen(
@@ -73,7 +108,9 @@ fun LevelDetailScreen(
             val modules = Net.client.api.levelModules(levelNumber).data
             val level = runCatching { Net.client.api.pathway().levels.firstOrNull { it.levelNumber == levelNumber } }.getOrNull()
             val mentor = runCatching { Net.client.api.mentor().mentor }.getOrNull()
-            LevelBundle(level, modules, mentor)
+            // Best-effort: no encouragements (unauthored or failed fetch) weaves nothing in.
+            val encouragements = runCatching { Net.client.api.levelEncouragements(levelNumber).data }.getOrDefault(emptyList())
+            LevelBundle(level, modules, mentor, encouragements)
         },
     ) { bundle: LevelBundle, _ ->
         val modules = bundle.modules
@@ -136,19 +173,25 @@ fun LevelDetailScreen(
                 // Discipler card — real /growth/mentor pairing.
                 bundle.mentor?.let { m -> DisciplerCard(m) }
 
-                // Module trail.
+                // Module trail — authored encouragements woven in at their
+                // after_module_sequence slot (iOS LevelDetailView parity).
                 Column {
                     Kicker("Your module trail")
                     Spacer(Modifier.height(Spacing.xs))
                     Text("Learn step by step", style = NuruType.title, color = Nuru.ink)
                     Spacer(Modifier.height(Spacing.md))
-                    modules.forEachIndexed { i, m ->
-                        ModuleStation(
-                            module = m,
-                            isNext = i == nextIdx,
-                            isLast = i == modules.lastIndex,
-                            onOpen = { if (m.isExam) onTakeExam(levelNumber) else onOpenModule(m.moduleId) },
-                        )
+                    val trail = remember(modules, bundle.encouragements) { weaveTrail(modules, bundle.encouragements) }
+                    trail.forEachIndexed { idx, item ->
+                        val isLastRow = idx == trail.lastIndex
+                        when (item) {
+                            is TrailItem.Mod -> ModuleStation(
+                                module = item.module,
+                                isNext = item.moduleIndex == nextIdx,
+                                isLast = isLastRow,
+                                onOpen = { if (item.module.isExam) onTakeExam(levelNumber) else onOpenModule(item.module.moduleId) },
+                            )
+                            is TrailItem.Enc -> EncouragementStation(item.item, isLast = isLastRow)
+                        }
                     }
                 }
 
@@ -292,6 +335,71 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
             )
         }
     }
+}
+
+/** A small gold moment strung on the same rail as the module stations (iOS
+ *  encouragementRow + EncouragementTrailCard parity) — authored content only,
+ *  rendered whenever it exists. */
+@Composable
+private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(28.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint)
+                    .border(1.dp, Nuru.gold.copy(alpha = 0.4f), RoundedCornerShape(Radii.pill)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!e.emoji.isNullOrBlank()) {
+                    Text(e.emoji, style = NuruType.caption)
+                } else {
+                    Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.gold, modifier = Modifier.size(12.dp))
+                }
+            }
+            if (!isLast) {
+                Box(Modifier.width(2.dp).height(46.dp).background(Nuru.gold.copy(alpha = 0.35f)))
+            }
+        }
+        Spacer(Modifier.size(Spacing.md))
+        Column(
+            Modifier.weight(1f).padding(bottom = Spacing.base)
+                .clip(RoundedCornerShape(20.dp)).background(Nuru.verseBg)
+                .border(1.dp, Nuru.gold.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                .padding(Spacing.base),
+        ) {
+            if (!e.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = e.imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)),
+                )
+                Spacer(Modifier.height(Spacing.sm))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.goldChipText, modifier = Modifier.size(11.dp))
+                Text(encouragementKicker(e.kind), style = NuruType.kicker, color = Nuru.goldChipText)
+            }
+            e.title?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(Spacing.xs))
+                Text(it, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+            }
+            e.body?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(Spacing.xs))
+                Text(it, style = NuruType.caption, color = Nuru.ink600)
+            }
+            e.scriptureRef?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(Spacing.xs))
+                Text(it, style = NuruType.micro, color = Nuru.goldLo, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/** Kicker per authored kind — splash/cheer/sticker/note/celebration/nudge/verse. */
+private fun encouragementKicker(kind: String?): String = when (kind?.lowercase()) {
+    "celebration", "cheer" -> "CELEBRATE"
+    "nudge" -> "KEEP GOING"
+    "verse" -> "A VERSE FOR YOU"
+    "note" -> "A NOTE FOR YOU"
+    else -> "ENCOURAGEMENT"
 }
 
 @Composable

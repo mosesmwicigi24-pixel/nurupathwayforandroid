@@ -123,6 +123,10 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+    // Radio "remind me when we're live" (item 4): a one-time WorkManager job
+    // fired at the next program's scheduledAt — avoids the exact-alarm
+    // permission AlarmManager would need.
+    implementation(libs.androidx.work.runtime.ktx)
     // Firebase (add-alongside): FCM push + Email/Password auth. Postgres stays the
     // source of truth — Firestore is intentionally NOT used (see FIREBASE_SETUP.md).
     implementation(platform(libs.firebase.bom))

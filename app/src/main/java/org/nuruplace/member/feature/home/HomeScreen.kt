@@ -156,7 +156,9 @@ fun HomeScreen(
         disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
         cohort = runCatching { Net.client.api.cellSummary() }.getOrNull()
         plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled } ?: Net.client.api.plans().data.firstOrNull() }.getOrNull()
-        prayers = runCatching { Net.client.api.prayerWall("latest").data }.getOrDefault(emptyList())
+        // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
+        // parity) — distinct from the community/prayer-wall feed's sort query.
+        prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
         val today = LocalDate.now()
         val from = today.toString()
@@ -299,6 +301,15 @@ fun HomeScreen(
                         }, onExternal = { url -> })
                     }
                 }
+                // 0b · Live now — a worship-ish gathering happening right now or
+                // starting within the hour (iOS HomeView.liveNowInfo/liveNowCard
+                // parity). Driven by the same calendar occurrences as Upcoming;
+                // no invented live-stream data, just a route to the real event.
+                liveNowInfo(upcoming)?.let { info ->
+                    Entrance(entrance, 1) {
+                        LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
+                    }
+                }
                 // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
                 letter?.takeIf { it.isUnread }?.let { lt ->
                     LetterKnockCard(lt) { showLetter = true }
@@ -314,7 +325,12 @@ fun HomeScreen(
                 next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
                 if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
-                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                // 2c · Continue your plan (resume nudge) — the member's in-progress
+                // plan (enrolled, not yet finished), iOS HomeView planResumeBanner parity.
+                plan?.takeIf { it.enrolled && it.completedAt == null }?.let { rp ->
+                    Entrance(entrance, 5) { PlanResumeBanner(rp) { onNavigate("plan/${rp.planId}") } }
+                }
+                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
                 MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
@@ -556,6 +572,62 @@ private fun OnAirCard(r: RadioProgram, onOpen: () -> Unit) {
     }
 }
 
+// ─────────────────────────── Live now ───────────────────────────
+
+/** A worship-ish calendar occurrence that is live right now, or that starts
+ *  within the hour. [startsInMin] is null while live (iOS HomeView parity). */
+private data class LiveNowInfo(val occ: CalendarOccurrence, val startsInMin: Int?)
+
+private fun liveNowInfo(events: List<CalendarOccurrence>): LiveNowInfo? {
+    val now = ZonedDateTime.now()
+    for (occ in events) {
+        if (!isWorshipish(occ)) continue
+        val start = parseZdt(occ.startAt) ?: continue
+        val end = parseZdt(occ.endAt) ?: start.plusHours(2)
+        if (!start.isAfter(now) && !now.isAfter(end)) return LiveNowInfo(occ, null)
+        val mins = java.time.Duration.between(now, start).toMinutes().toInt()
+        if (mins in 1..60) return LiveNowInfo(occ, mins)
+    }
+    return null
+}
+
+private fun isWorshipish(occ: CalendarOccurrence): Boolean {
+    val hay = "${occ.category.orEmpty()} ${occ.title}".lowercase()
+    return listOf("worship", "service", "praise", "church").any { hay.contains(it) }
+}
+
+@Composable
+private fun LiveNowCard(info: LiveNowInfo, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Row(
+        Modifier.fillMaxWidth().pressScale().clip(shape).background(Nuru.homeNavyGradient)
+            .border(1.dp, Nuru.liveRed.copy(alpha = 0.4f), shape).clickable { onOpen() }.padding(Spacing.base),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.homeNavyDark), contentAlignment = Alignment.Center) {
+            if (info.occ.primaryImageUrl != null) {
+                AsyncImage(model = info.occ.primaryImageUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
+            } else {
+                Text("⛪", style = NuruType.title)
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (info.startsInMin == null) "● HAPPENING NOW" else "STARTING SOON · ${info.startsInMin}m",
+                style = NuruType.kicker,
+                color = if (info.startsInMin == null) Nuru.liveRed else Nuru.gold,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(info.occ.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            info.occ.location?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = NuruType.caption, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text("›", style = NuruType.title, color = Nuru.gold)
+    }
+}
+
 @Composable
 private fun ReflectionStrip(a: NextAction, onClick: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
@@ -774,34 +846,90 @@ private fun VerseCard(
     }
 }
 
+/** "Pray for one another" — a small carousel of Home's own prayer-wall preview
+ *  posts (iOS HomeView.prayerWallCard parity): a single post hugs its content,
+ *  multiple posts page through a HorizontalPager with gold dots below (not the
+ *  system indicator — invisible on cream, per the iOS comment this mirrors). */
 @Composable
-private fun PrayerWallCard(post: PrayerWallPost, count: Int, onOpenWall: () -> Unit, onOpenPost: (String) -> Unit) {
-    HomeCard(modifier = Modifier.clickable { onOpenPost(post.postId) }) {
+private fun PrayerWallCard(posts: List<PrayerWallPost>, onOpenWall: () -> Unit, onOpenPost: (String) -> Unit) {
+    HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CardKicker("Pray for one another")
             Spacer(Modifier.weight(1f))
             RowScopeLink("Open wall ›", onOpenWall)
         }
         Spacer(Modifier.height(Spacing.md))
+        if (posts.size == 1) {
+            PrayerPostRow(posts[0], modifier = Modifier.clickable { onOpenPost(posts[0].postId) })
+        } else {
+            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { posts.size })
+            androidx.compose.foundation.pager.HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { i ->
+                val post = posts[i]
+                PrayerPostRow(post, modifier = Modifier.clickable { onOpenPost(post.postId) })
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                repeat(posts.size) { i ->
+                    val active = i == pagerState.currentPage
+                    Box(
+                        Modifier.padding(2.dp).height(6.dp).width(if (active) 16.dp else 6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (active) Nuru.gold else Nuru.gold.copy(alpha = 0.22f)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(post.authorAvatar, 40.dp)
+            Avatar(post.authorAvatar, 32.dp)
             Spacer(Modifier.width(Spacing.sm))
             Text(post.authorName, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(Spacing.sm))
-        post.title?.let { Text(it, style = NuruType.rowTitle, color = Nuru.ink) }
+        post.title?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(Spacing.sm))
+            Text(it, style = NuruType.rowTitle, color = Nuru.ink)
+        }
+        Spacer(Modifier.height(6.dp))
         Text(post.body, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(Spacing.sm))
         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
-            Text("🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""), style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            Text(
+                "🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""),
+                style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold,
+            )
         }
-        if (count > 1) {
-            Spacer(Modifier.height(Spacing.sm))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                repeat(count.coerceAtMost(5)) { i ->
-                    Box(Modifier.padding(2.dp).size(if (i == 0) 8.dp else 6.dp).clip(RoundedCornerShape(999.dp)).background(if (i == 0) Nuru.gold else Nuru.ink300))
-                }
+    }
+}
+
+/** 2c — "Continue your plan" resume banner (iOS HomeView.planResumeBanner
+ *  parity): a navy card with a gold circular progress ring, "Day N of M" +
+ *  plan title, tapping opens that plan on the Plans tab. */
+@Composable
+private fun PlanResumeBanner(p: ReadingPlanRow, onClick: () -> Unit) {
+    val day = p.currentDay ?: 1
+    val done = p.completedDays?.size ?: (day - 1).coerceAtLeast(0)
+    val pct = if (p.dayCount > 0) (done * 100 / p.dayCount).coerceIn(0, 100) else 0
+    NavyCard(modifier = Modifier.pressScale().clickable { onClick() }, pad = Spacing.base) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ProgressRing(pct = pct, size = 48.dp, stroke = 4.dp, track = Color.White.copy(alpha = 0.22f), arc = Nuru.gold) {
+                Text("📖", style = NuruType.body)
             }
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                CardKicker("Continue your plan", Nuru.goldSoft)
+                Text(p.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "Day $day of ${p.dayCount} · pick up where you left off",
+                    style = NuruType.micro, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(Spacing.sm))
+            Text("›", style = NuruType.title, color = Nuru.gold)
         }
     }
 }

@@ -55,6 +55,11 @@ interface MemberApi {
     @GET("levels/{n}/modules")
     suspend fun levelModules(@Path("n") levelNumber: Int): Envelope<LevelModule>
 
+    // A level's active encouragements in trail order (after_module_sequence,
+    // sort_order) — empty until content is authored (iOS LevelDetailView parity).
+    @GET("levels/{n}/encouragements")
+    suspend fun levelEncouragements(@Path("n") levelNumber: Int): Envelope<LevelEncouragement>
+
     @GET("modules/{id}")
     suspend fun module(@Path("id") moduleId: String): ModuleDetail
 
@@ -236,6 +241,10 @@ interface MemberApi {
     @POST("me/notifications/read")
     suspend fun markNotificationsRead(@Body body: MarkReadBody): Unit
 
+    // Screen-view dwell telemetry batch — best-effort, silent (iOS ScreenTracker parity).
+    @POST("me/activity/screens")
+    suspend fun screenActivity(@Body body: ScreenActivityBody): Unit
+
     // --- Giving (online-only, §5.6 — money is never queued) ---
     @GET("giving/history")
     suspend fun givingHistory(): Envelope<GivingRecord>
@@ -390,6 +399,11 @@ interface MemberApi {
 
     @GET("home/disciplers")
     suspend fun disciplers(): Envelope<Discipler>
+
+    // Home's own prayer-wall preview (distinct from the community/prayer-wall
+    // feed's general `sort` query) — iOS HomeView.prayerWallHome parity.
+    @GET("home/prayer-wall")
+    suspend fun prayerWallHome(): Envelope<PrayerWallPost>
 
     @GET("moments")
     suspend fun moments(): Envelope<Moment>
