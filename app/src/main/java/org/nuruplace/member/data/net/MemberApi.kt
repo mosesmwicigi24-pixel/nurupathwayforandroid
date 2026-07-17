@@ -32,6 +32,11 @@ interface MemberApi {
     @POST("auth/password/reset")
     suspend fun resetPassword(@Body body: ResetBody): Unit
 
+    // Step-up for the broadcast routes: same lockout as login; the returned
+    // access token carries pwd_at (and any MFA stamp, carried across).
+    @POST("auth/confirm-password")
+    suspend fun confirmPassword(@Body body: ConfirmPasswordBody): ConfirmPasswordRes
+
     @GET("me")
     suspend fun me(): MeResponse
 

@@ -118,6 +118,9 @@ data class ChatMessage(
     val readCount: Int? = null,
     val recipientCount: Int? = null,
     val aiTag: String? = null,
+    // Set when this message was delivered by a broadcast — the mark that lets a
+    // member's thread dress itself as "Talk with Pastor" instead of a plain DM.
+    val broadcastId: String? = null,
 )
 
 @Serializable
@@ -195,4 +198,17 @@ data class DmRes(val conversationId: String = "")
 data class BroadcastBody(val body: String, val msgType: String = "text", val clientMutationId: String)
 
 @Serializable
-data class BroadcastRes(val sent: Int = 0, val duplicate: Boolean = false)
+data class BroadcastRes(
+    val sent: Int = 0,
+    val duplicate: Boolean = false,
+    val broadcastId: String? = null,
+    val recipientCount: Int = 0,
+)
+
+// Step-up (§5.3): prove the password NOW; the server re-mints the access token
+// with a fresh pwd_at so broadcast routes admit it for 15 minutes.
+@Serializable
+data class ConfirmPasswordBody(val password: String)
+
+@Serializable
+data class ConfirmPasswordRes(val accessToken: String, val expiresIn: Int = 0, val confirmedAt: Long = 0)
