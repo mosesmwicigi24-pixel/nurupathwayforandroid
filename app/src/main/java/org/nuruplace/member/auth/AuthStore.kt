@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.BroadcastLock
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 
@@ -56,6 +57,10 @@ class AuthStore : ViewModel() {
         // never block sign-out on the network — local sign-out always proceeds.
         val rt = Net.client.vault.refreshToken
         Net.client.vault.clear()
+        // A fingerprint-enrolled Broadcast password belongs to THIS account —
+        // never let it silently carry over to whoever signs in next on this
+        // device.
+        BroadcastLock.wipe()
         _state.update { it.copy(authenticated = false, me = null) }
         if (rt != null) {
             viewModelScope.launch {

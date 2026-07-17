@@ -3,20 +3,28 @@
 // the same claim as "the person holding this phone is the pastor", so before
 // speaking to the whole church in your name — or reading what it wrote back —
 // the password is asked for once more, good for 15 minutes. Every 403
-// password_required from a broadcast route funnels through the same sheet so
-// the caller only has to say what to retry once it's confirmed.
+// password_required from a broadcast route funnels through here: the
+// fingerprint fast path (data/BroadcastLock.kt) is tried first when it's
+// enrolled, falling back to the typed sheet on cancel/failure/first time —
+// exactly iOS's BroadcastLock + PasswordConfirmSheet pairing.
 package org.nuruplace.member.feature.community
 
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,17 +33,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.BroadcastLock
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ConfirmPasswordBody
 import org.nuruplace.member.data.net.Net
@@ -50,19 +62,33 @@ fun isPasswordRequired(e: Throwable): Boolean {
     return "password_required" in body
 }
 
+/** Unwrap a possibly-wrapped Context (Compose's LocalContext is often a
+ *  ContextThemeWrapper) down to the hosting FragmentActivity. Null off-Activity
+ *  (a preview, a service) — biometrics simply aren't offered then; the typed
+ *  sheet still works everywhere. */
+tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is ContextWrapper -> baseContext.findFragmentActivity()
+    else -> null
+}
+
 internal sealed interface ConfirmOutcome {
     data object Success : ConfirmOutcome
     data class Failure(val message: String) : ConfirmOutcome
 }
 
 /** POST auth/confirm-password and, on success, swap ONLY the access token —
- *  the refresh token stays. Shared by every broadcast surface's step-up. */
+ *  the refresh token stays. A 401 means the password is wrong for THIS
+ *  account right now, so any fingerprint-enrolled copy of it is stale — wipe
+ *  it rather than let it keep failing silently. Shared by every broadcast
+ *  surface's step-up. */
 internal suspend fun confirmPasswordWithServer(password: String): ConfirmOutcome = try {
     val res = Net.client.api.confirmPassword(ConfirmPasswordBody(password))
     Net.client.vault.set(res.accessToken, Net.client.vault.refreshToken)
     ConfirmOutcome.Success
 } catch (e: Exception) {
     val code = (e as? HttpException)?.code()
+    if (code == 401) BroadcastLock.wipe()
     ConfirmOutcome.Failure(
         when (code) {
             401 -> "That password isn't right."
@@ -73,9 +99,10 @@ internal suspend fun confirmPasswordWithServer(password: String): ConfirmOutcome
 }
 
 /** One step-up sheet per screen (composer + list share one instance; the
- *  detail screen owns its own). Holds the password-sheet state and replays
- *  whatever action asked for it once the server confirms. */
-class BroadcastStepUp(private val scope: CoroutineScope) {
+ *  detail screen owns its own). Holds the password-sheet state, tries the
+ *  fingerprint fast path first, and replays whatever action asked for it once
+ *  the server confirms. */
+class BroadcastStepUp(private val scope: CoroutineScope, private val activity: FragmentActivity?) {
     var asking by mutableStateOf(false)
         private set
     var password by mutableStateOf("")
@@ -83,12 +110,42 @@ class BroadcastStepUp(private val scope: CoroutineScope) {
         private set
     var busy by mutableStateOf(false)
         private set
+    /** Bound to the sheet's "unlock with fingerprint next time" switch —
+     *  defaults on wherever it's offered, mirroring iOS's PasswordConfirmSheet. */
+    var rememberWithFingerprint by mutableStateOf(false)
     private var retry: (() -> Unit)? = null
 
-    /** Call from a failed call's 403 password_required branch. Opens the sheet
-     *  and remembers [action] to replay once the password is confirmed. */
+    /** Only worth asking when nothing is enrolled yet — once it is, this stays
+     *  hidden until a 401 (password changed) or a new-fingerprint invalidation
+     *  clears it. */
+    val canOfferFingerprint: Boolean
+        get() = activity != null && !BroadcastLock.isEnrolled && BroadcastLock.biometricAvailable(activity)
+
+    /** Call from a failed call's 403 password_required branch. Tries the
+     *  fingerprint fast path first when one is enrolled; opens the typed sheet
+     *  (remembering [action] to replay) on cancel, failure, or when nothing is
+     *  enrolled at all. */
     fun requestStepUp(action: () -> Unit) {
         retry = action
+        if (activity != null && BroadcastLock.isEnrolled) {
+            scope.launch {
+                val pw = BroadcastLock.unlock(activity)
+                val confirmed = pw != null && confirmPasswordWithServer(pw) is ConfirmOutcome.Success
+                if (confirmed) {
+                    val a = retry
+                    retry = null
+                    a?.invoke()
+                } else {
+                    openTypedSheet()
+                }
+            }
+        } else {
+            openTypedSheet()
+        }
+    }
+
+    private fun openTypedSheet() {
+        rememberWithFingerprint = canOfferFingerprint
         asking = true
     }
 
@@ -103,15 +160,20 @@ class BroadcastStepUp(private val scope: CoroutineScope) {
         if (password.isBlank() || busy) return
         busy = true
         error = null
+        val typed = password
+        val offerNow = rememberWithFingerprint && activity != null
         scope.launch {
-            when (val outcome = confirmPasswordWithServer(password)) {
+            when (val outcome = confirmPasswordWithServer(typed)) {
                 is ConfirmOutcome.Success -> {
+                    // The password is CONFIRMED RIGHT — the only moment it's
+                    // safe to put behind the owner's fingerprint for next time.
+                    if (offerNow) BroadcastLock.enroll(activity!!, typed)
                     password = ""
                     asking = false
                     busy = false
-                    val action = retry
+                    val a = retry
                     retry = null
-                    action?.invoke()
+                    a?.invoke()
                 }
                 is ConfirmOutcome.Failure -> {
                     busy = false
@@ -125,7 +187,8 @@ class BroadcastStepUp(private val scope: CoroutineScope) {
 @Composable
 fun rememberBroadcastStepUp(): BroadcastStepUp {
     val scope = rememberCoroutineScope()
-    return remember { BroadcastStepUp(scope) }
+    val activity = LocalContext.current.findFragmentActivity()
+    return remember { BroadcastStepUp(scope, activity) }
 }
 
 /** The "confirm it's you" sheet itself — shared styling for every caller. */
@@ -158,6 +221,20 @@ fun BroadcastStepUpDialog(stepUp: BroadcastStepUp, reason: String) {
                 }
                 val e = stepUp.error
                 if (e != null) Text(e, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318))
+                if (stepUp.canOfferFingerprint) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { stepUp.rememberWithFingerprint = !stepUp.rememberWithFingerprint },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Unlock with fingerprint next time", style = cInter(13, FontWeight.Medium), color = CHAT.navy)
+                        Switch(
+                            checked = stepUp.rememberWithFingerprint,
+                            onCheckedChange = { stepUp.rememberWithFingerprint = it },
+                            colors = SwitchDefaults.colors(checkedTrackColor = CHAT.gold, checkedThumbColor = Color.White),
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
