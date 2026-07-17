@@ -314,6 +314,11 @@ fun HomeScreen(
                 next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
                 if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
+                // 2c · Continue your plan (resume nudge) — the member's in-progress
+                // plan (enrolled, not yet finished), iOS HomeView planResumeBanner parity.
+                plan?.takeIf { it.enrolled && it.completedAt == null }?.let { rp ->
+                    Entrance(entrance, 5) { PlanResumeBanner(rp) { onNavigate("plan/${rp.planId}") } }
+                }
                 if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
@@ -802,6 +807,34 @@ private fun PrayerWallCard(post: PrayerWallPost, count: Int, onOpenWall: () -> U
                     Box(Modifier.padding(2.dp).size(if (i == 0) 8.dp else 6.dp).clip(RoundedCornerShape(999.dp)).background(if (i == 0) Nuru.gold else Nuru.ink300))
                 }
             }
+        }
+    }
+}
+
+/** 2c — "Continue your plan" resume banner (iOS HomeView.planResumeBanner
+ *  parity): a navy card with a gold circular progress ring, "Day N of M" +
+ *  plan title, tapping opens that plan on the Plans tab. */
+@Composable
+private fun PlanResumeBanner(p: ReadingPlanRow, onClick: () -> Unit) {
+    val day = p.currentDay ?: 1
+    val done = p.completedDays?.size ?: (day - 1).coerceAtLeast(0)
+    val pct = if (p.dayCount > 0) (done * 100 / p.dayCount).coerceIn(0, 100) else 0
+    NavyCard(modifier = Modifier.pressScale().clickable { onClick() }, pad = Spacing.base) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ProgressRing(pct = pct, size = 48.dp, stroke = 4.dp, track = Color.White.copy(alpha = 0.22f), arc = Nuru.gold) {
+                Text("📖", style = NuruType.body)
+            }
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                CardKicker("Continue your plan", Nuru.goldSoft)
+                Text(p.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "Day $day of ${p.dayCount} · pick up where you left off",
+                    style = NuruType.micro, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(Spacing.sm))
+            Text("›", style = NuruType.title, color = Nuru.gold)
         }
     }
 }
