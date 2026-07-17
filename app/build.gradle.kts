@@ -44,8 +44,8 @@ android {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 35
-        versionCode = 42                  // bump every release so devices take it as an update
-        versionName = "2.20.0"
+        versionCode = 43                  // bump every release so devices take it as an update
+        versionName = "2.20.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -116,6 +116,9 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.mlkit.barcode)
+    // 16 KB page-size compliance (Play requirement for targetSdk 35): the old
+    // transitive graphics-path 1.0.0 ships a 4 KB-aligned .so — pin the fixed one.
+    implementation("androidx.graphics:graphics-path:1.0.1")
     implementation(libs.play.location)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
