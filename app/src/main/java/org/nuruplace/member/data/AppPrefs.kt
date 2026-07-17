@@ -17,6 +17,7 @@ object AppPrefs {
     private const val KEY_TEXT_SCALE = "nuru.textScale"
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
+    private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
 
     private lateinit var prefs: SharedPreferences
 
@@ -48,4 +49,13 @@ object AppPrefs {
     var locationInviteShown: Boolean
         get() = ::prefs.isInitialized && prefs.getBoolean(KEY_LOCATION_INVITE, false)
         set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_LOCATION_INVITE, v).apply() }
+
+    /** "Remind me when we're live" — per-program toggle (iOS RemindMeCTA parity,
+     *  keyed by radio program id so it naturally resets once a new show is up next). */
+    fun isRadioReminderSet(programId: String): Boolean =
+        ::prefs.isInitialized && prefs.getBoolean(KEY_RADIO_REMIND_PREFIX + programId, false)
+
+    fun setRadioReminder(programId: String, on: Boolean) {
+        if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_RADIO_REMIND_PREFIX + programId, on).apply()
+    }
 }
