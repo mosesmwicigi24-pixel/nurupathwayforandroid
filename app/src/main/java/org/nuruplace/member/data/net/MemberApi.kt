@@ -55,6 +55,11 @@ interface MemberApi {
     @GET("levels/{n}/modules")
     suspend fun levelModules(@Path("n") levelNumber: Int): Envelope<LevelModule>
 
+    // A level's active encouragements in trail order (after_module_sequence,
+    // sort_order) — empty until content is authored (iOS LevelDetailView parity).
+    @GET("levels/{n}/encouragements")
+    suspend fun levelEncouragements(@Path("n") levelNumber: Int): Envelope<LevelEncouragement>
+
     @GET("modules/{id}")
     suspend fun module(@Path("id") moduleId: String): ModuleDetail
 
