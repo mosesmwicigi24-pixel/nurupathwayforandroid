@@ -156,7 +156,9 @@ fun HomeScreen(
         disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
         cohort = runCatching { Net.client.api.cellSummary() }.getOrNull()
         plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled } ?: Net.client.api.plans().data.firstOrNull() }.getOrNull()
-        prayers = runCatching { Net.client.api.prayerWall("latest").data }.getOrDefault(emptyList())
+        // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
+        // parity) — distinct from the community/prayer-wall feed's sort query.
+        prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
         val today = LocalDate.now()
         val from = today.toString()
@@ -328,7 +330,7 @@ fun HomeScreen(
                 plan?.takeIf { it.enrolled && it.completedAt == null }?.let { rp ->
                     Entrance(entrance, 5) { PlanResumeBanner(rp) { onNavigate("plan/${rp.planId}") } }
                 }
-                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
                 MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
@@ -844,34 +846,62 @@ private fun VerseCard(
     }
 }
 
+/** "Pray for one another" — a small carousel of Home's own prayer-wall preview
+ *  posts (iOS HomeView.prayerWallCard parity): a single post hugs its content,
+ *  multiple posts page through a HorizontalPager with gold dots below (not the
+ *  system indicator — invisible on cream, per the iOS comment this mirrors). */
 @Composable
-private fun PrayerWallCard(post: PrayerWallPost, count: Int, onOpenWall: () -> Unit, onOpenPost: (String) -> Unit) {
-    HomeCard(modifier = Modifier.clickable { onOpenPost(post.postId) }) {
+private fun PrayerWallCard(posts: List<PrayerWallPost>, onOpenWall: () -> Unit, onOpenPost: (String) -> Unit) {
+    HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CardKicker("Pray for one another")
             Spacer(Modifier.weight(1f))
             RowScopeLink("Open wall ›", onOpenWall)
         }
         Spacer(Modifier.height(Spacing.md))
+        if (posts.size == 1) {
+            PrayerPostRow(posts[0], modifier = Modifier.clickable { onOpenPost(posts[0].postId) })
+        } else {
+            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { posts.size })
+            androidx.compose.foundation.pager.HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { i ->
+                val post = posts[i]
+                PrayerPostRow(post, modifier = Modifier.clickable { onOpenPost(post.postId) })
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                repeat(posts.size) { i ->
+                    val active = i == pagerState.currentPage
+                    Box(
+                        Modifier.padding(2.dp).height(6.dp).width(if (active) 16.dp else 6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (active) Nuru.gold else Nuru.gold.copy(alpha = 0.22f)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(post.authorAvatar, 40.dp)
+            Avatar(post.authorAvatar, 32.dp)
             Spacer(Modifier.width(Spacing.sm))
             Text(post.authorName, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(Spacing.sm))
-        post.title?.let { Text(it, style = NuruType.rowTitle, color = Nuru.ink) }
+        post.title?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(Spacing.sm))
+            Text(it, style = NuruType.rowTitle, color = Nuru.ink)
+        }
+        Spacer(Modifier.height(6.dp))
         Text(post.body, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(Spacing.sm))
         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
-            Text("🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""), style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
-        }
-        if (count > 1) {
-            Spacer(Modifier.height(Spacing.sm))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                repeat(count.coerceAtMost(5)) { i ->
-                    Box(Modifier.padding(2.dp).size(if (i == 0) 8.dp else 6.dp).clip(RoundedCornerShape(999.dp)).background(if (i == 0) Nuru.gold else Nuru.ink300))
-                }
-            }
+            Text(
+                "🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""),
+                style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

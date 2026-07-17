@@ -391,6 +391,11 @@ interface MemberApi {
     @GET("home/disciplers")
     suspend fun disciplers(): Envelope<Discipler>
 
+    // Home's own prayer-wall preview (distinct from the community/prayer-wall
+    // feed's general `sort` query) — iOS HomeView.prayerWallHome parity.
+    @GET("home/prayer-wall")
+    suspend fun prayerWallHome(): Envelope<PrayerWallPost>
+
     @GET("moments")
     suspend fun moments(): Envelope<Moment>
 
