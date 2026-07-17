@@ -18,6 +18,12 @@ object AppPrefs {
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
     private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
+    // Broadcast fingerprint unlock (§5.3 step-up, data/BroadcastLock.kt): the
+    // step-up password, AES-GCM encrypted behind a biometric-gated Keystore
+    // key. NEVER plaintext — unusable without a fresh fingerprint unlocking
+    // the key that produced this ciphertext.
+    private const val KEY_BROADCAST_CIPHER = "nuru.broadcast.cipher"
+    private const val KEY_BROADCAST_IV = "nuru.broadcast.iv"
 
     private lateinit var prefs: SharedPreferences
 
@@ -57,5 +63,19 @@ object AppPrefs {
 
     fun setRadioReminder(programId: String, on: Boolean) {
         if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_RADIO_REMIND_PREFIX + programId, on).apply()
+    }
+
+    // ── Broadcast fingerprint unlock (data/BroadcastLock.kt owns the crypto;
+    // this is just its at-rest storage) ──
+    val broadcastCipher: String? get() = if (::prefs.isInitialized) prefs.getString(KEY_BROADCAST_CIPHER, null) else null
+    val broadcastIv: String? get() = if (::prefs.isInitialized) prefs.getString(KEY_BROADCAST_IV, null) else null
+    val broadcastBiometricEnrolled: Boolean get() = !broadcastCipher.isNullOrBlank() && !broadcastIv.isNullOrBlank()
+
+    fun setBroadcastBiometric(cipher: String, iv: String) {
+        if (::prefs.isInitialized) prefs.edit().putString(KEY_BROADCAST_CIPHER, cipher).putString(KEY_BROADCAST_IV, iv).apply()
+    }
+
+    fun clearBroadcastBiometric() {
+        if (::prefs.isInitialized) prefs.edit().remove(KEY_BROADCAST_CIPHER).remove(KEY_BROADCAST_IV).apply()
     }
 }

@@ -101,6 +101,9 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
+    // Broadcast fingerprint unlock (§5.3 step-up) — BiometricPrompt + a
+    // Keystore key gated on the current biometric enrollment.
+    implementation(libs.androidx.biometric)
     implementation(libs.retrofit)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
