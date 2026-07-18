@@ -67,6 +67,7 @@ import org.nuruplace.member.data.net.Discipler
 import org.nuruplace.member.data.net.FeaturedAnnouncement
 import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
+import org.nuruplace.member.data.net.HomeEventRow
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NextAction
@@ -89,11 +90,13 @@ import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.feature.events.EV
+import org.nuruplace.member.feature.events.evCountdown
+import org.nuruplace.member.feature.events.evTime
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -121,6 +124,7 @@ fun HomeScreen(
     var announcement by remember { mutableStateOf<FeaturedAnnouncement?>(null) }
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
     var upcoming by remember { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
+    var homeEvents by remember { mutableStateOf<List<HomeEventRow>>(emptyList()) }
     var cohort by remember { mutableStateOf<CellSummary?>(null) }
     var plan by remember { mutableStateOf<ReadingPlanRow?>(null) }
     var prayers by remember { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
@@ -164,6 +168,8 @@ fun HomeScreen(
         val from = today.toString()
         val to = today.plusDays(45).toString()
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
+        // Curated Home rows — server-capped at 5, soonest-first; never re-sort/cap client-side.
+        homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrDefault(emptyList())
         refreshing = false
         loadedOnce = true
 
@@ -344,7 +350,7 @@ fun HomeScreen(
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
                 GrowSection(onNavigate)
                 featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
-                UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
+                UpcomingSection(homeEvents, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode("")}") })
                 EncouragementCard(prayers.size)
                 CohortSection(cohort) { onNavigate("cell-info") }
                 GiveCard { onSelectTab("give") }
@@ -1231,77 +1237,70 @@ private fun FeaturedGatheringCard(ev: FeaturedEvent, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun UpcomingSection(events: List<CalendarOccurrence>, onSeeAll: () -> Unit, onEvent: (CalendarOccurrence) -> Unit) {
+private fun UpcomingSection(events: List<HomeEventRow>, onSeeAll: () -> Unit, onEvent: (HomeEventRow) -> Unit) {
+    // Whole section (header included) hides when there's nothing curated to show.
+    if (events.isEmpty()) return
     Column {
         SectionLabel("Upcoming")
         HomeCard {
-            val ym = YearMonth.now()
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CardKicker(ym.month.getDisplayName(JTextStyle.FULL, Locale.getDefault()))
                 Spacer(Modifier.weight(1f))
                 RowScopeLink("See all", onSeeAll)
             }
             Spacer(Modifier.height(Spacing.sm))
-            MiniMonth(ym, events)
-            events.firstOrNull()?.let { e ->
-                Spacer(Modifier.height(Spacing.md))
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.surface).clickable { onEvent(e) }.padding(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
-                        e.primaryImageUrl?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) } ?: Text("📅", style = NuruType.title)
-                    }
-                    Spacer(Modifier.width(Spacing.md))
-                    Column(Modifier.weight(1f)) {
-                        Text("● ${fmtEvent(e.startAt)}", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
-                        Text(e.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(if (e.going > 0) "${e.going} going" else (e.location ?: ""), style = NuruType.micro, color = Nuru.ink600)
-                    }
-                    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 14.dp, vertical = 8.dp)) { Text("RSVP", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                // Render exactly what the server sent, in that order — no client
+                // sort/cap. The server already caps this list at 5.
+                events.forEach { e -> UpcomingEventRow(e, onClick = { onEvent(e) }) }
             }
         }
     }
 }
 
 @Composable
-private fun MiniMonth(ym: YearMonth, events: List<CalendarOccurrence>) {
-    val today = LocalDate.now()
-    val eventDays = remember(events) {
-        events.mapNotNull { parseZdt(it.startAt) }.filter { it.year == ym.year && it.monthValue == ym.monthValue }.map { it.dayOfMonth }.toSet()
-    }
-    val first = ym.atDay(1)
-    val lead = (first.dayOfWeek.value + 6) % 7 // Monday-first offset
-    val days = ym.lengthOfMonth()
-    val weekdays = listOf("M", "T", "W", "T", "F", "S", "S")
-    Column {
-        Row(Modifier.fillMaxWidth()) {
-            weekdays.forEach { Text(it, style = NuruType.micro, color = Nuru.ink400, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)) }
+private fun UpcomingEventRow(e: HomeEventRow, onClick: () -> Unit) {
+    val kickerTime = evCountdown(e.startsAt).let { rel ->
+        val time = evTime(e.startsAt)
+        when {
+            rel.isNotBlank() && time.isNotBlank() -> "$rel · $time"
+            rel.isNotBlank() -> rel
+            time.isNotBlank() -> time
+            else -> fmtEvent(e.startsAt)
         }
-        Spacer(Modifier.height(Spacing.xs))
-        var day = 1
-        val rows = ((lead + days + 6) / 7)
-        for (r in 0 until rows) {
-            Row(Modifier.fillMaxWidth()) {
-                for (c in 0 until 7) {
-                    val cell = r * 7 + c
-                    if (cell < lead || day > days) {
-                        Box(Modifier.weight(1f).height(40.dp))
-                    } else {
-                        val d = day
-                        val isToday = today.year == ym.year && today.monthValue == ym.monthValue && today.dayOfMonth == d
-                        Column(Modifier.weight(1f).height(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                Modifier.size(30.dp).clip(RoundedCornerShape(999.dp)).background(if (isToday) Nuru.homeNavy else Color.Transparent),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("$d", style = NuruType.caption, color = if (isToday) Nuru.onNavy else Nuru.ink) }
-                            if (eventDays.contains(d)) Box(Modifier.size(4.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold))
-                        }
-                        day++
-                    }
-                }
-            }
+    }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.surface).clickable { onClick() }.padding(Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
+            e.primaryImageUrl?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) } ?: Text("📅", style = NuruType.title)
+        }
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text("● $kickerTime", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
+            Text(e.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(e.venue ?: "", style = NuruType.micro, color = Nuru.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        RsvpPill(e.myRsvp)
+    }
+}
+
+/** Trailing pill: gold "RSVP" call-to-action when the member hasn't responded,
+ *  otherwise a status pill reflecting their `my_rsvp` (EV palette, iOS parity). */
+@Composable
+private fun RsvpPill(myRsvp: String?) {
+    when (myRsvp) {
+        "going" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.going.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("Going", style = NuruType.micro, color = EV.goingText, fontWeight = FontWeight.SemiBold)
+        }
+        "maybe" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.maybe.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("Maybe", style = NuruType.micro, color = EV.maybe, fontWeight = FontWeight.SemiBold)
+        }
+        "declined" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.declined.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("Can't go", style = NuruType.micro, color = EV.declined, fontWeight = FontWeight.SemiBold)
+        }
+        else -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("RSVP", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold)
         }
     }
 }
