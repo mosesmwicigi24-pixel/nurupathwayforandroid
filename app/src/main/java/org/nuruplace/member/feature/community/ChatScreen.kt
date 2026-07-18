@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -202,13 +203,19 @@ fun ChatInboxScreen(
         // type=SPACE (docs/CHAT_REDESIGN_PLAN.md §2.1/§4 Open Question 4), and
         // `kind` on the wire is exactly {space, group} for those two today.
         val spaces = conversations.filter { it.kind == "space" }
-        // The discipler/pastoral threads live in their OWN tabs — keep the
-        // known ids out of the Chat tab's DM list (iOS parity; the list
-        // endpoint sends no `type`, so the locally-learned ids are the filter).
+        // The discipler/pastoral threads live in their OWN tabs — kept out of
+        // the Chat tab's DM list. Server-authoritative: a row's `type` (Chat
+        // Redesign C4) says DIRECT/BROADCAST_RESPONSE vs DISCIPLER/PASTORAL.
+        // Only when `type` is absent (an older server) does this fall back to
+        // the locally-learned/resolved ids — tolerant decode, not the default path.
         val dms = conversations.filter {
-            it.kind == "dm" &&
-                it.conversationId != disciplerConversationId &&
-                it.conversationId != pastoralConversationId
+            if (it.kind != "dm") return@filter false
+            val type = it.type
+            if (type != null) {
+                type != "DISCIPLER" && type != "PASTORAL"
+            } else {
+                it.conversationId != disciplerConversationId && it.conversationId != pastoralConversationId
+            }
         }
         val groups = conversations.filter { it.kind == "group" }
         val mySpaceUnread = spaces.sumOf { it.unread } + groups.sumOf { it.unread }
@@ -755,6 +762,7 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                 )
+                if (c.muted) MutedGlyph()
                 Text(
                     chatRowTime(c.lastAt),
                     style = cInter(11, if (c.unread > 0) FontWeight.SemiBold else FontWeight.Normal),
@@ -1086,6 +1094,7 @@ private fun DmRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Unit)
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                 )
+                if (c.muted) MutedGlyph()
                 Text(
                     chatRowTime(c.lastAt),
                     style = cInter(11, if (c.unread > 0) FontWeight.SemiBold else FontWeight.Normal),
@@ -1230,6 +1239,7 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                 )
+                if (c.muted) MutedGlyph()
                 Text(
                     chatRowTime(c.lastAt),
                     style = cInter(11, if (c.unread > 0) FontWeight.SemiBold else FontWeight.Normal),
@@ -1328,6 +1338,9 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
     var opening by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
+    // Mirrored from the thread's own server `muted` (Chat Redesign C4) the
+    // last time it loaded — see ChatThreadScreen's LaunchedEffect(thread.muted).
+    var muted by remember { mutableStateOf(AppPrefs.pastoralMuted) }
 
     Section("TALK WITH MY PASTOR", Icons.Filled.Favorite)
 
@@ -1369,7 +1382,10 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Filled.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp)) }
             Column(Modifier.weight(1f)) {
-                Text("Talk with My Pastor", style = cInter(13, FontWeight.SemiBold, -0.12f), color = CHAT.navy, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Talk with My Pastor", style = cInter(13, FontWeight.SemiBold, -0.12f), color = CHAT.navy, maxLines = 1)
+                    if (muted) MutedGlyph()
+                }
                 Text(
                     if (archived) "Archived — tap to reopen" else "A private word with your pastor",
                     style = cInter(11), color = CHAT.ink500, maxLines = 1,
@@ -1840,6 +1856,18 @@ private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCoun
 @Composable
 private fun DoubleCheck() {
     Icon(Icons.Filled.DoneAll, contentDescription = null, tint = CHAT.doubleCheck, modifier = Modifier.size(14.dp))
+}
+
+/** Small bell-slash glyph for a muted conversation row (Chat Redesign C4) —
+ *  beside the title, same signal the pastoral ⋮ menu's Mute/Unmute reflects. */
+@Composable
+private fun MutedGlyph() {
+    Icon(
+        Icons.Filled.NotificationsOff,
+        contentDescription = "Muted",
+        tint = CHAT.faint,
+        modifier = Modifier.padding(start = 4.dp).size(12.dp),
+    )
 }
 
 @Composable

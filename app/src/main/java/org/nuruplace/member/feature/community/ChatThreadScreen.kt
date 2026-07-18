@@ -133,10 +133,13 @@ private val Capsule = RoundedCornerShape(999.dp)
  * navigation already resolved the thread via `GET /chat/discipler/conversation`
  * or `POST /chat/pastoral` (Chat Redesign C3b): those routes already know
  * which flavour of 1:1 this is, so it's passed explicitly through the nav
- * route args (`"chat/{id}?ctx=discipler|pastoral"`) rather than re-derived —
- * `GET /chat/conversations/{id}` doesn't return `type` at all (confirmed by
- * reading chat/service.ts#getConversation's SELECT). Drives the privacy label
- * and, for "pastoral", the local biometric gate + its ⋮ menu.
+ * route args (`"chat/{id}?ctx=discipler|pastoral"`) rather than re-derived.
+ * The biometric gate below has to decide BEFORE the thread ever loads, so it
+ * always uses this pre-load value (falling back to the cached pastoral id,
+ * same as before). Once the thread loads, `GET /chat/conversations/{id}` DOES
+ * carry `type` now (Chat Redesign C4) — the render below (privacy label, ⋮
+ * menu) upgrades to that server-authoritative value when threadContext was
+ * never passed, rather than trusting only the pre-load guess.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -145,9 +148,8 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
     // deep link) still gets its privacy dressing and the local gate when this
     // device has already learned the thread's id — otherwise the gate would be
     // one un-annotated navigation away from useless.
-    val ctx = threadContext ?: if (conversationId.isNotBlank() && conversationId == AppPrefs.pastoralConversationId) "pastoral" else null
-    val isPastoral = ctx == "pastoral"
-    val gateActive = isPastoral && PastoralLock.enabled
+    val preloadCtx = threadContext ?: if (conversationId.isNotBlank() && conversationId == AppPrefs.pastoralConversationId) "pastoral" else null
+    val gateActive = preloadCtx == "pastoral" && PastoralLock.enabled
 
     // Re-lock whenever the app leaves the foreground while this screen is up —
     // "re-auth on timeout/restart/logout/device-lock" (owner brief). Restart is
@@ -192,6 +194,14 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
         val scope = rememberCoroutineScope()
         val context = LocalContext.current
         val view = LocalView.current
+        // Server-authoritative once loaded: `type` (Chat Redesign C4) wins over
+        // the pre-load guess when the caller never passed threadContext — the
+        // cached-id fallback only decides anything when `type` is absent too.
+        val ctx = threadContext ?: when (thread.type) {
+            "PASTORAL" -> "pastoral"
+            "DISCIPLER" -> "discipler"
+            else -> preloadCtx
+        }
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         val listState = rememberLazyListState()
@@ -364,10 +374,16 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
         // heuristic (a thread is never both in practice).
         val isPastorMail = thread.kind != "space" && messages.any { it.broadcastId != null && !it.mine }
 
-        // ── Pastoral ⋮ menu state (Chat Redesign C3b — Lock/Enable-biometric/
-        // Mute/Archive/Privacy info, all client-side-only per the task spec) ──
+        // ── Pastoral ⋮ menu state (Chat Redesign C3b: Lock/Enable-biometric/
+        // Archive/Privacy info are still client-side-only. Mute is now
+        // server-backed — Chat Redesign C4, PUT/DELETE
+        // /chat/conversations/{id}/mute — synced from the thread's own
+        // `muted` field on every load/reload and mirrored into AppPrefs so
+        // the Chat tab's badge suppression (which only fetches the list
+        // endpoint) sees the same state without a second round trip.) ──
         var biometricOn by remember { mutableStateOf(PastoralLock.enabled) }
-        var muted by remember { mutableStateOf(AppPrefs.pastoralMuted) }
+        var muted by remember(conversationId) { mutableStateOf(thread.muted) }
+        LaunchedEffect(thread.muted) { muted = thread.muted; AppPrefs.pastoralMuted = thread.muted }
         var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
         var showPrivacyInfo by remember { mutableStateOf(false) }
 
@@ -384,7 +400,26 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 archived = archived,
                 onLockNow = { PastoralLock.lock() },
                 onToggleBiometric = { PastoralLock.enabled = !biometricOn; biometricOn = PastoralLock.enabled },
-                onToggleMute = { muted = !muted; AppPrefs.pastoralMuted = muted },
+                onToggleMute = {
+                    // Optimistic — the menu label and the Chat tab badge
+                    // (AppPrefs.pastoralMuted) flip instantly.
+                    val target = !muted
+                    muted = target
+                    AppPrefs.pastoralMuted = target
+                    scope.launch {
+                        val ok = runCatching {
+                            if (target) Net.client.api.muteChatConversation(conversationId) else Net.client.api.unmuteChatConversation(conversationId)
+                        }.isSuccess
+                        if (!ok) {
+                            // Revert + inline error — same house idiom as the
+                            // edit/delete rollback above (actionError banner).
+                            muted = !target
+                            AppPrefs.pastoralMuted = !target
+                            Haptics.reject(view)
+                            actionError = if (target) "Couldn't mute — try again." else "Couldn't unmute — try again."
+                        }
+                    }
+                },
                 onArchive = { archived = !archived; AppPrefs.pastoralArchived = archived; if (archived) onBack() },
                 onShowPrivacyInfo = { showPrivacyInfo = true },
             )

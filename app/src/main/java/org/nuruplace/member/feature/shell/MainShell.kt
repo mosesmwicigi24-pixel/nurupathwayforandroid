@@ -103,6 +103,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     val onTab = TABS.any { it.route == route }
     val rootView = androidx.compose.ui.platform.LocalView.current
 
+    // GET /chat/pastoral/eligibility, cached per session (PastorEligibility) —
+    // ORed with SuperAdmin below so the Pastoral Inbox segment shows for an
+    // assigned non-SuperAdmin pastor too (Chat Redesign C4, closing the gap
+    // PARITY_AUDIT.md's 2026-07-18 entry flagged: "an assigned non-SuperAdmin
+    // pastor has no client-visible signal to key on").
+    val pastorEligible by androidx.compose.runtime.produceState(initialValue = false, me) {
+        value = if (me != null) org.nuruplace.member.data.PastorEligibility.isPastor() else false
+    }
+
     // Screen-view telemetry (POST /me/activity/screens) — silent, fire-and-forget
     // (iOS RootView.onChange(of: tabs.selected) + ScreenTracker parity). Tracks
     // every nav-graph destination change, not just tab switches.
@@ -272,7 +281,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("discipleship") {
                 org.nuruplace.member.feature.discipleship.DiscipleshipHubScreen(
                     onBack = { nav.popBackStack() },
-                    onOpenChat = { conversationId -> nav.navigate("chat/$conversationId") },
+                    // ?ctx=discipler — the hero always resolves the thread via
+                    // GET /chat/discipler/conversation now, so it gets the SAME
+                    // privacy banner + admin-invisibility as the My Discipler tab.
+                    onOpenChat = { conversationId -> nav.navigate("chat/$conversationId?ctx=discipler") },
                 )
             }
             // Discipler-facing (Instructor+; server enforces role + scope).
@@ -328,11 +340,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // Broadcast is between the shepherd and the individual — SuperAdmin
                     // only, not even Admins (product decision, 2026-07).
                     isStaff = me?.profile?.role == "SuperAdmin",
-                    // Pastoral Inbox segment (C3b): SuperAdmin only, client-side —
-                    // the server's real gate is step-up + FORBIDDEN_SCOPE for
-                    // non-pastors; an assigned non-SuperAdmin pastor has no
-                    // client-visible signal to key on (documented limit).
-                    pastoralEligible = me?.profile?.role == "SuperAdmin",
+                    // Pastoral Inbox segment (C3b/C4): SuperAdmin (oversight/
+                    // fallback reach) OR anyone the eligibility probe says has
+                    // ever been assigned as a pastor — was SuperAdmin-only
+                    // client-side, which hid the tab from an assigned
+                    // non-SuperAdmin pastor even though the server would have
+                    // admitted them past step-up.
+                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
                     onOpenBroadcast = { nav.navigate("broadcast/$it") },
                     onOpenThreadWithContext = { id, ctx -> nav.navigate("chat/$id?ctx=$ctx") },
                 )
