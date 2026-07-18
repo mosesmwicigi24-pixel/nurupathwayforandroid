@@ -5,6 +5,12 @@
 // non-tappable (§1.9, server-authoritative); a finished level offers the exam.
 package org.nuruplace.member.feature.pathway
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,27 +32,43 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
+import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.LevelEncouragement
 import org.nuruplace.member.data.net.LevelModule
+import org.nuruplace.member.data.net.LevelScore
 import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MentorInfo
 import org.nuruplace.member.data.net.ModuleStatus
@@ -65,6 +87,12 @@ private data class LevelBundle(
     val modules: List<LevelModule>,
     val mentor: MentorInfo.Mentor?,
     val encouragements: List<LevelEncouragement>,
+    /** This level's mastery (GET /me/levels/{n}/score) — same server band shown
+     *  at level-end, surfaced early on the mid-level stats card too. */
+    val levelScore: LevelScore?,
+    /** Current streak in days (GET /me/achievements) — same figure the Pathway
+     *  hub header already shows. */
+    val streak: Int,
 )
 
 /** One row of the trail — module cards and authored encouragement cards
@@ -72,6 +100,18 @@ private data class LevelBundle(
 private sealed class TrailItem {
     data class Mod(val module: LevelModule, val moduleIndex: Int) : TrailItem()
     data class Enc(val item: LevelEncouragement) : TrailItem()
+    /** The mid-level stats card (owner spec: "around modules 5-8 you should
+     *  have a card that captures all your stats") — woven in once, positionally,
+     *  like an authored encouragement, but built from the member's own real data. */
+    object Stats : TrailItem()
+}
+
+/** Where the mid-level stats card lands — directly after the 6th module row
+ *  (or the 5th on a shorter level; skipped on very short levels where the
+ *  card would feel out of place before there's anything to look back on). */
+private fun statsCardAfterIndex(moduleCount: Int): Int? {
+    if (moduleCount < 4) return null
+    return minOf(moduleCount, 6) - 1
 }
 
 /** Weaves encouragements in at their after_module_sequence slot: each lands
@@ -79,7 +119,15 @@ private sealed class TrailItem {
  *  0 (or a slot below every visible module) surfaces at the trail head, and a
  *  slot past the last module trails it. Mirrors iOS LevelDetailViewModel.trailItems. */
 private fun weaveTrail(modules: List<LevelModule>, encouragements: List<LevelEncouragement>): List<TrailItem> {
-    if (encouragements.isEmpty()) return modules.mapIndexed { i, m -> TrailItem.Mod(m, i) }
+    val statsAt = statsCardAfterIndex(modules.size)
+    if (encouragements.isEmpty()) {
+        val items = mutableListOf<TrailItem>()
+        modules.forEachIndexed { i, m ->
+            items += TrailItem.Mod(m, i)
+            if (i == statsAt) items += TrailItem.Stats
+        }
+        return items
+    }
     val slots = mutableMapOf<Int, MutableList<LevelEncouragement>>()   // module index (-1 = trail head)
     for (e in encouragements) {
         val idx = if (e.afterModuleSequence <= 0) -1
@@ -90,6 +138,7 @@ private fun weaveTrail(modules: List<LevelModule>, encouragements: List<LevelEnc
     items += (slots[-1] ?: emptyList()).map { TrailItem.Enc(it) }
     modules.forEachIndexed { i, m ->
         items += TrailItem.Mod(m, i)
+        if (i == statsAt) items += TrailItem.Stats
         items += (slots[i] ?: emptyList()).map { TrailItem.Enc(it) }
     }
     return items
@@ -101,6 +150,7 @@ fun LevelDetailScreen(
     onBack: () -> Unit,
     onOpenModule: (String) -> Unit,
     onTakeExam: (Int) -> Unit,
+    onOpenDiscipler: () -> Unit = {},
 ) {
     AsyncContent(
         key = levelNumber,
@@ -110,7 +160,9 @@ fun LevelDetailScreen(
             val mentor = runCatching { Net.client.api.mentor().mentor }.getOrNull()
             // Best-effort: no encouragements (unauthored or failed fetch) weaves nothing in.
             val encouragements = runCatching { Net.client.api.levelEncouragements(levelNumber).data }.getOrDefault(emptyList())
-            LevelBundle(level, modules, mentor, encouragements)
+            val levelScore = runCatching { Net.client.api.levelScore(levelNumber) }.getOrNull()
+            val streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
+            LevelBundle(level, modules, mentor, encouragements, levelScore, streak)
         },
     ) { bundle: LevelBundle, _ ->
         val modules = bundle.modules
@@ -126,6 +178,25 @@ fun LevelDetailScreen(
         val allDone = content.isNotEmpty() && content.all { it.completed }
         val nextIdx = modules.indexOfFirst { !it.completed && !(it.locked || it.status == ModuleStatus.LOCKED) }
 
+        // Within-level "walk with your discipler" reminder — eligible once the
+        // member is genuinely mid-level (≥3 modules done, not yet at the level's
+        // end). Re-appearance policy lives in DisciplerReminderSession (session
+        // cap) + AppPrefs (24h quiet period after an explicit X dismissal).
+        var showReminder by remember { mutableStateOf(false) }
+        val reduceMotion = rememberDisciplerReduceMotion()
+        LaunchedEffect(done, allDone, levelNumber) {
+            if (done >= 3 && !allDone && DisciplerReminderSession.shouldShow(levelNumber)) {
+                showReminder = true
+            }
+        }
+        if (showReminder) {
+            LaunchedEffect(showReminder) {
+                delay(60_000)
+                showReminder = false
+            }
+        }
+
+        Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             // Hero — navy gradient with overlaid pills + serif title (data-honest
             // fallback for the Figma's per-level hero image).
@@ -191,6 +262,13 @@ fun LevelDetailScreen(
                                 onOpen = { if (item.module.isExam) onTakeExam(levelNumber) else onOpenModule(item.module.moduleId) },
                             )
                             is TrailItem.Enc -> EncouragementStation(item.item, isLast = isLastRow)
+                            is TrailItem.Stats -> StatsStation(
+                                done = done, total = total, pct = pct,
+                                band = bundle.levelScore?.band, streak = bundle.streak,
+                                mentorName = bundle.mentor?.fullName,
+                                isLast = isLastRow,
+                                onMessage = onOpenDiscipler,
+                            )
                         }
                     }
                 }
@@ -214,6 +292,26 @@ fun LevelDetailScreen(
                 }
                 Spacer(Modifier.height(Spacing.xxl))
             }
+        }
+
+        // The reminder floats above the trail — a card, not a modal; it never
+        // blocks scrolling or the content underneath (owner spec: "stays about
+        // a minute, then disappears — and it can pop again later").
+        AnimatedVisibility(
+            visible = showReminder,
+            enter = if (reduceMotion) fadeIn(tween(220)) else slideInVertically(tween(320)) { it / 2 } + fadeIn(tween(320)),
+            exit = fadeOut(tween(200)),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = Spacing.screen, vertical = Spacing.tabBarSpace),
+        ) {
+            DisciplerReminderCard(
+                mentor = bundle.mentor,
+                onMessage = { showReminder = false; onOpenDiscipler() },
+                onDismiss = {
+                    AppPrefs.markDisciplerReminderDismissed(levelNumber)
+                    showReminder = false
+                },
+            )
+        }
         }
     }
 }
@@ -388,6 +486,168 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
             e.scriptureRef?.takeIf { it.isNotBlank() }?.let {
                 Spacer(Modifier.height(Spacing.xs))
                 Text(it, style = NuruType.micro, color = Nuru.goldLo, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+// ── Mid-level stats card (owner spec: "around modules 5-8 you should have a
+// card that captures all your stats, beautiful, with imagery, that reminds
+// and encourages you"). Navy-gradient + gold accents, the member's real,
+// server-provided progress, and the same discipler affordance as the
+// reminder pop-up. Static: it lives in the trail, not a popup.
+
+@Composable
+private fun StatsStation(
+    done: Int, total: Int, pct: Int, band: String?, streak: Int, mentorName: String?,
+    isLast: Boolean, onMessage: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(28.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+            if (!isLast) {
+                Box(Modifier.width(2.dp).height(46.dp).background(Nuru.gold.copy(alpha = 0.35f)))
+            }
+        }
+        Spacer(Modifier.size(Spacing.md))
+        Column(
+            Modifier.weight(1f).padding(bottom = Spacing.base)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Brush.linearGradient(listOf(Nuru.navy, Nuru.navyDeep)))
+                .border(1.dp, Nuru.gold.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                .padding(Spacing.base),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Nuru.gold, modifier = Modifier.size(12.dp))
+                Text("YOUR JOURNEY SO FAR", style = NuruType.kicker, color = Nuru.gold)
+            }
+            Spacer(Modifier.height(Spacing.xs))
+            Text("Look how far you've come", style = NuruType.cardTitle, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(Spacing.base))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatsRing(pct)
+                Spacer(Modifier.size(Spacing.base))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatLine("$done of $total", "modules complete")
+                    if (!band.isNullOrBlank()) StatLine(band, "your mastery so far")
+                    if (streak > 0) StatLine("$streak-day", "streak")
+                }
+            }
+            Spacer(Modifier.height(Spacing.base))
+            Text(
+                "Walk the rest with your discipler" + (mentorName?.let { " — $it is right there with you" } ?: "") + ".",
+                style = NuruType.caption, color = Color.White.copy(alpha = 0.7f),
+            )
+            Spacer(Modifier.height(Spacing.sm))
+            Row(
+                Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold)
+                    .clickable { onMessage() }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
+                Text("Message your discipler", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatLine(value: String, label: String) {
+    Column {
+        Text(value, style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(label, style = NuruType.micro, color = Color.White.copy(alpha = 0.55f))
+    }
+}
+
+/** Small gold progress ring on the navy card ground (PathwayHubScreen's HubRing
+ *  palette flipped — see that file's version for the light-background ring). */
+@Composable
+private fun StatsRing(pct: Int) {
+    Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(60.dp)) {
+            val sw = 6.dp.toPx(); val inset = sw / 2
+            val arc = Size(size.width - sw, size.height - sw)
+            drawArc(Color.White.copy(alpha = 0.18f), 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(sw))
+            drawArc(Nuru.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
+        Text("$pct%", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.Bold)
+    }
+}
+
+// ── Within-level discipler reminder pop-up (owner spec: "a pop-up appears
+// that says work with your discipler, stays about a minute, then disappears
+// — and it can pop again later; its work is to REMIND you"). A floating
+// card, not a modal — see AnimatedVisibility usage above.
+
+/** Remind-don't-nag session cap — at most once per app process per level (this
+ *  object's lifetime IS the app session; a relaunch clears it). The 24h
+ *  post-dismissal quiet period is separately persisted in AppPrefs. */
+private object DisciplerReminderSession {
+    private val shown = mutableSetOf<Int>()
+
+    fun shouldShow(levelNumber: Int): Boolean {
+        if (shown.contains(levelNumber) || AppPrefs.isDisciplerReminderDismissedRecently(levelNumber)) return false
+        shown += levelNumber
+        return true
+    }
+}
+
+/** True when the user has turned system animations off ("Remove animations") —
+ *  mirrors LiveRadioScreen's rememberReduceMotion for this screen's popup. */
+@Composable
+private fun rememberDisciplerReduceMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    return remember(resolver) {
+        val scale = android.provider.Settings.Global.getFloat(
+            resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+        )
+        scale == 0f
+    }
+}
+
+@Composable
+private fun DisciplerReminderCard(mentor: MentorInfo.Mentor?, onMessage: () -> Unit, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Nuru.white)
+            .border(1.dp, Nuru.gold.copy(alpha = 0.4f), RoundedCornerShape(20.dp)).padding(Spacing.base),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.success), contentAlignment = Alignment.Center) {
+            val initial = mentor?.fullName?.firstOrNull()?.uppercase() ?: "?"
+            Text(initial, style = NuruType.rowTitle, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.size(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Kicker("Walk with your discipler")
+            Text(
+                mentor?.fullName?.let { "$it is walking this with you" } ?: "A discipler is walking this with you",
+                style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                "You're making real progress — you don't have to walk it alone.",
+                style = NuruType.caption, color = Nuru.ink600,
+            )
+            Spacer(Modifier.height(Spacing.sm))
+            Row(
+                Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navyDeep)
+                    .clickable { onMessage() }
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                Text("Message", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+            Box(Modifier.size(26.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(13.dp))
             }
         }
     }

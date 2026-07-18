@@ -438,6 +438,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onBack = { nav.popBackStack() },
                     onOpenModule = { nav.navigate("module/$it") },
                     onTakeExam = { nav.navigate("exam/$it") },
+                    // Same destination as the hub's "Your Discipleship Hub" row
+                    // (iOS AppRoute.discipleshipHub parity) — the discipler's
+                    // real DM lives behind this screen.
+                    onOpenDiscipler = { nav.navigate("discipleship") },
                 )
             }
             composable(
