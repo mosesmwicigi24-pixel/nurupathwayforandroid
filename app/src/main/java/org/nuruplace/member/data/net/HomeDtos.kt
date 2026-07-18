@@ -33,12 +33,21 @@ data class TailoredVerse(
     val text: String? = null,
     // The day's tableau photograph (server-curated, theme-matched).
     val art: VerseArt? = null,
+    // Seven-bands: a short encouragement quote that replaces the "Chosen for
+    // your season" ribbon when present. Optional — absent on older backends.
+    val encouragement: Encouragement? = null,
 )
 
 @Serializable
 data class VerseArt(
     val url: String = "",
     val alt: String = "",
+)
+
+@Serializable
+data class Encouragement(
+    val text: String,
+    val author: String,
 )
 
 /** GET/POST /me/home/verse/reactions — community reactions on today's verse
@@ -86,6 +95,19 @@ data class HomeLiturgy(
     val scriptureRef: String? = null,
     // The hour's tableau photograph (server-curated per part + day).
     val art: VerseArt? = null,
+    // Seven-bands: the finer-grained time-of-day band the server used to pick
+    // `art` (server-only concern today — no client image work reads this).
+    val band: String? = null,
+    // A second, quieter exhortation line rendered below `line` when present.
+    val charge: String? = null,
+    // An optional companion verse rendered in serif italic under the liturgy.
+    val verseLine: VerseLine? = null,
+)
+
+@Serializable
+data class VerseLine(
+    val reference: String,
+    val text: String,
 )
 
 @Serializable
