@@ -1254,3 +1254,16 @@ message edit/delete — missing on BOTH apps (portal-only); (3) Android offline
 queue is plaintext Room vs iOS encrypted store (touches 16 KB compliance +
 needs queue migration); (4) cosmetic: iOS grays the unseen tick where
 Android/portal use blue (product said blue).
+
+## 2026-07-18 — Seven times of day (pathway#380 · ios#87 · android#48; backend DEPLOYED)
+Owner spec: sunrise 6-9 / morning 9-12 / midday 12-14 / afternoon 14-17 /
+evening 17-21 / night 21-24 / midnight 0-6. Server-side band art on BOTH Home
+cards from the 120 verified Unsplash images split even/odd (liturgy vs verse —
+provably never the same photo at any hour; disjointness unit-tested). Liturgy
+doubled: composed line + authored per-band charge + curated verse line w/ text
+(2 each, alternating daily). Verse card: "Chosen for your season" ribbon →
+rotating encouragement quotes (Spurgeon/Tozer/ten Boom/Moody/Müller + Pastor
+Moses) keyed to the verse theme. Clients tolerant — old fields untouched,
+absent new fields render exactly as before. Backend image 2026-07-18T06:31Z,
+readyz 200. Apps carry the rendering at their NEXT builds (iOS build 77+,
+Android vc44+); art + quotes are already live to CURRENT apps via server art.
