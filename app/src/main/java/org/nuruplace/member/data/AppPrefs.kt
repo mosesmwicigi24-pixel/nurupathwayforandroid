@@ -25,6 +25,14 @@ object AppPrefs {
     // the key that produced this ciphertext.
     private const val KEY_BROADCAST_CIPHER = "nuru.broadcast.cipher"
     private const val KEY_BROADCAST_IV = "nuru.broadcast.iv"
+    // Talk with My Pastor (Chat Redesign C3b) — a pure local privacy gate, no
+    // password/crypto behind it (see data/PastoralLock.kt). Also the local,
+    // client-side-only mute/archive flags the task spec calls for (no server
+    // route exists for either).
+    private const val KEY_PASTORAL_BIOMETRIC_ENABLED = "nuru.pastoral.biometricEnabled"
+    private const val KEY_PASTORAL_CONVERSATION_ID = "nuru.pastoral.conversationId"
+    private const val KEY_PASTORAL_MUTED = "nuru.pastoral.muted"
+    private const val KEY_PASTORAL_ARCHIVED = "nuru.pastoral.archived"
 
     private lateinit var prefs: SharedPreferences
 
@@ -95,5 +103,45 @@ object AppPrefs {
 
     fun clearBroadcastBiometric() {
         if (::prefs.isInitialized) prefs.edit().remove(KEY_BROADCAST_CIPHER).remove(KEY_BROADCAST_IV).apply()
+    }
+
+    // ── Talk with My Pastor local privacy gate + client-only mute/archive ──
+
+    /** Per-device opt-in — off by default (a new gate should never surprise-lock
+     *  someone who hasn't asked for it). data/PastoralLock.kt owns the runtime
+     *  unlock state; this is only the persisted on/off switch. */
+    var pastoralBiometricEnabled: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_PASTORAL_BIOMETRIC_ENABLED, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_PASTORAL_BIOMETRIC_ENABLED, v).apply() }
+
+    /** Cached once resolved (first tap on the tab, or from the pastor-facing
+     *  inbox) so a later Chat-hub load can cross-reference `GET
+     *  /chat/conversations`'s unread count for the tab badge WITHOUT ever
+     *  eagerly calling the create-or-open POST itself — see PARITY_AUDIT.md,
+     *  2026-07-18 entry, for why eager resolution was rejected. */
+    var pastoralConversationId: String?
+        get() = if (::prefs.isInitialized) prefs.getString(KEY_PASTORAL_CONVERSATION_ID, null) else null
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_PASTORAL_CONVERSATION_ID, v).apply() }
+
+    var pastoralMuted: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_PASTORAL_MUTED, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_PASTORAL_MUTED, v).apply() }
+
+    var pastoralArchived: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_PASTORAL_ARCHIVED, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_PASTORAL_ARCHIVED, v).apply() }
+
+    /** Account sign-out — these are per-device but keyed to whoever is signed
+     *  in right now; never let a pastoral cache/flag from account A leak into
+     *  account B on a shared device. */
+    fun clearPastoralState() {
+        if (::prefs.isInitialized) {
+            prefs.edit()
+                .remove(KEY_PASTORAL_BIOMETRIC_ENABLED)
+                .remove(KEY_PASTORAL_CONVERSATION_ID)
+                .remove(KEY_PASTORAL_MUTED)
+                .remove(KEY_PASTORAL_ARCHIVED)
+                .apply()
+        }
     }
 }
