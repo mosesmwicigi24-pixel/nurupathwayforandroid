@@ -1,7 +1,7 @@
 // Login — a faithful port of the iOS LoginView. A solid navy (#081C36) screen,
 // thirds layout: gold cross-in-tile + "Nuru Place" serif wordmark + keyline in the
 // upper region; dark translucent inset fields, a gold "Remember me" checkbox and a
-// gold "Log in" button in the lower region. Modes: sign-in · register · forgot · mfa.
+// gold "Log in" button in the lower region. Modes: sign-in · register · forgot · reset · mfa.
 package org.nuruplace.member.feature.login
 
 import androidx.compose.foundation.background
@@ -54,7 +54,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -66,6 +68,7 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ForgotBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RegisterBody
+import org.nuruplace.member.data.net.ResetBody
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.Nuru
@@ -73,7 +76,9 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 
-private enum class Mode { SIGNIN, REGISTER, FORGOT }
+// FORGOT requests the email; RESET is the "check your email" step (code + new
+// password) that follows it — same flow, same screen, per the login mockup.
+private enum class Mode { SIGNIN, REGISTER, FORGOT, RESET }
 
 @Composable
 fun LoginScreen(onAuthenticated: () -> Unit) {
@@ -84,6 +89,9 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    var resetCode by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var showNewPw by remember { mutableStateOf(false) }
     var mfaToken by remember { mutableStateOf<String?>(null) }
     var showPw by remember { mutableStateOf(false) }
     var remember_ by remember { mutableStateOf(true) }
@@ -137,14 +145,19 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                 heading = when {
                     mfaToken != null -> "Two-factor code"
                     mode == Mode.REGISTER -> "Create account"
+                    mode == Mode.RESET -> "Check your email"
                     else -> "Reset password"
                 },
                 subhead = when {
                     mfaToken != null -> "Enter the 6-digit code from your authenticator app, or a recovery code."
                     mode == Mode.REGISTER -> "Begin your discipleship journey on Pathway."
+                    mode == Mode.RESET -> "We sent a code to ${email.trim()}. Enter it below with your new password."
                     else -> "Enter your account email and we'll send you a reset link."
                 },
-                onBack = { mode = Mode.SIGNIN; mfaToken = null; error = null; info = null },
+                onBack = {
+                    mode = Mode.SIGNIN; mfaToken = null; error = null; info = null
+                    resetCode = ""; newPassword = ""
+                },
             )
             Spacer(Modifier.height(Spacing.xl))
         }
@@ -158,6 +171,25 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                     DarkField("PASSWORD", password, { password = it }, Icons.Outlined.Lock, "At least 8 characters", isPassword = true, showPw = showPw, onTogglePw = { showPw = !showPw })
                 }
                 mode == Mode.FORGOT -> DarkField("EMAIL ADDRESS", email, { email = it }, Icons.Outlined.MailOutline, "name@email.com", keyboardType = KeyboardType.Email)
+                mode == Mode.RESET -> {
+                    // Accepts a pasted "XXXX-XXXX" straight from the email — strips
+                    // whatever punctuation/case came along and re-inserts the dash,
+                    // same as the server's own normalizeResetCode().
+                    DarkField(
+                        "RESET CODE", resetCode,
+                        { input ->
+                            val cleaned = input.uppercase().filter { it.isLetterOrDigit() }.take(8)
+                            resetCode = if (cleaned.length > 4) "${cleaned.take(4)}-${cleaned.substring(4)}" else cleaned
+                        },
+                        Icons.Outlined.Lock, "XXXX-XXXX",
+                        monospace = true, capitalizeChars = true,
+                    )
+                    DarkField(
+                        "NEW PASSWORD", newPassword, { newPassword = it }, Icons.Outlined.Lock,
+                        "At least 8 characters", isPassword = true, showPw = showNewPw,
+                        onTogglePw = { showNewPw = !showNewPw },
+                    )
+                }
                 else -> {
                     DarkField("EMAIL ADDRESS", email, { email = it }, Icons.Outlined.MailOutline, "name@email.com", keyboardType = KeyboardType.Email)
                     DarkField("PASSWORD", password, { password = it }, Icons.Outlined.Lock, "••••••••", isPassword = true, showPw = showPw, onTogglePw = { showPw = !showPw })
@@ -197,6 +229,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                     mfaToken != null -> if (busy) "Verifying…" else "Verify & sign in"
                     mode == Mode.SIGNIN -> if (busy) "Signing in…" else "Log in"
                     mode == Mode.REGISTER -> if (busy) "Creating…" else "Create account"
+                    mode == Mode.RESET -> if (busy) "Saving…" else "Change password"
                     else -> if (busy) "Sending…" else "Send reset link"
                 },
                 loading = busy,
@@ -209,6 +242,11 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                             fullName.isBlank() -> "Enter your full name."
                             email.isBlank() -> "Enter your email."
                             password.length < 8 -> "Password must be at least 8 characters."
+                            else -> null
+                        }
+                        mode == Mode.RESET -> when {
+                            resetCode.replace("-", "").isBlank() -> "Enter the code from your email."
+                            newPassword.length < 8 -> "Password must be at least 8 characters."
                             else -> null
                         }
                         else -> if (email.isBlank()) "Enter your account email." else null
@@ -226,9 +264,17 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                                 val s = Net.client.api.register(RegisterBody(fullName.trim(), email.trim(), password))
                                 Net.client.vault.set(s.accessToken, s.refreshToken); onAuthenticated()
                             }
+                            mode == Mode.RESET -> {
+                                Net.client.api.resetPassword(ResetBody(resetCode.trim(), newPassword))
+                                resetCode = ""; newPassword = ""; password = ""
+                                mode = Mode.SIGNIN
+                                info = "Password changed — sign in"
+                            }
                             else -> {
                                 Net.client.api.forgotPassword(ForgotBody(email.trim()))
-                                info = "If an account exists for that email, a reset link is on its way."
+                                resetCode = ""; newPassword = ""
+                                mode = Mode.RESET
+                                info = "If an account exists for that email, we've sent a reset code."
                             }
                         }
                     }
@@ -300,10 +346,19 @@ private fun DarkField(
     showPw: Boolean = false,
     onTogglePw: (() -> Unit)? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
+    // Reset-code idiom: wide-tracked monospace so "XXXX-XXXX" reads unambiguously,
+    // plus a Characters-capitalized IME (the field itself still force-uppercases
+    // on every keystroke, so a pasted lowercase code is forgiven too).
+    monospace: Boolean = false,
+    capitalizeChars: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(Radii.control)
+    val fieldTextStyle = if (monospace)
+        TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 3.sp, color = Color.White)
+    else
+        TextStyle(fontFamily = Inter, fontSize = 16.sp, color = Color.White)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             label,
@@ -324,14 +379,17 @@ private fun DarkField(
                     value = value,
                     onValueChange = onValueChange,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    textStyle = TextStyle(fontFamily = Inter, fontSize = 16.sp, color = Color.White),
+                    textStyle = fieldTextStyle,
                     singleLine = true,
                     cursorBrush = SolidColor(Nuru.gold),
-                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboardType,
+                        capitalization = if (capitalizeChars) KeyboardCapitalization.Characters else KeyboardCapitalization.None,
+                    ),
                     visualTransformation = if (isPassword && !showPw) PasswordVisualTransformation() else VisualTransformation.None,
                     interactionSource = interaction,
                     decorationBox = { inner ->
-                        if (value.isEmpty()) Text(placeholder, style = TextStyle(fontFamily = Inter, fontSize = 16.sp), color = Color.White.copy(alpha = 0.40f))
+                        if (value.isEmpty()) Text(placeholder, style = fieldTextStyle.copy(color = Color.White.copy(alpha = 0.40f)))
                         inner()
                     },
                 )
