@@ -787,10 +787,29 @@ private fun VerseCard(
             }
         }
       Column(Modifier.padding(Spacing.base)) {
-        v.reason?.takeIf { it.isNotBlank() }?.let {
+        // Seven-bands: an `encouragement` quote from the server replaces the
+        // "Chosen for your season" ribbon when present; absent (older backend
+        // or no encouragement chosen today) falls back to the ribbon unchanged.
+        val encouragement = v.encouragement
+        if (encouragement != null) {
             Spacer(Modifier.height(Spacing.sm))
-            Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                Text("✦ Chosen for your season — $it", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            Text(
+                "“${encouragement.text}”",
+                style = NuruType.rowTitle.copy(fontSize = 14.sp, lineHeight = 20.sp, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal),
+                color = Nuru.ink,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "— ${encouragement.author}",
+                style = NuruType.micro,
+                color = Nuru.gold, fontWeight = FontWeight.SemiBold,
+            )
+        } else {
+            v.reason?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(Spacing.sm))
+                Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text("✦ Chosen for your season — $it", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         // One row (iOS parity): reaction chips left, Save + Share pushed right.

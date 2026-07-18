@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -107,6 +108,31 @@ fun LiturgyCard() {
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
+                l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        charge,
+                        style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 27.sp, shadow = textShadow),
+                        color = Nuru.onNavyDim,
+                    )
+                }
+                l.verseLine?.let { vl ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "“${vl.text}”",
+                        style = NuruType.rowTitle.copy(
+                            fontSize = 14.sp, lineHeight = 20.sp,
+                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
+                        ),
+                        color = Color.White.copy(alpha = 0.92f),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "— ${vl.reference}",
+                        style = NuruType.micro.copy(shadow = textShadow),
+                        color = LitGold, fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     } else {
@@ -130,6 +156,31 @@ fun LiturgyCard() {
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
+            }
+            l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    charge,
+                    style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp),
+                    color = Nuru.onNavyDim,
+                )
+            }
+            l.verseLine?.let { vl ->
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "“${vl.text}”",
+                    style = NuruType.rowTitle.copy(
+                        fontSize = 14.sp, lineHeight = 20.sp,
+                        fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
+                    ),
+                    color = Color.White.copy(alpha = 0.9f),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "— ${vl.reference}",
+                    style = NuruType.micro,
+                    color = LitGold, fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }
