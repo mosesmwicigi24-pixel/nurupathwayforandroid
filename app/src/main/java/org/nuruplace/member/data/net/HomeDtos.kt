@@ -143,3 +143,15 @@ data class HomeEcho(
 @Serializable
 data class HomeEchoEnvelope(val echo: HomeEcho? = null)
 
+/** GET /home/events — up to 5 soonest curated occurrences for Home (server-capped, never client-capped). */
+@Serializable
+data class HomeEventRow(
+    val occurrenceId: String,
+    val seriesId: String = "",
+    val title: String = "",
+    val venue: String? = null,
+    val startsAt: String = "",
+    val primaryImageUrl: String? = null,
+    val myRsvp: String? = null,
+)
+

@@ -233,6 +233,11 @@ interface MemberApi {
     @GET("calendar")
     suspend fun calendar(@retrofit2.http.Query("from") from: String, @retrofit2.http.Query("to") to: String): Envelope<CalendarOccurrence>
 
+    // Up to 5 soonest curated occurrences for Home — server-capped, sorted; the
+    // client must render exactly what arrives (no re-sort/re-cap).
+    @GET("home/events")
+    suspend fun homeEvents(): Envelope<HomeEventRow>
+
     @GET("events/{id}")
     suspend fun event(@Path("id") eventId: String): EventDetail
 
