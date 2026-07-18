@@ -1507,3 +1507,113 @@ SUCCEEDED, `... test` → 10/10 green. Android `export JAVA_HOME="/Applications/
 Android Studio.app/Contents/jbr/Contents/Home" && ./gradlew
 :app:compileDebugKotlin :app:testDebugUnitTest` → BUILD SUCCESSFUL, 21/21
 unit tests green. Not pushed / no PRs opened (per task instruction).
+
+## 2026-07-18 — Chat four-tab restructure: My Space · Chat · My Discipler · Talk with My Pastor (branch feat/chat-four-tabs, both member apps, client-only)
+
+Chat Redesign C3b (pathway docs/CHAT_REDESIGN.md §1-2, 5-7). The Chat hub's
+segments are restructured for members into **My Space · Chat · My Discipler ·
+Talk with My Pastor** — SuperAdmin additionally sees **Pastoral Inbox** and the
+unchanged **Broadcast**. Backend untouched (all four new routes were already
+live: `GET /chat/discipler/conversation`, `POST /chat/pastoral`, `GET
+/chat/pastoral/inbox`, `POST /chat/spaces/{id}/join-requests` — shapes
+verified by reading `chat/service.ts` and `pastoral/service.ts`, read-only).
+
+**My Space** merges the old "#My Space" (kind=space) and "My Groups"
+(kind=group) segments into one tab with sub-sections — the backend already
+files both under `type=SPACE` (CHAT_REDESIGN_PLAN.md §2.1, Open Question 4).
+The integer-indexed `Segment(0..3)` control became a role-shaped `ChatTab`
+enum list in a horizontally scrolling strip (icons + unread chips; a fixed
+4-wide `weight(1f)` split can't hold up to six segments). Discover "Join"
+tries the immediate `POST /chat/spaces/{id}/join` first (public spaces,
+unchanged) and falls back to filing a reviewed `join-requests` on refusal —
+the row flips to an hourglass "Requested" pill. Honest note: no live space
+currently *requires* review (`joinSpace` has no approval gating server-side),
+so the fallback is forward-compatible tolerance, not a path any real space
+exercises today.
+
+**Chat** is the C3a consent-gated DM segment, renamed — no behaviour change.
+The known discipler/pastoral conversation ids are filtered OUT of its DM list
+(they live in their own tabs). Since neither conversations endpoint returns
+`type`, that filter is a client-taught heuristic: the pastoral id is cached in
+AppPrefs on first open, the discipler id is re-resolved per hub load — a
+pastoral thread never opened on THIS device still shows as an ordinary DM row
+(mitigated in the thread screen by a cached-id ctx fallback, below).
+
+**My Discipler** is active only when `GET /me/discipleship` yields a
+discipler (empty state: "A discipler has not yet been assigned to you.");
+opening resolves the DISCIPLER thread via `GET /chat/discipler/conversation`
+— never the Hub's legacy `dm_conversation_id`, which is an ordinary unstamped
+DM lookup, not the same conversation. The hub load also resolves the id
+eagerly *when an assignment exists* purely for the tab's unread badge (the
+lazy-create is safe there: the thread it would create is the one the
+assignment already implies). DiscipleshipHubScreen itself was left untouched.
+
+**Talk with My Pastor** create-or-opens via `POST /chat/pastoral` (server
+resolves assigned → congregation default → SuperAdmin fallback; the rare
+`no_pastor` 404 and the minors' FORBIDDEN_SCOPE get friendly copy via the new
+`isNoPastor`/`isMinorBlocked` helpers in ChatShared.kt, same body-sniff idiom
+as `isPasswordRequired`). The thread screen shows the privacy banner
+("Private pastoral conversation." / "Private between you and your assigned
+discipler." for the discipler flavour) and, for pastoral, the ⋮ menu: Lock
+now · Enable/Disable biometric lock · Mute · Archive · Privacy info — all
+four actions client-side-only (no server route backs any of them; Archive is
+a local hide with a reopen affordance, Mute silences the tab badge and this
+device's own notification rendering). Privacy info is an honest dialog — no
+E2EE claim.
+
+**Biometric lock** (`data/PastoralLock.kt`) is deliberately NOT
+`BroadcastLock`'s shape: `POST /chat/pastoral` has no server step-up, so
+there is no password to carry — no Keystore key, no CryptoObject, no stored
+secret. It is a pure `BiometricPrompt` gate with `BIOMETRIC_WEAK or
+DEVICE_CREDENTIAL` (biometric-or-device-passcode, matching iOS's
+`.deviceOwnerAuthentication`), per-device opt-in (off by default), and its
+`unlocked` state lives only in process memory — restart always starts locked,
+the thread screen re-locks on ON_STOP (app backgrounded), and sign-out sweeps
+the lot (`AuthStore` → `resetForSignOut`). The gate is a true render gate:
+ChatThreadScreen early-returns to `PastoralLockScreen` before mark-read, the
+thread fetch, or any message composable runs — not an opaque cover. The ctx
+rides the nav route (`chat/{id}?ctx=discipler|pastoral`) because
+`GET /chat/conversations/{id}` carries no `type`; an un-annotated route falls
+back to comparing the cached pastoral id so a deep link can't slip past the
+gate. Cross-platform nuance, stated plainly: iOS re-locks on a 5-minute
+timeout as well; Android has no wall-clock timeout — it stays open only while
+the app is continuously foregrounded, which is the tighter posture in
+practice but not identical.
+
+**Pastoral Inbox** (pastor side, "Talk with Your Pastor") reuses the EXISTING
+`BroadcastStepUp`/`BroadcastStepUpDialog` machinery verbatim — `GET
+/chat/pastoral/inbox` genuinely demands the same §5.3 fresh-password step-up
+as Broadcast (fingerprint fast path included), so this is the one place C3b
+copies Broadcast's shape on purpose. Client-side the segment is offered to
+SuperAdmin only (`pastoralEligible` in MainShell): the server also admits any
+user who ever held a `pastor_assignments` row, but its middleware demands the
+password step-up BEFORE the not-a-pastor 403 can fire, so there is no
+side-effect-free probe — an assigned non-SuperAdmin pastor has no client
+entry point today. Real limit, not hidden. A plain 403 after step-up renders
+as an honest "no members assigned to you pastorally" empty state.
+
+**Notifications, honestly**: the backend sends NO push for any chat message —
+DM, discipler, pastoral or space — today (verified: only `space_join_*` and
+connection events call `notify()`). The suppression added to
+`NuruMessagingService` (pastoral pushes render the generic "You have a new
+private pastoral message." with no preview; dropped entirely when muted) is
+therefore defensive future-proofing, not a fix to a live leak — and it only
+governs notifications THIS app renders; a notification-payload push the OS
+renders while the process is dead never reaches that code.
+
+Android files: `data/net/CommunityDtos.kt` + `MemberApi.kt` (DTOs + 4 calls),
+`feature/community/ChatShared.kt` (error helpers), `data/PastoralLock.kt`
+(new), `data/AppPrefs.kt` (pastoral keys + sign-out sweep), `auth/AuthStore.kt`,
+`feature/community/ChatScreen.kt` (ChatTab enum, merged My Space, three new
+tab composables), `feature/community/ChatThreadScreen.kt` (ctx, gate, menu,
+banner), `feature/shell/MainShell.kt` (?ctx= route + pastoralEligible),
+`data/firebase/NuruMessagingService.kt` (preview suppression). iOS shipped
+the mirror restructure the same day on its own feat/chat-four-tabs (see that
+repo's PARITY_AUDIT.md entry — same tabs, PastoralLock twin with a 5-minute
+window, SuperAdmin inbox inside the pastor tab).
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 21/21 unit tests green. iOS `xcodebuild ... build` →
+BUILD SUCCEEDED, `... test` → 10/10 green (pinned simulator, derivedDataPath
+build/dd). Not pushed / no PRs opened (per task instruction).
