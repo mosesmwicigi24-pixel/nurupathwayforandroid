@@ -199,6 +199,55 @@ data class DmBody(val userId: String)
 @Serializable
 data class DmRes(val conversationId: String = "")
 
+// --- Chat connections (Chat Redesign C1/C2 backend, C3a client) — consent-gated
+// peer relationships. "No unsolicited DMs": POST /chat/dms now 403s with
+// CONSENT_REQUIRED for a brand-new thread between two ordinary members unless
+// an accepted `user_connections` row exists. Mirrors
+// packages/backend/src/modules/chat/connections.ts's wire shapes exactly.
+// Every field has a default so an unknown/older server shape never blanks the
+// whole Chat tab (same tolerant-DTO convention as the rest of this file).
+@Serializable
+data class RequestConnectionBody(val userId: String, val message: String? = null, val clientMutationId: String)
+
+@Serializable
+data class RequestConnectionRes(val requestId: String = "", val status: String = "pending", val duplicate: Boolean = false, val mutual: Boolean = false)
+
+/** One row of GET /chat/connections/requests?direction=incoming|outgoing. */
+@Serializable
+data class ConnectionRequestRow(
+    val requestId: String,
+    val status: String = "pending",
+    val message: String? = null,
+    val createdAt: String? = null,
+    val userId: String = "",
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+)
+
+@Serializable
+data class ConnectionRequestsRes(val data: List<ConnectionRequestRow> = emptyList())
+
+/** Shared response shape for accept / decline / cancel. */
+@Serializable
+data class ConnectionRequestDecision(val requestId: String = "", val status: String = "", val already: Boolean = false)
+
+/** One row of GET /chat/connections — an accepted (chat-able) peer. */
+@Serializable
+data class ConnectionRow(
+    val userId: String,
+    val fullName: String = "",
+    val avatarUrl: String? = null,
+    val status: String = "accepted",   // accepted | blocked | removed
+    val establishedAt: String? = null,
+)
+
+@Serializable
+data class ConnectionsRes(val data: List<ConnectionRow> = emptyList())
+
+/** Shared response shape for remove / block / unblock. */
+@Serializable
+data class ConnectionActionRes(val userId: String = "", val status: String = "")
+
 // Staff broadcast (POST chat/broadcast, Instructor+). Server zod: body 1..20000,
 // msg_type "text"|"image" (default text), attachment_url optional NOT nullable
 // (so it's omitted here — same explicitNulls trap as SendVoiceBody above),
