@@ -338,3 +338,49 @@ data class BroadcastDetailRes(
     val deliveredCount: Int = 0,
     val seenCount: Int = 0,
 )
+
+// --- My Discipler / Talk with My Pastor (Chat Redesign C3b) ---
+// Mirrors packages/backend/src/modules/chat/service.ts#openDisciplerConversation
+// and modules/pastoral/service.ts#openMyThread/inbox exactly — both already
+// live server routes (verified by reading the backend source, read-only).
+
+/** GET /chat/discipler/conversation — resolves (lazily creating) my DISCIPLER
+ *  thread with my CURRENT assignment. 404 {no_discipler:true} if none. */
+@Serializable
+data class DisclerConversationRes(val conversationId: String = "")
+
+/** POST /chat/pastoral — create-or-open MY pastoral thread. */
+@Serializable
+data class PastoralOpenRes(
+    val conversationId: String = "",
+    val pastorUserId: String = "",
+    // assigned | congregation_default | fallback_superadmin
+    val source: String = "assigned",
+)
+
+/** One row of GET /chat/pastoral/inbox (pastor/SuperAdmin-facing, password
+ *  step-up gated). */
+@Serializable
+data class PastoralInboxRow(
+    val conversationId: String,
+    val archivedAt: String? = null,
+    val updatedAt: String? = null,
+    val memberUserId: String = "",
+    val memberName: String = "",
+    val memberAvatarUrl: String? = null,
+    val lastBody: String? = null,
+    val lastAt: String? = null,
+)
+
+@Serializable
+data class PastoralInboxRes(val data: List<PastoralInboxRow> = emptyList())
+
+// --- My Space join requests (Chat Redesign C1/C2 backend, already live —
+// space_join_requests + leader/moderator review, as distinct from the
+// immediate POST /chat/spaces/{id}/join path used for auto-entitled spaces). ---
+@Serializable
+data class RequestJoinSpaceBody(val message: String? = null)
+
+/** already_member | pending. */
+@Serializable
+data class JoinSpaceRequestRes(val status: String = "pending", val requestId: String? = null)

@@ -257,6 +257,25 @@ interface MemberApi {
     @POST("chat/spaces/{id}/join")
     suspend fun joinChatSpace(@Path("id") conversationId: String): Unit
 
+    // Review-gated join (Chat Redesign C1/C2, already live) — the "My Space"
+    // discover flow now goes through this instead of the immediate join above,
+    // so a space that requires leader review gets a pending state rather than
+    // silent immediate membership.
+    @POST("chat/spaces/{id}/join-requests")
+    suspend fun requestJoinSpace(@Path("id") conversationId: String, @Body body: RequestJoinSpaceBody): JoinSpaceRequestRes
+
+    // --- My Discipler / Talk with My Pastor (Chat Redesign C3b) ---
+    @GET("chat/discipler/conversation")
+    suspend fun disciplerConversation(): DisclerConversationRes
+
+    @POST("chat/pastoral")
+    suspend fun openPastoralThread(): PastoralOpenRes
+
+    // Pastor/SuperAdmin-facing — password step-up gated (§5.3), same posture
+    // as the broadcast routes below.
+    @GET("chat/pastoral/inbox")
+    suspend fun pastoralInbox(): PastoralInboxRes
+
     @POST("chat/messages/{id}/reactions")
     suspend fun toggleChatReaction(@Path("id") messageId: String, @Body body: ReactBody): ReactOn
 

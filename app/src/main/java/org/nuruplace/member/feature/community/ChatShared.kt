@@ -262,6 +262,39 @@ fun isConsentRequired(e: Throwable): Boolean {
     return "CONSENT_REQUIRED" in body
 }
 
+// ── My Discipler / Talk with My Pastor (Chat Redesign C3b) ──
+
+/** True for GET /chat/discipler/conversation's specific 404 — no CURRENT
+ *  discipler assignment exists (details.no_discipler) — distinct from an
+ *  ordinary not-found. Drives the tab's empty state. */
+fun isNoDiscipler(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 404) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "no_discipler" in body
+}
+
+/** True for POST /chat/pastoral's rare 404 — nothing resolves to a pastor at
+ *  all (no assignment, no congregation default, no SuperAdmin to fall back
+ *  to; details.no_pastor). */
+fun isNoPastor(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 404) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "no_pastor" in body
+}
+
+/** True for the 403 FORBIDDEN_SCOPE every DM-flavoured route (discipler,
+ *  pastoral, ordinary DM) throws for a minor — "Direct messages are
+ *  unavailable for minors" (D-M6). Distinguishes the minor-safe note from an
+ *  ordinary refusal. */
+fun isMinorBlocked(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 403) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "FORBIDDEN_SCOPE" in body && "minor" in body.lowercase()
+}
+
 /** Where the caller stands with one other member right now — derived
  *  client-side from `GET /chat/connections` + `GET /chat/connections/
  *  requests?direction=...`, never sent by the server as a single field. */

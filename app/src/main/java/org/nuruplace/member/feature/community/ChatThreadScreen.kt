@@ -43,21 +43,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -82,6 +87,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,6 +106,8 @@ import kotlinx.serialization.json.putJsonArray
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.PastoralLock
 import org.nuruplace.member.data.net.ChatMessage
 import org.nuruplace.member.data.net.ChatThreadDetail
 import org.nuruplace.member.data.net.EditMessageBody
@@ -120,10 +128,53 @@ import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
+/**
+ * [threadContext] — "discipler" | "pastoral" | null. Set by the caller when
+ * navigation already resolved the thread via `GET /chat/discipler/conversation`
+ * or `POST /chat/pastoral` (Chat Redesign C3b): those routes already know
+ * which flavour of 1:1 this is, so it's passed explicitly through the nav
+ * route args (`"chat/{id}?ctx=discipler|pastoral"`) rather than re-derived —
+ * `GET /chat/conversations/{id}` doesn't return `type` at all (confirmed by
+ * reading chat/service.ts#getConversation's SELECT). Drives the privacy label
+ * and, for "pastoral", the local biometric gate + its ⋮ menu.
+ */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
+fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: String? = null) {
+    // A pastoral thread reached through an ordinary route (a stale DM row, a
+    // deep link) still gets its privacy dressing and the local gate when this
+    // device has already learned the thread's id — otherwise the gate would be
+    // one un-annotated navigation away from useless.
+    val ctx = threadContext ?: if (conversationId.isNotBlank() && conversationId == AppPrefs.pastoralConversationId) "pastoral" else null
+    val isPastoral = ctx == "pastoral"
+    val gateActive = isPastoral && PastoralLock.enabled
+
+    // Re-lock whenever the app leaves the foreground while this screen is up —
+    // "re-auth on timeout/restart/logout/device-lock" (owner brief). Restart is
+    // covered for free: PastoralLock.unlocked lives only in process memory, so
+    // a fresh process always starts locked.
+    if (gateActive) {
+        androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+            PastoralLock.lock()
+        }
+    }
+
+    // Gate the RENDER itself, not just an opaque cover: nothing below this —
+    // not the mark-read call, not the thread fetch, not a single message — runs
+    // until the gate opens.
+    if (gateActive && !PastoralLock.unlocked) {
+        PastoralLockScreen(onBack = onBack)
+        return
+    }
+
     LaunchedEffect(conversationId) { runCatching { Net.client.api.markChatRead(conversationId) } }
+    // First successful open of this tab caches the id locally so a later Chat
+    // hub load can cross-reference GET /chat/conversations for an unread
+    // badge, without the hub ever eagerly calling POST /chat/pastoral itself
+    // (that route creates a thread as a side effect — see PARITY_AUDIT.md).
+    if (threadContext == "pastoral") {
+        LaunchedEffect(conversationId) { AppPrefs.pastoralConversationId = conversationId }
+    }
     var myName by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { myName = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("") }
     // The other participant, for the ⋮ connection menu (Chat Redesign C3a).
@@ -308,7 +359,17 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
 
         // A DM carrying a message stamped with a broadcast_id is the pastor's own
         // word to this member — dress it as "Talk with Pastor", not a plain DM.
+        // Unrelated to threadContext == "pastoral": that's the NEW dedicated
+        // PASTORAL conversation type; this is the OLD "reply to a broadcast"
+        // heuristic (a thread is never both in practice).
         val isPastorMail = thread.kind != "space" && messages.any { it.broadcastId != null && !it.mine }
+
+        // ── Pastoral ⋮ menu state (Chat Redesign C3b — Lock/Enable-biometric/
+        // Mute/Archive/Privacy info, all client-side-only per the task spec) ──
+        var biometricOn by remember { mutableStateOf(PastoralLock.enabled) }
+        var muted by remember { mutableStateOf(AppPrefs.pastoralMuted) }
+        var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
+        var showPrivacyInfo by remember { mutableStateOf(false) }
 
         Column(Modifier.fillMaxSize().background(CHAT.threadBg).imePadding()) {
             ThreadHeader(
@@ -317,7 +378,25 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                 onRemoveConnection = { removeConnection() },
                 onBlock = { blockPeer() },
                 onUnblock = { unblockPeer() },
+                threadContext = ctx,
+                biometricOn = biometricOn,
+                muted = muted,
+                archived = archived,
+                onLockNow = { PastoralLock.lock() },
+                onToggleBiometric = { PastoralLock.enabled = !biometricOn; biometricOn = PastoralLock.enabled },
+                onToggleMute = { muted = !muted; AppPrefs.pastoralMuted = muted },
+                onArchive = { archived = !archived; AppPrefs.pastoralArchived = archived; if (archived) onBack() },
+                onShowPrivacyInfo = { showPrivacyInfo = true },
             )
+            if (ctx == "discipler" || ctx == "pastoral") {
+                PrivacyLabelBanner(
+                    if (ctx == "discipler") {
+                        "Private between you and your assigned discipler."
+                    } else {
+                        "Private pastoral conversation."
+                    },
+                )
+            }
             if (thread.kind == "space" && !thread.joined) {
                 Row(Modifier.fillMaxWidth().background(CHAT.canvas).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
                     Box(
@@ -559,6 +638,107 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                 },
             )
         }
+
+        // ---- Privacy info (pastoral ⋮ menu) — honest, no false E2EE claim ----
+        if (showPrivacyInfo) {
+            AlertDialog(
+                onDismissRequest = { showPrivacyInfo = false },
+                containerColor = CHAT.white,
+                title = { Text("About this conversation's privacy", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+                text = {
+                    Text(
+                        "Messages here are encrypted in transit and at rest, and only " +
+                            "you and your pastor are members of this thread — a SuperAdmin " +
+                            "or a permission-holding pastoral admin can reach it only through " +
+                            "an audited, exceptional-access path, never by default. This is " +
+                            "not end-to-end encrypted: the server can read message content, " +
+                            "the same as any other conversation in the app. The lock you just " +
+                            "opened is a LOCAL setting on this device only — it doesn't change " +
+                            "who can read the conversation, only who can open it on this phone.",
+                        style = cInter(13).copy(lineHeight = 19.sp),
+                        color = CHAT.ink600,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPrivacyInfo = false }) {
+                        Text("Got it", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** Shared privacy-label strip for the My Discipler / Talk with My Pastor
+ *  threads (Chat Redesign C3b) — distinct wording per thread flavour, same
+ *  chrome the existing "Only X sees your reply" broadcast-reply banner uses. */
+@Composable
+private fun PrivacyLabelBanner(label: String) {
+    Row(
+        Modifier.fillMaxWidth().background(CHAT.goldTint).padding(horizontal = 16.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Text(label, style = cInter(11, FontWeight.SemiBold), color = CHAT.goldDeep)
+    }
+}
+
+/** Full-screen local gate for a locked "Talk with My Pastor" thread —
+ *  nothing behind it renders until this resolves (see the early return in
+ *  ChatThreadScreen). Auto-prompts once on entry so the member doesn't have
+ *  to tap twice; "Try again" re-prompts on a cancel/failure, "Back" bails out
+ *  without ever fetching the thread. */
+@Composable
+private fun PastoralLockScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val activity = remember { context.findFragmentActivity() }
+    val scope = rememberCoroutineScope()
+    var unlocking by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun attempt() {
+        val act = activity ?: run { error = "Unlock isn't available here."; return }
+        if (unlocking) return
+        unlocking = true
+        error = null
+        scope.launch {
+            val ok = PastoralLock.unlock(act)
+            unlocking = false
+            if (!ok) error = "Couldn't verify it's you."
+        }
+    }
+
+    LaunchedEffect(Unit) { attempt() }
+
+    Column(
+        Modifier.fillMaxSize().background(CHAT.threadBg).padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            Modifier.size(64.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.selectedSeg),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
+        Spacer(Modifier.height(16.dp))
+        Text("Talk with My Pastor is locked", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy, textAlign = TextAlign.Center)
+        Text(
+            "Confirm it's you to open this private conversation.",
+            style = cInter(13).copy(lineHeight = 19.sp),
+            color = CHAT.ink600,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        error?.let { Text(it, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318), modifier = Modifier.padding(top = 10.dp)) }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(CHAT.surface).clickable { onBack() }.padding(horizontal = 20.dp, vertical = 12.dp),
+            ) { Text("Back", style = cInter(13, FontWeight.SemiBold), color = CHAT.ink600) }
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(CHAT.storyRing).clickable(enabled = !unlocking) { attempt() }.padding(horizontal = 20.dp, vertical = 12.dp),
+            ) { Text(if (unlocking) "Confirming…" else "Unlock", style = cInter(13, FontWeight.Bold), color = Color.White) }
+        }
     }
 }
 
@@ -572,6 +752,15 @@ private fun ThreadHeader(
     onRemoveConnection: () -> Unit = {},
     onBlock: () -> Unit = {},
     onUnblock: () -> Unit = {},
+    threadContext: String? = null,
+    biometricOn: Boolean = false,
+    muted: Boolean = false,
+    archived: Boolean = false,
+    onLockNow: () -> Unit = {},
+    onToggleBiometric: () -> Unit = {},
+    onToggleMute: () -> Unit = {},
+    onArchive: () -> Unit = {},
+    onShowPrivacyInfo: () -> Unit = {},
 ) {
     Column {
         ChatCreamHeaderBox {
@@ -601,7 +790,12 @@ private fun ThreadHeader(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("🕊️", fontSize = 10.sp)
                             Text(
-                                if (isPastorMail) "Talk with Pastor" else "Walking together in faith",
+                                when {
+                                    threadContext == "discipler" -> "My Discipler"
+                                    threadContext == "pastoral" -> "Talk with My Pastor"
+                                    isPastorMail -> "Talk with Pastor"
+                                    else -> "Walking together in faith"
+                                },
                                 style = cSerif(12, FontWeight.Medium).copy(fontStyle = FontStyle.Italic),
                                 color = CHAT.eyebrow, maxLines = 1,
                             )
@@ -614,7 +808,13 @@ private fun ThreadHeader(
                     }
                 }
 
-                if (thread.kind == "dm" && peerUserId != null) {
+                if (thread.kind == "dm" && threadContext == "pastoral") {
+                    PastoralMenuButton(
+                        biometricOn = biometricOn, muted = muted, archived = archived,
+                        onLockNow = onLockNow, onToggleBiometric = onToggleBiometric,
+                        onToggleMute = onToggleMute, onArchive = onArchive, onPrivacyInfo = onShowPrivacyInfo,
+                    )
+                } else if (thread.kind == "dm" && peerUserId != null) {
                     ConnectionMenuButton(connectionBusy, onRemoveConnection, onBlock, onUnblock)
                 } else {
                     Box(
@@ -672,6 +872,63 @@ private fun ConnectionMenuButton(busy: Boolean, onRemove: () -> Unit, onBlock: (
                 text = { Text("Unblock") },
                 leadingIcon = { Icon(Icons.Filled.LockOpen, null, modifier = Modifier.size(20.dp)) },
                 onClick = { expanded = false; onUnblock() },
+            )
+        }
+    }
+}
+
+/**
+ * "Talk with My Pastor" ⋮ menu (Chat Redesign C3b — the biometric lock's new
+ * home, moved from Broadcast per the owner brief). Lock now / Enable-Disable
+ * biometric / Mute / Archive are all pure client-side state — no server route
+ * backs any of the four (documented in PARITY_AUDIT.md). Privacy info opens
+ * an honest explainer dialog (no false E2EE claim).
+ */
+@Composable
+private fun PastoralMenuButton(
+    biometricOn: Boolean,
+    muted: Boolean,
+    archived: Boolean,
+    onLockNow: () -> Unit,
+    onToggleBiometric: () -> Unit,
+    onToggleMute: () -> Unit,
+    onArchive: () -> Unit,
+    onPrivacyInfo: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(
+        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.border, RoundedCornerShape(12.dp))
+            .clickable { expanded = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.MoreVert, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (biometricOn) {
+                DropdownMenuItem(
+                    text = { Text("Lock now") },
+                    leadingIcon = { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(20.dp)) },
+                    onClick = { expanded = false; onLockNow() },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(if (biometricOn) "Disable biometric lock" else "Enable biometric lock") },
+                leadingIcon = { Icon(Icons.Filled.Fingerprint, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onToggleBiometric() },
+            )
+            DropdownMenuItem(
+                text = { Text(if (muted) "Unmute" else "Mute") },
+                leadingIcon = { Icon(Icons.Filled.NotificationsOff, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onToggleMute() },
+            )
+            DropdownMenuItem(
+                text = { Text(if (archived) "Unarchive" else "Archive") },
+                leadingIcon = { Icon(if (archived) Icons.Filled.Unarchive else Icons.Filled.Archive, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onArchive() },
+            )
+            DropdownMenuItem(
+                text = { Text("Privacy info") },
+                leadingIcon = { Icon(Icons.Filled.Info, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onPrivacyInfo() },
             )
         }
     }

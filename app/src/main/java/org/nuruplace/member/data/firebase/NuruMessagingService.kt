@@ -36,8 +36,26 @@ class NuruMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val title = message.notification?.title ?: message.data["title"] ?: "Nuru Pathway"
-        val body = message.notification?.body ?: message.data["body"] ?: return
+        // Pastoral privacy (Chat Redesign C3b): a push about the member's
+        // pastoral thread never shows a content preview — generic copy only,
+        // and nothing at all when the member muted it. DEFENSIVE today: the
+        // backend currently sends NO push for any chat message (verified —
+        // only space_join_*/connection events call notify()), so this branch
+        // guards the future, not a live leak. It only applies where the client
+        // renders the notification itself; a notification-payload push the OS
+        // renders while the app is dead never reaches this code — real limit,
+        // recorded in docs/PARITY_AUDIT.md.
+        val template = (message.data["template"] ?: "").lowercase()
+        val pastoralId = org.nuruplace.member.data.AppPrefs.pastoralConversationId
+        val isPastoral = template.startsWith("pastoral") ||
+            (pastoralId != null && message.data["conversationId"] == pastoralId)
+        if (isPastoral && org.nuruplace.member.data.AppPrefs.pastoralMuted) return
+        val title = if (isPastoral) "Nuru Pathway" else message.notification?.title ?: message.data["title"] ?: "Nuru Pathway"
+        val body = if (isPastoral) {
+            "You have a new private pastoral message."
+        } else {
+            message.notification?.body ?: message.data["body"] ?: return
+        }
         ensureChannel(this)
         // Cold-tap deep link: compute the in-app destination from the push data and
         // hand it to MainActivity (PendingDest) so a tray tap lands on the target,
