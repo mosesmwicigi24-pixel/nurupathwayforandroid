@@ -1286,3 +1286,47 @@ Android vc44+); art + quotes are already live to CURRENT apps via server art.
    sidebars show only granted items (server middleware stays the law).
 Follow-up chip parked: unwired "Chat" pill on both level screens (pre-existing).
 Apps: all client work rides iOS build 77+ / Android vc44+.
+
+## 2026-07-18 — My Prayer Room (branch feat/my-prayer-room, both apps; not yet merged)
+Owner spec: replace the two separate Home/Grow/Community entries — "Prayer
+Wall" and "Prayer Journal" — with ONE destination, "My Prayer Room", holding
+two tabs: Private Prayer (default) and Corporate Prayer.
+
+iOS: new PrayerRoomView hosts a Chat-style capsule segmented control over the
+EXISTING PrayerJournalView and PrayerWallView, unmodified apart from a new
+`embedded` flag that drops each one's own back-button/hero chrome (Room
+supplies one shared header instead) and swaps their header-hosted "+" for a
+floating gold FAB. GrowDestination.prayerJournal and CommunityRoute.prayerWall
+now both resolve to PrayerRoomView (on the Private/Corporate tab respectively)
+in the single nuruDestinations() switch, so every existing NavigationLink/deep
+link (Home Grow tile, "Pray for one another" carousel "Open" link, minis row,
+Cell "Open community", the app's internal deep-link switch) converged with
+zero call-site changes.
+
+Android: same shape — new PrayerRoomScreen hosts a capsule segmented control
+over the existing PrayerJournalScreen and PrayerWallScreen, unmodified apart
+from an `embedded: Boolean` param. Android's nav graph is string-route based
+(no enum indirection), so the old "prayers" and "prayer-wall" list routes
+were removed and every caller rewired to a single "prayer-room?tab={tab}"
+route (optional query arg, iOS-parity of the "event/{id}?end=" pattern
+already in MainShell.kt): Home Grow tile, prayer-wall carousel card, minis
+row, the next-action route mapper, notification-tap + FCM push deep links,
+and the long-press launcher shortcut. In both cases a specific wall post
+still opens PrayerWallDetailView/Screen directly — deep links to a post keep
+working unchanged, they just no longer route through a "wall list" screen.
+
+Each private prayer row on both apps gets a new PROMINENT solid-gold "Share
+to Corporate Prayer" button (was a small icon/text link among other row
+actions) that swaps to a settled green "On the wall 🙏" state once the share
+lands, and fires the apps' existing quiet CelebrationCenter banner (no
+confetti — same idiom as posting to the wall) plus a confirm haptic on
+Android. No new endpoint: both apps' buttons call the SAME
+POST /me/prayers/{id}/share-to-wall the journal's share feature already
+shipped — this was already the publish primitive, just demoted to a small
+control; My Prayer Room promotes it to the headline action of the tab.
+
+Portal unaffected (oversight reads the same wall); backend unchanged.
+
+Verified: iOS `xcodebuild ... build` → BUILD SUCCEEDED, `... test` → 10/10
+green. Android `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` →
+BUILD SUCCESSFUL. Not pushed / no PRs opened yet (per task instruction).
