@@ -1267,3 +1267,22 @@ Moses) keyed to the verse theme. Clients tolerant — old fields untouched,
 absent new fields render exactly as before. Backend image 2026-07-18T06:31Z,
 readyz 200. Apps carry the rendering at their NEXT builds (iOS build 77+,
 Android vc44+); art + quotes are already live to CURRENT apps via server art.
+
+## 2026-07-18 — Owner's five-task batch, all shipped
+1. Day-unlock race FIXED+DEPLOYED (pathway#381/ios#88/android#49): completeSegment
+   answers day_complete/next_day_unlocked in-transaction; clients act on the ack,
+   always refetch, honest "Finishing your sync…" state. (Prod data showed all
+   owner's day-1 segments recorded — pure client-cache race.)
+2. Fireworks celebration (ios#89/android#50): rockets→radial glowing sparks ~5s,
+   3 pop wavs (silent-switch + Reduce Motion respected), single-Canvas 60fps.
+3. Mid-level discipler (ios#90/android#51): reminder pop-up after 3 modules
+   (60s auto-dismiss, 1/session, 24h grace), navy/gold stats card after module
+   5-6 (progress ring, band, streak) — all from existing payloads.
+4. Code-first reset DEPLOYED (pathway#382 mig 159 + android#52): email leads
+   with XXXX-XXXX code (same token field — apps unchanged), portal page shows it
+   copyable, Android gained its missing in-app enter-code screen.
+5. RBAC hardening DEPLOYED (pathway#383/ipad#5): permission-less scope=admin
+   logins refused with clear copy; login+/me carry permissions[]; web+iPad
+   sidebars show only granted items (server middleware stays the law).
+Follow-up chip parked: unwired "Chat" pill on both level screens (pre-existing).
+Apps: all client work rides iOS build 77+ / Android vc44+.
