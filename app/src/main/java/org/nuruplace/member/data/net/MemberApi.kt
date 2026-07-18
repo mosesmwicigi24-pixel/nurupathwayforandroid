@@ -209,6 +209,37 @@ interface MemberApi {
     @POST("chat/dms")
     suspend fun createDm(@Body body: DmBody): DmRes
 
+    // --- Chat connections (Chat Redesign C1/C2 backend, C3a client) ---
+    // "No unsolicited DMs": createDm above now 403s CONSENT_REQUIRED for a
+    // brand-new thread between two ordinary members unless one of these
+    // requests was accepted first. Existing threads are unaffected.
+    @POST("chat/connections/requests")
+    suspend fun requestConnection(@Body body: RequestConnectionBody): RequestConnectionRes
+
+    @GET("chat/connections/requests")
+    suspend fun listConnectionRequests(@Query("direction") direction: String): ConnectionRequestsRes
+
+    @POST("chat/connections/requests/{id}/accept")
+    suspend fun acceptConnectionRequest(@Path("id") requestId: String): ConnectionRequestDecision
+
+    @POST("chat/connections/requests/{id}/decline")
+    suspend fun declineConnectionRequest(@Path("id") requestId: String): ConnectionRequestDecision
+
+    @DELETE("chat/connections/requests/{id}")
+    suspend fun cancelConnectionRequest(@Path("id") requestId: String): ConnectionRequestDecision
+
+    @GET("chat/connections")
+    suspend fun listConnections(): ConnectionsRes
+
+    @POST("chat/connections/{user_id}/remove")
+    suspend fun removeConnection(@Path("user_id") userId: String): ConnectionActionRes
+
+    @POST("chat/connections/{user_id}/block")
+    suspend fun blockConnection(@Path("user_id") userId: String): ConnectionActionRes
+
+    @POST("chat/connections/{user_id}/unblock")
+    suspend fun unblockConnection(@Path("user_id") userId: String): ConnectionActionRes
+
     // Staff-only (Instructor+ — Students get 403): one message delivered to every
     // active member as an individual DM from the sender. Idempotent on
     // client_mutation_id; returns how many members it reached.

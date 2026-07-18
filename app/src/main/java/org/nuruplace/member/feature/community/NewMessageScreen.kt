@@ -26,10 +26,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,36 +40,36 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ChatPerson
+import org.nuruplace.member.data.net.ConnectionRequestRow
+import org.nuruplace.member.data.net.ConnectionRow
 import org.nuruplace.member.data.net.DmBody
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.RequestConnectionBody
 import org.nuruplace.member.ui.components.AsyncContent
+import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
+
+/** Directory + where the caller stands with each person (Chat Redesign C3a). */
+private data class NewMessageData(
+    val people: List<ChatPerson>,
+    val connections: List<ConnectionRow>,
+    val incoming: List<ConnectionRequestRow>,
+    val outgoing: List<ConnectionRequestRow>,
+)
 
 @Composable
 fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-
-    val startDm: (ChatPerson) -> Unit = { person ->
-        if (!busy) {
-            busy = true
-            scope.launch {
-                val id = runCatching {
-                    Net.client.api.createDm(DmBody(person.userId)).conversationId
-                }.getOrNull()
-                busy = false
-                if (!id.isNullOrBlank()) onOpenThread(id)
-            }
-        }
-    }
+    var busyUserId by remember { mutableStateOf<String?>(null) }
+    var consentPromptFor by remember { mutableStateOf<ChatPerson?>(null) }
 
     Column(Modifier.fillMaxSize().background(CHAT.paper).imePadding()) {
         // ── Cream header ──
@@ -140,11 +141,50 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
             )
         }
 
-        // ── People list ──
+        // ── People list — Chat Redesign C3a: what tapping a row does depends
+        // on where the pair stand (connect / cancel / open the DM). ──
         AsyncContent(
             key = query,
-            load = { Net.client.api.chatPeople(query.ifBlank { null }).people },
-        ) { people: List<ChatPerson>, _ ->
+            load = {
+                val people = Net.client.api.chatPeople(query.ifBlank { null }).people
+                val connections = runCatching { Net.client.api.listConnections().data }.getOrDefault(emptyList())
+                val incoming = runCatching { Net.client.api.listConnectionRequests("incoming").data }.getOrDefault(emptyList())
+                val outgoing = runCatching { Net.client.api.listConnectionRequests("outgoing").data }.getOrDefault(emptyList())
+                NewMessageData(people, connections, incoming, outgoing)
+            },
+        ) { (people, connections, incoming, outgoing), reload ->
+            fun startDm(person: ChatPerson) {
+                if (busyUserId != null) return
+                busyUserId = person.userId
+                scope.launch {
+                    runCatching { Net.client.api.createDm(DmBody(person.userId)).conversationId }
+                        .onSuccess { id -> busyUserId = null; if (id.isNotBlank()) onOpenThread(id) }
+                        .onFailure { e ->
+                            busyUserId = null
+                            if (isConsentRequired(e)) consentPromptFor = person
+                        }
+                }
+            }
+            fun sendConnectionRequest(person: ChatPerson) {
+                if (busyUserId != null) return
+                busyUserId = person.userId
+                scope.launch {
+                    runCatching { Net.client.api.requestConnection(RequestConnectionBody(person.userId, clientMutationId = UUID.randomUUID().toString())) }
+                    busyUserId = null
+                    reload()
+                }
+            }
+            fun cancelConnectionRequest(person: ChatPerson) {
+                val req = outgoing.firstOrNull { it.userId == person.userId } ?: return
+                if (busyUserId != null) return
+                busyUserId = person.userId
+                scope.launch {
+                    runCatching { Net.client.api.cancelConnectionRequest(req.requestId) }
+                    busyUserId = null
+                    reload()
+                }
+            }
+
             if (people.isEmpty()) {
                 Box(
                     Modifier.fillMaxWidth().padding(top = 48.dp),
@@ -167,7 +207,12 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                                 .border(1.dp, CHAT.border, RoundedCornerShape(24.dp)),
                         ) {
                             people.forEachIndexed { idx, person ->
-                                PersonRow(idx, person, startDm)
+                                val state = connectionStateFor(person.userId, connections, incoming, outgoing)
+                                PersonRow(
+                                    person, idx, state, busy = busyUserId == person.userId,
+                                    onMessage = { startDm(it) }, onConnect = { sendConnectionRequest(it) },
+                                    onCancelRequest = { cancelConnectionRequest(it) },
+                                )
                                 if (idx < people.lastIndex) {
                                     Box(
                                         Modifier
@@ -182,53 +227,41 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun PersonRow(idx: Int, p: ChatPerson, onTap: (ChatPerson) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable { onTap(p) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box {
-            ChatSquircleAvatar(
-                text = chatInitials(p.fullName),
-                tint = chatRowTint(idx + 1),
-                textSize = 15,
-                avatarUrl = p.avatarUrl,
-            )
-            val level = p.level
-            if (level != null) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .clip(Capsule)
-                        .background(CHAT.storyRing)
-                        .border(1.5.dp, Color.White, Capsule)
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                ) {
-                    Text("L$level", style = cInter(8, FontWeight.Bold), color = CHAT.navy)
-                }
-            }
-        }
-        Column(Modifier.weight(1f)) {
-            Text(p.fullName, style = cInter(13, FontWeight.Medium, -0.12f), color = CHAT.navy)
-            Text(
-                listOfNotNull(p.role, p.congregation).joinToString(" · "),
-                style = cInter(11),
-                color = CHAT.ink500,
+        // Stale-cache recovery: offer the connection request instead of a dead-end error.
+        val prompt = consentPromptFor
+        if (prompt != null) {
+            AlertDialog(
+                onDismissRequest = { consentPromptFor = null },
+                containerColor = CHAT.white,
+                title = { Text("Not connected yet", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+                text = {
+                    Text(
+                        "Send ${prompt.fullName} a connection request first — you can chat once they accept.",
+                        style = cInter(13).copy(lineHeight = 19.sp),
+                        color = CHAT.ink600,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (busyUserId == null) {
+                            busyUserId = prompt.userId
+                            scope.launch {
+                                runCatching { Net.client.api.requestConnection(RequestConnectionBody(prompt.userId, clientMutationId = UUID.randomUUID().toString())) }
+                                busyUserId = null
+                            }
+                        }
+                        consentPromptFor = null
+                    }) {
+                        Text("Send request", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { consentPromptFor = null }) {
+                        Text("Cancel", style = cInter(13, FontWeight.Medium), color = CHAT.ink500)
+                    }
+                },
             )
         }
-        Icon(
-            Icons.AutoMirrored.Filled.Chat,
-            contentDescription = null,
-            tint = CHAT.gold,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }

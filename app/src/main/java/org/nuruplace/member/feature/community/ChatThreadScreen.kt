@@ -44,17 +44,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -119,6 +126,16 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
     LaunchedEffect(conversationId) { runCatching { Net.client.api.markChatRead(conversationId) } }
     var myName by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { myName = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("") }
+    // The other participant, for the ⋮ connection menu (Chat Redesign C3a).
+    // GET /chat/conversations/{id} doesn't carry peer_user_id (only the list
+    // endpoint does) — cross-reference it from the inbox rather than touch
+    // the read-only backend. Best-effort: absent just hides the menu.
+    var peerUserId by remember(conversationId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(conversationId) {
+        peerUserId = runCatching {
+            Net.client.api.chatInbox().conversations.firstOrNull { it.conversationId == conversationId }?.peerUserId
+        }.getOrNull()
+    }
 
     AsyncContent(key = conversationId, load = { Net.client.api.chatConversation(conversationId) }) { thread: ChatThreadDetail, reload ->
         val scope = rememberCoroutineScope()
@@ -248,6 +265,45 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         }
         fun join() { scope.launch { try { Net.client.api.joinChatSpace(conversationId); reload() } catch (_: Exception) {} } }
 
+        // ── Connection controls (Chat Redesign C3a — thread ⋮ menu) ──
+        var connectionBusy by remember { mutableStateOf(false) }
+        fun removeConnection() {
+            val peer = peerUserId ?: return
+            if (connectionBusy) return
+            connectionBusy = true
+            scope.launch {
+                runCatching { Net.client.api.removeConnection(peer) }
+                    .onSuccess { actionError = "Connection removed. This chat's history is kept." }
+                    .onFailure { actionError = "Couldn't remove this connection — try again." }
+                connectionBusy = false
+            }
+        }
+        fun blockPeer() {
+            val peer = peerUserId ?: return
+            if (connectionBusy) return
+            connectionBusy = true
+            scope.launch {
+                runCatching { Net.client.api.blockConnection(peer) }
+                    .onSuccess { actionError = "Blocked. They can no longer message you." }
+                    .onFailure { actionError = "Couldn't block — try again." }
+                connectionBusy = false
+            }
+        }
+        fun unblockPeer() {
+            val peer = peerUserId ?: return
+            if (connectionBusy) return
+            connectionBusy = true
+            scope.launch {
+                runCatching { Net.client.api.unblockConnection(peer) }
+                    .onSuccess { actionError = "Unblocked." }
+                    // The menu offers Unblock unconditionally (no per-pair status
+                    // read exists client-side) — a 404 "wasn't blocked" is the
+                    // expected, harmless outcome when it wasn't needed.
+                    .onFailure { actionError = "This person wasn't blocked." }
+                connectionBusy = false
+            }
+        }
+
         LaunchedEffect(messages.size) { if (messages.isNotEmpty()) runCatching { listState.animateScrollToItem(messages.lastIndex) } }
 
         // A DM carrying a message stamped with a broadcast_id is the pastor's own
@@ -255,7 +311,13 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         val isPastorMail = thread.kind != "space" && messages.any { it.broadcastId != null && !it.mine }
 
         Column(Modifier.fillMaxSize().background(CHAT.threadBg).imePadding()) {
-            ThreadHeader(thread, isPastorMail, onBack)
+            ThreadHeader(
+                thread, isPastorMail, onBack,
+                peerUserId = peerUserId, connectionBusy = connectionBusy,
+                onRemoveConnection = { removeConnection() },
+                onBlock = { blockPeer() },
+                onUnblock = { unblockPeer() },
+            )
             if (thread.kind == "space" && !thread.joined) {
                 Row(Modifier.fillMaxWidth().background(CHAT.canvas).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
                     Box(
@@ -501,7 +563,16 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ThreadHeader(thread: ChatThreadDetail, isPastorMail: Boolean, onBack: () -> Unit) {
+private fun ThreadHeader(
+    thread: ChatThreadDetail,
+    isPastorMail: Boolean,
+    onBack: () -> Unit,
+    peerUserId: String? = null,
+    connectionBusy: Boolean = false,
+    onRemoveConnection: () -> Unit = {},
+    onBlock: () -> Unit = {},
+    onUnblock: () -> Unit = {},
+) {
     Column {
         ChatCreamHeaderBox {
             Row(
@@ -543,10 +614,14 @@ private fun ThreadHeader(thread: ChatThreadDetail, isPastorMail: Boolean, onBack
                     }
                 }
 
-                Box(
-                    Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.gold.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
+                if (thread.kind == "dm" && peerUserId != null) {
+                    ConnectionMenuButton(connectionBusy, onRemoveConnection, onBlock, onUnblock)
+                } else {
+                    Box(
+                        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.gold.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
+                }
             }
         }
         if (thread.kind == "space" && !thread.topic.isNullOrBlank()) {
@@ -558,6 +633,46 @@ private fun ThreadHeader(thread: ChatThreadDetail, isPastorMail: Boolean, onBack
                 Icon(Icons.Filled.Flag, null, tint = CHAT.ink600, modifier = Modifier.size(13.dp))
                 Text(thread.topic!!, style = cInter(12), color = CHAT.ink600)
             }
+        }
+    }
+}
+
+/**
+ * Per-connection controls (Chat Redesign C3a): Remove connection, Block,
+ * Unblock. No "Report" — this app has no member-facing report/moderation
+ * affordance to reuse (the flag/remove/restore actions on a message are
+ * Admin-console-only, gated by `requireRole("Admin")` server-side), so it's
+ * intentionally omitted rather than half-built.
+ */
+@Composable
+private fun ConnectionMenuButton(busy: Boolean, onRemove: () -> Unit, onBlock: () -> Unit, onUnblock: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(
+        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.border, RoundedCornerShape(12.dp))
+            .clickable(enabled = !busy) { expanded = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = CHAT.navy, strokeWidth = 2.dp)
+        } else {
+            Icon(Icons.Filled.MoreVert, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Remove connection") },
+                leadingIcon = { Icon(Icons.Filled.PersonRemove, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onRemove() },
+            )
+            DropdownMenuItem(
+                text = { Text("Block") },
+                leadingIcon = { Icon(Icons.Filled.Block, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onBlock() },
+            )
+            DropdownMenuItem(
+                text = { Text("Unblock") },
+                leadingIcon = { Icon(Icons.Filled.LockOpen, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onUnblock() },
+            )
         }
     }
 }

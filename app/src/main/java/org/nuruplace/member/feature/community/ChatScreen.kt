@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
@@ -69,24 +70,33 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import androidx.compose.material3.AlertDialog
 import org.nuruplace.member.data.net.BroadcastBody
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
+import org.nuruplace.member.data.net.ConnectionRequestRow
+import org.nuruplace.member.data.net.ConnectionRow
 import org.nuruplace.member.data.net.DiscoverSpace
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.RequestConnectionBody
 import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.ListSkeleton
 import java.time.LocalTime
+import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
-/** Hub bundle — one load for inbox + people + greeting name + the tailored verse. */
+/** Hub bundle — one load for inbox + people + greeting name + the tailored verse
+ *  + connections (Chat Redesign C3a — "no unsolicited DMs"). */
 private data class HubData(
     val inbox: org.nuruplace.member.data.net.ChatInbox,
     val people: List<ChatPerson>,
     val name: String,
     val verse: TailoredVerse?,
+    val connections: List<ConnectionRow>,
+    val incoming: List<ConnectionRequestRow>,
+    val outgoing: List<ConnectionRequestRow>,
 )
 
 @Composable
@@ -105,11 +115,23 @@ fun ChatInboxScreen(
         // Verse for today comes from the same tailored-verse service Home uses —
         // the hub card must reflect the server's pick, not a hardcoded verse.
         val verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
-        HubData(inbox, people, name, verse)
-    }) { (inbox, people, name, verse), reload ->
+        // Chat Redesign C3a — "no unsolicited DMs": who I'm already connected
+        // to, and who's asked / been asked. Best-effort so an older server
+        // (or a hiccup) never blanks the whole tab.
+        val connections = runCatching { Net.client.api.listConnections().data }.getOrDefault(emptyList())
+        val incoming = runCatching { Net.client.api.listConnectionRequests("incoming").data }.getOrDefault(emptyList())
+        val outgoing = runCatching { Net.client.api.listConnectionRequests("outgoing").data }.getOrDefault(emptyList())
+        HubData(inbox, people, name, verse, connections, incoming, outgoing)
+    }) { (inbox, people, name, verse, connections, incoming, outgoing), reload ->
         val scope = rememberCoroutineScope()
         var tab by remember { mutableIntStateOf(0) }
         var query by remember { mutableStateOf("") }
+        // Person a connection action is in flight for (Connect / cancel /
+        // accept / decline) — mirrors `busy` DM-creation below.
+        var connectingUserId by remember { mutableStateOf<String?>(null) }
+        // Stale-cache recovery: createDm answered 403 CONSENT_REQUIRED for
+        // someone the directory still showed as messageable.
+        var consentPromptFor by remember { mutableStateOf<ChatPerson?>(null) }
 
         val conversations = inbox.conversations
         val spaces = conversations.filter { it.kind == "space" }
@@ -122,8 +144,45 @@ fun ChatInboxScreen(
         }
         fun startDm(person: ChatPerson) {
             scope.launch {
-                val id = runCatching { Net.client.api.createDm(org.nuruplace.member.data.net.DmBody(person.userId)).conversationId }.getOrNull()
-                if (!id.isNullOrBlank()) onOpenThread(id)
+                runCatching { Net.client.api.createDm(org.nuruplace.member.data.net.DmBody(person.userId)).conversationId }
+                    .onSuccess { id -> if (id.isNotBlank()) onOpenThread(id) }
+                    .onFailure { e -> if (isConsentRequired(e)) consentPromptFor = person }
+            }
+        }
+        fun sendConnectionRequest(person: ChatPerson) {
+            if (connectingUserId != null) return
+            connectingUserId = person.userId
+            scope.launch {
+                runCatching { Net.client.api.requestConnection(RequestConnectionBody(person.userId, clientMutationId = UUID.randomUUID().toString())) }
+                connectingUserId = null
+                reload()
+            }
+        }
+        fun cancelConnectionRequest(req: ConnectionRequestRow) {
+            if (connectingUserId != null) return
+            connectingUserId = req.userId
+            scope.launch {
+                runCatching { Net.client.api.cancelConnectionRequest(req.requestId) }
+                connectingUserId = null
+                reload()
+            }
+        }
+        fun acceptConnectionRequest(req: ConnectionRequestRow) {
+            if (connectingUserId != null) return
+            connectingUserId = req.userId
+            scope.launch {
+                runCatching { Net.client.api.acceptConnectionRequest(req.requestId) }
+                connectingUserId = null
+                reload()
+            }
+        }
+        fun declineConnectionRequest(req: ConnectionRequestRow) {
+            if (connectingUserId != null) return
+            connectingUserId = req.userId
+            scope.launch {
+                runCatching { Net.client.api.declineConnectionRequest(req.requestId) }
+                connectingUserId = null
+                reload()
             }
         }
 
@@ -252,7 +311,9 @@ fun ChatInboxScreen(
                         // Chips count UNREAD messages, not conversations, and vanish at
                         // zero — "when they are open, the counter resets" (iOS parity).
                         Segment(0, "#My Space", spaces.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 0 }
-                        Segment(1, "DM", dms.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 1 }
+                        // Unread DM messages + pending incoming connection requests —
+                        // both are "things waiting on you in this tab".
+                        Segment(1, "DM", (dms.sumOf { it.unread } + incoming.size).takeIf { it > 0 }, tab) { tab = 1 }
                         Segment(2, "My Groups", groups.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 2 }
                         if (isStaff) Segment(3, "Broadcast", null, tab) { tab = 3 }
                     }
@@ -272,8 +333,16 @@ fun ChatInboxScreen(
                                 people = people,
                                 selfName = name,
                                 query = query,
+                                connections = connections,
+                                incoming = incoming,
+                                outgoing = outgoing,
+                                connectingUserId = connectingUserId,
                                 onOpenThread = onOpenThread,
                                 onStartDm = { startDm(it) },
+                                onConnect = { sendConnectionRequest(it) },
+                                onCancelRequest = { cancelConnectionRequest(it) },
+                                onAccept = { acceptConnectionRequest(it) },
+                                onDecline = { declineConnectionRequest(it) },
                             )
                             2 -> GroupsTab(
                                 groups = groups,
@@ -299,6 +368,33 @@ fun ChatInboxScreen(
             ) {
                 Icon(Icons.Filled.Edit, contentDescription = "New message", tint = Color.White, modifier = Modifier.size(22.dp))
             }
+        }
+
+        // Stale-cache recovery: offer the connection request instead of a dead-end error.
+        val prompt = consentPromptFor
+        if (prompt != null) {
+            AlertDialog(
+                onDismissRequest = { consentPromptFor = null },
+                containerColor = CHAT.white,
+                title = { Text("Not connected yet", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+                text = {
+                    Text(
+                        "Send ${prompt.fullName} a connection request first — you can chat once they accept.",
+                        style = cInter(13).copy(lineHeight = 19.sp),
+                        color = CHAT.ink600,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { sendConnectionRequest(prompt); consentPromptFor = null }) {
+                        Text("Send request", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { consentPromptFor = null }) {
+                        Text("Cancel", style = cInter(13, FontWeight.Medium), color = CHAT.ink500)
+                    }
+                },
+            )
         }
     }
 }
@@ -631,9 +727,33 @@ private fun DmTab(
     people: List<ChatPerson>,
     selfName: String,
     query: String,
+    connections: List<ConnectionRow>,
+    incoming: List<ConnectionRequestRow>,
+    outgoing: List<ConnectionRequestRow>,
+    connectingUserId: String?,
     onOpenThread: (String) -> Unit,
     onStartDm: (ChatPerson) -> Unit,
+    onConnect: (ChatPerson) -> Unit,
+    onCancelRequest: (ConnectionRequestRow) -> Unit,
+    onAccept: (ConnectionRequestRow) -> Unit,
+    onDecline: (ConnectionRequestRow) -> Unit,
 ) {
+    // Connection requests — incoming (needs YOUR action) leads outgoing
+    // (waiting on someone else).
+    if (query.isBlank() && (incoming.isNotEmpty() || outgoing.isNotEmpty())) {
+        Section("CONNECTION REQUESTS", Icons.Filled.People)
+        GroupedCard {
+            incoming.forEachIndexed { idx, req ->
+                if (idx > 0) Divider()
+                IncomingRequestRow(req, busy = connectingUserId == req.userId, onAccept = { onAccept(req) }, onDecline = { onDecline(req) })
+            }
+            outgoing.forEachIndexed { idx, req ->
+                if (idx > 0 || incoming.isNotEmpty()) Divider()
+                OutgoingRequestRow(req, busy = connectingUserId == req.userId, onCancel = { onCancelRequest(req) })
+            }
+        }
+    }
+
     // Story rail
     if (dms.isNotEmpty() && query.isBlank()) {
         Row(
@@ -705,7 +825,7 @@ private fun DmTab(
     val filteredDms = dms.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
     Section("DIRECT MESSAGES", Icons.Filled.People)
     if (filteredDms.isEmpty()) {
-        EmptyState("No direct messages yet.")
+        EmptyState(if (query.isBlank()) "Connect with someone before starting a chat." else "No conversations match your search.")
     } else {
         GroupedCard {
             filteredDms.forEachIndexed { idx, c ->
@@ -722,8 +842,68 @@ private fun DmTab(
         GroupedCard {
             filteredPeople.forEachIndexed { idx, p ->
                 if (idx > 0) Divider()
-                PersonRow(p, idx, onStartDm)
+                val state = connectionStateFor(p.userId, connections, incoming, outgoing)
+                PersonRow(
+                    p, idx, state, busy = connectingUserId == p.userId,
+                    onMessage = { onStartDm(p) }, onConnect = { onConnect(p) },
+                    onCancelRequest = {
+                        outgoing.firstOrNull { it.userId == p.userId }?.let(onCancelRequest)
+                    },
+                )
             }
+        }
+    }
+}
+
+/** One "X wants to connect" row — accept/decline, no separate PersonRow tap target. */
+@Composable
+private fun IncomingRequestRow(req: ConnectionRequestRow, busy: Boolean, onAccept: () -> Unit, onDecline: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ChatSquircleAvatar(chatInitials(req.fullName), CHAT.gold, size = 52.dp, radius = 18.dp, textSize = 15, avatarUrl = req.avatarUrl)
+        Column(Modifier.weight(1f)) {
+            Text(req.fullName, style = cInter(12, FontWeight.Medium, -0.12f), color = CHAT.navy, maxLines = 1)
+            Text("Wants to connect", style = cInter(11), color = CHAT.ink500)
+        }
+        if (busy) {
+            androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), color = CHAT.gold, strokeWidth = 2.dp)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.surface).clickable { onDecline() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Close, contentDescription = "Decline", tint = CHAT.ink600, modifier = Modifier.size(13.dp)) }
+                Box(
+                    Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.storyRing).clickable { onAccept() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Check, contentDescription = "Accept", tint = Color.White, modifier = Modifier.size(13.dp)) }
+            }
+        }
+    }
+}
+
+/** "Request sent — waiting to be accepted" — cancel only. */
+@Composable
+private fun OutgoingRequestRow(req: ConnectionRequestRow, busy: Boolean, onCancel: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ChatSquircleAvatar(chatInitials(req.fullName), CHAT.ink500, size = 52.dp, radius = 18.dp, textSize = 15, avatarUrl = req.avatarUrl)
+        Column(Modifier.weight(1f)) {
+            Text(req.fullName, style = cInter(12, FontWeight.Medium, -0.12f), color = CHAT.navy, maxLines = 1)
+            Text("Request sent — waiting to be accepted", style = cInter(11), color = CHAT.ink500)
+        }
+        if (busy) {
+            androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), color = CHAT.gold, strokeWidth = 2.dp)
+        } else {
+            Box(
+                Modifier.clip(Capsule).background(CHAT.surface).clickable { onCancel() }.padding(horizontal = 12.dp, vertical = 6.dp),
+            ) { Text("Cancel", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600) }
         }
     }
 }
@@ -762,11 +942,34 @@ private fun DmRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Unit)
     }
 }
 
+/**
+ * Directory row — what tapping it does depends on where the pair stand
+ * (Chat Redesign C3a, "no unsolicited DMs"): connected opens the DM,
+ * not-connected sends a request, a sent request cancels, a received request
+ * and a block are display-only here (acted on from the requests section /
+ * thread ⋮ menu respectively). Shared by [ChatScreen] (DM tab directory) and
+ * [NewMessageScreen] (the "New message" picker) — not `private` for that reason.
+ */
 @Composable
-private fun PersonRow(p: ChatPerson, idx: Int, onStartDm: (ChatPerson) -> Unit) {
+fun PersonRow(
+    p: ChatPerson,
+    idx: Int,
+    state: ConnectionState,
+    busy: Boolean,
+    onMessage: (ChatPerson) -> Unit,
+    onConnect: (ChatPerson) -> Unit,
+    onCancelRequest: (ChatPerson) -> Unit,
+) {
+    val tap: (() -> Unit)? = when (state) {
+        is ConnectionState.Connected -> { { onMessage(p) } }
+        is ConnectionState.NotConnected -> { { onConnect(p) } }
+        is ConnectionState.RequestSent -> { { onCancelRequest(p) } }
+        is ConnectionState.RequestReceived, is ConnectionState.Blocked -> null
+    }
     Row(
         Modifier
             .fillMaxWidth()
+            .then(if (tap != null && !busy) Modifier.clickable { tap() } else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -795,16 +998,46 @@ private fun PersonRow(p: ChatPerson, idx: Int, onStartDm: (ChatPerson) -> Unit) 
                 maxLines = 1,
             )
         }
-        Box(
-            Modifier
-                .size(32.dp)
-                .clip(androidx.compose.foundation.shape.CircleShape)
-                .background(CHAT.gold.copy(alpha = 0.10f))
-                .clickable { onStartDm(p) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Message", tint = CHAT.gold, modifier = Modifier.size(15.dp))
+        if (busy) {
+            androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), color = CHAT.gold, strokeWidth = 2.dp)
+        } else {
+            PersonRowAffordance(state)
         }
+    }
+}
+
+/** Right-edge affordance per connection state — same real estate the old
+ *  always-message-icon used to occupy. */
+@Composable
+private fun PersonRowAffordance(state: ConnectionState) {
+    when (state) {
+        is ConnectionState.Connected -> Box(
+            Modifier.size(32.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.gold.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Message", tint = CHAT.gold, modifier = Modifier.size(15.dp)) }
+        is ConnectionState.NotConnected -> Row(
+            Modifier.clip(Capsule).background(CHAT.storyRing).padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+            Text("Connect", style = cInter(11, FontWeight.Bold), color = Color.White)
+        }
+        is ConnectionState.RequestSent -> Row(
+            Modifier.clip(Capsule).background(CHAT.surface).padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text("Request sent", style = cInter(10, FontWeight.SemiBold), color = CHAT.ink500)
+            Icon(Icons.Filled.Close, contentDescription = "Cancel request", tint = CHAT.faint, modifier = Modifier.size(12.dp))
+        }
+        is ConnectionState.RequestReceived -> Box(
+            Modifier.clip(Capsule).background(CHAT.gold.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 6.dp),
+        ) { Text("Wants to connect", style = cInter(10, FontWeight.Bold), color = CHAT.navy) }
+        is ConnectionState.Blocked -> Icon(
+            Icons.Filled.Close, contentDescription = null, tint = CHAT.faint,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
