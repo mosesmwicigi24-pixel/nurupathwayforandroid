@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
+import org.nuruplace.member.data.net.PlanDayUnlockAck
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 
@@ -87,6 +88,18 @@ internal object ReaderMode {
  *  row on return (mirrors the iOS `.nuruPlanPartDone` NotificationCenter signal). */
 internal object PlanProgressBus {
     val finished = MutableSharedFlow<String>(extraBufferCapacity = 16)
+
+    /**
+     * The LAST segment of a day's authoritative ack — the offline-sync race:
+     * the day unlocks server-side the instant that completion lands, but a
+     * screen re-fetching the plan can still lose the race against its own
+     * write. `replay = 1` so a screen that was off the back stack when this
+     * fired (Compose Navigation disposes destinations under a pushed route)
+     * still sees it the moment it's recomposed on return — mirrors how the
+     * iOS NavigationStack keeps a pushed screen's `.onReceive` subscription
+     * alive underneath.
+     */
+    val dayUnlocked = MutableSharedFlow<PlanDayUnlockAck>(replay = 1, extraBufferCapacity = 4)
 }
 
 // ── Reading instruments ──
