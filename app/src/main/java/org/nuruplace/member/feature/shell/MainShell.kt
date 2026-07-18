@@ -328,7 +328,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // Broadcast is between the shepherd and the individual — SuperAdmin
                     // only, not even Admins (product decision, 2026-07).
                     isStaff = me?.profile?.role == "SuperAdmin",
+                    // Pastoral Inbox segment (C3b): SuperAdmin only, client-side —
+                    // the server's real gate is step-up + FORBIDDEN_SCOPE for
+                    // non-pastors; an assigned non-SuperAdmin pastor has no
+                    // client-visible signal to key on (documented limit).
+                    pastoralEligible = me?.profile?.role == "SuperAdmin",
                     onOpenBroadcast = { nav.navigate("broadcast/$it") },
+                    onOpenThreadWithContext = { id, ctx -> nav.navigate("chat/$id?ctx=$ctx") },
                 )
             }
             composable(
@@ -349,10 +355,21 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 )
             }
             composable(
-                "chat/{id}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                "chat/{id}?ctx={ctx}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    // "discipler" | "pastoral" | absent — the tab that resolved
+                    // the thread already knows its flavour (GET /chat/
+                    // conversations/{id} carries no `type`), so it rides the
+                    // route args into the thread's privacy chrome + local gate.
+                    navArgument("ctx") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
             ) { entry ->
-                ChatThreadScreen(conversationId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                ChatThreadScreen(
+                    conversationId = entry.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    threadContext = entry.arguments?.getString("ctx"),
+                )
             }
             composable("events") {
                 EventsScreen(

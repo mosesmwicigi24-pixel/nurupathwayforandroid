@@ -39,10 +39,15 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,14 +76,18 @@ import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.BroadcastBody
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.ConnectionRequestRow
 import org.nuruplace.member.data.net.ConnectionRow
 import org.nuruplace.member.data.net.DiscoverSpace
+import org.nuruplace.member.data.net.HubDiscipler
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.PastoralInboxRow
 import org.nuruplace.member.data.net.RequestConnectionBody
+import org.nuruplace.member.data.net.RequestJoinSpaceBody
 import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.ListSkeleton
@@ -87,8 +96,27 @@ import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
+/** Member tabs (4): My Space · Chat · My Discipler · Talk with My Pastor —
+ *  plus two staff-only appends (Chat Redesign C3b, docs/CHAT_REDESIGN.md).
+ *  An enum (not integer indices) because which tabs are VISIBLE varies by
+ *  role — a fixed index would silently point at the wrong tab body once a
+ *  conditional segment is hidden. */
+private enum class ChatTab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    MySpace("My Space", Icons.Filled.Group),
+    Chat("Chat", Icons.AutoMirrored.Filled.Chat),
+    MyDiscipler("My Discipler", Icons.Filled.Person),
+    TalkWithPastor("Talk with My Pastor", Icons.Filled.Favorite),
+    // Pastor/SuperAdmin-facing (client-loose-gated on Admin+; server is the
+    // real authority — password step-up then FORBIDDEN_SCOPE for anyone who
+    // has never held a pastor_assignments row and isn't SuperAdmin).
+    PastoralInbox("Pastoral Inbox", Icons.Filled.People),
+    // SuperAdmin only — unchanged from before this task, purely appended.
+    Broadcast("Broadcast", Icons.Filled.Campaign),
+}
+
 /** Hub bundle — one load for inbox + people + greeting name + the tailored verse
- *  + connections (Chat Redesign C3a — "no unsolicited DMs"). */
+ *  + connections (Chat Redesign C3a — "no unsolicited DMs") + My Discipler /
+ *  Talk with My Pastor tab pre-checks (Chat Redesign C3b). */
 private data class HubData(
     val inbox: org.nuruplace.member.data.net.ChatInbox,
     val people: List<ChatPerson>,
@@ -97,6 +125,22 @@ private data class HubData(
     val connections: List<ConnectionRow>,
     val incoming: List<ConnectionRequestRow>,
     val outgoing: List<ConnectionRequestRow>,
+    /** Non-null only when a real assignment exists (`GET /me/discipleship`) —
+     *  drives the My Discipler tab's active-vs-empty state without ever
+     *  calling the lazily-CREATING `GET /chat/discipler/conversation` just to
+     *  find out. */
+    val discipler: HubDiscipler?,
+    /** Best-effort resolve of the DISCIPLER thread — ONLY attempted when
+     *  [discipler] is non-null (a real, already-established relationship), so
+     *  this never surprise-creates a thread for someone with no discipler.
+     *  Used solely to cross-reference `inbox.conversations` for an unread
+     *  badge; the tap handler re-resolves independently. */
+    val disciplerConversationId: String?,
+    /** Cross-referenced from a PRIOR tap's cached id (AppPrefs) — never an
+     *  eager `POST /chat/pastoral` call, which creates a thread as a side
+     *  effect (see PARITY_AUDIT.md, 2026-07-18). Null until the member has
+     *  opened Talk with My Pastor at least once on this device. */
+    val pastoralConversationId: String?,
 )
 
 @Composable
@@ -106,7 +150,18 @@ fun ChatInboxScreen(
     onOpenAssistant: () -> Unit,
     onOpenNotifications: () -> Unit,
     isStaff: Boolean = false,
+    // Client-side gate for the pastor-facing "Pastoral Inbox" segment — the
+    // caller (MainShell) wires this to SuperAdmin-only, matching Broadcast's
+    // own precedent exactly ("SuperAdmin ONLY, not even Admin" — see the
+    // `isStaff` doc below). The server is the real authority regardless
+    // (password step-up, then FORBIDDEN_SCOPE for anyone who has never held
+    // a pastor_assignments row and isn't SuperAdmin; pastoral/service.ts#inbox)
+    // — an Admin-level pastor could still reach the route directly if one
+    // ever exists, they'd just need a deep link; documented as a known
+    // limit rather than widening this client gate speculatively.
+    pastoralEligible: Boolean = false,
     onOpenBroadcast: (String) -> Unit = {},
+    onOpenThreadWithContext: (String, String) -> Unit = { id, _ -> onOpenThread(id) },
 ) {
     AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, load = {
         val inbox = Net.client.api.chatInbox()
@@ -121,10 +176,17 @@ fun ChatInboxScreen(
         val connections = runCatching { Net.client.api.listConnections().data }.getOrDefault(emptyList())
         val incoming = runCatching { Net.client.api.listConnectionRequests("incoming").data }.getOrDefault(emptyList())
         val outgoing = runCatching { Net.client.api.listConnectionRequests("outgoing").data }.getOrDefault(emptyList())
-        HubData(inbox, people, name, verse, connections, incoming, outgoing)
-    }) { (inbox, people, name, verse, connections, incoming, outgoing), reload ->
+        val discipler = runCatching { Net.client.api.discipleship().data.discipler }.getOrNull()
+        val disciplerConversationId = if (discipler != null) {
+            runCatching { Net.client.api.disciplerConversation().conversationId }.getOrNull()?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+        val pastoralConversationId = AppPrefs.pastoralConversationId
+        HubData(inbox, people, name, verse, connections, incoming, outgoing, discipler, disciplerConversationId, pastoralConversationId)
+    }) { (inbox, people, name, verse, connections, incoming, outgoing, discipler, disciplerConversationId, pastoralConversationId), reload ->
         val scope = rememberCoroutineScope()
-        var tab by remember { mutableIntStateOf(0) }
+        var tab by remember { mutableStateOf(ChatTab.MySpace) }
         var query by remember { mutableStateOf("") }
         // Person a connection action is in flight for (Connect / cancel /
         // accept / decline) — mirrors `busy` DM-creation below.
@@ -134,13 +196,44 @@ fun ChatInboxScreen(
         var consentPromptFor by remember { mutableStateOf<ChatPerson?>(null) }
 
         val conversations = inbox.conversations
+        // "My Space" (Chat Redesign C3b) merges the old "#My Space" (kind=space)
+        // and "My Groups" (kind=group) segments into one tab — the backend's
+        // data model already unifies cell rooms + topical spaces under
+        // type=SPACE (docs/CHAT_REDESIGN_PLAN.md §2.1/§4 Open Question 4), and
+        // `kind` on the wire is exactly {space, group} for those two today.
         val spaces = conversations.filter { it.kind == "space" }
-        val dms = conversations.filter { it.kind == "dm" }
+        // The discipler/pastoral threads live in their OWN tabs — keep the
+        // known ids out of the Chat tab's DM list (iOS parity; the list
+        // endpoint sends no `type`, so the locally-learned ids are the filter).
+        val dms = conversations.filter {
+            it.kind == "dm" &&
+                it.conversationId != disciplerConversationId &&
+                it.conversationId != pastoralConversationId
+        }
         val groups = conversations.filter { it.kind == "group" }
+        val mySpaceUnread = spaces.sumOf { it.unread } + groups.sumOf { it.unread }
+        val disciplerUnread = disciplerConversationId?.let { id -> conversations.firstOrNull { it.conversationId == id }?.unread } ?: 0
+        val pastoralUnread = pastoralConversationId?.let { id -> conversations.firstOrNull { it.conversationId == id }?.unread } ?: 0
         val totalUnread = conversations.sumOf { it.unread }
 
+        // Spaces whose reviewed join request is pending a leader's decision
+        // (session-local — the server notifies on accept/decline).
+        var pendingJoinIds by remember { mutableStateOf(setOf<String>()) }
         fun join(conversationId: String) {
-            scope.launch { runCatching { Net.client.api.joinChatSpace(conversationId) }; reload() }
+            scope.launch {
+                // Immediate join first (public spaces, unchanged). Where the
+                // server refuses it (a space that requires leader review), fall
+                // back to filing a reviewed join request — pending, not failed.
+                runCatching { Net.client.api.joinChatSpace(conversationId) }
+                    .onSuccess { reload() }
+                    .onFailure {
+                        runCatching { Net.client.api.requestJoinSpace(conversationId, RequestJoinSpaceBody()) }
+                            .onSuccess { res ->
+                                if (res.status == "already_member") reload()
+                                else pendingJoinIds = pendingJoinIds + conversationId
+                            }
+                    }
+            }
         }
         fun startDm(person: ChatPerson) {
             scope.launch {
@@ -298,10 +391,22 @@ fun ChatInboxScreen(
 
                     if (query.isBlank()) VerseCard(verse)
 
-                    // Segmented control
+                    // Segmented control — member tabs (4): My Space · Chat ·
+                    // My Discipler · Talk with My Pastor, per the owner brief
+                    // (docs/CHAT_REDESIGN.md). Staff append Pastoral Inbox
+                    // and/or Broadcast; the list (not fixed integer indices)
+                    // is what actually varies per role.
+                    val tabs = remember(isStaff, pastoralEligible) {
+                        buildList {
+                            add(ChatTab.MySpace); add(ChatTab.Chat); add(ChatTab.MyDiscipler); add(ChatTab.TalkWithPastor)
+                            if (pastoralEligible) add(ChatTab.PastoralInbox)
+                            if (isStaff) add(ChatTab.Broadcast)
+                        }
+                    }
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                             .clip(Capsule)
                             .background(CHAT.white.copy(alpha = 0.7f))
                             .border(1.dp, CHAT.border, Capsule)
@@ -310,25 +415,33 @@ fun ChatInboxScreen(
                     ) {
                         // Chips count UNREAD messages, not conversations, and vanish at
                         // zero — "when they are open, the counter resets" (iOS parity).
-                        Segment(0, "#My Space", spaces.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 0 }
-                        // Unread DM messages + pending incoming connection requests —
-                        // both are "things waiting on you in this tab".
-                        Segment(1, "DM", (dms.sumOf { it.unread } + incoming.size).takeIf { it > 0 }, tab) { tab = 1 }
-                        Segment(2, "My Groups", groups.sumOf { it.unread }.takeIf { it > 0 }, tab) { tab = 2 }
-                        if (isStaff) Segment(3, "Broadcast", null, tab) { tab = 3 }
+                        tabs.forEach { t ->
+                            val count = when (t) {
+                                ChatTab.MySpace -> mySpaceUnread.takeIf { it > 0 }
+                                // Unread DM messages + pending incoming connection requests —
+                                // both are "things waiting on you in this tab".
+                                ChatTab.Chat -> (dms.sumOf { it.unread } + incoming.size).takeIf { it > 0 }
+                                ChatTab.MyDiscipler -> disciplerUnread.takeIf { it > 0 }
+                                ChatTab.TalkWithPastor -> pastoralUnread.takeIf { it > 0 }
+                                ChatTab.PastoralInbox, ChatTab.Broadcast -> null
+                            }
+                            Segment(label = t.label, icon = t.icon, count = count, selected = tab == t) { tab = t }
+                        }
                     }
 
                     // Tab body
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         when (tab) {
-                            0 -> MySpaceTab(
+                            ChatTab.MySpace -> MySpaceTab(
                                 spaces = spaces,
+                                groups = groups,
                                 discover = inbox.discoverSpaces,
                                 query = query,
                                 onOpenThread = onOpenThread,
                                 onJoin = { join(it) },
+                                pendingJoinIds = pendingJoinIds,
                             )
-                            1 -> DmTab(
+                            ChatTab.Chat -> DmTab(
                                 dms = dms,
                                 people = people,
                                 selfName = name,
@@ -344,12 +457,17 @@ fun ChatInboxScreen(
                                 onAccept = { acceptConnectionRequest(it) },
                                 onDecline = { declineConnectionRequest(it) },
                             )
-                            2 -> GroupsTab(
-                                groups = groups,
-                                query = query,
-                                onOpenThread = onOpenThread,
+                            ChatTab.MyDiscipler -> MyDisciplerTab(
+                                discipler = discipler,
+                                onOpenThread = { id -> onOpenThreadWithContext(id, "discipler") },
                             )
-                            else -> BroadcastTab(onOpenBroadcast = onOpenBroadcast)
+                            ChatTab.TalkWithPastor -> TalkWithPastorTab(
+                                onOpenThread = { id -> onOpenThreadWithContext(id, "pastoral") },
+                            )
+                            ChatTab.PastoralInbox -> PastoralInboxTab(
+                                onOpenThread = { id -> onOpenThreadWithContext(id, "pastoral") },
+                            )
+                            ChatTab.Broadcast -> BroadcastTab(onOpenBroadcast = onOpenBroadcast)
                         }
                     }
                 }
@@ -522,27 +640,29 @@ private fun VerseCard(verse: TailoredVerse?) {
     }
 }
 
-// ── Segmented control segment ──
+// ── Segmented control segment — one per icon + unread badge (Chat Redesign
+// C3b: up to 6 segments across roles, so the strip scrolls horizontally
+// rather than the old fixed 4-wide `weight(1f)` even split). ──
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.Segment(
-    index: Int,
+private fun Segment(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     count: Int?,
-    tab: Int,
+    selected: Boolean,
     onSelect: () -> Unit,
 ) {
-    val on = tab == index
+    val on = selected
     Row(
         Modifier
-            .weight(1f)
             .clip(Capsule)
             .then(if (on) Modifier.background(CHAT.selectedSeg) else Modifier)
             .clickable { onSelect() }
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(icon, contentDescription = null, tint = if (on) Color.White else CHAT.ink600, modifier = Modifier.size(14.dp))
             Text(label, style = cInter(12, FontWeight.SemiBold), color = if (on) Color.White else CHAT.ink600, maxLines = 1)
             if (count != null) {
                 Box(
@@ -560,16 +680,22 @@ private fun androidx.compose.foundation.layout.RowScope.Segment(
     }
 }
 
-// ── Tab 0: My Space ──
+// ── Tab: My Space (Chat Redesign C3b — merges the old "#My Space" (kind=space)
+// and "My Groups" (kind=group) segments into one tab, per the owner brief:
+// the backend's data model already unifies cell rooms + topical spaces under
+// type=SPACE. Both kinds of content stay visible as their own sub-sections. ──
 @Composable
 private fun MySpaceTab(
     spaces: List<ChatConversation>,
+    groups: List<ChatConversation>,
     discover: List<DiscoverSpace>,
     query: String,
     onOpenThread: (String) -> Unit,
     onJoin: (String) -> Unit,
+    pendingJoinIds: Set<String> = emptySet(),
 ) {
     val filteredSpaces = spaces.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
+    val filteredGroups = groups.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
 
     Section("# YOUR SPACES")
     if (filteredSpaces.isEmpty()) {
@@ -583,13 +709,27 @@ private fun MySpaceTab(
         }
     }
 
+    if (filteredGroups.isNotEmpty() || query.isBlank()) {
+        Section("YOUR GROUPS", Icons.Filled.Group)
+        if (filteredGroups.isEmpty()) {
+            EmptyState("No groups yet.")
+        } else {
+            GroupedCard {
+                filteredGroups.forEachIndexed { idx, c ->
+                    if (idx > 0) Divider()
+                    GroupRow(c, idx, onOpenThread)
+                }
+            }
+        }
+    }
+
     val filteredDiscover = discover.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
     if (filteredDiscover.isNotEmpty()) {
         Section("# DISCOVER SPACES")
         GroupedCard {
             filteredDiscover.forEachIndexed { idx, d ->
                 if (idx > 0) Divider()
-                DiscoverSpaceRow(d, idx, onJoin)
+                DiscoverSpaceRow(d, idx, pending = d.conversationId in pendingJoinIds, onJoin = onJoin)
             }
         }
     }
@@ -650,7 +790,7 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
 }
 
 @Composable
-private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, onJoin: (String) -> Unit) {
+private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, pending: Boolean, onJoin: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -699,28 +839,46 @@ private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, onJoin: (String) -> Uni
                 MemberStack(avatarUrl = null, title = d.title, idx = idx + 2, memberCount = d.memberCount)
             }
         }
-        JoinButton { onJoin(d.conversationId) }
+        JoinButton(pending = pending) { onJoin(d.conversationId) }
     }
 }
 
+/**
+ * "Join" / "Requested" — the review-gated flow (Chat Redesign C1/C2 backend,
+ * already live: `POST /chat/spaces/{id}/join-requests`). A space requiring
+ * leader review never joins immediately; it goes "pending" and the leader is
+ * notified server-side (`space_join_requested`). Tapping again while pending
+ * is a no-op (the button disables) — the unique partial index on the server
+ * makes a repeat call harmless anyway, but there's no reason to fire it.
+ */
 @Composable
-private fun JoinButton(onClick: () -> Unit) {
+private fun JoinButton(pending: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .clip(Capsule)
-            .background(CHAT.selectedSeg)
+            // Color vs. Brush — two different background overloads, so the
+            // branch has to pick the modifier, not the argument.
+            .then(if (pending) Modifier.background(CHAT.surface) else Modifier.background(CHAT.selectedSeg))
             .height(30.dp)
-            .clickable { onClick() }
+            .then(if (pending) Modifier else Modifier.clickable { onClick() })
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
-        Text("Join", style = cInter(11, FontWeight.Bold), color = Color.White)
+        if (pending) {
+            Icon(Icons.Filled.HourglassEmpty, contentDescription = null, tint = CHAT.ink500, modifier = Modifier.size(11.dp))
+            Text("Requested", style = cInter(11, FontWeight.Bold), color = CHAT.ink500)
+        } else {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+            Text("Join", style = cInter(11, FontWeight.Bold), color = Color.White)
+        }
     }
 }
 
-// ── Tab 1: DM ──
+// ── Tab: Chat (Chat Redesign C3b rename of the old "DM" segment — same
+// consent-gated behaviour as before, just relabelled and reordered as the
+// 2nd tab per the owner brief's Member tabs (4): My Space · Chat · My
+// Discipler · Talk with My Pastor.) ──
 @Composable
 private fun DmTab(
     dms: List<ChatConversation>,
@@ -1041,27 +1199,9 @@ private fun PersonRowAffordance(state: ConnectionState) {
     }
 }
 
-// ── Tab 2: My Groups ──
-@Composable
-private fun GroupsTab(
-    groups: List<ChatConversation>,
-    query: String,
-    onOpenThread: (String) -> Unit,
-) {
-    val filtered = groups.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
-    Section("YOUR GROUPS", Icons.Filled.Group)
-    if (filtered.isEmpty()) {
-        EmptyState("No groups yet.")
-    } else {
-        GroupedCard {
-            filtered.forEachIndexed { idx, c ->
-                if (idx > 0) Divider()
-                GroupRow(c, idx, onOpenThread)
-            }
-        }
-    }
-}
-
+// GroupRow is now rendered inline by MySpaceTab's "YOUR GROUPS" sub-section
+// above (Chat Redesign C3b merge) — kept as its own function since it's a
+// distinct row style (square tile + Group icon vs. the "#" squircle).
 @Composable
 private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Unit) {
     Row(
@@ -1099,6 +1239,230 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(previewText(c), style = cInter(10), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
                 if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
+            }
+        }
+    }
+}
+
+// ── Tab: My Discipler (Chat Redesign C3b). Active/has-content only when
+// GET /me/discipleship's `discipler` field is non-null (an already-established
+// assignment) — the empty state below is NOT an error, it's the ordinary
+// unpaired state. Tapping resolves — lazily CREATING if needed — the
+// DISCIPLER thread via GET /chat/discipler/conversation (never the Hub's own
+// legacy `dm_conversation_id`, which is an ordinary/unstamped DM lookup, not
+// the same conversation this endpoint resolves — see PARITY_AUDIT.md). ──
+@Composable
+private fun MyDisciplerTab(discipler: HubDiscipler?, onOpenThread: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var opening by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Section("MY DISCIPLER", Icons.Filled.Person)
+
+    if (discipler == null) {
+        EmptyState("A discipler has not yet been assigned to you.")
+        return
+    }
+
+    fun open() {
+        if (opening) return
+        opening = true
+        error = null
+        scope.launch {
+            runCatching { Net.client.api.disciplerConversation().conversationId }
+                .onSuccess { id -> opening = false; if (id.isNotBlank()) onOpenThread(id) }
+                .onFailure { e ->
+                    opening = false
+                    error = when {
+                        isNoDiscipler(e) -> "A discipler has not yet been assigned to you."
+                        isMinorBlocked(e) -> "Direct messages aren't available yet for your account."
+                        else -> "Couldn't open this conversation — please try again."
+                    }
+                }
+        }
+    }
+
+    GroupedCard {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !opening) { open() }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            ChatSquircleAvatar(chatInitials(discipler.fullName), CHAT.gold, size = 52.dp, radius = 18.dp, textSize = 15, avatarUrl = discipler.avatarUrl)
+            Column(Modifier.weight(1f)) {
+                Text(discipler.fullName.ifBlank { "Your discipler" }, style = cInter(13, FontWeight.SemiBold, -0.12f), color = CHAT.navy, maxLines = 1)
+                val meta = listOfNotNull(discipler.roleLabel.takeIf { it.isNotBlank() }, discipler.cellName).joinToString(" · ")
+                Text(meta.ifBlank { "Tap to start the conversation" }, style = cInter(11), color = CHAT.ink500, maxLines = 1)
+            }
+            if (opening) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = CHAT.gold, strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Open conversation", tint = CHAT.gold, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+    Row(
+        Modifier.padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Text("Private between you and your assigned discipler.", style = cInter(11), color = CHAT.ink500)
+    }
+    error?.let { Text(it, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318), modifier = Modifier.padding(top = 8.dp)) }
+}
+
+// ── Tab: Talk with My Pastor (Chat Redesign C3b). Unlike My Discipler this
+// tab is never structurally "empty" — POST /chat/pastoral always resolves to
+// SOMEONE (assigned → congregation default → fallback SuperAdmin) except the
+// rare "nothing resolves" case, so the entry card always renders; only the
+// tap outcome can fail. The biometric lock itself lives on the opened thread
+// (ChatThreadScreen's PastoralLockScreen), not here — this tab is the (always
+// unlocked) door to it. ──
+@Composable
+private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var opening by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
+
+    Section("TALK WITH MY PASTOR", Icons.Filled.Favorite)
+
+    fun open() {
+        if (opening) return
+        opening = true
+        error = null
+        scope.launch {
+            runCatching { Net.client.api.openPastoralThread() }
+                .onSuccess { res ->
+                    opening = false
+                    if (res.conversationId.isNotBlank()) {
+                        AppPrefs.pastoralConversationId = res.conversationId
+                        onOpenThread(res.conversationId)
+                    }
+                }
+                .onFailure { e ->
+                    opening = false
+                    error = when {
+                        isNoPastor(e) -> "No pastor is available for your congregation right now — please check back later."
+                        isMinorBlocked(e) -> "Direct messages aren't available yet for your account."
+                        else -> "Couldn't open this conversation — please try again."
+                    }
+                }
+        }
+    }
+
+    GroupedCard {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !opening) { if (archived) { archived = false; AppPrefs.pastoralArchived = false }; open() }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(chatTileBrush(CHAT.gold)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Filled.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp)) }
+            Column(Modifier.weight(1f)) {
+                Text("Talk with My Pastor", style = cInter(13, FontWeight.SemiBold, -0.12f), color = CHAT.navy, maxLines = 1)
+                Text(
+                    if (archived) "Archived — tap to reopen" else "A private word with your pastor",
+                    style = cInter(11), color = CHAT.ink500, maxLines = 1,
+                )
+            }
+            if (opening) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = CHAT.gold, strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Open conversation", tint = CHAT.gold, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+    Row(
+        Modifier.padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Text("Private pastoral conversation.", style = cInter(11), color = CHAT.ink500)
+    }
+    error?.let { Text(it, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318), modifier = Modifier.padding(top = 8.dp)) }
+}
+
+// ── Tab: Pastoral Inbox (Chat Redesign C3b) — the pastor/SuperAdmin-facing
+// "Talk with Your Pastor" console. GET /chat/pastoral/inbox is password
+// step-up gated exactly like Broadcast (§5.3), so it reuses the same
+// BroadcastStepUp/BroadcastStepUpDialog machinery as-is rather than building
+// a second step-up UI. FORBIDDEN_SCOPE (never held a pastor_assignments row
+// and isn't SuperAdmin) is treated as an honest empty state, not a crash. ──
+@Composable
+private fun PastoralInboxTab(onOpenThread: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val stepUp = rememberBroadcastStepUp()
+    var rows by remember { mutableStateOf<List<PastoralInboxRow>?>(null) }
+    var forbidden by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+
+    fun load() {
+        scope.launch {
+            runCatching { Net.client.api.pastoralInbox().data }
+                .onSuccess { rows = it; forbidden = false; failed = false }
+                .onFailure { e ->
+                    when {
+                        isPasswordRequired(e) -> stepUp.requestStepUp { load() }
+                        (e as? retrofit2.HttpException)?.code() == 403 -> forbidden = true
+                        else -> failed = true
+                    }
+                }
+        }
+    }
+    LaunchedEffect(Unit) { load() }
+
+    Section("PASTORAL INBOX", Icons.Filled.People)
+
+    val list = rows
+    when {
+        forbidden -> EmptyState("You don't currently have any members assigned to you pastorally.")
+        failed -> EmptyState("Couldn't load the pastoral inbox — pull to retry.")
+        list == null -> EmptyState("Loading…")
+        list.isEmpty() -> EmptyState("No pastoral conversations yet.")
+        else -> GroupedCard {
+            list.forEachIndexed { idx, row ->
+                if (idx > 0) Divider()
+                PastoralInboxRowView(row, idx, onOpenThread)
+            }
+        }
+    }
+
+    BroadcastStepUpDialog(stepUp, reason = "Pastoral conversations are private. Confirm it's you to open the inbox.")
+}
+
+@Composable
+private fun PastoralInboxRowView(row: PastoralInboxRow, idx: Int, onOpenThread: (String) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onOpenThread(row.conversationId) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        ChatSquircleAvatar(chatInitials(row.memberName), chatRowTint(idx), size = 52.dp, radius = 18.dp, textSize = 15, avatarUrl = row.memberAvatarUrl)
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    row.memberName.ifBlank { "Member" },
+                    style = cInter(12, FontWeight.Medium, -0.12f),
+                    color = CHAT.navy, modifier = Modifier.weight(1f), maxLines = 1,
+                )
+                Text(chatRowTime(row.lastAt), style = cInter(11), color = CHAT.faint)
+            }
+            row.lastBody?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = cInter(10), color = CHAT.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
