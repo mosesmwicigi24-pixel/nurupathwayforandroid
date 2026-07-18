@@ -66,6 +66,15 @@ data class ChatConversation(
     val peerUserId: String? = null,
     val messageCount: Int = 0,
     val reactionCount: Int = 0,
+    // `chat_conversations.type` — DIRECT/SPACE/DISCIPLER/PASTORAL/BROADCAST/
+    // BROADCAST_RESPONSE (Chat Redesign C4). Server-authoritative way to tell
+    // a discipler/pastoral 1:1 apart from an ordinary DM; null on an older
+    // server, in which case callers fall back to the client-taught id
+    // heuristic (see ChatScreen.kt's `dms`).
+    val type: String? = null,
+    // This caller has muted the conversation (server-side, per-member; Chat
+    // Redesign C4 mute). Additive — false on a server that predates it.
+    val muted: Boolean = false,
 )
 
 @Serializable
@@ -133,6 +142,9 @@ data class ChatThreadDetail(
     val memberCount: Int = 0,
     val joined: Boolean = false,
     val messages: List<ChatMessage> = emptyList(),
+    // Same server `type` / per-member mute as ChatConversation — additive.
+    val type: String? = null,
+    val muted: Boolean = false,
 )
 
 // --- Request bodies / small responses ---
@@ -374,6 +386,17 @@ data class PastoralInboxRow(
 
 @Serializable
 data class PastoralInboxRes(val data: List<PastoralInboxRow> = emptyList())
+
+/** GET /chat/pastoral/eligibility — side-effect-free "have I ever been
+ *  assigned as a pastor" probe (Chat Redesign C4). No step-up. */
+@Serializable
+data class PastoralEligibilityRes(val isPastor: Boolean = false)
+
+/** PUT /chat/conversations/{id}/mute body (Chat Redesign C4) — `until` null
+ *  mutes forever; an ISO-8601 instant mutes until then. DELETE the same path
+ *  unmutes (no body). */
+@Serializable
+data class MuteConversationBody(val until: String? = null)
 
 // --- My Space join requests (Chat Redesign C1/C2 backend, already live —
 // space_join_requests + leader/moderator review, as distinct from the
