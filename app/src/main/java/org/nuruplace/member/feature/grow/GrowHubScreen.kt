@@ -43,7 +43,7 @@ fun GrowHubScreen(onOpen: (String) -> Unit) {
         GrowEntry("devotional", "Today's devotional", "A word for today + reflect", Icons.AutoMirrored.Filled.List),
         GrowEntry("memory-verses", "Memory verses", "Hide His Word in your heart", Icons.Filled.Star),
         GrowEntry("plans", "Reading plans", "Journey through Scripture", Icons.AutoMirrored.Filled.List),
-        GrowEntry("prayers", "Prayer journal", "Your private prayers", Icons.Filled.Favorite),
+        GrowEntry("prayer-room", "My Prayer Room", "Your private prayers", Icons.Filled.Favorite),
         GrowEntry("verses", "Verse library", "Verses you've saved", Icons.Filled.Star),
     )
     Column(

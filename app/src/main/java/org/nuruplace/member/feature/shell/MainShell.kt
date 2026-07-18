@@ -52,14 +52,12 @@ import org.nuruplace.member.feature.grow.MemoryVerseScreen
 import org.nuruplace.member.feature.grow.PlanDayScreen
 import org.nuruplace.member.feature.grow.PlanDetailScreen
 import org.nuruplace.member.feature.grow.PlanSegmentScreen
-import org.nuruplace.member.feature.grow.PrayerJournalScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
 import org.nuruplace.member.feature.community.ChatInboxScreen
 import org.nuruplace.member.feature.community.ChatThreadScreen
 import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
-import org.nuruplace.member.feature.community.PrayerWallScreen
 import org.nuruplace.member.feature.events.AllEventsCalendarScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
 import org.nuruplace.member.feature.events.EventsScreen
@@ -271,7 +269,6 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 val i = entry.arguments?.getInt("i") ?: 0
                 PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
             }
-            composable("prayers") { PrayerJournalScreen(onBack = { nav.popBackStack() }) }
             composable("discipleship") {
                 org.nuruplace.member.feature.discipleship.DiscipleshipHubScreen(
                     onBack = { nav.popBackStack() },
@@ -297,8 +294,24 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
             composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
-            composable("prayer-wall") {
-                PrayerWallScreen(onBack = { nav.popBackStack() }, onOpenPost = { nav.navigate("prayer-wall/$it") })
+            // My Prayer Room — the single destination that replaced the separate
+            // "prayers" (journal) and "prayer-wall" (wall) routes; ?tab picks
+            // which of its two tabs opens first. A specific post still opens
+            // its own detail screen directly ("prayer-wall/{id}" below).
+            composable(
+                "prayer-room?tab={tab}",
+                arguments = listOf(navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                val initialTab = if (entry.arguments?.getString("tab") == "corporate") {
+                    org.nuruplace.member.feature.community.PrayerRoomTab.Corporate
+                } else {
+                    org.nuruplace.member.feature.community.PrayerRoomTab.Private
+                }
+                org.nuruplace.member.feature.community.PrayerRoomScreen(
+                    initialTab = initialTab,
+                    onBack = { nav.popBackStack() },
+                    onOpenPost = { nav.navigate("prayer-wall/$it") },
+                )
             }
             composable(
                 "prayer-wall/{id}",

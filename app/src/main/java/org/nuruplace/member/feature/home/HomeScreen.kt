@@ -330,10 +330,12 @@ fun HomeScreen(
                 plan?.takeIf { it.enrolled && it.completedAt == null }?.let { rp ->
                     Entrance(entrance, 5) { PlanResumeBanner(rp) { onNavigate("plan/${rp.planId}") } }
                 }
-                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                // Both open My Prayer Room — the wall preview on its Corporate
+                // tab, the post itself pushed directly (deep-link parity).
+                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-room?tab=corporate") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
-                MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
+                MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayer-room") })
                 featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
                 if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }
                 announcement?.let { a -> FeaturedAnnouncementCard(a, onAll = { onNavigate("announcements") }, onOpen = { onNavigate("announcement/${a.announcementId}") }) }
@@ -979,7 +981,7 @@ private fun MinisRow(plan: ReadingPlanRow?, journal: PrayerWallPost?, onReading:
                 Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp)) { Text("journal", style = NuruType.micro, color = Nuru.answeredText, fontWeight = FontWeight.SemiBold) }
             }
             Spacer(Modifier.height(Spacing.sm))
-            CardKicker("Prayer journal", Nuru.danger)
+            CardKicker("My Prayer Room", Nuru.danger)
             Text(journal?.title ?: "Your prayers", style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(journal?.body ?: "Keep a record of what you're praying for.", style = NuruType.micro, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -1179,7 +1181,7 @@ private fun GrowSection(onNavigate: (String) -> Unit) {
                 GrowTile("Your Calling", "Discover your gifts", "✨", Nuru.callingBg, Nuru.callingFg, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             Spacer(Modifier.height(Spacing.sm))
-            GrowTile("Prayer Wall", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.fillMaxWidth()) { onNavigate("prayer-wall") }
+            GrowTile("My Prayer Room", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.fillMaxWidth()) { onNavigate("prayer-room?tab=corporate") }
         }
     }
 }
@@ -1410,7 +1412,7 @@ private fun routeFor(a: NextAction): String = when (a.route) {
     "level", "pathway" -> "pathway"
     "devotional" -> "devotional"
     "memory_verse", "verse" -> "memory-verses"
-    "prayer", "reflection" -> "prayers"
+    "prayer", "reflection" -> "prayer-room"
     "give" -> "give"
     else -> "pathway"
 }

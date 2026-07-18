@@ -95,7 +95,7 @@ import java.util.UUID
 private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
-fun PrayerWallScreen(onBack: () -> Unit, onOpenPost: (String) -> Unit) {
+fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenPost: (String) -> Unit) {
     var sort by remember { mutableStateOf("latest") }
     var composing by remember { mutableStateOf(false) }
 
@@ -103,90 +103,106 @@ fun PrayerWallScreen(onBack: () -> Unit, onOpenPost: (String) -> Unit) {
     // born inside AsyncContent below, so it travels up through a plain ref.
     var refreshing by remember { mutableStateOf(false) }
     val reloadRef = remember { arrayOfNulls<() -> Unit>(1) }
-    NuruRefreshBox(refreshing = refreshing, onRefresh = { reloadRef[0]?.let { refreshing = true; it() } }) {
-        Column(
-            Modifier.fillMaxSize().background(GrowPal.coolPaper).verticalScroll(rememberScrollState()),
-        ) {
-            // Navy hero
-            Box(
-                Modifier.fillMaxWidth().height(240.dp)
-                    .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
+    Box(Modifier.fillMaxSize()) {
+        NuruRefreshBox(refreshing = refreshing, onRefresh = { reloadRef[0]?.let { refreshing = true; it() } }) {
+            Column(
+                Modifier.fillMaxSize().background(GrowPal.coolPaper).verticalScroll(rememberScrollState()),
             ) {
-                Box(Modifier.matchParentSize().background(GrowPal.heroGradient))
-                Box(Modifier.matchParentSize().background(GrowPal.scrimNavy.copy(alpha = 0.55f)))
-                Row(
-                    Modifier.align(Alignment.TopStart).fillMaxWidth()
-                        .padding(horizontal = 24.dp).padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                // Navy hero — embedded (My Prayer Room) supplies its own back
+                // button + title + segmented control instead.
+                if (!embedded) {
                     Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.40f))
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(GrowPal.gold)
-                            .clickable { composing = true },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Add, null, tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
-                }
-                Column(
-                    Modifier.align(Alignment.BottomStart).padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text("PRAY FOR ONE ANOTHER", style = gInter(11, FontWeight.Medium, 1.8f), color = GrowPal.gold)
-                    Text("Carry one another", style = gSerif(24, FontWeight.SemiBold), color = Color.White)
-                    Text(
-                        "“Carry each other's burdens, and in this way you will fulfill the law of Christ.” — Galatians 6:2",
-                        style = gInter(12), color = Color.White.copy(alpha = 0.55f), maxLines = 2,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
-
-            // Body
-            AsyncContent(key = sort, loading = { ListSkeleton(rows = 5) }, load = {
-                // The `finally` also parks the pull-to-refresh spinner above.
-                try { Net.client.api.prayerWall(sort).data } finally { refreshing = false }
-            }) { posts: List<PrayerWallPost>, reload ->
-                reloadRef[0] = reload
-                val scope = rememberCoroutineScope()
-                val player = remember { VoicePlayer() }
-                DisposableEffect(Unit) { onDispose { player.release() } }
-                Column(
-                    Modifier.padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // Sort pills
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SortPill("Latest", "latest", sort) { sort = it }
-                        SortPill("Most prayed", "prayed", sort) { sort = it }
-                    }
-                    if (posts.isEmpty()) {
-                        Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                            Text("No prayer requests yet.", style = gInter(13), color = GrowPal.ink600)
+                        Modifier.fillMaxWidth().height(240.dp)
+                            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
+                    ) {
+                        Box(Modifier.matchParentSize().background(GrowPal.heroGradient))
+                        Box(Modifier.matchParentSize().background(GrowPal.scrimNavy.copy(alpha = 0.55f)))
+                        Row(
+                            Modifier.align(Alignment.TopStart).fillMaxWidth()
+                                .padding(horizontal = 24.dp).padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.40f))
+                                    .clickable { onBack() },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).background(GrowPal.gold)
+                                    .clickable { composing = true },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.Add, null, tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
                         }
-                    } else {
-                        posts.forEach { p ->
-                            PrayerCard(
-                                p,
-                                player = player,
-                                onOpen = { onOpenPost(p.postId) },
-                                onPray = {
-                                    scope.launch {
-                                        try {
-                                            Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
-                                        } catch (_: Exception) {}
-                                    }
-                                },
+                        Column(
+                            Modifier.align(Alignment.BottomStart).padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("PRAY FOR ONE ANOTHER", style = gInter(11, FontWeight.Medium, 1.8f), color = GrowPal.gold)
+                            Text("Carry one another", style = gSerif(24, FontWeight.SemiBold), color = Color.White)
+                            Text(
+                                "“Carry each other's burdens, and in this way you will fulfill the law of Christ.” — Galatians 6:2",
+                                style = gInter(12), color = Color.White.copy(alpha = 0.55f), maxLines = 2,
+                                modifier = Modifier.padding(top = 4.dp),
                             )
                         }
                     }
                 }
 
-                if (composing) ComposeSheet(scope, onDismiss = { composing = false }, onPosted = { reload() })
+                // Body
+                AsyncContent(key = sort, loading = { ListSkeleton(rows = 5) }, load = {
+                    // The `finally` also parks the pull-to-refresh spinner above.
+                    try { Net.client.api.prayerWall(sort).data } finally { refreshing = false }
+                }) { posts: List<PrayerWallPost>, reload ->
+                    reloadRef[0] = reload
+                    val scope = rememberCoroutineScope()
+                    val player = remember { VoicePlayer() }
+                    DisposableEffect(Unit) { onDispose { player.release() } }
+                    Column(
+                        Modifier.padding(horizontal = 20.dp)
+                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Sort pills
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SortPill("Latest", "latest", sort) { sort = it }
+                            SortPill("Most prayed", "prayed", sort) { sort = it }
+                        }
+                        if (posts.isEmpty()) {
+                            Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                                Text("No prayer requests yet.", style = gInter(13), color = GrowPal.ink600)
+                            }
+                        } else {
+                            posts.forEach { p ->
+                                PrayerCard(
+                                    p,
+                                    player = player,
+                                    onOpen = { onOpenPost(p.postId) },
+                                    onPray = {
+                                        scope.launch {
+                                            try {
+                                                Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
+                                            } catch (_: Exception) {}
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    if (composing) ComposeSheet(scope, onDismiss = { composing = false }, onPosted = { reload() })
+                }
             }
+        }
+        // Embedded (My Prayer Room) has no hero to carry the "+" compose
+        // action, so it floats one instead — same compose sheet.
+        if (embedded) {
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(20.dp)
+                    .size(56.dp).clip(CircleShape).background(GrowPal.gold)
+                    .clickable { composing = true },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Filled.Add, "Share a prayer", tint = GrowPal.navyDeep, modifier = Modifier.size(22.dp)) }
         }
     }
 }

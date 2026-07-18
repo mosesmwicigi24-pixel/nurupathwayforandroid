@@ -45,7 +45,7 @@ fun CommunityHubScreen(onOpen: (String) -> Unit) {
             Text("Pray & connect", style = NuruType.display, color = Nuru.onNavy)
         }
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            HubCard("prayer-wall", "Prayer wall", "Share & carry each other's requests", Icons.Filled.Favorite, Nuru.danger, Nuru.dangerBg, onOpen)
+            HubCard("prayer-room?tab=corporate", "My Prayer Room", "Share & carry each other's requests", Icons.Filled.Favorite, Nuru.danger, Nuru.dangerBg, onOpen)
             HubCard("chat", "Messages", "Spaces, groups and direct messages", Icons.Filled.Email, Nuru.info, Nuru.infoBg, onOpen)
             HubCard("events", "Events", "What's on — RSVP and see who's going", Icons.Filled.DateRange, Nuru.goldLo, Nuru.goldTint, onOpen)
             HubCard("announcements", "Announcements", "News from your church", Icons.Filled.Notifications, Nuru.success, Nuru.successBg, onOpen)
