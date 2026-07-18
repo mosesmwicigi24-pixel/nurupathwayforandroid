@@ -203,6 +203,15 @@ interface MemberApi {
     @POST("chat/conversations/{id}/read")
     suspend fun markChatRead(@Path("id") conversationId: String): Unit
 
+    // PUT/DELETE chat/conversations/{id}/mute — per-member mute (Chat Redesign
+    // C4). Wired from the pastoral ⋮ menu's Mute/Unmute; `muted` then rides
+    // back on chatInbox()/chatConversation() rows.
+    @PUT("chat/conversations/{id}/mute")
+    suspend fun muteChatConversation(@Path("id") conversationId: String, @Body body: MuteConversationBody = MuteConversationBody()): Unit
+
+    @DELETE("chat/conversations/{id}/mute")
+    suspend fun unmuteChatConversation(@Path("id") conversationId: String): Unit
+
     @GET("chat/people")
     suspend fun chatPeople(@retrofit2.http.Query("q") query: String? = null): PeopleRes
 
@@ -275,6 +284,12 @@ interface MemberApi {
     // as the broadcast routes below.
     @GET("chat/pastoral/inbox")
     suspend fun pastoralInbox(): PastoralInboxRes
+
+    // Side-effect-free "have I ever been assigned as a pastor" probe (Chat
+    // Redesign C4). No step-up — lets the Chat tab show the Pastoral Inbox
+    // segment to an assigned non-SuperAdmin pastor.
+    @GET("chat/pastoral/eligibility")
+    suspend fun pastoralEligibility(): PastoralEligibilityRes
 
     @POST("chat/messages/{id}/reactions")
     suspend fun toggleChatReaction(@Path("id") messageId: String, @Body body: ReactBody): ReactOn

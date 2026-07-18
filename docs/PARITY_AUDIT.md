@@ -1627,3 +1627,82 @@ member report, conversation type on wire, 23/25 §16 scenarios proven
 (794/794 backend tests). Client-side remainder for next arcs: mute model
 (server has none), pastoral-inbox client render of type-driven dedup,
 DiscipleshipHub legacy dm path. AWAITING: app builds iOS 77 / Android vc44.
+
+## 2026-07-19 — CHAT EPIC CLIENT REMAINDER CLOSED (both apps)
+Closes the four items the 2026-07-19 entry above flagged as "next arcs" —
+the backend landed the eligibility probe and the mute contract in the
+interim (`chat/pastoral/eligibility`, `chat/conversations/{id}/mute`);
+pathway repo was read-only (wire shapes only, `modules/{chat,pastoral}`).
+
+**Pastor inbox entry** — `GET /chat/pastoral/eligibility` → `{is_pastor}`,
+no step-up. The "Talk with Your Pastor" segment (Android: `PastoralInbox`
+tab; iOS: the inbox section inside the pastor tab) was SuperAdmin-only
+client-side even though the server has always admitted any user who ever
+held a `pastor_assignments` row, past step-up. Both apps now OR the probe
+into the existing SuperAdmin check, cached in memory for the app session
+(Android `data/PastorEligibility.kt`; iOS `PastorEligibility` enum in
+`Features/Chat/PastoralLock.swift`) and reset on sign-out alongside the rest
+of the pastoral device-local state.
+
+**Type-driven dedup** — conversation list + detail rows now carry
+`type` (DIRECT/SPACE/DISCIPLER/PASTORAL/BROADCAST/BROADCAST_RESPONSE). Both
+apps' Chat-tab DM filter (Android `ChatScreen.kt#dms`; iOS
+`ChatInboxViewModel.dms`) now excludes DISCIPLER/PASTORAL by `type` first,
+falling back to the old cached/resolved-id heuristic only when a row carries
+no `type` (older server) — tolerant decode, not the default path. iOS also
+upgraded `ChatThreadViewModel`'s context inference (privacy banner + ⋮ menu)
+to the same server-first rule. Android's biometric GATE still has to decide
+before the thread ever loads (nav `?ctx=` param, unchanged), but the
+post-load render (privacy banner, pastoral ⋮ menu) now upgrades to
+`thread.type` when the caller passed no `ctx` — see `ChatThreadScreen.kt`'s
+`preloadCtx` vs. `ctx` split.
+
+**DiscipleshipHub legacy path** — Android `DiscipleshipHubScreen`'s
+"Message" hero and iOS `DiscipleshipHubView`'s equivalent used to resolve
+(or create, via `POST /chat/dms`) a plain DIRECT dm keyed off the hub's
+`dmConversationId` — never the DISCIPLER type, so neither the privacy banner
+nor admin-invisibility applied. Both now always call
+`GET /chat/discipler/conversation` (the same call the My Discipler tab
+makes) and navigate with the discipler context explicit (Android
+`chat/{id}?ctx=discipler`; iOS `ThreadRoute(context: .discipler)`). Not
+touched: `DisciplerDossierScreen`/`DisciplerDossierView` (the leader-side
+mirror, out of scope — a separate screen the task didn't name; flagged here,
+not fixed).
+
+**Server mute** — `PUT/DELETE chat/conversations/{id}/mute` (`{until?}`,
+absent = forever), `muted: Bool` additive on conversation list/detail. The
+pastoral ⋮ menu's Mute/Unmute (the only Mute menu item either app has) is
+now wired to these routes instead of being purely local: optimistic flip,
+server call, revert + inline error on failure (Android reuses the existing
+`actionError` banner in `ChatThreadScreen`; iOS reuses `flashActionError` in
+`ChatThreadView`). `muted` is still mirrored into the local pref
+(`AppPrefs.pastoralMuted` / `PastoralPrefs.muted`) so the Chat tab's badge
+suppression — which only fetches the list endpoint — doesn't need a second
+round trip, but that pref is now synced FROM the server on every thread load
+and every inbox load, not treated as the source of truth. Muted rows show a
+small bell-slash glyph: Android `MutedGlyph()` in `ChatScreen.kt` (Space/Dm/
+Group rows + the Talk with My Pastor card); iOS the equivalent in
+`ChatView.swift` + `PrivateThreadCard`.
+
+Android files: `data/net/CommunityDtos.kt` (+type/muted on ChatConversation/
+ChatThreadDetail, PastoralEligibilityRes, MuteConversationBody),
+`data/net/MemberApi.kt` (+3 endpoints), `data/PastorEligibility.kt` (new),
+`auth/AuthStore.kt` (reset sweep), `feature/shell/MainShell.kt`
+(pastorEligible produceState, discipleship route `?ctx=discipler`),
+`feature/community/ChatScreen.kt` (dms filter, MutedGlyph, mute state on the
+pastor card), `feature/community/ChatThreadScreen.kt` (preloadCtx/ctx split,
+server mute wiring), `feature/discipleship/DiscipleshipHubScreen.kt`
+(discipler-endpoint hero). iOS files: `Models/Chat.swift` (type/muted),
+`Networking/MemberAPI+Pastoral.swift` (+eligibility),
+`Networking/MemberAPI.swift` (+mute/unmute), `Features/Chat/PastoralLock.swift`
+(PastorEligibility), `Features/Chat/ChatView.swift`,
+`Features/Chat/ChatThreadView.swift`, `Features/Chat/PastoralViews.swift`,
+`Features/Discipleship/DiscipleshipHubView.swift`.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 21/21 unit tests green (no new tests added — pure
+wiring/rendering change, no new pure-function surface to unit test). iOS
+`xcodebuild ... build` → BUILD SUCCEEDED, `... test` → 10/10 green (pinned
+simulator 8265F608-4A98-4E95-9074-7C54BEC4684A, derivedDataPath build/dd).
+Not pushed / no PRs opened (per task instruction).
