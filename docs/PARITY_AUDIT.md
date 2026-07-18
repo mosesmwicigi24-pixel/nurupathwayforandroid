@@ -1330,3 +1330,30 @@ Portal unaffected (oversight reads the same wall); backend unchanged.
 Verified: iOS `xcodebuild ... build` → BUILD SUCCEEDED, `... test` → 10/10
 green. Android `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` →
 BUILD SUCCESSFUL. Not pushed / no PRs opened yet (per task instruction).
+
+## 2026-07-18 — Home "Upcoming" curated rows replace the month-calendar grid (branch feat/home-events-rows, Android only)
+Owner spec: the Home "Upcoming" section's mini month grid + dot markers (and
+its single hardcoded next-event row underneath) is gone, replaced by a plain
+list of up to 5 curated event rows sourced from the new `GET /home/events`
+contract (already live backend-side, no backend work needed here) — soonest
+first, server-capped at 5. Client renders exactly what the wire sends, in
+that order: no client-side sort or `.take(5)`.
+
+`UpcomingSection` now takes `List<HomeEventRow>` (new DTO in HomeDtos.kt, new
+`Net.client.api.homeEvents()` call in MemberApi.kt, populated in HomeScreen's
+existing `LaunchedEffect(refreshTick)` batch alongside the untouched
+`upcoming`/`liveNowInfo` calendar fetch that still feeds the "happening now /
+starting soon" LiveNowCard). The whole section — header included — hides when
+the list is empty. Each row reuses the app's existing Events-tab relative-time
+helpers (`evCountdown` + `evTime` from `feature/events/EventsShared.kt`,
+"Tomorrow · 3:00 PM" style) rather than inventing new date logic, and its
+trailing pill is driven by `my_rsvp`: gold "RSVP" call-to-action when null,
+otherwise a Going/Maybe/Can't-go status pill using the app's existing `EV`
+RSVP palette (green/amber/gray) — same wording pattern the Events tab already
+uses. `MiniMonth` (the day-grid composable) is deleted outright; it had no
+other caller. The Events tab's own full calendar screens
+(`AllEventsCalendarScreen.kt`, `EventsScreen.kt`) were not touched — they keep
+their own real calendar UI.
+
+Verified: `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` → BUILD
+SUCCESSFUL. Not pushed / no PR opened (per task instruction).
