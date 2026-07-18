@@ -1357,3 +1357,68 @@ their own real calendar UI.
 
 Verified: `./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` → BUILD
 SUCCESSFUL. Not pushed / no PR opened (per task instruction).
+
+## 2026-07-18 — Chat edit/delete own messages (branch feat/chat-edit-delete, both member apps, client-only)
+Owner spec: mirror the web portal's already-live ⋮-menu Edit/Delete on own
+chat bubbles onto both member apps, wired to the already-live backend
+endpoints `PATCH /chat/messages/{id}` (body `{ body }` → `{ message_id, body,
+is_edited }`, author-only, sets `is_edited = true`) and `DELETE
+/chat/messages/{id}` (→ `{ message_id, deleted }`, author-only soft delete —
+the row drops out of the next `GET /chat/conversations/{id}` because the
+service already filters `deleted_at IS NULL`). No backend or portal changes;
+the backend repo was intentionally left untouched (another agent was working
+there).
+
+Both apps: the trigger is a long-press on a message you authored (`mine ==
+true` only — never on someone else's bubble, a system row, or a broadcast
+copy you didn't write). Voice and image messages get Delete only, no Edit.
+Edit opens a small prefilled sheet; Delete asks "Delete this message? This
+can't be undone." before calling the server. Both actions are optimistic
+(the bubble updates/disappears immediately) and roll back to the prior state
+plus a brief inline error banner if the PATCH/DELETE throws — no silent lie
+about what actually landed.
+
+iOS (`NuruMember/Features/Chat/ChatThreadView.swift`): the existing
+`.contextMenu` on `AuroraBubble` (already long-press-native on iOS, already
+carrying the reaction emoji row + Copy) grows an `Edit`/`Delete` section
+gated on `m.mine`, calling new `MemberAPI.editChatMessage`/`deleteChatMessage`
+(`NuruMember/Networking/MemberAPI.swift`, new shared `ChatMessageMutationResult`
+DTO tolerant of both response shapes in `NuruMember/Models/Chat.swift`).
+`ChatThreadViewModel` grew `editOverrides`/`locallyDeletedIds` dictionaries
+layered on top of `allMessages` for the optimistic update/rollback, plus
+`editMessage`/`deleteMessage` methods. Edit is a new `EditMessageSheet`
+(reuses the existing `PSheetShell`/`GoldSheetButton` chrome from
+ProfileView.swift) presented via `.sheet(item:)`; Delete is a
+`.confirmationDialog` matching the app's existing destructive-confirm idiom
+(same pattern as PrayerJournalView's "Delete this prayer?"). A transient
+banner above the composer (mirrors the file's own `micHint` idiom) surfaces
+a failed action.
+
+Android (`app/src/main/java/org/nuruplace/member/feature/community/
+ChatThreadScreen.kt`): no existing per-message menu affordance to reuse, so
+this adds one — `combinedClickable(onLongClick = …)` on own bubbles only,
+opening a `ModalBottomSheet` action list (Edit/Delete), matching the app's
+dominant sheet-based menu idiom (used everywhere else: AiDraft, MemoryVerse,
+Profile, Giving, PrayerWall) over the one-off `DropdownMenu` used for the
+attachment picker. Edit reuses the same `ModalBottomSheet` shell with a
+prefilled `BasicTextField` + Save button; Delete confirms via `AlertDialog`
+(same idiom as `ModuleScreen`'s revisit-module dialog). Local optimistic
+state (`editOverrides: Map<String, String>`, `locallyDeleted: Set<String>`)
+sits alongside the screen's existing `AsyncContent`-driven `thread` and is
+layered onto `messages` via `.filter`/`.map` before rendering — rollback on
+failure just removes the entry. New `EditMessageBody`/`EditMessageRes`/
+`DeleteMessageRes` DTOs in `data/net/CommunityDtos.kt`, new
+`editChatMessage`/`deleteChatMessage` Retrofit methods in
+`data/net/MemberApi.kt`.
+
+Not touched: `BroadcastDetailScreen.kt`/`RecipientRow` on Android already
+tints the tick blue regardless of seen state (the iOS-only tick-color fix in
+this task's second part was iOS-only — Android and the portal already had it
+right).
+
+Verified: iOS `xcodebuild -scheme NuruMember -configuration Debug
+-destination "id=8265F608-4A98-4E95-9074-7C54BEC4684A" build` → BUILD
+SUCCEEDED, `... test` → 10/10 green (`ModelDecodingTests`). Android
+`export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+&& ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` → BUILD
+SUCCESSFUL. Not pushed / no PRs opened (per task instruction).

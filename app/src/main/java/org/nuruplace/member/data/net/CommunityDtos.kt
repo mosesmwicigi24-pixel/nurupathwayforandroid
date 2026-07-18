@@ -156,6 +156,15 @@ data class ReactBody(val emoji: String)
 data class ReactOn(val on: Boolean = false)
 
 @Serializable
+data class EditMessageBody(val body: String)
+
+@Serializable
+data class EditMessageRes(val messageId: String = "", val body: String = "", val isEdited: Boolean = false)
+
+@Serializable
+data class DeleteMessageRes(val messageId: String = "", val deleted: Boolean = false)
+
+@Serializable
 data class PrayerCommentBody(val commentId: String, val body: String, val clientMutationId: String)
 
 @Serializable
