@@ -108,9 +108,26 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
         if (done) { onBack(); return }
         saving = true
         scope.launch {
+            var lastAck: org.nuruplace.member.data.net.SegmentCompleteResult? = null
             group.filterNot { it.completed }.forEach { seg ->
-                runCatching { Net.client.api.completeSegment(seg.segmentId) }
+                runCatching { Net.client.api.completeSegment(seg.segmentId) }.onSuccess { lastAck = it }
                 PlanProgressBus.finished.tryEmit(seg.segmentId)
+            }
+            // The LAST segment's ack is the server's authoritative word on
+            // whether this day just sealed and the next one opened — computed
+            // in the same transaction as the write. Broadcasting it lets the
+            // day hub skip waiting on an extra "Seal the day" tap, and the
+            // plan overview tell a genuine lock apart from a completion still
+            // landing through the sync path.
+            lastAck?.let { ack ->
+                if (ack.dayComplete) {
+                    PlanProgressBus.dayUnlocked.tryEmit(
+                        org.nuruplace.member.data.net.PlanDayUnlockAck(
+                            planId = planId, dayNumber = ack.dayNumber,
+                            nextDayNumber = ack.nextDayNumber, nextDayUnlocked = ack.nextDayUnlocked,
+                        ),
+                    )
+                }
             }
             done = true; saving = false
             onBack()

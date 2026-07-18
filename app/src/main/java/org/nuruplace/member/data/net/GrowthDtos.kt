@@ -152,12 +152,38 @@ data class PlanDayReflectionEnv(val data: PlanDayReflection? = null)
 @Serializable
 data class SaveReflectionBody(val body: String, val clientMutationId: String)
 
-/** POST growth/segments/{id}/complete → tells us if finishing this segment completed the day. */
+/**
+ * POST growth/segments/{id}/complete → tells us if finishing this segment
+ * completed the day. Additive (backend fix/plan-day-unlock-race): dayComplete
+ * / nextDayNumber / nextDayUnlocked are computed server-side in the SAME
+ * transaction as the completion write, so the client can act on the LAST
+ * segment's ack directly instead of racing a plan re-fetch against a
+ * completion that might still be landing (the offline-sync race). Missing
+ * keys fall back to their defaults, so an older server still decodes fine —
+ * dayComplete falls back to dayCompleted specifically for that reason.
+ */
 @Serializable
 data class SegmentCompleteResult(
     val segmentId: String = "",
     val dayNumber: Int = 0,
     val dayCompleted: Boolean = false,
+    val dayComplete: Boolean = dayCompleted,
+    val nextDayNumber: Int? = null,
+    val nextDayUnlocked: Boolean = false,
+)
+
+/**
+ * Broadcast (via [org.nuruplace.member.feature.grow.PlanProgressBus.dayUnlocked])
+ * when a segment's ack confirms its day sealed — the authoritative,
+ * same-transaction verdict from the server (§1.1: the server decides gating,
+ * never the client). Lets the day hub trust it directly and the plan overview
+ * tell a genuine lock apart from a completion still catching up to its fetch.
+ */
+data class PlanDayUnlockAck(
+    val planId: String?,
+    val dayNumber: Int,
+    val nextDayNumber: Int?,
+    val nextDayUnlocked: Boolean,
 )
 
 @Serializable

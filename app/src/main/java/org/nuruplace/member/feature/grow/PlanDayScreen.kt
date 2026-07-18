@@ -139,6 +139,18 @@ fun PlanDayScreen(
     LaunchedEffect(Unit) {
         PlanProgressBus.finished.collect { if (it !in completedSegments) completedSegments.add(it) }
     }
+    // The offline-sync race: the day unlocks server-side the instant its LAST
+    // segment's completion lands, but this screen would otherwise still wait
+    // on an explicit "Seal the day" tap. Trust that segment's own
+    // authoritative ack directly — "Continue the plan" works immediately,
+    // with no extra tap and no race against a re-fetch.
+    LaunchedEffect(planId, dayNumber) {
+        PlanProgressBus.dayUnlocked.collect { ack ->
+            if (ack.dayNumber == dayNumber && (ack.planId == null || ack.planId == planId)) {
+                dayCompleted = true
+            }
+        }
+    }
 
     val reference = day?.reference ?: ""
     val title = day?.title ?: "Day $dayNumber"
