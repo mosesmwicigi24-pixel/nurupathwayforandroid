@@ -18,6 +18,7 @@ object AppPrefs {
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
     private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
+    private const val KEY_DISCIPLER_REMINDER_DISMISSED_PREFIX = "nuru.discipler.reminder.dismissedAt.level."
     // Broadcast fingerprint unlock (§5.3 step-up, data/BroadcastLock.kt): the
     // step-up password, AES-GCM encrypted behind a biometric-gated Keystore
     // key. NEVER plaintext — unusable without a fresh fingerprint unlocking
@@ -63,6 +64,23 @@ object AppPrefs {
 
     fun setRadioReminder(programId: String, on: Boolean) {
         if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_RADIO_REMIND_PREFIX + programId, on).apply()
+    }
+
+    /** Within-level "walk with your discipler" pop-up (LevelDetailScreen) — the
+     *  quiet period after an explicit X dismissal. "At most once per session per
+     *  level" is a separate, in-memory rule owned by the screen itself; this is
+     *  only the persisted "don't nag" 24h window (iOS UserDefaults parity). */
+    fun isDisciplerReminderDismissedRecently(levelNumber: Int): Boolean {
+        if (!::prefs.isInitialized) return false
+        val ts = prefs.getLong(KEY_DISCIPLER_REMINDER_DISMISSED_PREFIX + levelNumber, 0L)
+        if (ts <= 0L) return false
+        return System.currentTimeMillis() - ts < 24L * 60 * 60 * 1000
+    }
+
+    fun markDisciplerReminderDismissed(levelNumber: Int) {
+        if (::prefs.isInitialized) {
+            prefs.edit().putLong(KEY_DISCIPLER_REMINDER_DISMISSED_PREFIX + levelNumber, System.currentTimeMillis()).apply()
+        }
     }
 
     // ── Broadcast fingerprint unlock (data/BroadcastLock.kt owns the crypto;
