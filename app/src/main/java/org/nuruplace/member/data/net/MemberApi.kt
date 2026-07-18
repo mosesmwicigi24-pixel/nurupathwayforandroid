@@ -229,6 +229,14 @@ interface MemberApi {
     @POST("chat/messages/{id}/reactions")
     suspend fun toggleChatReaction(@Path("id") messageId: String, @Body body: ReactBody): ReactOn
 
+    // Author-only (server 404s otherwise). PATCH sets is_edited = true; DELETE
+    // soft-deletes — the message stops coming back on the next chatConversation().
+    @PATCH("chat/messages/{id}")
+    suspend fun editChatMessage(@Path("id") messageId: String, @Body body: EditMessageBody): EditMessageRes
+
+    @DELETE("chat/messages/{id}")
+    suspend fun deleteChatMessage(@Path("id") messageId: String): DeleteMessageRes
+
     // --- Events / calendar ---
     @GET("calendar")
     suspend fun calendar(@retrofit2.http.Query("from") from: String, @retrofit2.http.Query("to") to: String): Envelope<CalendarOccurrence>

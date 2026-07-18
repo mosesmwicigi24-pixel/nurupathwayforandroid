@@ -13,9 +13,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +45,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Lock
@@ -50,8 +54,11 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +95,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.net.ChatMessage
 import org.nuruplace.member.data.net.ChatThreadDetail
+import org.nuruplace.member.data.net.EditMessageBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.data.net.SendMessageBody
@@ -105,6 +113,7 @@ import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
     LaunchedEffect(conversationId) { runCatching { Net.client.api.markChatRead(conversationId) } }
@@ -118,7 +127,63 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         val listState = rememberLazyListState()
+        // Edit/Delete (own messages only) — optimistic local overrides on top of
+        // whatever the server last returned, rolled back if the PATCH/DELETE fails.
+        var editOverrides by remember(conversationId) { mutableStateOf(mapOf<String, String>()) }
+        var locallyDeleted by remember(conversationId) { mutableStateOf(setOf<String>()) }
+        var actionsForMessage by remember { mutableStateOf<ChatMessage?>(null) }
+        var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+        var editDraft by remember { mutableStateOf("") }
+        var editSaving by remember { mutableStateOf(false) }
+        var editError by remember { mutableStateOf<String?>(null) }
+        var deleteConfirmFor by remember { mutableStateOf<ChatMessage?>(null) }
+        var actionError by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(actionError) {
+            if (actionError != null) {
+                kotlinx.coroutines.delay(3500)
+                actionError = null
+            }
+        }
         val messages = thread.messages
+            .filter { it.messageId !in locallyDeleted }
+            .map { m -> editOverrides[m.messageId]?.let { m.copy(body = it, isEdited = true) } ?: m }
+        fun editMessage(m: ChatMessage, newBody: String) {
+            val trimmed = newBody.trim()
+            if (trimmed.isBlank()) return
+            if (trimmed == m.body) { editingMessage = null; return }
+            val previous = editOverrides[m.messageId]
+            editSaving = true
+            editError = null
+            editOverrides = editOverrides + (m.messageId to trimmed)
+            scope.launch {
+                try {
+                    Net.client.api.editChatMessage(m.messageId, EditMessageBody(trimmed))
+                    editOverrides = editOverrides - m.messageId
+                    editingMessage = null
+                    Haptics.confirm(view)
+                    reload()
+                } catch (_: Exception) {
+                    editOverrides = if (previous != null) editOverrides + (m.messageId to previous) else editOverrides - m.messageId
+                    Haptics.reject(view)
+                    editError = "Couldn't save — please try again."
+                } finally {
+                    editSaving = false
+                }
+            }
+        }
+        fun deleteMessage(m: ChatMessage) {
+            locallyDeleted = locallyDeleted + m.messageId
+            scope.launch {
+                try {
+                    Net.client.api.deleteChatMessage(m.messageId)
+                    reload()
+                } catch (_: Exception) {
+                    locallyDeleted = locallyDeleted - m.messageId
+                    Haptics.reject(view)
+                    actionError = "Couldn't delete this message — try again."
+                }
+            }
+        }
         val recorder = remember { VoiceRecorder() }
         val player = remember { VoicePlayer() }
         DisposableEffect(Unit) { onDispose { recorder.release(); player.release() } }
@@ -209,7 +274,11 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                     val thisDay = chatDayKey(m.createdAt)
                     if (thisDay != prevDay) DaySeparator(m.createdAt)
                     val runHead = i == 0 || messages[i - 1].authorUserId != m.authorUserId || chatDayKey(messages[i - 1].createdAt) != thisDay
-                    MessageRow(m, thread.kind, runHead, player) { emoji -> react(m, emoji) }
+                    MessageRow(
+                        m, thread.kind, runHead, player,
+                        onReact = { emoji -> react(m, emoji) },
+                        onLongPress = { if (m.mine) { Haptics.tap(view); actionsForMessage = m } },
+                    )
                 }
             }
 
@@ -241,6 +310,14 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                             .clickable { send(q) }.padding(horizontal = 14.dp, vertical = 8.dp),
                     ) { Text(q, style = cInter(13, FontWeight.Medium), color = CHAT.navy) }
                 }
+            }
+
+            // A failed edit/delete already rolled its optimistic change back —
+            // this just tells the member why, briefly, above the composer.
+            actionError?.let { msg ->
+                Row(
+                    Modifier.fillMaxWidth().background(Color(0xFFFDECEA)).padding(horizontal = 16.dp, vertical = 7.dp),
+                ) { Text(msg, style = cInter(11, FontWeight.Medium), color = Color(0xFFB3261E)) }
             }
 
             // Composer — swaps to the live recording strip while a voice note is
@@ -327,6 +404,99 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                 }
             }
         }
+
+        // ---- Long-press action sheet — own messages only: Edit (text only), Delete ----
+        actionsForMessage?.let { m ->
+            ModalBottomSheet(onDismissRequest = { actionsForMessage = null }) {
+                Column(Modifier.padding(bottom = 24.dp)) {
+                    if (m.msgType != "voice" && m.msgType != "image") {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable {
+                                    editDraft = m.body
+                                    editError = null
+                                    editingMessage = m
+                                    actionsForMessage = null
+                                }
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Icon(Icons.Filled.Edit, null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
+                            Text("Edit", style = cInter(14, FontWeight.SemiBold), color = CHAT.navy)
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                                deleteConfirmFor = m
+                                actionsForMessage = null
+                            }
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Filled.Delete, null, tint = Color(0xFFB3261E), modifier = Modifier.size(18.dp))
+                        Text("Delete", style = cInter(14, FontWeight.SemiBold), color = Color(0xFFB3261E))
+                    }
+                }
+            }
+        }
+
+        // ---- Edit sheet — prefilled with the current body; PATCH on save ----
+        editingMessage?.let { m ->
+            ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                    Text("Edit message", style = cSerif(19, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(CHAT.paper)
+                            .border(1.dp, CHAT.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        BasicTextField(
+                            value = editDraft,
+                            onValueChange = { editDraft = it },
+                            textStyle = cInter(14).copy(color = CHAT.navy),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(CHAT.gold),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    editError?.let { err ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(err, style = cInter(12), color = Color(0xFFB3261E))
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Box(
+                        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
+                            .background(if (editDraft.isBlank()) CHAT.gold.copy(alpha = 0.4f) else CHAT.gold)
+                            .clickable(enabled = !editSaving && editDraft.isNotBlank()) { editMessage(m, editDraft) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(if (editSaving) "Saving…" else "Save", style = cInter(14, FontWeight.Bold), color = CHAT.navy)
+                    }
+                }
+            }
+        }
+
+        // ---- Delete confirm — irreversible, so always ask first ----
+        deleteConfirmFor?.let { m ->
+            AlertDialog(
+                onDismissRequest = { deleteConfirmFor = null },
+                title = { Text("Delete this message?", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+                text = { Text("This can't be undone.", style = cInter(13), color = CHAT.ink600) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deleteConfirmFor = null
+                        deleteMessage(m)
+                    }) { Text("Delete", style = cInter(13, FontWeight.Bold), color = Color(0xFFB3261E)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteConfirmFor = null }) {
+                        Text("Cancel", style = cInter(13, FontWeight.SemiBold), color = CHAT.ink600)
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -401,8 +571,16 @@ private fun DaySeparator(iso: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(m: ChatMessage, kind: String, runHead: Boolean, player: VoicePlayer, onReact: (String) -> Unit) {
+private fun MessageRow(
+    m: ChatMessage,
+    kind: String,
+    runHead: Boolean,
+    player: VoicePlayer,
+    onReact: (String) -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = if (m.mine) Arrangement.End else Arrangement.Start,
@@ -436,6 +614,15 @@ private fun MessageRow(m: ChatMessage, kind: String, runHead: Boolean, player: V
                 Modifier.clip(shape)
                     .then(if (m.mine) Modifier.background(CHAT.bubbleInk) else Modifier.background(CHAT.bubbleLight))
                     .border(1.dp, if (m.mine) Color.White.copy(alpha = 0.08f) else CHAT.hairline, shape)
+                    // Edit/Delete affordance — own messages only, never on a
+                    // system row or someone else's copy of a broadcast.
+                    .then(
+                        if (m.mine) {
+                            Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress)
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
