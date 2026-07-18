@@ -1617,3 +1617,13 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 → BUILD SUCCESSFUL, 21/21 unit tests green. iOS `xcodebuild ... build` →
 BUILD SUCCEEDED, `... test` → 10/10 green (pinned simulator, derivedDataPath
 build/dd). Not pushed / no PRs opened (per task instruction).
+
+## 2026-07-19 — CHAT REDESIGN EPIC COMPLETE (C0-C4, all deployed)
+pathway#385/#386/#387/#388 live in prod (migrations 161-171); apps carry
+C3a (and#56/ios#94) + C3b (and#57/ios#95). Four tabs, consent DMs, derived
+spaces w/ approval gate, discipler history, pastoral channel + biometric
+local lock, typed push notifications (first ever for chat; pastoral generic),
+member report, conversation type on wire, 23/25 §16 scenarios proven
+(794/794 backend tests). Client-side remainder for next arcs: mute model
+(server has none), pastoral-inbox client render of type-driven dedup,
+DiscipleshipHub legacy dm path. AWAITING: app builds iOS 77 / Android vc44.
