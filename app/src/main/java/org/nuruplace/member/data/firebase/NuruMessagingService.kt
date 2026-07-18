@@ -70,7 +70,7 @@ class NuruMessagingService : FirebaseMessagingService() {
             data["levelNumber"]?.takeIf { it.isNotBlank() }?.let { return "level/$it" }
             val t = (data["template"] ?: "").lowercase()
             return when {
-                "prayer" in t -> "prayer-wall"
+                "prayer" in t -> "prayer-room?tab=corporate"
                 "verse" in t || "memory" in t -> "memory-verses"
                 "devotional" in t -> "devotional"
                 "give" in t || "giving" in t || "payment" in t -> "give"

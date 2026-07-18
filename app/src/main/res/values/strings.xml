@@ -3,7 +3,7 @@
     <string name="app_name">Nuru Pathway</string>
     <string name="shortcut_radio">Nuru Radio</string>
     <string name="shortcut_pathway">My Pathway</string>
-    <string name="shortcut_prayer">Prayer Wall</string>
+    <string name="shortcut_prayer">Prayer Room</string>
     <string name="shortcut_give">Give</string>
     <string name="radio_channel_name">Nuru Radio</string>
 </resources>

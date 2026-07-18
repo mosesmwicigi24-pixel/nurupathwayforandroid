@@ -31,7 +31,7 @@
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.nuruplace"
             android:targetClass="org.nuruplace.member.MainActivity">
-            <extra android:name="nuru.dest" android:value="prayer-wall" />
+            <extra android:name="nuru.dest" android:value="prayer-room?tab=corporate" />
         </intent>
     </shortcut>
     <shortcut

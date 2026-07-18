@@ -3,7 +3,9 @@
 package org.nuruplace.member.feature.grow
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,6 +34,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
@@ -39,6 +45,9 @@ import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.data.net.PrayerEntry
 import org.nuruplace.member.data.net.PrayerUpsertBody
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruCard
 import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.components.ScreenHeader
@@ -49,7 +58,7 @@ import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
 
 @Composable
-fun PrayerJournalScreen(onBack: () -> Unit) {
+fun PrayerJournalScreen(embedded: Boolean = false, onBack: () -> Unit = {}) {
     AsyncContent(load = { Net.client.api.prayers().data }) { entries: List<PrayerEntry>, reload ->
         val scope = rememberCoroutineScope()
         var title by remember { mutableStateOf("") }
@@ -57,7 +66,9 @@ fun PrayerJournalScreen(onBack: () -> Unit) {
         var busy by remember { mutableStateOf(false) }
 
         Column(Modifier.fillMaxSize().background(Nuru.paper).imePadding()) {
-            ScreenHeader("Prayer journal", kicker = "Private", onBack = onBack)
+            // Embedded (My Prayer Room) supplies its own back button + title +
+            // segmented control, so this screen drops its standalone header.
+            if (!embedded) ScreenHeader("Prayer journal", kicker = "Private", onBack = onBack)
             LazyColumn(
                 Modifier.fillMaxWidth(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
@@ -97,6 +108,7 @@ fun PrayerJournalScreen(onBack: () -> Unit) {
 @Composable
 private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
     var busy by remember { mutableStateOf(false) }
     var sharedToWall by remember { mutableStateOf(false) }
     var confirmShare by remember { mutableStateOf(false) }
@@ -142,17 +154,34 @@ private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
                 Text("Mark answered", style = NuruType.cardCta, color = Nuru.success)
             }
         }
-        // Share to the prayer wall — copies the PRIVATE entry into a member-visible
-        // wall post, so it is deliberate (confirm) and NEVER queued offline; the
+        // PROMINENT gold call-to-action — every private prayer's bridge to
+        // Corporate Prayer. Copies the PRIVATE entry into a member-visible wall
+        // post, so it is deliberate (confirm) and NEVER queued offline; the
         // server is idempotent (re-share returns the existing post). iOS parity.
-        TextButton(onClick = { if (!busy && !sharedToWall) confirmShare = true }) {
-            Text("🤲", style = NuruType.caption)
-            Spacer(Modifier.size(6.dp))
-            Text(
-                if (sharedToWall) "On the wall 🙏" else "Share to wall",
-                style = NuruType.cardCta,
-                color = if (sharedToWall) Nuru.gold else Nuru.eyebrow,
-            )
+        Spacer(Modifier.height(Spacing.sm))
+        if (sharedToWall) {
+            Box(
+                Modifier.fillMaxWidth().height(44.dp)
+                    .clip(RoundedCornerShape(Radii.button))
+                    .background(Nuru.successBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Favorite, null, tint = Nuru.successText, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("On the wall 🙏", style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold), color = Nuru.successText)
+                }
+            }
+        } else {
+            Box(
+                Modifier.fillMaxWidth().height(44.dp)
+                    .clip(RoundedCornerShape(Radii.button))
+                    .background(Nuru.gold)
+                    .clickable(enabled = !busy) { confirmShare = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("Share to Corporate Prayer", style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold), color = Nuru.navyDeep)
+            }
         }
     }
 
@@ -169,6 +198,12 @@ private fun PrayerCard(e: PrayerEntry, onChanged: () -> Unit) {
                         try {
                             Net.client.api.sharePrayerToWall(e.entryId)
                             sharedToWall = true
+                            Haptics.confirm(view)
+                            // Light celebration (no confetti — the wall-compose
+                            // idiom this mirrors) once the share is confirmed.
+                            CelebrationCenter.fire(
+                                Moment("prayer-share-${e.entryId}", "Shared to Corporate Prayer", "Your cell is standing with you 🙏", confetti = false),
+                            )
                         } catch (_: Exception) {
                             // 404 = offline-created entry the server hasn't synced yet.
                         } finally { busy = false }
