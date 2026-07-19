@@ -35,6 +35,19 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
+            <!-- Read with a Friend (docs/READING_SOCIAL_PLAN.md §5 tier 2/3):
+                 the public /join/{token} landing page's inline script attempts
+                 nuru://join/{token} before falling back to the Play Store.
+                 Custom-scheme only — no autoVerify App Link yet (no
+                 assetlinks.json hosted at pathway.nuruplace.org yet; that's
+                 backend/infra work, tracked separately, honestly noted rather
+                 than silently skipped). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nuru" android:host="join" />
+            </intent-filter>
         </activity>
 
         <!-- FCM push (§D-M9) — token → POST /me/devices; local notification on receive. -->

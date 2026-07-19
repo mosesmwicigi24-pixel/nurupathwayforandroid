@@ -433,6 +433,52 @@ private fun CtaBar(
         "Start plan"
     }
 
+    // Read with a Friend (spec §6): create-or-get MY shared group for this
+    // plan, mint a fresh open-link invite, and hand the public
+    // /join/{token} URL + a rich message to the system share sheet —
+    // replaces the old no-op button (docs/READING_SOCIAL_PLAN.md §3).
+    var inviting by remember { mutableStateOf(false) }
+    var inviteError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    fun startInvite() {
+        if (inviting) return
+        inviting = true
+        scope.launch {
+            runCatching {
+                val group = org.nuruplace.member.data.net.Net.client.api.createOrGetReadingGroup(
+                    org.nuruplace.member.data.net.CreateReadingGroupBody(planId = d.planId),
+                )
+                org.nuruplace.member.data.net.Net.client.api.createReadingInvite(
+                    group.groupId,
+                    org.nuruplace.member.data.net.CreateReadingInviteBody(clientMutationId = java.util.UUID.randomUUID().toString()),
+                )
+            }.onSuccess { invite ->
+                val message = readingInviteMessage(d.title, d.dayCount, invite.token)
+                runCatching {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, message)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, null))
+                }
+            }.onFailure { e ->
+                inviteError = org.nuruplace.member.data.net.ApiException.message(e, context)
+            }
+            inviting = false
+        }
+    }
+
+    inviteError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { inviteError = null },
+            confirmButton = { TextButton(onClick = { inviteError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
+            title = { Text("Couldn't send that invite", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
+            text = { Text(msg, style = plInter(13), color = PL.ink2) },
+            containerColor = Color.White,
+        )
+    }
+
     Column(Modifier.fillMaxWidth().background(Color.White)) {
         // Top hairline (iOS: 1px PL.border across the top of the white CTA bar).
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
@@ -459,18 +505,23 @@ private fun CtaBar(
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = plInter(14, FontWeight.Bold), color = PL.navy)
             }
-            // White "Invite" button (no-op)
+            // "Invite" — Read with a Friend (was a no-op; now creates-or-gets a
+            // shared group, mints an invite, and opens the share sheet).
             Row(
                 Modifier.heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, PL.border, RoundedCornerShape(16.dp))
-                    .clickable { }
+                    .clickable(enabled = !inviting) { startInvite() }
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                if (inviting) {
+                    CircularProgressIndicator(color = PL.navy, modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                }
                 Text("Invite", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
             }
         }

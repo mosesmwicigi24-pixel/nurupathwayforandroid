@@ -249,6 +249,45 @@ interface MemberApi {
     @POST("chat/connections/{user_id}/unblock")
     suspend fun unblockConnection(@Path("user_id") userId: String): ConnectionActionRes
 
+    // --- Reading & Social R1 — "Read with a Friend" (spec §3/§6) ---
+    // Wire shapes: packages/backend/src/modules/reading-social/{groups,invites}.ts.
+    // The public https://pathway.nuruplace.org/join/{token} landing page is
+    // server-rendered (publicPage.ts) — the app never fetches it; it only
+    // mints the token and hands the URL to the system share sheet.
+
+    @POST("reading/groups")
+    suspend fun createOrGetReadingGroup(@Body body: CreateReadingGroupBody): ReadingGroupRow
+
+    @GET("reading/groups")
+    suspend fun myReadingGroups(): ReadingGroupsRes
+
+    @GET("reading/groups/{id}")
+    suspend fun readingGroup(@Path("id") groupId: String): ReadingGroupRow
+
+    @POST("reading/groups/{id}/archive")
+    suspend fun archiveReadingGroup(@Path("id") groupId: String): Unit
+
+    @POST("reading/groups/{id}/leave")
+    suspend fun leaveReadingGroup(@Path("id") groupId: String): Unit
+
+    @POST("reading/groups/{id}/invites")
+    suspend fun createReadingInvite(@Path("id") groupId: String, @Body body: CreateReadingInviteBody): ReadingInviteRow
+
+    @GET("reading/groups/{id}/invites")
+    suspend fun listReadingInvites(@Path("id") groupId: String): ReadingInvitesRes
+
+    @POST("reading/groups/{id}/invites/{invite_id}/revoke")
+    suspend fun revokeReadingInvite(@Path("id") groupId: String, @Path("invite_id") inviteId: String): Unit
+
+    @GET("reading/invites/{token}")
+    suspend fun readingInvitePreview(@Path("token") token: String): ReadingInvitePreview
+
+    @POST("reading/invites/{token}/accept")
+    suspend fun acceptReadingInvite(@Path("token") token: String): ReadingInviteAcceptResult
+
+    @POST("reading/invites/{token}/decline")
+    suspend fun declineReadingInvite(@Path("token") token: String): Unit
+
     // Staff-only (Instructor+ — Students get 403): one message delivered to every
     // active member as an individual DM from the sender. Idempotent on
     // client_mutation_id; returns how many members it reached.
