@@ -1706,3 +1706,91 @@ wiring/rendering change, no new pure-function surface to unit test). iOS
 `xcodebuild ... build` → BUILD SUCCEEDED, `... test` → 10/10 green (pinned
 simulator 8265F608-4A98-4E95-9074-7C54BEC4684A, derivedDataPath build/dd).
 Not pushed / no PRs opened (per task instruction).
+
+---
+
+## 2026-07-19 — iOS-only polish (builds 78–84) ported to Android (branch feat/ios-parity-polish, Android only)
+
+iOS shipped six polish commits directly to `nuru-member-ios` main between builds
+78 and 84 (owner feedback on the just-launched reading/social surfaces). This
+session read each iOS diff (`git show <hash>`) and ported the equivalent to
+Android, matching Android's own idioms (Compose, `cInter`/`cSerif`/`gInter`
+helpers, `NuruType`, `CHAT`/`Nuru` palettes) rather than transliterating Swift.
+
+**1. Liturgy card hierarchy** (iOS b6f124b → Android). The Home liturgy card
+used to shout two large serif lines and cite two scriptures. Rebuilt to ONE
+hierarchy: the hour's word large white serif, a short gold "selah" rule
+(34dp), the charge + companion verse in small gold italic serif (curly
+quotes), closing on a single letter-spaced gold uppercase reference — the
+composed line's own `scriptureRef` shows only when there's no companion
+verse. Applied to both the art-tableau and classic (no-art) branches; added a
+`tableauHeight()` model (232dp base + 30dp charge + 50dp verse) so the bottom
+stack never crowds the kicker, mirroring iOS's retuned height math.
+`feature/home/LiturgyCards.kt`.
+
+**2. My Prayer Room redesign** (iOS 95984ed + dde8c3a → Android). Room tabs
+became Private · Corporate · Answered (`PrayerRoomTab` gained a third case;
+the Answered tab hosts `PrayerJournalScreen` pinned via a new `forcedTab:
+PrayerTab?` param). The journal's management surface collapsed to ONE row:
+Active/Answered filter chips (hidden when force-pinned) + a gold "Add Prayer"
+pill that opens a composer dialog (title/body/answered — Android has no
+sheet-presentation system yet, so this ships as an `AlertDialog`, functionally
+equivalent to iOS's `PrayerComposerSheet`). Each card now shows the owner's
+real name (`GET /me` profile.fullName, not "You"), an initials avatar, and a
+relative timestamp — and ONLY those three carry the status color (green
+answered · orange on-the-corporate-wall · gold private); title/body stay
+neutral. All actions moved into a `⋮` `DropdownMenu` (Mark answered/Reopen ·
+Publish to Corporate · Edit · Delete), replacing the old stacked buttons.
+Answered keeps the green celebration banner; a shared-but-unanswered prayer
+shows the quiet orange "On the Corporate wall" line. `sharedToWall` is
+session-local (a `Set<String>` lifted to screen scope), matching iOS's
+`@Published var sharedToWall: Set<String>` — the server has no persisted
+"is this shared" flag on the entry; re-sharing is idempotent either way.
+`feature/community/PrayerRoomScreen.kt`, `feature/grow/PrayerJournalScreen.kt`
+(rewritten), `feature/shell/MainShell.kt` (`?tab=answered` routing).
+
+**3. Pastoral = broadcast behavior** (iOS 1a1f789 + 761298b → Android). The
+Talk-with-My-Pastor thread now shows the personal gold ribbon "Only \<pastor\>
+sees your reply" instead of the generic "Private pastoral conversation."
+sentence (that generic `PrivacyLabelBanner` now only renders for
+`ctx == "discipler"`). Message ticks adopted the broadcast rule everywhere:
+ONE WhatsApp-blue tick (`CHAT.tickBlue = 0xFF2F80ED`, new constant in
+`ChatShared.kt`) = delivered, TWO blue ticks = seen (`readCount > 0`) — was
+previously always "✓✓", gold when read / white-dim otherwise. Applies to every
+`mine` message bubble in every thread kind (DM, discipler, pastoral), not
+just pastor mail. `feature/community/ChatThreadScreen.kt`,
+`feature/community/ChatShared.kt`.
+
+**4. Tap-zone hardening — audited, not ported (Compose doesn't carry either
+bug class).** iOS build 81 fixed a `GeometryReader`-under-`fixedSize` bug
+where the reading-plan mini card's ambiguous height let the Prayer Room
+mini's tap bleed into the card below; build 83 fixed `NavigationLink`s hosted
+inside a paged `TabView` firing with a neighbor page's captured value.
+Checked Android's `MinisRow`/`MiniCard` (`HomeScreen.kt`) and the "Pray for
+one another" `HorizontalPager` (`HomeScreen.kt`): neither exists in Compose.
+`clickable`'s hit-test region is exactly the modified composable's measured/
+clipped bounds (no `GeometryReader`-style ambiguity possible from a plain
+`Column`/`Row` with intrinsic sizing), and `HorizontalPager`'s page content is
+a plain `(i, list) -> ...` closure re-evaluated per page — there is no
+identity-forwarding mechanism analogous to SwiftUI's `NavigationLink`-in-
+`TabView` quirk. No code changed for this item.
+
+**5. Global type tokens** (iOS build 80 `nChipLabel`/`nActionLabel` →
+Android). Added `NuruType.chipLabel` (`nuruSans(12, SemiBold)`) and
+`NuruType.actionLabel` (`nuruSans(13, Bold)`) to `ui/theme/NuruTheme.kt`,
+mirroring the iOS tokens exactly. Wired into the two call sites this session
+touched: `PrayerRoomScreen`'s segmented-control chips (previously inline
+`gInter(12, FontWeight.SemiBold)`) and the new Prayer Room card's chip/pill
+labels. Left Chat's own `cInter`/`cSerif` per-surface helpers alone — Android's
+established convention (per `TypeSchema.kt`'s header comment) is per-surface
+delegates for surface-local text, promoting to `NuruType` only for genuinely
+cross-cutting styles; forcing every existing `cInter(12, .semibold)` chip
+call site onto the new global token site-wide would have been scope creep
+beyond this session's ported items.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 21/21 unit tests green (no new tests added — pure
+UI/wiring change, no new pure-function surface to unit test). versionCode/
+versionName/signing untouched. Not pushed / no PR opened (per task
+instruction).

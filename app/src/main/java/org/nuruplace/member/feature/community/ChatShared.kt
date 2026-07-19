@@ -75,6 +75,10 @@ object CHAT {
     val activeBg = Color(0x1716A34A)    // #16A34A @ 9%
     val online = Color(0xFF25D366)
     val doubleCheck = Color(0xFFBCC4CE)
+    // The broadcast tick rule, everywhere (iOS build 84 parity): ONE blue tick
+    // = delivered, TWO blue ticks = seen. WhatsApp-blue on every surface — no
+    // gold, no gray states — DM, discipler, and pastoral bubbles alike.
+    val tickBlue = Color(0xFF2F80ED)
     val tintBlue = Color(0xFFE8EEF7)
     val navyMid = Color(0xFF315F8C)
 
