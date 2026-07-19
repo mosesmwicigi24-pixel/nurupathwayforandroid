@@ -44,6 +44,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -61,6 +62,21 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 
 private val LitGold = Color(0xFFE8CA6C)
+// One-hierarchy palette (iOS build 79 parity): the "selah" rule + closing
+// scripture reference read in this gold; the charge/companion-verse whisper
+// sits one shade paler so the large white line stays the only shout.
+private val LitRuleGold = Color(0xFFE0B85E)
+private val LitWhisper = Color(0xFFF2DDA0)
+
+/** Height model for the tableau card: base art height + room for the charge
+ *  line + the companion verse block, so the bottom stack never crowds the
+ *  kicker (iOS LiturgyCards.tableauHeight parity). */
+private fun tableauHeight(l: HomeLiturgy): Dp {
+    var h = 232.dp
+    if (!l.charge.isNullOrBlank()) h += 30.dp
+    if (l.verseLine?.text?.isNotBlank() == true) h += 50.dp
+    return h
+}
 
 @Composable
 fun LiturgyCard() {
@@ -83,7 +99,7 @@ fun LiturgyCard() {
         // Taller tableau: the hour + brand at the top, the prayer line resting at
         // the BOTTOM under the deep-navy block where the veil is deepest, so the
         // type reads clearly (owner ask). matchParentSize behind, clipped.
-        Box(Modifier.fillMaxWidth().height(232.dp).clip(RoundedCornerShape(20.dp))) {
+        Box(Modifier.fillMaxWidth().height(tableauHeight(l)).clip(RoundedCornerShape(20.dp))) {
             AsyncImage(
                 model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
@@ -93,50 +109,59 @@ fun LiturgyCard() {
                 Modifier.align(Alignment.TopStart).padding(18.dp),
                 partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
             )
+            // ONE hierarchy: the hour's word LARGE, a gold rule (the selah),
+            // then small golden lines closing on a SINGLE scripture — never two
+            // large lines, never two references (iOS build 79 parity).
             Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
                 Text(
                     l.line,
-                    style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 27.sp, shadow = textShadow),
+                    style = NuruType.rowTitle.copy(fontSize = 20.sp, lineHeight = 26.sp, shadow = textShadow),
                     color = Color.White,
                 )
-                l.scriptureRef?.let { ref ->
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
-                            .background(Color.Black.copy(alpha = 0.28f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
+                Spacer(Modifier.height(7.dp))
+                Box(Modifier.width(34.dp).height(1.5.dp).background(LitRuleGold.copy(alpha = 0.8f)))
+                Spacer(Modifier.height(7.dp))
                 l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         charge,
-                        style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 27.sp, shadow = textShadow),
-                        color = Nuru.onNavyDim,
+                        style = NuruType.rowTitle.copy(
+                            fontSize = 13.5.sp, lineHeight = 18.sp,
+                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
+                        ),
+                        color = LitWhisper,
                     )
+                    Spacer(Modifier.height(7.dp))
                 }
-                l.verseLine?.let { vl ->
-                    Spacer(Modifier.height(10.dp))
+                val vl = l.verseLine
+                if (vl != null && vl.text.isNotBlank()) {
                     Text(
                         "“${vl.text}”",
                         style = NuruType.rowTitle.copy(
-                            fontSize = 14.sp, lineHeight = 20.sp,
+                            fontSize = 13.sp, lineHeight = 18.sp,
                             fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
                         ),
-                        color = Color.White.copy(alpha = 0.92f),
+                        color = LitWhisper.copy(alpha = 0.85f),
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(1.dp))
                     Text(
-                        "— ${vl.reference}",
-                        style = NuruType.micro.copy(shadow = textShadow),
-                        color = LitGold, fontWeight = FontWeight.SemiBold,
+                        vl.reference.uppercase(),
+                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
+                        color = LitRuleGold,
                     )
+                } else {
+                    l.scriptureRef?.let { ref ->
+                        Text(
+                            ref.uppercase(),
+                            style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
+                            color = LitRuleGold,
+                        )
+                    }
                 }
             }
         }
     } else {
-        // Offline / older backend: the classic navy card, content-sized.
+        // Offline / older backend: the classic navy card, content-sized. Same
+        // one-hierarchy tree as the tableau branch, no shadow (no art behind it).
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
                 .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
@@ -144,43 +169,45 @@ fun LiturgyCard() {
         ) {
             LitKicker(Modifier, partEmoji, partLabel, l.isSunday, l.season, onArt = false, textShadow = textShadow)
             Spacer(Modifier.height(10.dp))
-            Text(l.line, style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp), color = Color.White)
-            l.scriptureRef?.let { ref ->
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        ref, style = NuruType.micro, color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
-                            .background(Color.White.copy(alpha = 0.12f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
-            }
+            Text(l.line, style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp), color = Color.White)
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.width(34.dp).height(1.5.dp).background(LitRuleGold.copy(alpha = 0.8f)))
+            Spacer(Modifier.height(8.dp))
             l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
-                Spacer(Modifier.height(10.dp))
                 Text(
                     charge,
-                    style = NuruType.rowTitle.copy(fontSize = 18.sp, lineHeight = 26.sp),
-                    color = Nuru.onNavyDim,
+                    style = NuruType.rowTitle.copy(
+                        fontSize = 13.5.sp, lineHeight = 18.sp,
+                        fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
+                    ),
+                    color = LitWhisper,
                 )
+                Spacer(Modifier.height(8.dp))
             }
-            l.verseLine?.let { vl ->
-                Spacer(Modifier.height(12.dp))
+            val vl = l.verseLine
+            if (vl != null && vl.text.isNotBlank()) {
                 Text(
                     "“${vl.text}”",
                     style = NuruType.rowTitle.copy(
-                        fontSize = 14.sp, lineHeight = 20.sp,
+                        fontSize = 13.sp, lineHeight = 18.sp,
                         fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                     ),
-                    color = Color.White.copy(alpha = 0.9f),
+                    color = LitWhisper.copy(alpha = 0.85f),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(1.dp))
                 Text(
-                    "— ${vl.reference}",
-                    style = NuruType.micro,
-                    color = LitGold, fontWeight = FontWeight.SemiBold,
+                    vl.reference.uppercase(),
+                    style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                    color = LitRuleGold,
                 )
+            } else {
+                l.scriptureRef?.let { ref ->
+                    Text(
+                        ref.uppercase(),
+                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                        color = LitRuleGold,
+                    )
+                }
             }
         }
     }
