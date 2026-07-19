@@ -314,10 +314,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 "prayer-room?tab={tab}",
                 arguments = listOf(navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null }),
             ) { entry ->
-                val initialTab = if (entry.arguments?.getString("tab") == "corporate") {
-                    org.nuruplace.member.feature.community.PrayerRoomTab.Corporate
-                } else {
-                    org.nuruplace.member.feature.community.PrayerRoomTab.Private
+                val initialTab = when (entry.arguments?.getString("tab")) {
+                    "corporate" -> org.nuruplace.member.feature.community.PrayerRoomTab.Corporate
+                    "answered" -> org.nuruplace.member.feature.community.PrayerRoomTab.Answered
+                    else -> org.nuruplace.member.feature.community.PrayerRoomTab.Private
                 }
                 org.nuruplace.member.feature.community.PrayerRoomScreen(
                     initialTab = initialTab,

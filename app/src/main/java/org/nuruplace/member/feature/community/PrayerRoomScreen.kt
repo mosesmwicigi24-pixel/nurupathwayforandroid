@@ -1,11 +1,12 @@
 // My Prayer Room — the single destination that replaces the separate
-// "Prayer wall" and "Prayer journal" entries. Two tabs over one screen:
-// Private Prayer (the member's own journal, PrayerJournalScreen, embedded)
-// and Corporate Prayer (the congregation's wall, PrayerWallScreen, embedded).
-// Both child screens keep their real behavior (add/edit/answer, share-to-wall,
-// compose, react, comment, voice notes) — only their own header/back-button
-// chrome is suppressed in favor of this screen's shared header + segmented
-// control. Port of iOS PrayerRoomView.
+// "Prayer wall" and "Prayer journal" entries. THREE tabs over one screen:
+// Private (the member's own journal, PrayerJournalScreen, embedded), Corporate
+// (the congregation's wall, PrayerWallScreen, embedded), and Answered (the
+// journal again, pinned to its answered filter — iOS build 80 parity). Child
+// screens keep their real behavior (add/edit/answer, share-to-wall, compose,
+// react, comment, voice notes) — only their own header/back-button chrome is
+// suppressed in favor of this screen's shared header + segmented control.
+// Port of iOS PrayerRoomView.
 package org.nuruplace.member.feature.community
 
 import androidx.compose.foundation.background
@@ -37,16 +38,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.nuruplace.member.feature.grow.PrayerJournalScreen
 import org.nuruplace.member.ui.components.GrowCreamHeader
-import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 
-enum class PrayerRoomTab { Private, Corporate }
+enum class PrayerRoomTab { Private, Corporate, Answered }
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -84,6 +83,7 @@ fun PrayerRoomScreen(
             when (tab) {
                 PrayerRoomTab.Private -> PrayerJournalScreen(embedded = true)
                 PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, onOpenPost = onOpenPost)
+                PrayerRoomTab.Answered -> PrayerJournalScreen(embedded = true, forcedTab = org.nuruplace.member.feature.grow.PrayerTab.Answered)
             }
         }
     }
@@ -97,8 +97,9 @@ private fun SegmentedControl(tab: PrayerRoomTab, onSelect: (PrayerRoomTab) -> Un
             .border(1.dp, Nuru.border, Capsule).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        SegmentButton("Private Prayer", tab == PrayerRoomTab.Private, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Private) }
-        SegmentButton("Corporate Prayer", tab == PrayerRoomTab.Corporate, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Corporate) }
+        SegmentButton("Private", tab == PrayerRoomTab.Private, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Private) }
+        SegmentButton("Corporate", tab == PrayerRoomTab.Corporate, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Corporate) }
+        SegmentButton("Answered", tab == PrayerRoomTab.Answered, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Answered) }
     }
 }
 
@@ -119,7 +120,7 @@ private fun SegmentButton(label: String, selected: Boolean, modifier: Modifier =
     ) {
         Text(
             label,
-            style = gInter(12, FontWeight.SemiBold),
+            style = NuruType.chipLabel,
             color = if (selected) Color.White else Color(0xFF59667C),
             maxLines = 1,
         )
