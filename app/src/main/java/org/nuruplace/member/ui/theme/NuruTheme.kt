@@ -184,6 +184,11 @@ object NuruType {
     val featureTitle = nuruSerif(18, FontWeight.SemiBold)
     // Greeting — iOS "Fraunces 22 semibold, kerning −0.22".
     val greeting = nuruSerif(22, FontWeight.SemiBold, tracking = -0.22f)
+    // iOS build 80 parity (nChipLabel/nActionLabel): segment/filter chips and
+    // pill CTA / menu action labels inherit from here instead of each call site
+    // declaring its own inline Inter size+weight.
+    val chipLabel = nuruSans(12, FontWeight.SemiBold)
+    val actionLabel = nuruSans(13, FontWeight.Bold)
 }
 
 private val NuruColorScheme = lightColorScheme(
