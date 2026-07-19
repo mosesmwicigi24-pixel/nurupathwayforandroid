@@ -44,8 +44,8 @@ android {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 35
-        versionCode = 44                  // bump every release so devices take it as an update
-        versionName = "2.21.0"
+        versionCode = 45                  // bump every release so devices take it as an update
+        versionName = "2.21.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -70,6 +70,10 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
             signing?.let { signingConfig = signingConfigs.getByName("release") }
             isMinifyEnabled = true
+            // Resource shrinking (safe mode — keeps resources referenced by name)
+            // strips unused resources on top of R8's code shrink → smaller app +
+            // a real Play "shrinking" score. Requires minify, which is on.
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
