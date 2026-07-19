@@ -45,7 +45,11 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 
-enum class PrayerRoomTab { Private, Corporate, Answered }
+// "Answered" used to be its own top-level tab; it now folds into Private's own
+// Active/Answered chips (PrayerJournalScreen already shows them whenever it
+// isn't pinned to a forced tab) so the room stays at a clean four across —
+// Selah and Prayer Points took its top-level slot.
+enum class PrayerRoomTab { Private, Corporate, Selah, PrayerPoints }
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -83,23 +87,27 @@ fun PrayerRoomScreen(
             when (tab) {
                 PrayerRoomTab.Private -> PrayerJournalScreen(embedded = true)
                 PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, onOpenPost = onOpenPost)
-                PrayerRoomTab.Answered -> PrayerJournalScreen(embedded = true, forcedTab = org.nuruplace.member.feature.grow.PrayerTab.Answered)
+                PrayerRoomTab.Selah -> SelahScreen()
+                PrayerRoomTab.PrayerPoints -> PrayerPointsScreen()
             }
         }
     }
 }
 
-// Capsule pills, navy gradient active — Chat's segmented-control idiom.
+// Capsule pills, navy gradient active — Chat's segmented-control idiom. Four
+// tabs no longer fit one equal-width row on a phone, so the capsule scrolls
+// horizontally; each pill sizes to its own label instead of splitting evenly.
 @Composable
 private fun SegmentedControl(tab: PrayerRoomTab, onSelect: (PrayerRoomTab) -> Unit) {
-    Row(
+    androidx.compose.foundation.lazy.LazyRow(
         Modifier.fillMaxWidth().clip(Capsule).background(Nuru.white)
             .border(1.dp, Nuru.border, Capsule).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        SegmentButton("Private", tab == PrayerRoomTab.Private, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Private) }
-        SegmentButton("Corporate", tab == PrayerRoomTab.Corporate, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Corporate) }
-        SegmentButton("Answered", tab == PrayerRoomTab.Answered, Modifier.weight(1f)) { onSelect(PrayerRoomTab.Answered) }
+        item { SegmentButton("Private", tab == PrayerRoomTab.Private) { onSelect(PrayerRoomTab.Private) } }
+        item { SegmentButton("Corporate", tab == PrayerRoomTab.Corporate) { onSelect(PrayerRoomTab.Corporate) } }
+        item { SegmentButton("Selah", tab == PrayerRoomTab.Selah) { onSelect(PrayerRoomTab.Selah) } }
+        item { SegmentButton("Prayer Points", tab == PrayerRoomTab.PrayerPoints) { onSelect(PrayerRoomTab.PrayerPoints) } }
     }
 }
 
@@ -115,7 +123,7 @@ private fun SegmentButton(label: String, selected: Boolean, modifier: Modifier =
                 },
             )
             .clickable { onSelect() }
-            .padding(vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

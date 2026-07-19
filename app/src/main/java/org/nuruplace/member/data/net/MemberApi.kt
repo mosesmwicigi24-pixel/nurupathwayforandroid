@@ -153,6 +153,26 @@ interface MemberApi {
     @DELETE("me/prayers/{id}")
     suspend fun deletePrayer(@Path("id") entryId: String): Unit
 
+    // --- Selah — My Thoughts (private, §5.4 — no leader/admin read path exists) ---
+    @GET("me/thoughts")
+    suspend fun thoughts(): Envelope<Thought>
+
+    @GET("me/thoughts/{id}")
+    suspend fun thought(@Path("id") thoughtId: String): Thought
+
+    @PUT("me/thoughts")
+    suspend fun upsertThought(@Body body: ThoughtUpsertBody): Unit
+
+    @DELETE("me/thoughts/{id}")
+    suspend fun deleteThought(@Path("id") thoughtId: String): Unit
+
+    // --- AI Prayer Points (consent-gated, §1.1 — words only, never gates/scores) ---
+    @POST("me/prayer/assist")
+    suspend fun prayerAssist(@Body body: PrayerAssistBody): PrayerAssistRes
+
+    @POST("me/prayer/points")
+    suspend fun prayerPoints(): PrayerPointsRes
+
     // --- Verse library ---
     @GET("me/verses")
     suspend fun verses(): Envelope<SavedVerse>

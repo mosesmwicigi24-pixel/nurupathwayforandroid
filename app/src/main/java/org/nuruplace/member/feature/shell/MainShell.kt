@@ -354,7 +354,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 val initialTab = when (entry.arguments?.getString("tab")) {
                     "corporate" -> org.nuruplace.member.feature.community.PrayerRoomTab.Corporate
-                    "answered" -> org.nuruplace.member.feature.community.PrayerRoomTab.Answered
+                    "selah" -> org.nuruplace.member.feature.community.PrayerRoomTab.Selah
+                    "prayer-points" -> org.nuruplace.member.feature.community.PrayerRoomTab.PrayerPoints
+                    // "answered" no longer has a top-level slot — it folds into
+                    // Private's own Active/Answered chips (PrayerRoomScreen.kt).
                     else -> org.nuruplace.member.feature.community.PrayerRoomTab.Private
                 }
                 org.nuruplace.member.feature.community.PrayerRoomScreen(

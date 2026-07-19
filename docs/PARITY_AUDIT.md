@@ -1872,3 +1872,111 @@ UI/wiring + one new screen file, no new pure-function surface distinct from
 what the existing DTO/ViewModel-less Compose pattern already covers).
 versionCode/versionName/signing untouched. Not pushed / no PR opened (per
 task instruction).
+## 2026-07-20 — Selah (My Thoughts) + AI Prayer Points: Prayer Room tabs 3 & 4 (branch feat/selah-prayer-points, this repo only, client against LIVE backend pathway#391, port of iOS same-day build)
+
+Prayer Room grew from three tabs (Private · Corporate · Answered) to four
+(Private · Corporate · Selah · Prayer Points). Answered lost its top-level
+slot but not its function — `PrayerJournalScreen`'s own Active/Answered chips
+already render whenever it isn't force-pinned via `forcedTab`, so nothing
+about Answered was removed, only relocated. The `prayer-room?tab={tab}` route
+now recognizes `selah`/`prayer-points`; `tab=answered` falls back to Private
+rather than 404ing a stale deep link. Segmented control moved from a fixed
+3-way `Row` to a horizontally-scrolling `LazyRow` (four labels no longer fit
+one equal-width strip on a phone).
+
+**Wire surface added to `MemberApi.kt`** (none of this existed before this
+session — traced `packages/backend/src/modules/thoughts/{index,service}.ts`
+and `intelligence/prayer.ts` first): `GET/PUT/DELETE me/thoughts[/{id}]`,
+`POST me/prayer/assist`, `POST me/prayer/points`; DTOs `Thought`,
+`ThoughtSpan{start,end,bold?,italic?,color?,font?}`, `ThoughtUpsertBody`,
+`PrayerAssistBody/Res`, `PrayerPointsRes` added to `GrowthDtos.kt` matching
+the Zod shapes field-for-field. Writes route through the SAME offline queue
+as the prayer journal (`Net.client.offline.runOrQueue("member_thoughts",
+"upsert"/"delete", ...)`) — confirmed `member_thoughts:upsert`/`:delete` wired
+in the backend's `sync/service.ts:304-316` before relying on it.
+
+**Selah — My Thoughts** (`SelahScreen.kt`) follows `PrayerJournalScreen`'s own
+idiom (`AsyncContent` + local composable state, no separate ViewModel class)
+rather than introducing a new pattern. One-time explainer card persisted via
+`SharedPreferences` (`nuru_selah`/`explainer_dismissed` — Android has no
+`@AppStorage`; this is its direct equivalent) with the owner's exact copy;
+empty state "Selah. Pause here — write your first thought."
+
+**The editor** (`SelahEditorScreen.kt` + `SelahRichEditor.kt`) bridges a plain
+`android.widget.EditText` into Compose via `AndroidView` — Compose's own
+`TextField`/`BasicTextField` has no live rich-text editing model (a
+`TextFieldValue.annotatedString` renders styling but user edits collapse back
+to plain text), so `EditText` + `Editable` spans is the standard Android
+idiom, matching iOS's `UITextView` bridge. Bold/Italic use `StyleSpan`
+(stacked independently over the same range rather than one combined
+`BOLD_ITALIC` span, so each button state reads/writes clean); color uses
+`ForegroundColorSpan`; font uses a hand-rolled `CustomTypefaceSpan` — minSdk
+26 predates the stock API-28 `android.text.style.TypefaceSpan(Typeface)`,
+so this is the pre-28 workaround (carries both the resolved `Typeface` AND
+its `SelahFont` key, since `ResourcesCompat.getFont` gives no identity
+guarantee for reverse-mapping a bare `Typeface` back to an enum case). Four
+font choices: Inter/Fraunces (bundled brand faces) + Serif/Cursive (free
+Android system fonts — deliberately not bundling new assets, mirroring iOS's
+Georgia/Noteworthy choice of 2 brand + 2 free system faces). **Line spacing is
+honestly scoped as a GLOBAL preference, not per-span** — same reasoning as
+iOS: the backend's `ThoughtSpan` has no spacing field, so it's
+`EditText.setLineSpacing(...)` applied to the whole field, not persisted per
+thought.
+
+**Platform-honest gap, stated plainly**: unlike `UITextView`'s "typing
+attributes" (toggle Bold with an empty cursor, keep typing bold), plain
+`EditText` has no equivalent without a custom `InputConnection`. Formatting
+here requires a real selection first — select text, then format — which is
+the standard Android rich-text idiom (Docs, Keep, Notion all work this way)
+but is a genuine interaction difference from the iOS build, not a bug to fix
+later.
+
+**Pen drawing** (`SelahInk.kt`) is a Compose `Canvas` capturing pointer input
+via `awaitEachGesture`/`awaitPointerEvent` — each `PointerInputChange.type`
+(Compose's own decode of the underlying `MotionEvent` tool type) is inspected
+so a real stylus draws a thinner 2.5dp line vs a finger's 5dp, genuine
+tool-type capture rather than a finger-only stand-in. Gated to tablet-class
+hardware (`smallestScreenWidthDp >= 600`, the standard Android "is this a
+tablet" heuristic) as the closest honest analog to iOS's iPad-only gate —
+Android styluses ship on tablets/Chromebooks, not phones, and there is no
+reliable single "has a stylus" signal on a phone-form-factor device the way
+`userInterfaceIdiom == .pad` is a clean proxy on iOS. A drawing renders twice
+from the same stroke data — once live via Compose `drawPath` for the canvas,
+once via `android.graphics.Canvas`/`Path` for the PNG export — and uploads
+through the EXISTING `me/media/image` multipart endpoint
+(`Net.client.api.uploadPostImage`, the same call `EventDetailScreen`'s image
+composer already uses) — no new upload path invented. Delivered `url`s append
+to `drawingUrls`; removable locally before Save.
+
+**Prayer Points** (`PrayerPointsScreen.kt`) against the intelligence layer's
+`PrayerAiService`: (a) an assist composer — seed points → `POST
+me/prayer/assist` → an editable draft, visually mirroring `AiDraft.kt`'s orb+
+sheet idiom (purple→gold, `AutoAwesome` icon) without reusing the component —
+the wire shape differs (`assistantChat` summarizes a thread; this takes a
+bare `seed`); (b) "Gather my prayer points" → `POST me/prayer/points` → an
+editable, removable, copy-all numbered list. Both consent-gate on
+`ai_opt_out`; there is no dedicated "Sunday Letter consent prompt" component
+in this codebase to reuse (checked — the letter just doesn't compose
+server-side when opted out), so this ships its own gate card using
+`ProfileScreen.kt`'s `AiConsentCard` copy verbatim, with a one-tap "Turn on
+AI personalization" CTA calling the same `setAiConsent` the Profile toggle
+uses.
+
+Files: `data/net/GrowthDtos.kt` (+`Thought`/`ThoughtSpan`/`ThoughtUpsertBody`/
+`PrayerAssistBody`/`PrayerAssistRes`/`PrayerPointsRes`), `data/net/
+MemberApi.kt` (+6 endpoints), `feature/community/SelahRichEditor.kt` (new),
+`feature/community/SelahInk.kt` (new), `feature/community/
+SelahEditorScreen.kt` (new), `feature/community/SelahScreen.kt` (new),
+`feature/community/PrayerPointsScreen.kt` (new), `feature/community/
+PrayerRoomScreen.kt` (tabs), `feature/shell/MainShell.kt` (route mapping).
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 21/21 unit tests green (no regressions; no new pure-
+function surface to unit test — this session is UI/wiring + a new rich-text/
+ink engine, both exercised by compilation and manual reasoning, not new unit
+tests). Needed two one-time worktree fixups unrelated to the code itself:
+`local.properties` (sdk.dir) and `app/google-services.json` are both
+git-ignored and don't exist in a fresh worktree checkout — copied from the
+main checkout before the first Gradle invocation. Not pushed / no PR opened
+(per task instruction).

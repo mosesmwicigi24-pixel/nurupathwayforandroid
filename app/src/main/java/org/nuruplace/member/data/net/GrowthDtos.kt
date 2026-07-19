@@ -210,6 +210,51 @@ data class VerseUpsertBody(
 @Serializable
 data class ShareToWallRes(val postId: String = "")
 
+// --- Selah — My Thoughts (private rich-text + pen journal, §5.4) ---
+// Wire shape mirrors packages/backend/src/modules/thoughts/service.ts exactly:
+// `body` is plain text, `bodySpans` is the portable formatting overlay (start/
+// end char offsets + which of bold/italic/color/font apply over that range).
+@Serializable
+data class ThoughtSpan(
+    val start: Int,
+    val end: Int,
+    val bold: Boolean? = null,
+    val italic: Boolean? = null,
+    val color: String? = null,
+    val font: String? = null,
+)
+
+@Serializable
+data class Thought(
+    val thoughtId: String,
+    val title: String? = null,
+    val body: String = "",
+    val bodySpans: List<ThoughtSpan>? = null,
+    val drawingUrls: List<String> = emptyList(),
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+@Serializable
+data class ThoughtUpsertBody(
+    val thoughtId: String,
+    val title: String? = null,
+    val body: String,
+    val bodySpans: List<ThoughtSpan>? = null,
+    val drawingUrls: List<String> = emptyList(),
+    val clientMutationId: String,
+)
+
+// --- AI Prayer Points (Prayer Room tab 4) ---
+@Serializable
+data class PrayerAssistBody(val seed: String? = null)
+
+@Serializable
+data class PrayerAssistRes(val suggestion: String = "")
+
+@Serializable
+data class PrayerPointsRes(val points: List<String> = emptyList())
+
 // --- Talk it Over (the shared plan-day conversation) ---
 @Serializable
 data class TalkPost(
