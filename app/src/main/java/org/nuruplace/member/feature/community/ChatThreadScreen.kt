@@ -423,14 +423,11 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 onArchive = { archived = !archived; AppPrefs.pastoralArchived = archived; if (archived) onBack() },
                 onShowPrivacyInfo = { showPrivacyInfo = true },
             )
-            if (ctx == "discipler" || ctx == "pastoral") {
-                PrivacyLabelBanner(
-                    if (ctx == "discipler") {
-                        "Private between you and your assigned discipler."
-                    } else {
-                        "Private pastoral conversation."
-                    },
-                )
+            // Pastoral speaks with the broadcast's voice (iOS build 82 parity):
+            // the personal gold ribbon below replaces this generic sentence —
+            // only discipler threads keep the plain privacy banner here.
+            if (ctx == "discipler") {
+                PrivacyLabelBanner("Private between you and your assigned discipler.")
             }
             if (thread.kind == "space" && !thread.joined) {
                 Row(Modifier.fillMaxWidth().background(CHAT.canvas).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
@@ -459,8 +456,10 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             }
 
             // The privacy promise, right where the member types: a reply to the
-            // pastor's broadcast goes to the pastor alone.
-            if (isPastorMail) {
+            // pastor's broadcast — or any Talk with My Pastor thread — goes to
+            // the pastor alone (iOS build 82: pastoral wears the broadcast's
+            // dressing everywhere, not just on broadcast-originated mail).
+            if (isPastorMail || ctx == "pastoral") {
                 Row(
                     Modifier.fillMaxWidth().background(CHAT.goldTint).padding(horizontal = 16.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1150,7 +1149,11 @@ private fun MessageRow(
                     Text(chatMsgTime(m.createdAt), style = cInter(10), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
                     if (m.mine) {
                         Spacer(Modifier.width(4.dp))
-                        Text("✓✓", style = cInter(9, FontWeight.SemiBold, -1f), color = if ((m.readCount ?: 0) > 0) CHAT.gold else Color.White.copy(alpha = 0.55f))
+                        // The broadcast rule, everywhere: ONE blue tick = delivered
+                        // (the copy is in their thread), TWO blue ticks = seen
+                        // (their last_read_at covers it). Always WhatsApp-blue.
+                        val seen = (m.readCount ?: 0) > 0
+                        Text(if (seen) "✓✓" else "✓", style = cInter(9, FontWeight.SemiBold, -1f), color = CHAT.tickBlue)
                     }
                 }
             }
