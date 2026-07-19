@@ -35,10 +35,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,7 +76,11 @@ import java.util.Calendar
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun ReadingPlansScreen(onOpenPlan: (String) -> Unit, onOpenNotifications: () -> Unit = {}) {
+fun ReadingPlansScreen(
+    onOpenPlan: (String) -> Unit,
+    onOpenNotifications: () -> Unit = {},
+    onOpenReadWithFriend: () -> Unit = {},
+) {
     var plans by remember { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
     var streak by remember { mutableStateOf(0) }
     var todayWordDone by remember { mutableStateOf(false) }
@@ -160,6 +166,7 @@ fun ReadingPlansScreen(onOpenPlan: (String) -> Unit, onOpenNotifications: () -> 
                     FilteredResults(category = category, plans = filtered, onOpenPlan = onOpenPlan)
                 } else {
                     CollectionsSections(collections = collections, onOpenPlan = onOpenPlan)
+                    InvitationCard(onClick = onOpenReadWithFriend)
                 }
             }
         }
@@ -791,5 +798,40 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
                 )
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invitation — the Read with a Friend hub (spec §3). Port of iOS
+// ReadingPlansView.swift `invitationCard`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun InvitationCard(onClick: () -> Unit) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(PL.gold.copy(alpha = 0.08f), PL.gold.copy(alpha = 0.02f))))
+            .border(1.dp, PL.gold.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+            .clickable { org.nuruplace.member.ui.components.Haptics.tap(view); onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(PL.gold.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Groups, null, tint = PL.gold, modifier = Modifier.size(19.dp))
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text("Read with a friend", style = plInter(13, FontWeight.Bold), color = PL.navy)
+            Text(
+                "Invite your cell to a plan and keep each other going.",
+                style = plInter(11), color = PL.ink2,
+            )
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.ink3, modifier = Modifier.size(16.dp))
     }
 }

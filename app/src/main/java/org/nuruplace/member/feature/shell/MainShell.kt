@@ -123,8 +123,12 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     }
 
     // Launcher-shortcut / notification destination (long-press icon → Radio,
-    // Pathway, Prayer Wall, Give). Consumed once per intent.
-    LaunchedEffect(Unit) {
+    // Pathway, Prayer Wall, Give; nuru://join/{token} deep links). Keyed off
+    // PendingDest.route (Compose state) rather than Unit, so a WARM dispatch —
+    // the activity already alive, onNewIntent firing without a fresh
+    // setContent — re-triggers this exactly like a cold-start read would.
+    // Consumed once per value so recompositions don't re-navigate.
+    LaunchedEffect(org.nuruplace.member.PendingDest.route) {
         org.nuruplace.member.PendingDest.consume()?.let { dest ->
             nav.navigate(dest) { launchSingleTop = true }
         }
@@ -211,6 +215,40 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 ReadingPlansScreen(
                     onOpenPlan = { nav.navigate("plan/$it") },
                     onOpenNotifications = { nav.navigate("notifications") },
+                    onOpenReadWithFriend = { nav.navigate("read-with-friend") },
+                )
+            }
+            // Read with a Friend (spec §3/§6) — my active shared plans, group
+            // detail (roster + progress), and the invite-preview screen a
+            // nuru://join/{token} deep link or notification tap lands on.
+            composable("read-with-friend") {
+                org.nuruplace.member.feature.grow.ReadWithFriendHubScreen(
+                    myUserId = me?.profile?.userId ?: "",
+                    onBack = { nav.popBackStack() },
+                    onOpenGroup = { nav.navigate("read-with-friend/$it") },
+                )
+            }
+            composable(
+                "read-with-friend/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.grow.ReadingGroupDetailScreen(
+                    groupId = entry.arguments?.getString("groupId") ?: "",
+                    myUserId = me?.profile?.userId ?: "",
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(
+                "reading/join/{token}",
+                arguments = listOf(navArgument("token") { type = NavType.StringType }),
+            ) { entry ->
+                val token = entry.arguments?.getString("token") ?: ""
+                org.nuruplace.member.feature.grow.ReadingInvitePreviewScreen(
+                    token = token,
+                    onClose = { if (!nav.popBackStack()) nav.navigate("plans") { popUpTo("home") } },
+                    onOpenGroup = { groupId ->
+                        nav.navigate("read-with-friend/$groupId") { popUpTo("plans") { inclusive = false } }
+                    },
                 )
             }
             composable(

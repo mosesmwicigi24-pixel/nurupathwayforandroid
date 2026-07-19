@@ -81,11 +81,30 @@ class NuruMessagingService : FirebaseMessagingService() {
         const val CHANNEL_ID = "nuru_default"
 
         /** Push data → in-app nav route (mirrors NotificationsScreen.routeFor).
-         *  Null → open Home (nothing to deep-link to). */
+         *  Null → open Home (nothing to deep-link to).
+         *
+         *  NOTE on key casing: the backend dispatcher (workers/dispatch.ts)
+         *  copies the notification's `payload` JSONB into the FCM `data` map
+         *  VERBATIM — no snake_case→camelCase conversion happens for push
+         *  (unlike the REST DTOs, which go through the Json SnakeCase naming
+         *  strategy). Every `.schedule({ payload: {...} })` call site in the
+         *  backend writes snake_case keys (e.g. reading-social's groups.ts:
+         *  `{ group_id, invite_token, inviter_id, inviter_name }`), so THIS
+         *  map's keys are snake_case on the wire — `invite_token`/`group_id`,
+         *  not `inviteToken`/`groupId`. Read with a Friend's lookup below is
+         *  keyed correctly; the pre-existing moduleId/announcementId/
+         *  levelNumber lookups above appear to have the SAME bug (the backend
+         *  payloads for those templates are also snake_case per
+         *  assessment/moduleReflection.ts's `{ module_id, feedback }`) — left
+         *  untouched here (out of scope for this feature; flagged separately). */
         fun destFor(data: Map<String, String>): String? {
             data["moduleId"]?.takeIf { it.isNotBlank() }?.let { return "module/$it" }
             data["announcementId"]?.takeIf { it.isNotBlank() }?.let { return "announcement/$it" }
             data["levelNumber"]?.takeIf { it.isNotBlank() }?.let { return "level/$it" }
+            // Read with a Friend (reading-social R1) — a targeted invite ping
+            // carries invite_token, so the tap opens the SAME invite-preview
+            // screen a nuru://join/{token} deep link opens.
+            data["invite_token"]?.takeIf { it.isNotBlank() }?.let { return "reading/join/$it" }
             val t = (data["template"] ?: "").lowercase()
             return when {
                 "prayer" in t -> "prayer-room?tab=corporate"
@@ -95,6 +114,9 @@ class NuruMessagingService : FirebaseMessagingService() {
                 "event" in t -> "events"
                 "badge" in t || "certificate" in t || "cert" in t -> "profile"
                 "reflection" in t || "level" in t -> "pathway"
+                // Other plan_group_* templates (accepted/joined/day-completed)
+                // carry no redeemable token — land on the hub instead.
+                "plan_group" in t -> "read-with-friend"
                 else -> null
             }
         }

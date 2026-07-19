@@ -1794,3 +1794,81 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 UI/wiring change, no new pure-function surface to unit test). versionCode/
 versionName/signing untouched. Not pushed / no PR opened (per task
 instruction).
+
+## 2026-07-20 — Read with a Friend R3 client (branch feat/read-with-friend-ui, this repo only)
+Reading & Social R1 backend (pathway#392, `/v1/reading/*` — shared plan
+groups, invites, public `/join/{token}` OG page) now has Android client UI.
+Read `pathway/docs/READING_SOCIAL_REDESIGN.md` §3/§6 + `docs/READING_SOCIAL_PLAN.md`
+and the backend module (`packages/backend/src/modules/reading-social/{groups,
+invites,tokens,publicPage,index}.ts`, read-only) for the exact wire shapes;
+built in a dedicated worktree (`.worktrees/rwf`) per the two-agent isolation
+instruction — never pushed, commit is local only.
+
+**New:** `data/net/ReadingSocialDtos.kt` (kotlinx.serialization DTOs — the
+global `JsonNamingStrategy.SnakeCase` handles the wire conversion, so these
+are plain `data class`es with defaults, no hand-rolled tolerant decoders like
+iOS needs); `MemberApi.kt` grew the 11 reading-social endpoints; new screen
+file `feature/grow/ReadWithFriendScreen.kt` — the hub (`ReadWithFriendHubScreen`,
+my active shared groups with per-friend "Doris · Day 3 of 7" rows, reusing
+`ChatCircleAvatar` from the community package rather than inventing a second
+avatar component), group detail (`ReadingGroupDetailScreen` — roster +
+progress bars, invite-a-friend via a `ModalBottomSheet` `FriendPickerSheet`
+that reuses `MemberApi.listConnections()`, share-link, leave/archive,
+pending-invites with revoke, refetches on every recomposition of `groupId`),
+and the invite-preview/accept/decline screen (`ReadingInvitePreviewScreen`).
+
+**Wired:** unlike iOS, Android's Plans screen had NO "Read with a friend"
+card at all (only the CtaBar's no-op Invite button existed) — added a new
+`InvitationCard` composable to `ReadingPlansScreen.kt`, ported from the iOS
+`invitationCard`, opening the hub. `PlanDetailScreen.kt`'s CtaBar "Invite"
+button — previously `.clickable { }`, a literal no-op, the largest single
+client gap the R0 audit found (`docs/READING_SOCIAL_PLAN.md` §3) — now
+creates-or-gets a real group for that plan, mints an open invite, and hands
+the public `https://pathway.nuruplace.org/join/{token}` link + a rich message
+to `Intent.ACTION_SEND` (the same share pattern `DevotionalScreen.kt` already
+uses).
+
+**Incoming:** added the FIRST deep-link infra this app has ever had — an
+`android:scheme="nuru" android:host="join"` `VIEW`/`BROWSABLE` intent-filter
+on `MainActivity` (`AndroidManifest.xml` previously had only the launcher
+filter, confirmed by the R0 audit: "no App Links intent-filter... no
+assetlinks.json"). `MainActivity.readingJoinDest()` parses `intent.data` and
+feeds `"reading/join/{token}"` through the existing `PendingDest` mechanism.
+A `plan_group_invite_received` FCM push does the same via `invite_token` in
+the data payload (`NuruMessagingService.destFor`); other `plan_group_*`
+templates (no redeemable token) land on the hub.
+
+**Fixed in passing (needed for THIS feature's warm-tap path, not a drive-by):**
+`PendingDest` was a plain `var`, not Compose state — `MainShell`'s consuming
+`LaunchedEffect(Unit)` only ever ran once per composition, so a deep link or
+notification tapped while the app was ALREADY OPEN (`singleTop` → `onNewIntent`
+fires, `setContent` does not re-run) silently failed to navigate for every
+existing destination, not just this one. Converted to `by mutableStateOf<String?>`
+and re-keyed the effect off `PendingDest.route` — a write from `onNewIntent`
+now re-triggers it exactly like a cold-start read would.
+
+**Found but out of scope, spun off separately:** `NuruMessagingService.destFor`'s
+pre-existing `moduleId`/`announcementId`/`levelNumber` FCM data-key lookups
+appear to be dead code — the backend dispatcher (`workers/dispatch.ts`) copies
+the payload JSONB into the FCM `data` map VERBATIM (confirmed: no camelCase
+conversion for push, unlike REST), and every backend `.schedule()` call site
+writes snake_case (`module_id`, `announcement_id`, `level_number`). Read with
+a Friend's own `invite_token` lookup is correctly snake_case; the three
+pre-existing ones are not. Not touched here — flagged as a background task.
+
+**Deep-link limit (honest, not silently deferred):** only the `nuru://`
+custom scheme is wired, per `docs/READING_SOCIAL_PLAN.md` §5 tier 2/3 — no
+`autoVerify` App Link for `https://pathway.nuruplace.org/join/{token}`. That
+needs `/.well-known/assetlinks.json` hosted at the domain root (backend/infra
+work, out of this client-only session). Until it ships, the public
+`/join/{token}` page's own inline-script fallback (already live server-side)
+still opens the app via the custom scheme when installed, or falls through to
+the Play Store after ~1200ms when not.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 21/21 unit tests green (no new tests added — pure
+UI/wiring + one new screen file, no new pure-function surface distinct from
+what the existing DTO/ViewModel-less Compose pattern already covers).
+versionCode/versionName/signing untouched. Not pushed / no PR opened (per
+task instruction).
