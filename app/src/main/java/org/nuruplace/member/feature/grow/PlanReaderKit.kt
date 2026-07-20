@@ -51,8 +51,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.nuruplace.member.data.net.PlanDayUnlockAck
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.scaledLineHeight
 
 // ── Type helpers (exact-size brand faces) ──
 internal fun rInter(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
@@ -62,7 +64,7 @@ internal fun rSerif(size: Int, weight: FontWeight = FontWeight.Normal, lineHeigh
     TextStyle(
         fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp,
         fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
-        lineHeight = if (lineHeight > 0) lineHeight.sp else (size * 1.35).sp,
+        lineHeight = scaledLineHeight(if (lineHeight > 0) lineHeight else size * 1.35),
     )
 
 // ── Reader palette — warm day, sepia night (iOS ReaderPalette parity) ──
@@ -160,7 +162,7 @@ internal fun RPassage(text: String, pal: ReaderPalette) {
                 }
                 withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = pal.ink)) { append(line.text) }
             }
-            Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = 25.sp))
+            Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = scaledLineHeight(25)))
         }
     }
 }
@@ -227,7 +229,7 @@ internal fun RKeynotes(content: String, pal: ReaderPalette) {
         points.forEach { pt ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.padding(top = 7.dp).size(5.dp).clip(CircleShape).background(pal.gold))
-                Text(pt, style = rInter(14, FontWeight.Medium).copy(lineHeight = 20.sp), color = pal.ink)
+                Text(pt, style = rInter(14, FontWeight.Medium).copy(lineHeight = scaledLineHeight(20)), color = pal.ink)
             }
         }
     }

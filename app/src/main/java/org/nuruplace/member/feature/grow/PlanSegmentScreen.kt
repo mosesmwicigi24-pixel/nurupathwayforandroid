@@ -67,10 +67,12 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.ui.components.GrowCreamHeader
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.theme.scaledLineHeight
 
 // ── Type helpers — build exact-size styles from the two brand faces, mirroring
 //    the iOS `.fraunces(N, weight)` / `.inter(N, weight)` calls. ──
@@ -82,7 +84,7 @@ private fun serif(size: Int, weight: FontWeight = FontWeight.Normal, lineHeight:
         fontFamily = Fraunces,
         fontWeight = weight,
         fontSize = size.sp,
-        lineHeight = if (lineHeight > 0) lineHeight.sp else (size * 1.35).sp,
+        lineHeight = scaledLineHeight(if (lineHeight > 0) lineHeight else size * 1.35),
     )
 
 /** Short chip label per segment kind — WATCH/READ header equivalents (title-case). */
@@ -339,11 +341,10 @@ private fun SegmentBody(segment: PlanSegment, onPlay: (String) -> Unit) {
         }
 
         "scripture" -> {
-            // Scripture segments ARE the featured verse.
-            PullQuoteCard(
-                text = content ?: reference ?: segment.title,
-                caption = reference ?: "Scripture",
-                quoted = content != null,
+            // Scripture segments ARE the featured verse — the shared cream card.
+            VerseQuoteCard(
+                verse = content ?: reference ?: segment.title,
+                reference = reference ?: "Scripture",
             )
         }
 

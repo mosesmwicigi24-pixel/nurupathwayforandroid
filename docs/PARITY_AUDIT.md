@@ -1980,3 +1980,120 @@ tests). Needed two one-time worktree fixups unrelated to the code itself:
 git-ignored and don't exist in a fresh worktree checkout — copied from the
 main checkout before the first Gradle invocation. Not pushed / no PR opened
 (per task instruction).
+
+## 2026-07-20 — Global reading typography: line-spacing pref + VerseQuoteCard + Selah per-span spacing (branch feat/reading-typography-global, this repo only, port of the same-day iOS session)
+
+Four pieces, all reusing existing tokens (Fraunces, `Nuru` palette) — no
+second parchment color, no second quote glyph.
+
+**1. Global line-spacing preference**, exactly parallel to the existing
+text-size control. `data/AppPrefs.kt` gained `lineSpacing: Float`
+(`mutableFloatStateOf`, default 1.0, persisted in the same `nuru_member_prefs`
+SharedPreferences file as `textScale`). `ui/theme/TypeSchema.kt`'s
+`nuruSans`/`nuruSerif` factories now multiply every `lineHeight` by
+`AppPrefs.lineSpacing` — the ONE hook every derived style (`NuruType.*`,
+`gInter`/`gSerif`, `pInter`/`pSerif`, `evInter`/`evSerif`, `plInter`/`plSerif`,
+`rInter`/`rSerif`, …) already funnels through. Two follow-on fixes were
+needed for this to actually recompose live, matching how `textScale` does it
+via `LocalDensity`: `NuruType`'s style properties in `ui/theme/NuruTheme.kt`
+were `val`s eagerly computed once at object-init — converted to `get() =`
+computed properties so each access re-reads the live pref; and
+`MaterialTheme.typography` (a plain `Typography` value, not something
+descendants re-read the way `LocalDensity` is) is now built INSIDE the
+`NuruTheme()` composable via `remember(AppPrefs.lineSpacing) { Typography(…) }`
+instead of a top-level `val`. `feature/profile/SettingsScreen.kt`'s
+`DisplayCard` gained a "Line spacing" row directly under "Text size", same
+Compact/Default/Relaxed (0.85/1.0/1.35) chip idiom.
+
+**2. Verified + fixed the named reading surfaces.** All the shared
+`*Inter`/`*Serif` per-feature delegates already route through
+`nuruSans`/`nuruSerif`, so they picked up the pref for free. What didn't:
+local factories and inline `.copy(lineHeight = N.sp)` overrides that hardcode
+a literal instead of taking the schema default. Added
+`ui/theme/TypeSchema.kt#scaledLineHeight(sp)` (`(sp * AppPrefs.lineSpacing).sp`)
+and routed every hardcoded literal on the named surfaces through it:
+`feature/pathway/ModuleScreen.kt` (the `ml`/`mlSerif` lesson-markdown
+renderer — paragraphs, bullets, numbered lists, table cells, the folded
+reflection), `feature/grow/PlanSegmentScreen.kt` (`serif()` factory),
+`feature/grow/PlanReaderKit.kt` (`rSerif()` factory + `RPassage`/`RKeynotes`),
+`feature/grow/PlanPartReaderScreen.kt` ("GO DEEPER" reading block),
+`feature/grow/PlanDayScreen.kt` (`VerseBlock` — currently dead code, no
+caller, fixed anyway for when it's wired up), `feature/grow/
+DevotionalScreen.kt`, `feature/grow/MemoryVerseScreen.kt`. Left untouched
+(out of the named scope): Chat/Home/Prayer/Events screens' own hardcoded
+lineHeights.
+
+**3. `VerseQuoteCard`** — new shared composable, `ui/components/
+VerseQuoteCard.kt`: warm parchment (`#FBF3DF`, distinct from the older
+`Nuru.verseBg` #FFF8E6 gold-tint used by `PullQuoteCard`/`RPullQuote`), a left
+gold accent bar, a large hanging gold "“" glyph, the verse in Fraunces
+over `Nuru.navy`, an uppercase/`Nuru.ink600`/1.4sp-tracked reference line.
+Built entirely from `nuruSans`/`nuruSerif`, so it inherits both the text-size
+and line-spacing prefs with no local override. Wired in:
+`feature/pathway/ModuleScreen.kt` — `MarkdownView`'s blockquote branch now
+runs the quote text through a new `splitScriptureQuote()` (a regex,
+`ScriptureRefTail`, matching a trailing "— Book Chapter:Verse" attribution,
+same shape as this file's existing `WhisperLines`); a match renders
+`VerseQuoteCard`, no match falls back to the plain gold-bar blockquote
+unchanged. `feature/pathway/LevelDetailScreen.kt` — an authored encouragement
+with `kind == "verse"` and both `body`+`scriptureRef` now renders
+`VerseQuoteCard` instead of two separate Text rows. `feature/grow/
+PlanSegmentScreen.kt` — a `"scripture"`-kind segment (`SegmentBody`).
+`feature/grow/PlanPartReaderScreen.kt` — the Word part's `"scripture"`-kind
+segment (`PartContent`). Also (not in the original explicit list, but the
+same duplicated cream/gold/quote-icon shape, so folded in for consistency):
+`feature/grow/DevotionalScreen.kt`'s "today's verse" card.
+`PullQuoteCard`/`RPullQuote` are kept (still used for reference-only,
+non-quoted callouts in the "talk" segment case) but `RPullQuote` no longer has
+a scripture call site — left in place as a shared primitive rather than
+deleted, since removing it wasn't requested.
+
+**4. Selah editor per-span line spacing** — the backend
+(`packages/backend/src/modules/thoughts/service.ts`) shipped
+`ThoughtSpan.spacing` (`z.number().min(0.8).max(2.5).optional()`) this same
+day; `data/net/GrowthDtos.kt#ThoughtSpan` gained the matching
+`spacing: Float? = null`. `feature/community/SelahRichEditor.kt`: added
+`LineSpacingSpan`, a hand-written `android.text.style.LineHeightSpan`
+implementation (no framework concrete class below API 29) that scales a
+line's `Paint.FontMetricsInt` ascent/descent/top/bottom by a multiplier —
+same "write our own span" idiom this file already used for `CustomTypefaceSpan`
+(custom fonts, minSdk 26 predates the stock API-28 TypefaceSpan).
+`SelahRichText.build()` now applies `LineSpacingSpan` from `span.spacing`;
+`SelahRichText.extract()` now scans for `LineSpacingSpan` alongside
+bold/italic/color/font, includes it in the boundary set and the "differs"/
+run-merge checks, and emits `ThoughtSpan.spacing`. `RichEditorController
+.applySpacing(multiplier: Float)` replaced the old whole-`EditText
+.setLineSpacing()` call with a per-selection `LineSpacingSpan` (same idiom as
+`applyColor`/`applyFont`) — the round trip is closed both ways.
+`SelahSpacing` (the toolbar's 3 presets) changed from absolute
+`extraPx` values to `0.8..2.5`-range multipliers (Cozy 1.0 / Comfortable 1.4 /
+Relaxed 1.8) and gained `nearest(multiplier)` to map a stored per-span value
+back to the closest preset. `feature/community/SelahEditorScreen.kt` dropped
+its `setLineSpacing(...)` call on the hosted `EditText` and now calls
+`controller.applySpacing(s.multiplier)` from the toolbar dropdown.
+
+Honest limits: `VerseQuoteCard`'s hanging-quote glyph is positioned with
+fixed dp offsets, not measured against the actual font metrics — reasonable
+by eye but not pixel-verified against the iOS build (which had not yet
+landed its own `VerseQuoteCard` in `nuru-member-ios` as of this session,
+so there was no sibling implementation to diff against — this is an
+independent build from the same text spec, not a byte-for-byte port). The
+card has no reader-night-mode variant, so a scripture callout in
+`PlanPartReaderScreen`'s dark reader palette still renders on light
+parchment (a deliberate "Scripture stays set apart" choice, not an oversight,
+but worth a second look). `LineSpacingSpan` is a single-multiplier `chooseHeight`
+scale, not validated against Android's behavior when two different
+`LineHeightSpan`s overlap the same wrapped line (an edge case a member would
+have to construct deliberately — select a partial line twice with different
+presets). No unit tests were added for the Selah round-trip or the markdown
+scripture-detection regex — this codebase has no Robolectric/android-API
+test harness for `android.text.*`-touching code (`SelahRichText.build/extract`
+were untested before this change too), and `parseMarkdown`/`splitScriptureQuote`
+are plain string logic that could be unit-tested but weren't, to keep this
+session inside its four stated deliverables.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, all unit tests green (no regressions; no new pure-function
+unit tests added — see "Honest limits" above). Not pushed / no PR opened (per
+task instruction).
