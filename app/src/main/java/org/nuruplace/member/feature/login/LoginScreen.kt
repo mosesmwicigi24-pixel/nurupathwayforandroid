@@ -152,7 +152,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                     mfaToken != null -> "Enter the 6-digit code from your authenticator app, or a recovery code."
                     mode == Mode.REGISTER -> "Begin your discipleship journey on Pathway."
                     mode == Mode.RESET -> "We sent a code to ${email.trim()}. Enter it below with your new password."
-                    else -> "Enter your account email and we'll send you a reset link."
+                    else -> "Enter your account email and we'll email you a reset code."
                 },
                 onBack = {
                     mode = Mode.SIGNIN; mfaToken = null; error = null; info = null
@@ -230,7 +230,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                     mode == Mode.SIGNIN -> if (busy) "Signing in…" else "Log in"
                     mode == Mode.REGISTER -> if (busy) "Creating…" else "Create account"
                     mode == Mode.RESET -> if (busy) "Saving…" else "Change password"
-                    else -> if (busy) "Sending…" else "Send reset link"
+                    else -> if (busy) "Sending…" else "Send reset code"
                 },
                 loading = busy,
                 enabled = true, // iOS keeps the gold button bright; validate on tap
