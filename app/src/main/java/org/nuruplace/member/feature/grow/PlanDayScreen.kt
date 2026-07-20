@@ -343,7 +343,7 @@ private fun VerseBlock(reference: String, content: String?) {
             Text(
                 content,
                 style = plSerif(17, Normal, -0.17f, italic = true)
-                    .copy(lineHeight = 25.sp),
+                    .copy(lineHeight = org.nuruplace.member.ui.theme.scaledLineHeight(25)),
                 color = PL.navy,
                 modifier = Modifier.padding(top = 8.dp),
             )

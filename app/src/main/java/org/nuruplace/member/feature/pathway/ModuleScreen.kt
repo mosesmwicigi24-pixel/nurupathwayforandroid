@@ -88,10 +88,12 @@ import org.nuruplace.member.data.net.CompleteBody
 import org.nuruplace.member.data.net.ModuleDetail
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
 
 // Screen-local palette — iOS `enum ML` (ModuleView.swift), distinct from global Nuru.
@@ -549,14 +551,14 @@ private fun MarkdownView(md: String) {
                 is Md.Heading -> Text(b.text, style = mlSerif(when (b.level) { 1 -> 22; 2 -> 19; 3 -> 17; else -> 16 }, FontWeight.SemiBold, -0.4f), color = ML.navy)
                 is Md.Para -> {
                     val lead = !firstParaSeen; firstParaSeen = true
-                    Text(inline(b.text), style = if (lead) ml(16, FontWeight.Medium) else ml(15), color = if (lead) ML.lead else ML.bodyInk, lineHeight = if (lead) 23.sp else 21.sp)
+                    Text(inline(b.text), style = if (lead) ml(16, FontWeight.Medium) else ml(15), color = if (lead) ML.lead else ML.bodyInk, lineHeight = scaledLineHeight(if (lead) 23 else 21))
                 }
                 is Md.Bullet -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     b.items.forEach { item ->
                         Row {
                             Box(Modifier.padding(top = 7.dp).size(5.dp).clip(RoundedCornerShape(999.dp)).background(ML.navy))
                             Spacer(Modifier.width(10.dp))
-                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = 21.sp)
+                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = scaledLineHeight(21))
                         }
                     }
                 }
@@ -565,7 +567,7 @@ private fun MarkdownView(md: String) {
                         Row {
                             Text("${i + 1}.", style = ml(14, FontWeight.Bold), color = ML.gold, modifier = Modifier.width(22.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = 21.sp)
+                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = scaledLineHeight(21))
                         }
                     }
                 }
@@ -585,7 +587,7 @@ private fun MarkdownView(md: String) {
                                 if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(ML.border))
                                 Text(
                                     inline(h), style = ml(13, FontWeight.Bold), color = ML.navy,
-                                    lineHeight = 17.sp,
+                                    lineHeight = scaledLineHeight(17),
                                     modifier = Modifier.weight(1f).widthIn(min = minCol)
                                         .padding(horizontal = 10.dp, vertical = 12.dp),
                                 )
@@ -598,7 +600,7 @@ private fun MarkdownView(md: String) {
                                     if (c > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(ML.border))
                                     Text(
                                         inline(row.getOrNull(c) ?: ""), style = ml(13), color = ML.bodyInk,
-                                        lineHeight = 18.sp,
+                                        lineHeight = scaledLineHeight(18),
                                         modifier = Modifier.weight(1f).widthIn(min = minCol)
                                             .padding(horizontal = 10.dp, vertical = 12.dp),
                                     )
@@ -607,9 +609,21 @@ private fun MarkdownView(md: String) {
                         }
                     }
                 }
-                is Md.Quote -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
-                    Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
-                    Text("“${b.text}”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
+                is Md.Quote -> {
+                    // A blockquote whose authored text carries a trailing
+                    // "— Book Chapter:Verse" attribution IS Scripture — render
+                    // it as the shared VerseQuoteCard. Any other blockquote
+                    // (a pull-quote from a mentor, an aside) has no such tail
+                    // and stays the plain gold-bar callout.
+                    val scripture = remember(b.text) { splitScriptureQuote(b.text) }
+                    if (scripture != null) {
+                        VerseQuoteCard(verse = scripture.first, reference = scripture.second)
+                    } else {
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
+                            Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
+                            Text("“${b.text}”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
+                        }
+                    }
                 }
                 Md.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
             }
@@ -628,6 +642,27 @@ private sealed interface Md {
 }
 
 private val NUM = Regex("^\\d+[.)]\\s+")
+
+// A trailing "— Book Chapter:Verse" (or "- Book Chapter:Verse") attribution —
+// optional leading number for books like "1 Corinthians", one or more
+// capitalized words for the book name, a chapter number, and an optional
+// :verse or :verse-verse range. Matches how authored content already writes
+// verse attributions elsewhere in this app (see ModuleScreen's WhisperLines:
+// "…" — Psalm 1).
+private val ScriptureRefTail = Regex(
+    "[—–-]\\s*((?:\\d\\s+)?[A-Z][A-Za-z]+(?:\\s+[A-Za-z]+)*\\s+\\d+(?::\\d+(?:[-–]\\d+)?)?)\\s*$",
+)
+
+/** Splits a blockquote's raw text into (verse, reference) when it carries a
+ *  trailing scripture attribution; returns null for an ordinary blockquote
+ *  so callers can fall back to the plain callout. */
+private fun splitScriptureQuote(text: String): Pair<String, String>? {
+    val m = ScriptureRefTail.find(text) ?: return null
+    val reference = m.groupValues[1].trim()
+    val verse = text.substring(0, m.range.first).trim().trim('"', '“', '”').trim()
+    if (verse.isBlank()) return null
+    return verse to reference
+}
 
 private fun parseMarkdown(text: String): List<Md> {
     val out = mutableListOf<Md>()
@@ -699,7 +734,7 @@ private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
                 Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D))
             }
             Spacer(Modifier.height(10.dp))
-            Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = 22.sp)
+            Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = scaledLineHeight(22))
         }
         Spacer(Modifier.height(14.dp))
         // The module is sealed — changing anything is intentional, one quiet door.

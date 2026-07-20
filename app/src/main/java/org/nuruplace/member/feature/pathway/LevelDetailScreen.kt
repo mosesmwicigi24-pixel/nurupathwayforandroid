@@ -77,6 +77,7 @@ import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.Kicker
 import org.nuruplace.member.ui.components.PrimaryButton
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
@@ -479,13 +480,22 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
                 Spacer(Modifier.height(Spacing.xs))
                 Text(it, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
             }
-            e.body?.takeIf { it.isNotBlank() }?.let {
+            val body = e.body?.takeIf { it.isNotBlank() }
+            val ref = e.scriptureRef?.takeIf { it.isNotBlank() }
+            if (e.kind?.lowercase() == "verse" && body != null && ref != null) {
+                // A "verse" encouragement IS Scripture — the shared card, not
+                // two separate lines of body + reference text.
                 Spacer(Modifier.height(Spacing.xs))
-                Text(it, style = NuruType.caption, color = Nuru.ink600)
-            }
-            e.scriptureRef?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(Spacing.xs))
-                Text(it, style = NuruType.micro, color = Nuru.goldLo, fontWeight = FontWeight.SemiBold)
+                VerseQuoteCard(verse = body, reference = ref)
+            } else {
+                body?.let {
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(it, style = NuruType.caption, color = Nuru.ink600)
+                }
+                ref?.let {
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(it, style = NuruType.micro, color = Nuru.goldLo, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }

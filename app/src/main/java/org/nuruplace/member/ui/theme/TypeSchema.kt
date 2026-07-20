@@ -17,20 +17,27 @@ package org.nuruplace.member.ui.theme
 
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import org.nuruplace.member.data.AppPrefs
 
 /** Canonical Inter (sans) style. `tracking` in sp; null = schema default.
  *  GLOBAL VOICE (owner-set, iOS build 28 parity): the DEFAULT body weight is
  *  Inter **Medium** — the Pathway module-reader weight — so every title,
  *  subtitle and paragraph app-wide carries the same warm reading presence.
- *  Callers that pass an explicit SemiBold/Bold are unaffected. */
+ *  Callers that pass an explicit SemiBold/Bold are unaffected.
+ *
+ *  Line-height also carries the user's global line-spacing preference
+ *  (AppPrefs.lineSpacing, 1.0 = default) — the same single hook `textScale`
+ *  uses via LocalDensity, read here at style-build time so every call site
+ *  (NuruType, gInter/pInter/evSerif/plInter/rInter, …) picks it up for free. */
 fun nuruSans(size: Int, weight: FontWeight = FontWeight.Medium, tracking: Float? = null): TextStyle =
     TextStyle(
         fontFamily = Inter,
         fontWeight = weight,
         fontSize = size.sp,
-        lineHeight = (size * 1.4f).sp,
+        lineHeight = (size * 1.4f * AppPrefs.lineSpacing).sp,
         letterSpacing = tracking?.sp ?: if (size < 13) 0.1.sp else 0.sp,
     )
 
@@ -40,6 +47,13 @@ fun nuruSerif(size: Int, weight: FontWeight = FontWeight.Normal, tracking: Float
         fontFamily = Fraunces,
         fontWeight = weight,
         fontSize = size.sp,
-        lineHeight = (size * 1.25f).sp,
+        lineHeight = (size * 1.25f * AppPrefs.lineSpacing).sp,
         letterSpacing = tracking?.sp ?: (-0.02).em,
     )
+
+/** For the handful of reading-surface call sites that hardcode an explicit
+ *  `.copy(lineHeight = N.sp)` instead of taking a factory's schema default —
+ *  routes that literal through the same AppPrefs.lineSpacing multiplier so
+ *  the global pref moves it too. Read at the composable call site (like
+ *  nuruSans/nuruSerif above) so it recomposes the same way. */
+fun scaledLineHeight(sp: Number): TextUnit = (sp.toFloat() * AppPrefs.lineSpacing).sp

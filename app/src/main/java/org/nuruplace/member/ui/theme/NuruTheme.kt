@@ -10,6 +10,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -163,32 +164,39 @@ val Fraunces = FontFamily(
  * Semantic type scale (Inter body · Fraunces display). Every style is built from
  * the canonical factories in TypeSchema.kt so line-height and letter-spacing follow
  * ONE schema — sizes/weights here are the scale, rhythm lives in TypeSchema.kt.
+ *
+ * Each style is a computed property (`get() =`), not a cached `val` — nuruSans/
+ * nuruSerif read AppPrefs.lineSpacing when they build the TextStyle, so a plain
+ * eagerly-initialized val would freeze the FIRST value forever. Computing it on
+ * every access means a call site inside a composable re-reads the live pref on
+ * every recomposition, the same live-update behavior AppPrefs.textScale gets via
+ * LocalDensity in NuruTheme() below.
  */
 object NuruType {
-    val display = nuruSerif(28, FontWeight.Medium)
-    val title = nuruSerif(22, FontWeight.Medium)
-    val cardTitle = nuruSerif(18, FontWeight.SemiBold)
-    val rowTitle = nuruSerif(15, FontWeight.SemiBold)
-    val heading = nuruSans(16, FontWeight.Medium)
-    val body = nuruSans(14)
-    val bodyLg = nuruSans(16)
-    val label = nuruSans(12, FontWeight.Medium)
-    val caption = nuruSans(12)
-    val micro = nuruSans(11, FontWeight.Medium)
-    val kicker = nuruSans(11, FontWeight.Bold, tracking = 1.4f)
-    val cardCta = nuruSans(14, FontWeight.SemiBold)
+    val display get() = nuruSerif(28, FontWeight.Medium)
+    val title get() = nuruSerif(22, FontWeight.Medium)
+    val cardTitle get() = nuruSerif(18, FontWeight.SemiBold)
+    val rowTitle get() = nuruSerif(15, FontWeight.SemiBold)
+    val heading get() = nuruSans(16, FontWeight.Medium)
+    val body get() = nuruSans(14)
+    val bodyLg get() = nuruSans(16)
+    val label get() = nuruSans(12, FontWeight.Medium)
+    val caption get() = nuruSans(12)
+    val micro get() = nuruSans(11, FontWeight.Medium)
+    val kicker get() = nuruSans(11, FontWeight.Bold, tracking = 1.4f)
+    val cardCta get() = nuruSans(14, FontWeight.SemiBold)
     // Section labels that sit OUTSIDE a card (GROW YOUR FAITH · UPCOMING · YOUR
     // COHORT) — iOS "Inter 11 bold, kerning 1.98", rendered in `Nuru.eyebrow`.
-    val sectionLabel = nuruSans(11, FontWeight.Bold, tracking = 1.8f)
+    val sectionLabel get() = nuruSans(11, FontWeight.Bold, tracking = 1.8f)
     // Fraunces feature-card headline (verse text, card titles) — iOS "Fraunces 18 semibold".
-    val featureTitle = nuruSerif(18, FontWeight.SemiBold)
+    val featureTitle get() = nuruSerif(18, FontWeight.SemiBold)
     // Greeting — iOS "Fraunces 22 semibold, kerning −0.22".
-    val greeting = nuruSerif(22, FontWeight.SemiBold, tracking = -0.22f)
+    val greeting get() = nuruSerif(22, FontWeight.SemiBold, tracking = -0.22f)
     // iOS build 80 parity (nChipLabel/nActionLabel): segment/filter chips and
     // pill CTA / menu action labels inherit from here instead of each call site
     // declaring its own inline Inter size+weight.
-    val chipLabel = nuruSans(12, FontWeight.SemiBold)
-    val actionLabel = nuruSans(13, FontWeight.Bold)
+    val chipLabel get() = nuruSans(12, FontWeight.SemiBold)
+    val actionLabel get() = nuruSans(13, FontWeight.Bold)
 }
 
 private val NuruColorScheme = lightColorScheme(
@@ -202,15 +210,6 @@ private val NuruColorScheme = lightColorScheme(
     error = Nuru.danger,
 )
 
-private val NuruTypography = Typography(
-    titleLarge = NuruType.title,
-    titleMedium = NuruType.cardTitle,
-    bodyLarge = NuruType.bodyLg,
-    bodyMedium = NuruType.body,
-    labelLarge = NuruType.cardCta,
-    labelMedium = NuruType.label,
-)
-
 @Composable
 fun NuruTheme(content: @Composable () -> Unit) {
     @Suppress("UNUSED_EXPRESSION") isSystemInDarkTheme() // brand is light-only for now
@@ -218,10 +217,25 @@ fun NuruTheme(content: @Composable () -> Unit) {
     // without disturbing dp layout metrics.
     val base = LocalDensity.current
     val scaled = Density(density = base.density, fontScale = base.fontScale * org.nuruplace.member.data.AppPrefs.textScale)
+    // App-wide line-spacing control: MaterialTheme.typography is a plain value
+    // (not read live by descendants the way LocalDensity is), so it has to be
+    // rebuilt HERE, at theme-build time, reading AppPrefs.lineSpacing so this
+    // recomposes — and therefore every MaterialTheme.typography.* consumer
+    // downstream repaints — exactly when the pref changes.
+    val typography = remember(org.nuruplace.member.data.AppPrefs.lineSpacing) {
+        Typography(
+            titleLarge = NuruType.title,
+            titleMedium = NuruType.cardTitle,
+            bodyLarge = NuruType.bodyLg,
+            bodyMedium = NuruType.body,
+            labelLarge = NuruType.cardCta,
+            labelMedium = NuruType.label,
+        )
+    }
     CompositionLocalProvider(LocalDensity provides scaled) {
         MaterialTheme(
             colorScheme = NuruColorScheme,
-            typography = NuruTypography,
+            typography = typography,
             content = content,
         )
     }

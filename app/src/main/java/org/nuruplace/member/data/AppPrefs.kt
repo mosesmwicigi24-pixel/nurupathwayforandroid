@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 object AppPrefs {
     private const val FILE = "nuru_member_prefs"
     private const val KEY_TEXT_SCALE = "nuru.textScale"
+    private const val KEY_LINE_SPACING = "nuru.lineSpacing"
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
     private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
@@ -40,6 +41,13 @@ object AppPrefs {
     var textScale by mutableFloatStateOf(1.0f)
         private set
 
+    /** App-wide line-spacing multiplier (1.0 = default), exactly parallel to
+     *  [textScale]: TypeSchema.kt's nuruSans/nuruSerif factories read it when
+     *  they build every style's `lineHeight`, so changing it recomposes the
+     *  whole tree the same way a font-scale change does. */
+    var lineSpacing by mutableFloatStateOf(1.0f)
+        private set
+
     /** Opt-in approximate-location sharing (server keeps only a coarse geohash). */
     var shareLocation by mutableStateOf(false)
         private set
@@ -47,12 +55,18 @@ object AppPrefs {
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         textScale = prefs.getFloat(KEY_TEXT_SCALE, 1.0f)
+        lineSpacing = prefs.getFloat(KEY_LINE_SPACING, 1.0f)
         shareLocation = prefs.getBoolean(KEY_SHARE_LOCATION, false)
     }
 
     fun updateTextScale(scale: Float) {
         textScale = scale
         if (::prefs.isInitialized) prefs.edit().putFloat(KEY_TEXT_SCALE, scale).apply()
+    }
+
+    fun updateLineSpacing(spacing: Float) {
+        lineSpacing = spacing
+        if (::prefs.isInitialized) prefs.edit().putFloat(KEY_LINE_SPACING, spacing).apply()
     }
 
     fun updateShareLocation(on: Boolean) {

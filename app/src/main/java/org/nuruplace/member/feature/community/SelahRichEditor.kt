@@ -1,15 +1,16 @@
 // Selah's rich-text engine: an EditText bridged into Compose (bold, italic,
-// color, font — the four traits ThoughtSpan can persist) plus the plain-text
-// <-> Editable spans <-> [ThoughtSpan] round-trip that keeps the wire shape
-// exactly what packages/backend/src/modules/thoughts/service.ts expects.
+// color, font, line-spacing — the five traits ThoughtSpan can persist) plus
+// the plain-text <-> Editable spans <-> [ThoughtSpan] round-trip that keeps
+// the wire shape exactly what packages/backend/src/modules/thoughts/service.ts
+// expects.
 //
-// "Spacing" (owner spec) is real but intentionally NOT per-span: the backend's
-// ThoughtSpan has no spacing field (only start/end/bold/italic/color/font), so
-// baking a line-height into one run would silently do nothing for the rest of
-// the note. Line spacing is instead a single global reading/writing preference
-// applied to the whole EditText (setLineSpacing) — honest to what the schema
-// can actually carry, still a real working control. Mirrors the iOS build's
-// SelahRichEditor.swift exactly (same enums, same reasoning).
+// Line spacing IS per-span: the backend's ThoughtSpan carries a `spacing`
+// multiplier (0.8..2.5, default 1.0) alongside start/end/bold/italic/color/
+// font, so one run of a note can read airier than the rest. Android has no
+// stock per-run line-height primitive below API 29 (LineHeightSpan.Standard),
+// so [LineSpacingSpan] implements the `android.text.style.LineHeightSpan`
+// interface directly — the same "write our own span" idiom this file already
+// uses for the custom font (see CustomTypefaceSpan below).
 package org.nuruplace.member.feature.community
 
 import android.content.Context
@@ -20,6 +21,7 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.TextPaint
 import android.text.style.ForegroundColorSpan
+import android.text.style.LineHeightSpan
 import android.text.style.MetricAffectingSpan
 import android.text.style.StyleSpan
 import android.widget.EditText
@@ -49,15 +51,24 @@ enum class SelahFont(val key: String, val label: String) {
     }
 }
 
-/** Line spacing presets (global preference — see header note). */
-enum class SelahSpacing(val label: String, val extraPx: Float) {
-    COZY("Cozy", 4f),
-    COMFORTABLE("Comfortable", 9f),
-    RELAXED("Relaxed", 15f),
+/** Line-spacing presets a member can apply to a selected run — the toolbar's
+ *  choices within the backend's per-span range (0.8..2.5, ThoughtSpan.spacing). */
+enum class SelahSpacing(val label: String, val multiplier: Float) {
+    COZY("Cozy", 1.0f),
+    COMFORTABLE("Comfortable", 1.4f),
+    RELAXED("Relaxed", 1.8f),
     ;
 
     companion object {
         fun fromName(n: String?): SelahSpacing = entries.firstOrNull { it.name == n } ?: COMFORTABLE
+
+        /** Nearest preset to a stored per-span multiplier — so the toolbar can
+         *  reflect what the server actually holds, not just what was tapped
+         *  last in this session. */
+        fun nearest(multiplier: Float?): SelahSpacing {
+            val m = multiplier ?: return COMFORTABLE
+            return entries.minByOrNull { kotlin.math.abs(it.multiplier - m) } ?: COMFORTABLE
+        }
     }
 }
 
@@ -92,6 +103,22 @@ class CustomTypefaceSpan(val fontKey: String, private val typeface: Typeface) : 
     }
 }
 
+/** Per-run line-height multiplier (mirrors ThoughtSpan.spacing, 0.8..2.5).
+ *  `LineHeightSpan` fires per wrapped line the span's range touches, handing
+ *  back the paint's natural font metrics to scale — there is no framework
+ *  concrete implementation below API 29, so this implements the interface
+ *  directly (same reasoning as [CustomTypefaceSpan] above). Also a
+ *  `WrapTogetherSpan` (a LineHeightSpan superinterface), so the layout keeps
+ *  the spanned run together while wrapping. */
+class LineSpacingSpan(val multiplier: Float) : LineHeightSpan {
+    override fun chooseHeight(text: CharSequence?, start: Int, end: Int, spanstartv: Int, lineHeight: Int, fm: Paint.FontMetricsInt) {
+        fm.ascent = (fm.ascent * multiplier).toInt()
+        fm.descent = (fm.descent * multiplier).toInt()
+        fm.top = (fm.top * multiplier).toInt()
+        fm.bottom = (fm.bottom * multiplier).toInt()
+    }
+}
+
 object SelahRichText {
     const val BASE_COLOR_HEX = "#0B1F33"
 
@@ -117,6 +144,9 @@ object SelahRichText {
                     sb.setSpan(CustomTypefaceSpan(font.key, font.typeface(context)), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             }
+            span.spacing?.let { mult ->
+                sb.setSpan(LineSpacingSpan(mult), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
         }
         return sb
     }
@@ -129,7 +159,8 @@ object SelahRichText {
         val styleSpans = editable.getSpans(0, text.length, StyleSpan::class.java)
         val colorSpans = editable.getSpans(0, text.length, ForegroundColorSpan::class.java)
         val fontSpans = editable.getSpans(0, text.length, CustomTypefaceSpan::class.java)
-        (styleSpans.asSequence() + colorSpans.asSequence() + fontSpans.asSequence()).forEach { s ->
+        val spacingSpans = editable.getSpans(0, text.length, LineSpacingSpan::class.java)
+        (styleSpans.asSequence() + colorSpans.asSequence() + fontSpans.asSequence() + spacingSpans.asSequence()).forEach { s ->
             boundaries.add(editable.getSpanStart(s))
             boundaries.add(editable.getSpanEnd(s))
         }
@@ -146,8 +177,10 @@ object SelahRichText {
             val colorHex = colorSpan?.let { String.format("#%06X", 0xFFFFFF and it.foregroundColor) }
             val fontSpan = fontSpans.firstOrNull { editable.getSpanStart(it) <= start && editable.getSpanEnd(it) >= end }
             val fontKey = fontSpan?.fontKey
+            val spacingSpan = spacingSpans.firstOrNull { editable.getSpanStart(it) <= start && editable.getSpanEnd(it) >= end }
+            val spacingMult = spacingSpan?.multiplier
 
-            val differs = bold || italic || (colorHex != null && colorHex != BASE_COLOR_HEX) || fontKey != null
+            val differs = bold || italic || (colorHex != null && colorHex != BASE_COLOR_HEX) || fontKey != null || spacingMult != null
             if (!differs) { pending?.let { spans.add(it) }; pending = null; continue }
             val candidate = ThoughtSpan(
                 start = start, end = end,
@@ -155,10 +188,11 @@ object SelahRichText {
                 italic = if (italic) true else null,
                 color = if (colorHex != null && colorHex != BASE_COLOR_HEX) colorHex else null,
                 font = fontKey,
+                spacing = spacingMult,
             )
             val p = pending
             if (p != null && p.end == candidate.start && p.bold == candidate.bold && p.italic == candidate.italic &&
-                p.color == candidate.color && p.font == candidate.font
+                p.color == candidate.color && p.font == candidate.font && p.spacing == candidate.spacing
             ) {
                 pending = p.copy(end = candidate.end)
             } else {
@@ -237,8 +271,18 @@ class RichEditorController {
         et.setSelection(start, end)
     }
 
-    fun applySpacing(spacing: SelahSpacing) {
-        editText?.setLineSpacing(spacing.extraPx, 1f)
+    /** Sets [multiplier] as a per-run [LineSpacingSpan] over the current
+     *  selection — same selection-scoped idiom as [applyColor]/[applyFont],
+     *  not a whole-EditText setting, so it round-trips through ThoughtSpan.spacing. */
+    fun applySpacing(multiplier: Float) {
+        val et = editText ?: return
+        val (start, end) = selectionOrWordRange(et)
+        if (start >= end) return
+        val editable = et.text
+        editable.getSpans(start, end, LineSpacingSpan::class.java).forEach { editable.removeSpan(it) }
+        editable.setSpan(LineSpacingSpan(multiplier), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        et.text = editable
+        et.setSelection(start, end)
     }
 
     /** Formatting applies to a real selection. Unlike iOS's UITextView (which

@@ -222,6 +222,10 @@ data class ThoughtSpan(
     val italic: Boolean? = null,
     val color: String? = null,
     val font: String? = null,
+    // Per-span line-height multiplier (1.0 = default, 0.8..2.5 — backend
+    // packages/backend/src/modules/thoughts/service.ts ThoughtSpan.spacing).
+    // Global JsonNamingStrategy.SnakeCase handles the wire key.
+    val spacing: Float? = null,
 )
 
 @Serializable

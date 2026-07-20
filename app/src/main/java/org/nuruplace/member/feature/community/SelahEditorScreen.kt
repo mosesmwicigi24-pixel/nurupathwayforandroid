@@ -1,9 +1,8 @@
 // Selah's quiet page — the rich-text + pen editor for one thought. New-or-
 // existing, always full screen (this is the "write what's on your heart"
-// surface). Bold/italic/color/font persist per span (ThoughtSpan); line
-// spacing is a global preference (see SelahRichEditor.kt header note);
-// drawings upload via the existing me/media/image flow and attach as
-// `drawing_urls`. Port of iOS SelahEditorView.
+// surface). Bold/italic/color/font/spacing all persist per span (ThoughtSpan
+// — see SelahRichEditor.kt); drawings upload via the existing me/media/image
+// flow and attach as `drawing_urls`. Port of iOS SelahEditorView.
 package org.nuruplace.member.feature.community
 
 import android.text.Editable
@@ -92,7 +91,6 @@ fun SelahEditorScreen(
     var drawingUrls by remember { mutableStateOf(draft.drawingUrls) }
     val controller = remember { RichEditorController() }
     var isEmpty by remember { mutableStateOf(draft.body.isBlank()) }
-    var spacing by remember { mutableStateOf(SelahSpacing.COMFORTABLE) }
     var showDrawing by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf(false) }
     var fontMenuOpen by remember { mutableStateOf(false) }
@@ -153,7 +151,6 @@ fun SelahEditorScreen(
                         textSize = 16f
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         setPadding(28, 28, 28, 28)
-                        setLineSpacing(spacing.extraPx, 1f)
                         controller.editText = this
                         controller.onSelectionChanged = {}
                         editableRef = text
@@ -229,7 +226,7 @@ fun SelahEditorScreen(
                 DropdownMenu(expanded = spacingMenuOpen, onDismissRequest = { spacingMenuOpen = false }) {
                     SelahSpacing.entries.forEach { s ->
                         DropdownMenuItem(text = { Text(s.label) }, onClick = {
-                            spacingMenuOpen = false; Haptics.tap(view); spacing = s; controller.applySpacing(s)
+                            spacingMenuOpen = false; Haptics.tap(view); controller.applySpacing(s.multiplier)
                         })
                     }
                 }
