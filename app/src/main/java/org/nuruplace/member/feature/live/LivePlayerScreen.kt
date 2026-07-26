@@ -227,8 +227,12 @@ private fun AudioBackdrop(title: String) {
     }
 }
 
+// Not private — LiveBroadcastScreen.kt (L3, same package) reuses this exact
+// breathing-bars visual for the broadcaster's own audio-kind HUD, per the
+// Radio/Live on-air aesthetic (no live mic-level API exposed by RootEncoder
+// at the version this app resolves — see that file's comment).
 @Composable
-private fun AudioWaveform(modifier: Modifier = Modifier) {
+fun AudioWaveform(modifier: Modifier = Modifier) {
     val t = rememberInfiniteTransition(label = "liveAudioWave")
     val phase by t.animateFloat(
         initialValue = 0f, targetValue = (2 * PI).toFloat(),
