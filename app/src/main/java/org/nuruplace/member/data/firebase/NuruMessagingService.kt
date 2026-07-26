@@ -107,6 +107,14 @@ class NuruMessagingService : FirebaseMessagingService() {
             data["invite_token"]?.takeIf { it.isNotBlank() }?.let { return "reading/join/$it" }
             val t = (data["template"] ?: "").lowercase()
             return when {
+                // live_stream_started (packages/backend/src/modules/live/service.ts)
+                // — a tapped push must land IN THE PLAYER, not just Home, and the
+                // payload alone (stream_id/scope/cell_id/title) isn't enough to
+                // build LiveRoutes.kt's live-player route (no kind/viewers/
+                // startedAt) — "live-now" is a lightweight MainShell destination
+                // that re-fetches GET /live/now and forwards to the newest
+                // watchable stream (or Home if it already ended).
+                "live" in t -> "live-now"
                 "prayer" in t -> "prayer-room?tab=corporate"
                 "verse" in t || "memory" in t -> "memory-verses"
                 "devotional" in t -> "devotional"

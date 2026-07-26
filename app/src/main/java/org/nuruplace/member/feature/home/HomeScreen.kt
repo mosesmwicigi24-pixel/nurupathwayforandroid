@@ -181,6 +181,7 @@ fun HomeScreen(
         prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
         liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
+        org.nuruplace.member.feature.live.LiveDiscoveryCenter.ingest(liveNow)
         val today = LocalDate.now()
         val from = today.toString()
         val to = today.plusDays(45).toString()
@@ -199,16 +200,19 @@ fun HomeScreen(
     }
 
     val churchLive = liveNow.firstOrNull { it.scope == "church" }
-    // Piggybacks Home's own refresh cycle for the initial read; ONLY while a
-    // church stream is confirmed live does a lightweight 60s timer keep the
-    // viewer count / started-at fresh — no separate aggressive polling loop,
-    // and it's a plain LaunchedEffect so Compose cancels it outright the
-    // moment the stream disappears (key change) or Home leaves composition.
-    LaunchedEffect(churchLive?.streamId) {
-        if (churchLive == null) return@LaunchedEffect
+    // An UNCONDITIONAL 60s re-check while Home is composed (this used to gate
+    // on `churchLive != null` and only poll once a church stream was already
+    // known live, but discovering a BRAND NEW stream is the whole point of
+    // the mini-window pop-up, so it can't wait for one to already be known).
+    // Every result is folded into the shared LiveDiscoveryCenter, which
+    // decides whether to pop the mini-window (a stream_id this session
+    // hasn't surfaced yet). Still a plain LaunchedEffect(Unit) — Compose
+    // cancels it outright the moment Home leaves composition.
+    LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(60_000)
             liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(liveNow)
+            org.nuruplace.member.feature.live.LiveDiscoveryCenter.ingest(liveNow)
         }
     }
 
@@ -219,7 +223,8 @@ fun HomeScreen(
     // flag flips, so a later return to Home composes instantly.
     val entrance = remember { (!homeEntrancePlayed).also { homeEntrancePlayed = true } }
 
-    NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
+    Box(Modifier.fillMaxSize()) {
+        NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             HomeHeader(
                 firstName = me?.profile?.fullName?.substringBefore(' ') ?: "friend",
@@ -403,6 +408,31 @@ fun HomeScreen(
                 GiveCard { onSelectTab("give") }
                 Spacer(Modifier.height(Spacing.tabBarSpace))
             }
+        }
+        }
+
+        // Nuru Live discovery — the mini-window pop-up: a MUTED autoplaying
+        // preview docked above the tab bar (Scaffold already reserves that
+        // space via its bottomBar content padding, so an aligned-bottom
+        // overlay here floats right above it) for the first stream this
+        // session hasn't seen yet. "Join live" opens the SAME full player the
+        // banner's "Watch live" does (unmuted); ✕ collapses it to the
+        // ordinary LIVE banner card above and never re-pops for this
+        // stream_id again.
+        val discoveryStreams by org.nuruplace.member.feature.live.LiveDiscoveryCenter.streams.collectAsState()
+        val popupStreamId by org.nuruplace.member.feature.live.LiveDiscoveryCenter.popupStreamId.collectAsState()
+        discoveryStreams.firstOrNull { it.streamId == popupStreamId }?.let { popupStream ->
+            org.nuruplace.member.feature.live.LiveMiniPopup(
+                stream = popupStream,
+                onJoin = {
+                    org.nuruplace.member.feature.live.LiveDiscoveryCenter.markSeen(popupStream.streamId)
+                    onNavigate(liveNowRoute(popupStream))
+                },
+                onDismiss = { org.nuruplace.member.feature.live.LiveDiscoveryCenter.dismissPopup(popupStream.streamId) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = Spacing.base, vertical = Spacing.sm),
+            )
         }
     }
 
