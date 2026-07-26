@@ -7,6 +7,7 @@
 package org.nuruplace.member.feature.live
 
 import android.net.Uri
+import org.nuruplace.member.data.net.CreatedLiveStream
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.LiveRecordingRow
 import org.nuruplace.member.data.net.Net
@@ -29,3 +30,13 @@ fun liveRecordingRoute(row: LiveRecordingRow): String {
         "&title=${Uri.encode(row.title)}&kind=${Uri.encode(row.kind)}&live=false" +
         "&startedAt=${Uri.encode(row.startedAt)}&viewers=0"
 }
+
+/** The nav route into the broadcaster's own screen (L3), fed by the setup
+ *  sheet's just-minted CreatedLiveStream. `rtmpUrl`/`streamKey` travel raw —
+ *  LiveBroadcastScreen.kt builds the actual publish URL itself (see its
+ *  header comment for exactly why, and what it found verifying against
+ *  RootEncoder's + MediaMTX's real source). */
+fun liveBroadcastRoute(created: CreatedLiveStream, title: String, kind: String): String =
+    "live-broadcast?streamId=${Uri.encode(created.streamId)}" +
+        "&rtmpUrl=${Uri.encode(created.rtmpUrl)}&streamKey=${Uri.encode(created.streamKey)}" +
+        "&title=${Uri.encode(title)}&kind=${Uri.encode(kind)}"

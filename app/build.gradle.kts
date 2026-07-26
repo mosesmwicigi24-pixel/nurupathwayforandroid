@@ -123,6 +123,9 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.mlkit.barcode)
+    // Nuru Live (L3) — RootEncoder RTMP publisher (broadcaster side). Ships
+    // only via JitPack (see settings.gradle.kts for the repo declaration).
+    implementation(libs.rootencoder)
     // 16 KB page-size compliance (Play requirement for targetSdk 35): the old
     // transitive graphics-path 1.0.0 ships a 4 KB-aligned .so — pin the fixed one.
     implementation("androidx.graphics:graphics-path:1.0.1")

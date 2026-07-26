@@ -504,6 +504,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
             composable("cell-info") {
                 org.nuruplace.member.feature.home.CellInfoScreen(
+                    me = me,
                     onBack = { nav.popBackStack() },
                     onNavigate = { nav.navigate(it) },
                 )
@@ -543,6 +544,32 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.live.LiveReplaysScreen(
                     onBack = { nav.popBackStack() },
                     onOpenRecording = { row -> nav.navigate(org.nuruplace.member.feature.live.liveRecordingRoute(row)) },
+                )
+            }
+            // Nuru Live (L3, broadcaster) — the setup sheet (Home/CellInfo)
+            // mints the stream server-side and navigates here with the
+            // result; this route never re-fetches, it just carries what the
+            // sheet already has (same query-arg convention as live-player).
+            composable(
+                "live-broadcast?streamId={streamId}&rtmpUrl={rtmpUrl}&streamKey={streamKey}&title={title}&kind={kind}",
+                arguments = listOf(
+                    navArgument("streamId") { type = NavType.StringType },
+                    navArgument("rtmpUrl") { type = NavType.StringType },
+                    navArgument("streamKey") { type = NavType.StringType },
+                    navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = "" },
+                    navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = "video" },
+                ),
+            ) { entry ->
+                val a = entry.arguments
+                org.nuruplace.member.feature.live.LiveBroadcastScreen(
+                    streamId = a?.getString("streamId").orEmpty(),
+                    rtmpUrl = a?.getString("rtmpUrl").orEmpty(),
+                    streamKey = a?.getString("streamKey").orEmpty(),
+                    title = a?.getString("title").orEmpty(),
+                    kind = a?.getString("kind") ?: "video",
+                    // Pop back to wherever the member came from (Home or
+                    // CellInfoScreen) — never a fixed destination.
+                    onEnded = { nav.popBackStack() },
                 )
             }
             composable(

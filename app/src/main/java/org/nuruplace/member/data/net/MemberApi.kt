@@ -684,8 +684,7 @@ interface MemberApi {
     @POST("radio/programs/{id}/listening")
     suspend fun radioListening(@Path("id") programId: String): retrofit2.Response<Unit>
 
-    // --- Nuru Live — viewer surfaces (L2). Broadcaster routes (mint key,
-    // end, MediaMTX auth webhook) are L3 and not exposed here. ---
+    // --- Nuru Live — viewer surfaces (L2). ---
     @GET("live/now")
     suspend fun getLiveNow(): Envelope<LiveNowRow>
 
@@ -698,6 +697,17 @@ interface MemberApi {
         @Query("scope") scope: String? = null,
         @Query("cell_id") cellId: String? = null,
     ): Envelope<LiveRecordingRow>
+
+    // --- Nuru Live — broadcaster routes (L3). RBAC-gated server-side
+    // (live:go — 403 FORBIDDEN_SCOPE if missing); the client only mirrors the
+    // gate to hide the UI (permissions.contains("live:go")), never trusts it.
+    // 409 CONFLICT means another stream is already running for that scope.
+    @POST("live/streams")
+    suspend fun postLiveStreams(@Body body: CreateLiveStreamBody): CreatedLiveStream
+
+    // Idempotent — allowed for the starter or a live:manage holder.
+    @POST("live/streams/{id}/end")
+    suspend fun postLiveStreamEnd(@Path("id") streamId: String): EndedLiveStream
 
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")
