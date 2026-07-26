@@ -26,12 +26,16 @@ firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 junit = "4.13.2"
 coroutinesTest = "1.8.1"
-# Nuru Live (L3) — RTMP publish (broadcaster side). 2.8.0 is the current
-# stable JitPack release as of this writing (verified against the project's
-# maven-metadata.xml + GitHub releases; the last several majors -- 2.x -- use
-# the unified GenericStream/StreamClient API, not the older per-transport
-# RtmpCamera2/RtmpDisplay classes referenced in older tutorials).
-rootEncoder = "2.8.0"
+# Nuru Live (L3) — RTMP publish (broadcaster side). The newest JitPack
+# release is 2.8.0, but 2.6.0+ raised the library's own compileSdk to 36/37
+# (verified by checking library/build.gradle.kts at each tag), which this
+# project's AGP 8.5.2 + compileSdk 35 cannot consume (a hard AAR-metadata
+# failure, not a warning). 2.5.9 is the newest tag still built against
+# compileSdk 35 -- confirmed to resolve AND compile cleanly here -- and it
+# already carries the unified GenericStream/StreamClient API this code uses
+# (that refactor landed well before the 2.x series), not the older
+# per-transport RtmpCamera2/RtmpDisplay classes from early tutorials.
+rootEncoder = "2.5.9"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
