@@ -92,6 +92,10 @@ import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.feature.live.GoLiveButton
+import org.nuruplace.member.feature.live.GoLiveSetupSheet
+import org.nuruplace.member.feature.live.canGoLive
+import org.nuruplace.member.feature.live.liveBroadcastRoute
 import org.nuruplace.member.feature.live.liveNowRoute
 import org.nuruplace.member.feature.events.EV
 import org.nuruplace.member.feature.events.evCountdown
@@ -144,6 +148,10 @@ fun HomeScreen(
     // ever renders the church-scope one (CellInfoScreen renders the cell one
     // off this SAME shape from its own fetch).
     var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
+    // Nuru Live (L3) — the "Go Live" setup sheet; Home offers whichever of
+    // church/my-cell the member is eligible for (see GoLiveShared.kt for the
+    // exact eligibility rule and its reasoning).
+    var showGoLiveSheet by remember { mutableStateOf(false) }
 
     // One tick per full load — pull-to-refresh bumps it to re-run the batch;
     // `loadedOnce` keeps the skeleton from ever returning after first paint.
@@ -230,6 +238,13 @@ fun HomeScreen(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
+                // Nuru Live (L3) — the broadcaster entry point, gold and gated
+                // on the live:go RBAC grant, sitting right above the L2 LIVE
+                // banner slot so a broadcaster sees both "go live" and
+                // "who's live now" together.
+                if (canGoLive(me)) {
+                    Box(Modifier.fillMaxWidth()) { GoLiveButton(onClick = { showGoLiveSheet = true }) }
+                }
                 // Nuru Live — the very top of Home, above everything else,
                 // whenever the church is live right now.
                 churchLive?.let { row ->
@@ -389,6 +404,18 @@ fun HomeScreen(
                 Spacer(Modifier.height(Spacing.tabBarSpace))
             }
         }
+    }
+
+    if (showGoLiveSheet) {
+        GoLiveSetupSheet(
+            me = me,
+            lockedScope = null, // let the member pick between church/my cell
+            onDismiss = { showGoLiveSheet = false },
+            onStarted = { created, streamTitle, kind, _ ->
+                showGoLiveSheet = false
+                onNavigate(liveBroadcastRoute(created, streamTitle, kind))
+            },
+        )
     }
 }
 
