@@ -163,6 +163,12 @@ fun ChatInboxScreen(
     pastoralEligible: Boolean = false,
     onOpenBroadcast: (String) -> Unit = {},
     onOpenThreadWithContext: (String, String) -> Unit = { id, _ -> onOpenThread(id) },
+    // L4 tab restructure: the inbox's total-unread count feeds BOTH the
+    // "Chat" segment's own badge (computed locally below, unchanged) and the
+    // outer "You" tab's bottom-bar icon badge (MainShell/YouScreen — see
+    // docs/LIVE_STREAMING.md L4). Fired once per load/refresh; a no-op
+    // default keeps every other caller (none today) unaffected.
+    onUnreadChange: (Int) -> Unit = {},
 ) {
     AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, load = {
         val inbox = Net.client.api.chatInbox()
@@ -222,6 +228,7 @@ fun ChatInboxScreen(
         val disciplerUnread = disciplerConversationId?.let { id -> conversations.firstOrNull { it.conversationId == id }?.unread } ?: 0
         val pastoralUnread = pastoralConversationId?.let { id -> conversations.firstOrNull { it.conversationId == id }?.unread } ?: 0
         val totalUnread = conversations.sumOf { it.unread }
+        LaunchedEffect(totalUnread) { onUnreadChange(totalUnread) }
 
         // Spaces whose reviewed join request is pending a leader's decision
         // (session-local — the server notifies on accept/decline).
@@ -649,9 +656,12 @@ private fun VerseCard(verse: TailoredVerse?) {
 
 // ── Segmented control segment — one per icon + unread badge (Chat Redesign
 // C3b: up to 6 segments across roles, so the strip scrolls horizontally
-// rather than the old fixed 4-wide `weight(1f)` even split). ──
+// rather than the old fixed 4-wide `weight(1f)` even split). `internal` (not
+// `private`) so the L4 tab restructure's "You" tab can reuse the EXACT same
+// capsule idiom for its own outer Chat|Events|Give|Profile strip
+// (feature/shell/YouScreen.kt) rather than forking a near-duplicate. ──
 @Composable
-private fun Segment(
+internal fun Segment(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     count: Int?,

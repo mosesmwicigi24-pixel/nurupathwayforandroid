@@ -51,6 +51,24 @@ import java.util.Locale
 fun LiveReplaysScreen(onBack: () -> Unit, onOpenRecording: (LiveRecordingRow) -> Unit) {
     Column(Modifier.fillMaxSize().background(Nuru.paper)) {
         ScreenHeader("Replays", kicker = "Nuru Live", onBack = onBack)
+        ReplaysList(onOpenRecording)
+    }
+}
+
+/**
+ * The recordings list body, WITHOUT a header — extracted so the L4 "Live" tab
+ * (feature/shell/LiveTabScreen.kt) can host it directly beneath its own Go
+ * Live section instead of duplicating the fetch/empty-state/row logic. Scrolls
+ * itself (as the original inline body did) via [modifier] — callers that
+ * already sit in a BOUNDED-height slot (both the standalone screen above, and
+ * the tab's own `Modifier.weight(1f)` box) can use the default as-is; a
+ * scrollable ANCESTOR must never wrap this directly, since [AsyncContent]'s
+ * loading/error states use `fillMaxSize()`, which throws under an unbounded
+ * (infinite) height constraint.
+ */
+@Composable
+fun ReplaysList(onOpenRecording: (LiveRecordingRow) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxSize()) {
         AsyncContent(load = { Net.client.api.getLiveRecordings().data }) { recordings, _ ->
             if (recordings.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
