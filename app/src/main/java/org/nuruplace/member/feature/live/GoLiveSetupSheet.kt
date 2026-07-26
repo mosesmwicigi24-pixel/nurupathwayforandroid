@@ -176,6 +176,19 @@ fun GoLiveSetupSheet(
             }
             Spacer(Modifier.height(Spacing.md))
 
+            // Defensive: canGoLive() only checks the "live:go" grant, not
+            // scope eligibility — a member could in principle hold that
+            // grant with no cellGroupId and no staff role. Rather than let
+            // Start silently send scope=cell with a null cell_id (a
+            // confusing 422 VALIDATION_FAILED), say so plainly.
+            if (lockedScope == null && !churchEligible && !cellEligible) {
+                Text(
+                    "There's no cell or church-wide scope available for your account yet. Ask an admin to check your Go Live access.",
+                    style = NuruType.body, color = Nuru.ink600,
+                )
+                return@Column
+            }
+
             if (permanentlyDenied) {
                 PermissionDeniedBlock(kind, context)
                 return@Column
