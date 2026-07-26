@@ -68,6 +68,7 @@ import org.nuruplace.member.data.net.FeaturedAnnouncement
 import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
 import org.nuruplace.member.data.net.HomeEventRow
+import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NextAction
@@ -86,10 +87,12 @@ import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideo
 import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.feature.live.liveNowRoute
 import org.nuruplace.member.feature.events.EV
 import org.nuruplace.member.feature.events.evCountdown
 import org.nuruplace.member.feature.events.evTime
@@ -136,6 +139,11 @@ fun HomeScreen(
     var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
+    // Nuru Live (L2, viewer-only) — GET /live/now returns church streams
+    // always plus cell streams scoped to the caller's own cell; Home only
+    // ever renders the church-scope one (CellInfoScreen renders the cell one
+    // off this SAME shape from its own fetch).
+    var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
 
     // One tick per full load — pull-to-refresh bumps it to re-run the batch;
     // `loadedOnce` keeps the skeleton from ever returning after first paint.
@@ -164,6 +172,7 @@ fun HomeScreen(
         // parity) — distinct from the community/prayer-wall feed's sort query.
         prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
+        liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
         val today = LocalDate.now()
         val from = today.toString()
         val to = today.plusDays(45).toString()
@@ -179,6 +188,20 @@ fun HomeScreen(
         if (days in setOf(3, 7, 14, 21, 30, 50, 100)) CelebrationCenter.fire(Moment("streak-$days", "$days-day rhythm streak!"))
         streak?.badges.orEmpty().filter { CelebrationCenter.seenOnce("seen-badges", it.code) }
             .forEach { CelebrationCenter.fire(Moment("badge-${it.code}", "${it.name} earned!", "Badges celebrate your growth — keep walking.")) }
+    }
+
+    val churchLive = liveNow.firstOrNull { it.scope == "church" }
+    // Piggybacks Home's own refresh cycle for the initial read; ONLY while a
+    // church stream is confirmed live does a lightweight 60s timer keep the
+    // viewer count / started-at fresh — no separate aggressive polling loop,
+    // and it's a plain LaunchedEffect so Compose cancels it outright the
+    // moment the stream disappears (key change) or Home leaves composition.
+    LaunchedEffect(churchLive?.streamId) {
+        if (churchLive == null) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(liveNow)
+        }
     }
 
     val pendingSync by Net.client.offline.pending.collectAsState()
@@ -207,6 +230,15 @@ fun HomeScreen(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
+                // Nuru Live — the very top of Home, above everything else,
+                // whenever the church is live right now.
+                churchLive?.let { row ->
+                    LiveStreamBanner(
+                        row = row,
+                        onOpen = { onNavigate(liveNowRoute(row)) },
+                        onReplays = { onNavigate("live-replays") },
+                    )
+                }
                 if (pendingSync > 0) {
                     Text(
                         "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",

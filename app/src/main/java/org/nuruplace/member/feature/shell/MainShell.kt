@@ -502,7 +502,49 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(it) }) }
             composable("firebase-account") { org.nuruplace.member.feature.profile.FirebaseAccountScreen(onBack = { nav.popBackStack() }) }
             composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
-            composable("cell-info") { org.nuruplace.member.feature.home.CellInfoScreen(onBack = { nav.popBackStack() }) }
+            composable("cell-info") {
+                org.nuruplace.member.feature.home.CellInfoScreen(
+                    onBack = { nav.popBackStack() },
+                    onNavigate = { nav.navigate(it) },
+                )
+            }
+            // Nuru Live (L2, viewer-only) — the full-screen player is one
+            // destination fed entirely via query args (Home's banner, the
+            // cell card, and Replays rows all build this route through
+            // liveNowRoute()/liveRecordingRoute() so the resolved media url
+            // and heartbeat/live-ness travel with the navigation, not a
+            // second fetch).
+            composable(
+                "live-player?streamId={streamId}&url={url}&title={title}&kind={kind}&live={live}&startedAt={startedAt}&viewers={viewers}",
+                arguments = listOf(
+                    navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("url") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = "video" },
+                    navArgument("live") { type = NavType.StringType; nullable = true; defaultValue = "false" },
+                    navArgument("startedAt") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("viewers") { type = NavType.IntType; defaultValue = 0 },
+                ),
+            ) { entry ->
+                val a = entry.arguments
+                org.nuruplace.member.feature.live.LivePlayerScreen(
+                    url = a?.getString("url").orEmpty(),
+                    title = a?.getString("title").orEmpty(),
+                    kind = a?.getString("kind") ?: "video",
+                    live = a?.getString("live") == "true",
+                    streamId = a?.getString("streamId")?.takeIf { it.isNotBlank() },
+                    startedAt = a?.getString("startedAt"),
+                    initialViewerCount = a?.getInt("viewers") ?: 0,
+                    onBack = { nav.popBackStack() },
+                    onOpenReplays = { nav.navigate("live-replays") { popUpTo("home") } },
+                )
+            }
+            composable("live-replays") {
+                org.nuruplace.member.feature.live.LiveReplaysScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenRecording = { row -> nav.navigate(org.nuruplace.member.feature.live.liveRecordingRoute(row)) },
+                )
+            }
             composable(
                 "score/{pillar}",
                 arguments = listOf(navArgument("pillar") { type = NavType.StringType }),

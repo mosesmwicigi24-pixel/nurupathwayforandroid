@@ -684,6 +684,21 @@ interface MemberApi {
     @POST("radio/programs/{id}/listening")
     suspend fun radioListening(@Path("id") programId: String): retrofit2.Response<Unit>
 
+    // --- Nuru Live — viewer surfaces (L2). Broadcaster routes (mint key,
+    // end, MediaMTX auth webhook) are L3 and not exposed here. ---
+    @GET("live/now")
+    suspend fun getLiveNow(): Envelope<LiveNowRow>
+
+    // Empty body; server just bumps the stream's last-seen-viewer clock.
+    @POST("live/streams/{id}/heartbeat")
+    suspend fun postLiveHeartbeat(@Path("id") streamId: String): Unit
+
+    @GET("live/recordings")
+    suspend fun getLiveRecordings(
+        @Query("scope") scope: String? = null,
+        @Query("cell_id") cellId: String? = null,
+    ): Envelope<LiveRecordingRow>
+
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")
     suspend fun syncPush(@Body body: SyncPushBody): SyncPushResult
