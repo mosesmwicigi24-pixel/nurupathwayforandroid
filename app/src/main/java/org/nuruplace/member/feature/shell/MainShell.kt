@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +77,9 @@ import org.nuruplace.member.feature.pathway.PathwayHubScreen
 import org.nuruplace.member.feature.pathway.ModuleScreen
 import org.nuruplace.member.feature.pathway.QuizScreen
 import org.nuruplace.member.feature.pathway.QuizVerdict
+import org.nuruplace.member.feature.live.AppLiveBar
+import org.nuruplace.member.feature.live.LiveDiscoveryCenter
+import org.nuruplace.member.feature.live.liveNowRoute
 import org.nuruplace.member.ui.components.CelebrationHost
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
@@ -182,52 +186,85 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     if (showLocationInvite) LocationInviteDialog(onDismiss = { showLocationInvite = false })
     RefreshLocationIfSharing()
 
+    // Nuru Live discovery — "invite loudly, never hijack": a gentle app-wide
+    // poll (no existing app-level poll to piggyback on Android, unlike iOS's
+    // ChatBadge timer, so this is the one) that feeds the app-wide LIVE bar
+    // below and whatever GET /live/now re-check a routed notification tap
+    // needs. Plain LaunchedEffect(Unit) — alive only while the authed shell
+    // itself is composed, same idiom HomeScreen's own live poll already uses.
+    LaunchedEffect(Unit) {
+        while (true) {
+            LiveDiscoveryCenter.refresh()
+            kotlinx.coroutines.delay(75_000)
+        }
+    }
+    val liveStreamsNow by LiveDiscoveryCenter.streams.collectAsState()
+    // Every screen but Home, while a stream is watchable and the player it
+    // would open isn't already the thing on screen.
+    val showAppLiveBar = liveStreamsNow.isNotEmpty() && route != "home" &&
+        route?.startsWith("live-player") != true
+
     Scaffold(
         containerColor = Nuru.paper,
         bottomBar = {
-            if (onTab) NavigationBar(containerColor = Nuru.white) {
-                tabs.forEach { tab ->
-                    // The "You" tab is active on ANY of its five aliased routes
-                    // (see isYouRoute) — every other tab is a single literal route.
-                    val isSelected = if (tab.route == YOU_TAB_ROUTE) isYouRoute(route) else route == tab.route
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            if (!isSelected) {
-                                org.nuruplace.member.ui.components.Haptics.tick(rootView)
-                                nav.navigate(tab.route) {
-                                    popUpTo("home"); launchSingleTop = true
-                                }
-                            }
-                        },
-                        icon = {
-                            // Chat unread carries onto the You tab's icon too
-                            // (docs/LIVE_STREAMING.md L4) — same count the
-                            // Chat segment's own label badges inside You.
-                            if (tab.route == YOU_TAB_ROUTE && chatUnread > 0) {
-                                BadgedBox(
-                                    badge = {
-                                        Badge(containerColor = Nuru.gold, contentColor = Nuru.navyDeep) {
-                                            Text(chatUnread.coerceAtMost(99).toString())
+            // The LIVE bar sits ABOVE the bottom nav (when the bottom nav is
+            // even showing — it also floats on non-tab screens like a module
+            // reader, since "not on Home" is the only scope rule).
+            Column {
+                if (showAppLiveBar) {
+                    AppLiveBar(stream = liveStreamsNow.first()) {
+                        val stream = liveStreamsNow.first()
+                        LiveDiscoveryCenter.markSeen(stream.streamId)
+                        nav.navigate(liveNowRoute(stream))
+                    }
+                }
+                if (onTab) {
+                    NavigationBar(containerColor = Nuru.white) {
+                        tabs.forEach { tab ->
+                            // The "You" tab is active on ANY of its five aliased
+                            // routes (see isYouRoute) — every other tab is a
+                            // single literal route.
+                            val isSelected = if (tab.route == YOU_TAB_ROUTE) isYouRoute(route) else route == tab.route
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = {
+                                    if (!isSelected) {
+                                        org.nuruplace.member.ui.components.Haptics.tick(rootView)
+                                        nav.navigate(tab.route) {
+                                            popUpTo("home"); launchSingleTop = true
                                         }
-                                    },
-                                ) {
-                                    Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
-                                }
-                            } else {
-                                Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
-                            }
-                        },
-                        label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Nuru.navyDeep,
-                            selectedTextColor = Nuru.navyDeep,
-                            indicatorColor = Nuru.goldTint,
-                            unselectedIconColor = Nuru.ink400,
-                            unselectedTextColor = Nuru.ink400,
-                        ),
-                    )
+                                    }
+                                },
+                                icon = {
+                                    // Chat unread carries onto the You tab's icon too
+                                    // (docs/LIVE_STREAMING.md L4) — same count the
+                                    // Chat segment's own label badges inside You.
+                                    if (tab.route == YOU_TAB_ROUTE && chatUnread > 0) {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge(containerColor = Nuru.gold, contentColor = Nuru.navyDeep) {
+                                                    Text(chatUnread.coerceAtMost(99).toString())
+                                                }
+                                            },
+                                        ) {
+                                            Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
+                                        }
+                                    } else {
+                                        Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
+                                    }
+                                },
+                                label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Nuru.navyDeep,
+                                    selectedTextColor = Nuru.navyDeep,
+                                    indicatorColor = Nuru.goldTint,
+                                    unselectedIconColor = Nuru.ink400,
+                                    unselectedTextColor = Nuru.ink400,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -583,6 +620,29 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // link here just renders LiveTabScreen's own defensive fallback).
             composable("live") {
                 org.nuruplace.member.feature.live.LiveTabScreen(me = me, onNavigate = { nav.navigate(it) })
+            }
+            // Nuru Live discovery — the lightweight forwarding destination a
+            // routed live_stream_started notification tap lands on (see
+            // NuruMessagingService.destFor). The push payload alone lacks
+            // kind/viewers/startedAt, so this re-fetches GET /live/now itself
+            // and forwards straight into the newest watchable stream's player
+            // (never rendered long enough to need its own back-stack entry —
+            // it immediately replaces itself), or back to Home (which shows
+            // its own banner/mini-window) if nothing is watchable anymore.
+            composable("live-now") {
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    LiveDiscoveryCenter.refresh()
+                    val newest = LiveDiscoveryCenter.newestWatchable
+                    if (newest != null) {
+                        LiveDiscoveryCenter.markSeen(newest.streamId)
+                        nav.navigate(liveNowRoute(newest)) { popUpTo("home") }
+                    } else {
+                        nav.navigate("home") { popUpTo("home") { inclusive = true } }
+                    }
+                }
+                Box(Modifier.fillMaxSize().background(Nuru.paper), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(color = Nuru.gold)
+                }
             }
             composable(
                 "level-complete/{n}",
