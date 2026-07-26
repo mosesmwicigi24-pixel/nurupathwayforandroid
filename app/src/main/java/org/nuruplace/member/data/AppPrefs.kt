@@ -34,6 +34,10 @@ object AppPrefs {
     private const val KEY_PASTORAL_CONVERSATION_ID = "nuru.pastoral.conversationId"
     private const val KEY_PASTORAL_MUTED = "nuru.pastoral.muted"
     private const val KEY_PASTORAL_ARCHIVED = "nuru.pastoral.archived"
+    // "Named giving" (Give tab, custom-amount sheet) — the last gift name the
+    // member typed/picked, so the next custom gift preselects it subtly
+    // (iOS @AppStorage "giving.lastAccountName" parity).
+    private const val KEY_GIVING_LAST_ACCOUNT_NAME = "nuru.giving.lastAccountName"
 
     private lateinit var prefs: SharedPreferences
 
@@ -144,6 +148,11 @@ object AppPrefs {
     var pastoralArchived: Boolean
         get() = ::prefs.isInitialized && prefs.getBoolean(KEY_PASTORAL_ARCHIVED, false)
         set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_PASTORAL_ARCHIVED, v).apply() }
+
+    /** Last gift name used on the custom-amount giving sheet — empty means never set. */
+    var lastGivingAccountName: String
+        get() = if (::prefs.isInitialized) prefs.getString(KEY_GIVING_LAST_ACCOUNT_NAME, "") ?: "" else ""
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_GIVING_LAST_ACCOUNT_NAME, v).apply() }
 
     /** Account sign-out — these are per-device but keyed to whoever is signed
      *  in right now; never let a pastoral cache/flag from account A leak into
