@@ -28,9 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import org.nuruplace.member.data.net.CellSummary
 import org.nuruplace.member.data.net.FeaturedCell
+import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.feature.live.liveNowRoute
 import org.nuruplace.member.feature.profile.AvatarCircle
 import org.nuruplace.member.ui.components.Kicker
+import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.NuruCard
 import org.nuruplace.member.ui.components.ScreenHeader
 import org.nuruplace.member.ui.theme.Nuru
@@ -39,18 +42,31 @@ import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.fmtEventTime
 
 @Composable
-fun CellInfoScreen(onBack: () -> Unit) {
+fun CellInfoScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     var featured by remember { mutableStateOf<FeaturedCell?>(null) }
     var cell by remember { mutableStateOf<CellSummary.Cell?>(null) }
+    // Nuru Live (L2) — ONE call to the same GET /live/now Home uses; the
+    // server already scopes cell-scope rows to the caller's own cell, so no
+    // extra client-side cellId matching (or a second endpoint) is needed here.
+    var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
     LaunchedEffect(Unit) {
         featured = runCatching { Net.client.api.featuredCell().data }.getOrNull()
         cell = runCatching { Net.client.api.cellSummary().cell }.getOrNull()
+        liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
     }
+    val cellLive = liveNow.firstOrNull { it.scope == "cell" }
 
     val name = featured?.name ?: cell?.name ?: "Your cell"
     Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
         ScreenHeader(name, kicker = "Your cell", onBack = onBack)
         Column(Modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
+            cellLive?.let { row ->
+                LiveStreamBanner(
+                    row = row,
+                    onOpen = { onNavigate(liveNowRoute(row)) },
+                    onReplays = { onNavigate("live-replays") },
+                )
+            }
             if (featured == null && cell == null) {
                 NuruCard {
                     Text("No cell yet", style = NuruType.cardTitle, color = Nuru.ink)
