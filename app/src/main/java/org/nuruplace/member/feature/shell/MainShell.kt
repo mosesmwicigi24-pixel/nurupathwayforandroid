@@ -1,7 +1,9 @@
-// Authed shell — five-tab bottom bar (Home · Pathway · Grow · Community ·
-// Profile) over a NavHost. Pathway carries its own stack: Levels → Level →
-// Module → Quiz/Exam. Grow/Community/Profile are placeholders until their
-// phases land. Port of the iOS RootView tab shell.
+// Authed shell — bottom bar (Home · Pathway · Plans · You · Live) over a
+// NavHost. Pathway carries its own stack: Levels → Level → Module →
+// Quiz/Exam. "You" (L4 tab restructure, docs/LIVE_STREAMING.md) fuses the
+// old Chat/Events/Give/Profile tabs behind one segmented capsule — see
+// YouScreen.kt. "Live" is broadcaster-only (canGoLive(me)) and hosts Go Live
+// + Replays — see LiveTabScreen.kt. Port of the iOS RootView tab shell.
 package org.nuruplace.member.feature.shell
 
 import androidx.compose.foundation.background
@@ -15,13 +17,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -32,6 +34,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,21 +58,17 @@ import org.nuruplace.member.feature.grow.PlanDetailScreen
 import org.nuruplace.member.feature.grow.PlanSegmentScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
-import org.nuruplace.member.feature.community.ChatInboxScreen
 import org.nuruplace.member.feature.community.ChatThreadScreen
 import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
 import org.nuruplace.member.feature.events.AllEventsCalendarScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
-import org.nuruplace.member.feature.events.EventsScreen
 import org.nuruplace.member.feature.events.NotificationsScreen
 import org.nuruplace.member.feature.give.GivingReceiptScreen
-import org.nuruplace.member.feature.give.GivingScreen
 import org.nuruplace.member.feature.give.GivingStatementScreen
 import org.nuruplace.member.feature.home.HomeScreen
 import org.nuruplace.member.feature.profile.AssistantScreen
 import org.nuruplace.member.feature.profile.GiftsScreen
-import org.nuruplace.member.feature.profile.ProfileScreen
 import org.nuruplace.member.feature.profile.ResourcesScreen
 import org.nuruplace.member.feature.pathway.LevelDetailScreen
 import org.nuruplace.member.feature.pathway.LevelsMapScreen
@@ -83,15 +83,33 @@ import org.nuruplace.member.ui.theme.Spacing
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-private val TABS = listOf(
+/** The "You" tab (L4 tab restructure) is really FOUR routes wearing one tab —
+ *  "you" itself (the bottom-bar's own destination, always Chat-default) plus
+ *  the four old standalone routes, each of which now pre-selects its segment
+ *  in the SAME [YouScreen] (see MainShell's NavHost below and
+ *  docs/LIVE_STREAMING.md L4). Every nav call site that still targets one of
+ *  these four by name — FCM pushes, NotificationsScreen.routeFor, Home's
+ *  onSelectTab, CommunityHubScreen, shortcuts.xml — keeps landing correctly
+ *  with zero edits, and the bottom bar must recognize all five as "the You
+ *  tab is active" for highlighting/back-stack purposes. */
+private const val YOU_TAB_ROUTE = "you"
+private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "events", "give", "profile")
+private fun isYouRoute(route: String?) = route != null && route in YOU_ALIAS_ROUTES
+
+private val BASE_TABS = listOf(
     Tab("home", "Home", Icons.Filled.Home),
     Tab("pathway", "Pathway", Icons.Filled.MenuBook),
     Tab("plans", "Plans", Icons.Filled.Bookmark),
-    Tab("events", "Events", Icons.Filled.CalendarMonth),
-    Tab("chat", "Chat", Icons.AutoMirrored.Filled.Chat),
-    Tab("give", "Give", Icons.Filled.VolunteerActivism),
-    Tab("profile", "Profile", Icons.Filled.Person),
+    Tab(YOU_TAB_ROUTE, "You", Icons.Filled.Person),
 )
+private val LIVE_TAB = Tab("live", "Live", Icons.Filled.Videocam)
+
+/** "Live" only appears for members holding the "live:go" grant (client-side
+ *  advisory gate, §5.4 — the server is the real authority on every /live
+ *  route's write regardless). Everyone else gets 4 tabs and watches through
+ *  Home/cell surfaces, per docs/LIVE_STREAMING.md L4. */
+private fun tabsFor(me: MeResponse?): List<Tab> =
+    if (org.nuruplace.member.feature.live.canGoLive(me)) BASE_TABS + LIVE_TAB else BASE_TABS
 
 @Composable
 fun MainShell(auth: AuthStore, me: MeResponse?) {
@@ -100,8 +118,25 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val onTab = TABS.any { it.route == route }
+    val tabs = remember(me) { tabsFor(me) }
+    val onTab = tabs.any { it.route == route } || isYouRoute(route)
     val rootView = androidx.compose.ui.platform.LocalView.current
+
+    // Chat's total-unread — hoisted here (not inside YouScreen) so it survives
+    // the "you"/"chat"/"events"/"give"/"profile" destination being disposed
+    // and recreated by nav (none of this app's tabs use saveState/
+    // restoreState), and so it can badge the bottom-bar "You" icon even while
+    // a DIFFERENT segment (or a wholly different tab) is on screen. Eagerly
+    // best-effort fetched once per session so the badge is right from the
+    // first frame, then kept fresh in real time by ChatInboxScreen's own
+    // onUnreadChange while the member is actually looking at Chat.
+    var chatUnread by remember { mutableIntStateOf(0) }
+    LaunchedEffect(me) {
+        if (me != null) {
+            runCatching { Net.client.api.chatInbox() }
+                .getOrNull()?.let { inbox -> chatUnread = inbox.conversations.sumOf { it.unread } }
+        }
+    }
 
     // GET /chat/pastoral/eligibility, cached per session (PastorEligibility) —
     // ORed with SuperAdmin below so the Pastoral Inbox segment shows for an
@@ -151,18 +186,38 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         containerColor = Nuru.paper,
         bottomBar = {
             if (onTab) NavigationBar(containerColor = Nuru.white) {
-                TABS.forEach { tab ->
+                tabs.forEach { tab ->
+                    // The "You" tab is active on ANY of its five aliased routes
+                    // (see isYouRoute) — every other tab is a single literal route.
+                    val isSelected = if (tab.route == YOU_TAB_ROUTE) isYouRoute(route) else route == tab.route
                     NavigationBarItem(
-                        selected = route == tab.route,
+                        selected = isSelected,
                         onClick = {
-                            if (route != tab.route) {
+                            if (!isSelected) {
                                 org.nuruplace.member.ui.components.Haptics.tick(rootView)
                                 nav.navigate(tab.route) {
                                     popUpTo("home"); launchSingleTop = true
                                 }
                             }
                         },
-                        icon = { Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp)) },
+                        icon = {
+                            // Chat unread carries onto the You tab's icon too
+                            // (docs/LIVE_STREAMING.md L4) — same count the
+                            // Chat segment's own label badges inside You.
+                            if (tab.route == YOU_TAB_ROUTE && chatUnread > 0) {
+                                BadgedBox(
+                                    badge = {
+                                        Badge(containerColor = Nuru.gold, contentColor = Nuru.navyDeep) {
+                                            Text(chatUnread.coerceAtMost(99).toString())
+                                        }
+                                    },
+                                ) {
+                                    Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
+                                }
+                            } else {
+                                Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
+                            }
+                        },
                         label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
@@ -372,24 +427,37 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 PrayerWallDetailScreen(postId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
-            composable("chat") {
-                ChatInboxScreen(
-                    onOpenThread = { nav.navigate("chat/$it") },
-                    onNewMessage = { nav.navigate("new-message") },
-                    onOpenAssistant = { nav.navigate("assistant") },
-                    onOpenNotifications = { nav.navigate("notifications") },
-                    // Broadcast is between the shepherd and the individual — SuperAdmin
-                    // only, not even Admins (product decision, 2026-07).
+            // "You" tab (L4 tab restructure) — ONE screen (YouScreen) behind
+            // FIVE routes: the canonical bottom-tab destination ("you",
+            // always Chat-default) plus the four old standalone routes,
+            // each pre-selecting its own segment so every existing
+            // nav.navigate("chat"/"events"/"give"/"profile") call site
+            // (FCM pushes, NotificationsScreen, Home's onSelectTab,
+            // CommunityHubScreen, shortcuts.xml) keeps landing correctly.
+            // isStaff/pastoralEligible mirror the OLD "chat" composable's
+            // gating exactly (product decision, 2026-07 / Chat Redesign C4).
+            composable(YOU_TAB_ROUTE) {
+                YouScreen(
+                    initial = YouSegment.Chat,
+                    me = me,
                     isStaff = me?.profile?.role == "SuperAdmin",
-                    // Pastoral Inbox segment (C3b/C4): SuperAdmin (oversight/
-                    // fallback reach) OR anyone the eligibility probe says has
-                    // ever been assigned as a pastor — was SuperAdmin-only
-                    // client-side, which hid the tab from an assigned
-                    // non-SuperAdmin pastor even though the server would have
-                    // admitted them past step-up.
                     pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
-                    onOpenBroadcast = { nav.navigate("broadcast/$it") },
-                    onOpenThreadWithContext = { id, ctx -> nav.navigate("chat/$id?ctx=$ctx") },
+                    chatUnread = chatUnread,
+                    onChatUnreadChange = { chatUnread = it },
+                    onNavigate = { nav.navigate(it) },
+                    onSignOut = { auth.signOut() },
+                )
+            }
+            composable("chat") {
+                YouScreen(
+                    initial = YouSegment.Chat,
+                    me = me,
+                    isStaff = me?.profile?.role == "SuperAdmin",
+                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
+                    chatUnread = chatUnread,
+                    onChatUnreadChange = { chatUnread = it },
+                    onNavigate = { nav.navigate(it) },
+                    onSignOut = { auth.signOut() },
                 )
             }
             composable(
@@ -427,12 +495,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 )
             }
             composable("events") {
-                EventsScreen(
-                    onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") },
-                    onOpenCalendar = { nav.navigate("events-calendar") },
-                    onOpenAnnouncement = { nav.navigate("announcement/$it") },
-                    onOpenAnnouncements = { nav.navigate("announcements") },
-                    onOpenNotifications = { nav.navigate("notifications") },
+                YouScreen(
+                    initial = YouSegment.Events,
+                    me = me,
+                    isStaff = me?.profile?.role == "SuperAdmin",
+                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
+                    chatUnread = chatUnread,
+                    onChatUnreadChange = { chatUnread = it },
+                    onNavigate = { nav.navigate(it) },
+                    onSignOut = { auth.signOut() },
                 )
             }
             composable("events-calendar") {
@@ -464,7 +535,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 NotificationsScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })
             }
             composable("give") {
-                GivingScreen(onBack = { nav.popBackStack() }, onOpenStatement = { nav.navigate("statement") }, onOpenSchedules = { nav.navigate("schedules") })
+                YouScreen(
+                    initial = YouSegment.Give,
+                    me = me,
+                    isStaff = me?.profile?.role == "SuperAdmin",
+                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
+                    chatUnread = chatUnread,
+                    onChatUnreadChange = { chatUnread = it },
+                    onNavigate = { nav.navigate(it) },
+                    onSignOut = { auth.signOut() },
+                )
             }
             composable("schedules") { org.nuruplace.member.feature.give.SchedulesScreen(onBack = { nav.popBackStack() }) }
             composable("announcements") {
@@ -485,7 +565,25 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 GivingReceiptScreen(transactionId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
-            composable("profile") { ProfileScreen(me, onOpen = { nav.navigate(it) }, onSignOut = { auth.signOut() }) }
+            composable("profile") {
+                YouScreen(
+                    initial = YouSegment.Profile,
+                    me = me,
+                    isStaff = me?.profile?.role == "SuperAdmin",
+                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
+                    chatUnread = chatUnread,
+                    onChatUnreadChange = { chatUnread = it },
+                    onNavigate = { nav.navigate(it) },
+                    onSignOut = { auth.signOut() },
+                )
+            }
+            // "Live" tab (L4, broadcaster-only — MainShell's `tabs` list only
+            // includes it when canGoLive(me), so this destination is simply
+            // unreachable via the bottom bar for anyone else; a stale deep
+            // link here just renders LiveTabScreen's own defensive fallback).
+            composable("live") {
+                org.nuruplace.member.feature.live.LiveTabScreen(me = me, onNavigate = { nav.navigate(it) })
+            }
             composable(
                 "level-complete/{n}",
                 arguments = listOf(navArgument("n") { type = NavType.IntType }),
