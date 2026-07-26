@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.GiveBody
 import org.nuruplace.member.data.net.GivingIntentResult
@@ -132,10 +133,20 @@ private fun GiveTab(
     var fundId by remember { mutableStateOf("tithe") }
     var amountMajor by remember { mutableIntStateOf(1000) }
     var customOpen by remember { mutableStateOf(false) }
+    // "Named giving" (custom sheet, optional): set from the custom-amount
+    // dialog. Rides the M-Pesa AccountReference + persists for
+    // receipts/statements/portal Finance.
+    var accountName by remember { mutableStateOf("") }
     if (customOpen) {
         CustomAmountDialog(
             initial = amountMajor,
-            onConfirm = { amountMajor = it; customOpen = false },
+            initialName = accountName.ifBlank { AppPrefs.lastGivingAccountName },
+            onConfirm = { amt, name ->
+                amountMajor = amt
+                accountName = name.orEmpty()
+                if (!name.isNullOrBlank()) AppPrefs.lastGivingAccountName = name
+                customOpen = false
+            },
             onDismiss = { customOpen = false },
         )
     }
@@ -151,7 +162,7 @@ private fun GiveTab(
 
     // Full-screen generosity ceremony once an intent is created.
     result?.let { r ->
-        GiveResult(r, onDone = { result = null })
+        GiveResult(r, fundLabel = giveFund(fundId).name, giftName = accountName.trim().ifBlank { null }, onDone = { result = null })
         return
     }
 
@@ -169,12 +180,13 @@ private fun GiveTab(
             try {
                 result = Net.client.api.giving(
                     GiveBody(
-                        fundId,
-                        amountMajor * 100,
-                        "KES",
-                        method.provider ?: "mpesa",
-                        phone.ifBlank { null },
-                        UUID.randomUUID().toString(),
+                        fund = fundId,
+                        amountMinor = amountMajor * 100,
+                        currency = "KES",
+                        method = method.provider ?: "mpesa",
+                        phoneNumber = phone.ifBlank { null },
+                        accountName = accountName.trim().ifBlank { null },
+                        idempotencyKey = UUID.randomUUID().toString(),
                     ),
                 )
             } catch (e: Exception) {
@@ -550,7 +562,7 @@ private fun SheetDivider() {
 
 /** Full-screen generosity ceremony once an intent is created. */
 @Composable
-private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
+private fun GiveResult(r: GivingIntentResult, fundLabel: String? = null, giftName: String? = null, onDone: () -> Unit) {
     val context = LocalContext.current
     // PayPal is a two-step settle: approve in the browser, then POST
     // /giving/paypal/capture with the order id (the intent's provider_ref) —
@@ -596,6 +608,17 @@ private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
                 else -> "Your gift is being processed."
             }
             Text(sub, style = giInter(13), color = if (captured) GIVE.successText else GIVE.sub, textAlign = TextAlign.Center)
+            // "Named giving" (custom sheet, optional): the member's own label
+            // for this gift, shown alongside the fund it went to.
+            if (!fundLabel.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    giftName?.let { "$fundLabel — “$it”" } ?: fundLabel,
+                    style = giInter(12, FontWeight.SemiBold),
+                    color = GIVE.eyebrow,
+                    textAlign = TextAlign.Center,
+                )
+            }
 
             if (r.approveUrl != null && !captured) {
                 Spacer(Modifier.height(20.dp))
@@ -652,10 +675,22 @@ private fun GiveResult(r: GivingIntentResult, onDone: () -> Unit) {
     }
 }
 
-// Custom giving amount — a real editor (numeric keyboard, KSh, 1..2,000,000).
+/** Preset gift-name chips on the custom-amount sheet — like an M-Pesa Paybill
+ *  account name, shown on the church's M-Pesa statement (sanitized server-side). */
+private val GIVE_NAME_PRESETS = listOf("Tithe", "Offering", "Building", "Missions", "Thanksgiving", "First Fruits")
+
+// Custom giving amount — a real editor (numeric keyboard, KSh, 1..2,000,000)
+// plus an optional "Name your gift" field (named giving).
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CustomAmountDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+private fun CustomAmountDialog(
+    initial: Int,
+    initialName: String = "",
+    onConfirm: (Int, String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
     var text by remember { mutableStateOf(initial.toString()) }
+    var name by remember { mutableStateOf(initialName) }
     val parsed = text.filter { it.isDigit() }.take(7).toIntOrNull() ?: 0
     val valid = parsed in 1..2_000_000
     androidx.compose.material3.AlertDialog(
@@ -663,7 +698,7 @@ private fun CustomAmountDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss
         containerColor = GIVE.white,
         title = { Text("Enter amount", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 androidx.compose.material3.OutlinedTextField(
                     value = text,
                     onValueChange = { v -> text = v.filter { it.isDigit() }.take(7) },
@@ -679,10 +714,50 @@ private fun CustomAmountDialog(initial: Int, onConfirm: (Int) -> Unit, onDismiss
                     Spacer(Modifier.height(6.dp))
                     Text("Enter an amount between KSh 1 and KSh 2,000,000.", style = giInter(12), color = GIVE.sub)
                 }
+
+                Spacer(Modifier.height(16.dp))
+                Text("NAME YOUR GIFT (OPTIONAL)", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    GIVE_NAME_PRESETS.forEach { p ->
+                        val on = name == p
+                        Text(
+                            p,
+                            style = giInter(12, FontWeight.SemiBold),
+                            color = if (on) Color.White else GIVE.navy,
+                            modifier = Modifier.clip(Capsule)
+                                .background(if (on) GIVE.navy else GIVE.surface)
+                                .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, Capsule))
+                                .clickable { name = if (on) "" else p }
+                                .padding(horizontal = 11.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = name,
+                    onValueChange = { v -> name = v.take(60) },
+                    singleLine = true,
+                    placeholder = { Text("e.g. \"For Mom's healing\"", style = giInter(13), color = GIVE.tertiary) },
+                    textStyle = giInter(13, FontWeight.Medium).copy(color = GIVE.navy),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Shows on the church's M-Pesa statement — like a Paybill account name.",
+                    style = giInter(10),
+                    color = GIVE.tertiary,
+                )
             }
         },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { if (valid) onConfirm(parsed) }, enabled = valid) {
+            androidx.compose.material3.TextButton(
+                onClick = { if (valid) onConfirm(parsed, name.trim().ifBlank { null }) },
+                enabled = valid,
+            ) {
                 Text("Set amount", style = giInter(14, FontWeight.Bold), color = if (valid) GIVE.gold else GIVE.sub)
             }
         },

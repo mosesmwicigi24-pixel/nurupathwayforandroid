@@ -346,6 +346,11 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                                         style = giInter(11),
                                         color = GIVE.tertiary,
                                     )
+                                    // "Named giving" (custom sheet, optional): the
+                                    // member's own label for this gift, when set.
+                                    r.accountName?.takeIf { it.isNotBlank() }?.let {
+                                        Text("“$it”", style = giInter(11, FontWeight.SemiBold), color = GIVE.sub)
+                                    }
                                         r.receiptCode?.takeIf { it.isNotBlank() }?.let {
                                             Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow)
                                         }
@@ -454,6 +459,11 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
                     }
                     Text(money(d.amountMinor, d.currency), style = giSerif(36, FontWeight.Bold), color = GIVE.ink)
                     Text("to ${giveFund(d.fund).name}", style = giInter(14), color = GIVE.sub)
+                    // "Named giving" (custom sheet, optional): the member's own
+                    // label for this gift, shown right under the fund.
+                    d.accountName?.takeIf { it.isNotBlank() }?.let {
+                        Text("“$it”", style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow)
+                    }
                     StatusChip(d.status)
                 }
 
@@ -468,6 +478,9 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
                 ) {
                     DetailRow("Date", fullDate(d.createdAt), showDivider = true)
                     DetailRow("Method", (d.method ?: "").replaceFirstChar { it.uppercase() }, showDivider = true)
+                    d.accountName?.takeIf { it.isNotBlank() }?.let {
+                        DetailRow("Gift name", it, showDivider = true)
+                    }
                     DetailRow("Currency", d.currency, showDivider = true)
                     DetailRow("Reference", d.receiptCode ?: d.providerRef ?: "—", showDivider = true)
                     DetailRow("Transaction", d.transactionId.take(8) + "…", showDivider = false)
