@@ -2097,3 +2097,21 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 → BUILD SUCCESSFUL, all unit tests green (no regressions; no new pure-function
 unit tests added — see "Honest limits" above). Not pushed / no PR opened (per
 task instruction).
+
+## 2026-07-27 — NURU LIVE EPIC COMPLETE (L0→L4, one day)
+Self-hosted zero-cost live video/audio, spec pathway docs/LIVE_STREAMING.md:
+L0 MediaMTX on VPS (RTMP 1935 in, HLS via nginx /live/, records fMP4).
+L1 backend (pathway#393 mig178 + #395): RBAC live:go|manage, per-stream keys,
+auth webhook (a key opens only its own stream — ground-truth verified in prod),
+/live/now, heartbeats, recording registrar. L1.5 (#394): Cloudflare R2 free-
+egress fan-out — church streams served from pub-086….r2.dev via publisher
+daemon (systemd nuru-live-cdn); 1000 viewers = same origin load; ENDLIST
+verified from the edge. L2 viewers (ios#97/android#66): Home LIVE banner, cell
+card, player, Replays. L3 broadcasters (ios#98/android#67): HaishinKit /
+RootEncoder 1080p H.264; Android agent found+fixed a real credential-dropping
+URL-parse bug for the church path. L4 (ios#99/android#68): tab bar becomes
+Home·Pathway·Plans·You·Live — You fuses Chat|Events|Give|Profile (Chat heart,
+unread badge), Live tab only for live:go; Android alias-routes kept every
+FCM/shortcut/deep-link site byte-identical; iOS added nuru://you|live hosts.
+ON DEVICES: next builds (iOS 77+/Android vc48+). First-broadcast checklist in
+[[live-streaming-epic]] memory.
