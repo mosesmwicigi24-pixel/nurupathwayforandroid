@@ -2225,3 +2225,181 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 → BUILD SUCCESSFUL, all 8 test classes green (36 tests, 0 failures/errors;
 13 new: 7 `LiveInteractionsTest` + 6 `LiveDtoTest`). Not pushed / no PR
 opened (per task instruction — isolated worktree `feat/live-viewer-l5`).
+
+## 2026-07-31 — Nuru Live L5 broadcaster interactions + orientation-follow fix
+
+Second half of L5 parity: Android's viewer side shipped earlier today
+(previous entry above); this pass brings the **broadcaster** HUD
+(`LiveBroadcastScreen.kt`) to iOS parity (`GoLiveBroadcastView.swift` +
+`BroadcastController.swift`, `nuru-member-ios`), plus a real bug fix the
+task specifically called out. Isolated worktree `feat/live-broadcaster-l5`
+off `origin/main` (`41e9dd8`, includes PR #73's viewer L5). Not pushed.
+
+**1. Orientation-follow fix (port of iOS 80f4fdd).** Was: `LiveBroadcastScreen.kt`
+hard-coded `rotation = 90` in `GenericStream.prepareVideo(...)`, so a
+broadcast was encoded portrait 1080×1920 EVEN WHEN THE PHONE WAS PHYSICALLY
+HELD LANDSCAPE — the video came out sideways for any landscape broadcaster.
+Root-caused against the actual pinned dependency rather than guessed:
+pulled the real RootEncoder 2.5.9 sources from GitHub (`gh api
+repos/pedroSG94/RootEncoder … ?ref=2.5.9`, matching `gradle/libs.versions.toml`'s
+`rootEncoder = "2.5.9"` — this app's `.aar`s in the Gradle cache ship no
+sources jar) rather than guessing at the API:
+- `library/src/main/java/com/pedro/library/base/StreamBase.kt`
+  (`prepareVideo`) computes the ACTUAL encoder width/height from its
+  `rotation: Int` param internally — `if (rotation == 90 || rotation == 270)
+  glInterface.setEncoderSize(height, width) else setEncoderSize(width,
+  height)`. So no manual width/height swap is needed on the call site (the
+  task flagged this as a possibility to check) — `VIDEO_WIDTH`/
+  `VIDEO_HEIGHT` stay the fixed "landscape-native" 1920×1080 base for BOTH
+  orientations; only the `rotation` flag changes. This is the exact pattern
+  RootEncoder's own bundled sample app uses (`app/src/main/java/com/pedro/
+  streamer/rotation/CameraFragment.kt`: `rotation = if (isVertical) 90 else 0`).
+- `encoder/src/main/java/com/pedro/encoder/input/video/CameraHelper.java`'s
+  `getCameraOrientation(Context)` is the library's own canonical helper for
+  reading "how is the phone held, as a `prepareVideo`-ready rotation value":
+  it reads `windowManager.getDefaultDisplay().getRotation()` and converts
+  Surface.ROTATION_0/90/180/270 to 90/0/270/180 respectively — exactly the
+  convention `prepareVideo`'s `rotation` param expects, and the same helper
+  RootEncoder's own `ScreenOrientation.lockScreen()` sample uses. This is
+  already on the app's classpath (the "encoder" module RootEncoder pulls in
+  transitively — `Camera2Source`/`MicrophoneSource` from the same module were
+  already imported here).
+- **The fix**: call `CameraHelper.getCameraOrientation(context)` ONCE, inside
+  the same `remember { }` block that builds the broadcaster and calls
+  `prepareVideo` — i.e. decided at go-live and never touched again for the
+  rest of the session, per the task's ask. `VideoBroadcaster` now carries
+  that locked `rotation` value and, on camera flip, defensively re-asserts it
+  via `stream.setOrientation(cameraOrientationFor(rotation))` — verified
+  against `Camera2Source.switchCamera()`'s 2.5.9 source that this is a no-op
+  TODAY (it only stops/restarts capture on the same `glInterface` surface and
+  never touches orientation — only `StreamBase.changeVideoSource()`, a call
+  path this app never uses, does that), kept as cheap insurance against a
+  future library version changing that behavior — mirrors the iOS port's own
+  "re-attach resets it" comment for the equivalent HaishinKit guard.
+  `cameraOrientationFor(rotation)` (`if (rotation == 0) 270 else rotation -
+  90`) is `StreamBase.prepareVideo`'s own internal formula, extracted as a
+  small pure `internal fun` and unit-tested for all four rotations
+  (`LiveBroadcastInteractionsTest`).
+- Left `getGlInterface().autoHandleOrientation = true` untouched (task said
+  keep everything else the same) — verified against `GlStreamInterface.kt`
+  that this only wires a LIVE `SensorRotationManager` that keeps re-asserting
+  camera-tilt compensation via `setCameraOrientation`/`setIsPortrait` for the
+  rest of the broadcast (keeps footage upright if the phone tilts slightly);
+  `encoderWidth`/`encoderHeight` are set ONCE by `prepareVideo` and never
+  touched again by that sensor callback, so it doesn't reopen the "resolution
+  changes mid-stream" hole this fix closes — orthogonal, not a conflict.
+- **Mechanism, stated plainly**: two rotation values, chosen once —
+  `rotation=0` (phone held landscape at go-live) encodes 1920×1080;
+  `rotation=90` (portrait, or any other physical orientation
+  `CameraHelper.getCameraOrientation` doesn't map straight to 0) encodes
+  1080×1920. `CameraHelper.getCameraOrientation` actually returns all four of
+  0/90/180/270 (reverse-portrait/reverse-landscape included), and
+  `prepareVideo`'s own `isPortrait = rotation == 90 || rotation == 270` check
+  means both portrait values (90 and 270) correctly resolve to the 1080×1920
+  encode shape — a broader fix than the task's literal "two cases" framing,
+  gotten for free from reading the real formula instead of hand-rolling one.
+
+**Honest limits on the orientation fix**: `CameraHelper.getCameraOrientation`
+reads the WINDOW's current display rotation, which only tracks how the phone
+is physically held if the OS's system-wide auto-rotate is ON — unlike iOS's
+`UIDevice.current.orientation` (raw accelerometer, tracks physical
+orientation even when the user has rotation-lock enabled). A broadcaster who
+has Android's rotation lock on and is holding the phone landscape at go-live
+will still get a portrait encode, because the window itself never rotated.
+The task explicitly asked to "read the display rotation," which is what this
+implements; a raw-accelerometer `OrientationEventListener` would be the
+closer iOS-equivalent if that gap matters in practice, and is a natural
+follow-up, not done here. Separately, and pre-existing/out of scope for this
+fix either way: `MainActivity` declares no `android:configChanges`, so if the
+device's Activity-level configuration genuinely rotates mid-broadcast (system
+auto-rotate on, phone actually turned), Android recreates the whole Activity
+— every `remember`-only broadcaster/HUD state (including the locked
+orientation) is torn down and rebuilt from scratch, which would visibly
+reset the HUD (elapsed timer, phase) even though the underlying server-side
+stream row survives. This is a platform behavior that predates this change
+and is orthogonal to which orientation gets chosen; not touched here.
+
+**2. Broadcaster L5 HUD.** `LiveBroadcastScreen.kt`'s controls row grows from
+`[mic, flip, ·, End]` to `[mic, End, flip, ✋, 💬]` — the exact order (End
+moved next to mic, not pinned to the trailing edge) as the iOS port's
+`controlsRow`, not a cosmetic choice: keeping literal parity with the
+reference the task named. Reuses PR #73's L5 viewer plumbing wherever it
+overlaps rather than re-deriving it: `LiveParticleController`/
+`LiveParticleLayer` for the floating reaction burst, `myGuestStatus` (its
+`(guests, userId)` signature is generic enough to answer "is THIS raised-hand
+user already invited", not just "am I invited" — reused as-is for the hands
+sheet), and `isReduceMotionEnabled` (previously private to
+`LivePlayerScreen.kt`; promoted to `LiveInteractions.kt` so both viewer and
+broadcaster share the exact same Reduce-Motion detection instead of a second
+copy).
+- **✋ hand button**: gold-badged with the raised-hand count (badge hidden at
+  0, capped display at 99), fed by a NEW 3s `getLivePulse` poll (the wire
+  contract's broadcaster cadence — viewer polls at 5s) folded into the same
+  "only while `phase == LIVE`" idiom the existing viewer-count poll in this
+  file already uses. Opens `LiveHandsGuestsSheet` (new file,
+  `LiveBroadcastInteractions.kt`): a `ModalBottomSheet` (matching
+  `GoLiveSetupSheet`'s existing sheet convention in this codebase) listing
+  raised hands (avatar/name/"raised Xm ago") each with "Invite to join" (POST
+  `guests/:userId`, disabled + relabeled "6 guests max" at the L6 cap) or,
+  once already invited/accepted, a status label instead of the button; a
+  "Lower" pill that's LOCAL-ONLY UI (the wire contract's `POST /hand` always
+  targets the calling user — there is no broadcaster-authority "lower
+  someone else's hand" endpoint), documented as such, matching the iOS
+  port's identical doc comment and identical `remember`-scoped-to-sheet-
+  lifetime behavior. A guests section (mirrors `pulse.guests`, filtered to
+  `LiveGuestRow.isActive` — a new small extension property, `status ==
+  "invited" || "accepted"`, ported from the iOS model's `isActive`) with
+  "Remove" (`DELETE guests/:userId`); an accepted guest reads "Joining soon —
+  video in a later update" rather than silently implying real video (L6
+  video is its own later phase per the wire contract). Both invite/remove
+  call an immediate `onRefreshPulse()` (the sheet's own out-of-cadence pulse
+  refresh, mirroring iOS's `pollPulseNow()`) rather than waiting out the rest
+  of the 3s window.
+- **💬 chat button**: opens `LiveBroadcastChatSheet` (new, same file) — a
+  `ModalBottomSheet`, NOT the viewer's floating `LiveChatOverlay`. Documented
+  choice: the task left this open ("your call"); iOS also chose a sheet here,
+  for the same reason — the broadcaster is filming through their own camera
+  preview, and a translucent overlay ACROSS that preview (viewers see it
+  over passive video; a broadcaster would see it over their own live framing)
+  is a worse fit than a dismissible sheet. 3s-polled since-cursor message
+  list (same cadence/shape as the viewer path, reusing the identical
+  `getLiveMessages`/`postLiveMessage` DTOs) + composer; light-bubble style
+  (mine = `Nuru.myBubble`, others = white + name), NOT the full Aurora chat
+  thread (no read receipts/offline queue/edit/delete) — same deliberately
+  reduced scope as the iOS sheet.
+- **Floating reactions**: `pulse.recent_reactions` seeds `LiveParticleLayer`
+  exactly like the viewer path (first poll only seeds the "seen" set, never
+  bursts history), anchored bottom-end above the controls row. Reduce Motion
+  swaps to a static "❤️ N" running-total chip (`ReactionCounterChip`, new)
+  instead of suppressing the feature — same fallback shape as both the
+  viewer overlay and the iOS port's `ReactionBurstQueue.reduceMotionTotal`.
+
+**Files**: `feature/live/LiveBroadcastScreen.kt` (orientation fix, L5 state/
+polling/HUD wiring, controls-row reorder), `feature/live/
+LiveBroadcastInteractions.kt` (new — hands/guests sheet, chat sheet,
+`isActive`, `MAX_GUESTS`), `feature/live/LiveInteractions.kt`
+(`isReduceMotionEnabled` promoted from `LivePlayerScreen.kt`, now shared),
+`feature/live/LivePlayerScreen.kt` (that promotion — no behavior change),
+`feature/shell/MainShell.kt` (plumbed `myUserId = me?.profile?.userId` into
+`LiveBroadcastScreen`, mirroring the existing `LivePlayerScreen` call one
+route above it, so the chat sheet can tell "mine" bubbles apart).
+
+**Honest limits (HUD)**: no Robolectric/instrumentation test exercises the
+actual Compose sheets or HUD (rail taps, sheet list rendering, chat scroll)
+— only the pure functions (`cameraOrientationFor`, `LiveGuestRow.isActive`,
+`MAX_GUESTS`) are unit-tested, consistent with this codebase's existing Live/
+Compose test coverage posture (see the viewer L5 entry above, and PR #73's
+audit note, for the same tradeoff made the same way). The chat sheet has no
+push-driven auto-open and no unread badge on the 💬 button — a broadcaster
+only sees new messages by having the sheet open; out of scope here, same as
+the viewer path's guest-invite card lacking a push-driven auto-open. L6
+guest video (WHIP/WHEP) remains scaffolding-only on both surfaces, per the
+wire contract — this pass only manages invite/accept/remove state, same as
+the viewer side already did.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, all 9 test classes green (43 tests, 0 failures/errors; 7
+new in `LiveBroadcastInteractionsTest`: 4 `cameraOrientationFor` rotations +
+2 `LiveGuestRow.isActive` cases + 1 `MAX_GUESTS` pin). Not pushed / no PR
+opened (per task instruction — isolated worktree `feat/live-broadcaster-l5`).
