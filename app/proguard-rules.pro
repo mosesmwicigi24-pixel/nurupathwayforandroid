@@ -52,6 +52,31 @@
 -keepattributes *Annotation*
 -dontwarn org.webrtc.**
 
+# --- WebRTC jni_zero bridge (org.jni_zero) — ROOT CAUSE FIX ROUND 2, 2026-07-31 ---
+# The org.webrtc.** rule above (round 1, #85/#86, shipped as vc55) was
+# necessary but NOT sufficient: the SAME tombstone recurred on vc56 (built
+# on top of that fix). Root-caused this time by disassembling the actual
+# io.github.webrtc-sdk:android:144.7559.09 libjingle_peerconnection_so.so at
+# the tombstone's own PC offsets (xcrun llvm-objdump, aarch64): JNI_OnLoad ->
+# InitGlobalJniVariables (jvm.cc) succeeds — g_jvm was null, so this is NOT
+# "JNI_OnLoad called twice" — then falls into WebRTC's jni_zero JNI-bridge
+# bootstrap, which calls `env->FindClass("org/jni_zero/JniInit")`. That class
+# IS present in the resolved AAR's classes.jar (org.jni_zero.JniInit and
+# ~15 siblings, confirmed via `unzip -l`), but lives in a package the
+# org.webrtc.** keep rule never covers — R8 has nothing else referencing it
+# (it's only ever looked up via JNI FindClass, i.e. by reflection) so full
+# mode strips it. Confirmed absent from BOTH mapping.txt and the shipped
+# classes*.dex of the exact vc56 release build the tombstone came from (zero
+# "jni_zero" hits in either). FindClass returns null -> env->ExceptionCheck()
+# true -> WebRTC's own RTC_CHECK/CHECK macro fails -> its FatalMessage
+# formatter runs -> __builtin_trap() (BRK #imm) -> SIGTRAP/TRAP_BRKPT,
+# reproducing the tombstone frame-for-frame (JNI_OnLoad+64 -> the
+# InitGlobalJniVariables call site -> the FindClass-wrapper's RTC_CHECK ->
+# the trap). See docs/PARITY_AUDIT.md for the full disassembly trail.
+-keep class org.jni_zero.** { *; }
+-keepclassmembers class org.jni_zero.** { *; }
+-dontwarn org.jni_zero.**
+
 # --- RootEncoder (com.github.pedroSG94.RootEncoder) — audited as part of the
 # same incident (owner doctrine: "one failure = a class, audit for sibling
 # occurrences"). Verified: unzipped the resolved library/common/rtmp 2.5.9

@@ -3587,3 +3587,172 @@ Additionally ran `./gradlew :app:assembleRelease` → BUILD SUCCESSFUL.
 Committed, not pushed / no PR opened (isolated worktree
 `.worktrees/prevfix`, branch `fix/live-preview-and-selfdiscovery`, built on
 top of origin/main c63a9b9 / rel/vc55b).
+
+## 2026-07-31 — Nuru Live host-process-death ROUND 2 (disassembly-proven root cause) + guest WHIP/WHEP auth fixed to Basic (branch fix/live-guest-auth-and-crash, this repo only, on top of #73/#74/#76/#78/L6b/L6c/host-stability/#85/#86/#87)
+
+Two independent, production-proven bugs, both blocking guests from ever
+successfully joining a live broadcast.
+
+### Bug 1 — the host still crashed the FIRST time WebRTC loaded, even after #85/#86
+
+The prior incident (`#85`/`#86`, shipped as vc55, 2.30.0) root-caused a
+SIGTRAP/TRAP_BRKPT inside `libjingle_peerconnection_so.so`'s `JNI_OnLoad`
+as R8 stripping `org.webrtc.**` members the native init resolves by name,
+and fixed it with a `-keep class org.webrtc.** { *; }` rule. The owner
+captured the SAME tombstone again on vc56 (versionCode 56, `2.31.0`,
+`.worktrees/vc56`), built on top of that fix — proof #85/#86 was necessary
+but not sufficient.
+
+**Root cause, proven by disassembly, not inference**: pulled the resolved
+`io.github.webrtc-sdk:android:144.7559.09` AAR's `arm64-v8a` `.so` straight
+out of Gradle's cache and disassembled it with Xcode's `llvm-objdump`
+(`--triple aarch64`) at the tombstone's own PC offsets:
+
+- `JNI_OnLoad+64` (`0x298e60`) calls `InitGlobalJniVariables` (`jvm.cc`,
+  `0x394e58`) — its `RTC_CHECK(!g_jvm)` guard is checked and PASSES (`g_jvm`
+  was null: this is a first load, not "`JNI_OnLoad` called twice", the
+  hypothesis #85/#86 had already correctly demoted).
+- `InitGlobalJniVariables` then falls into WebRTC's `jni_zero` JNI-bridge
+  bootstrap, which calls `env->FindClass("org/jni_zero/JniInit")`
+  (the literal class-name string recovered from `.rodata` at the call
+  site, `0x3a2480`–`0x3a2498`).
+- Tracing the callee (`0x3a2680`): it calls `FindClass` (JNIEnv vtable
+  offset `0x30`, index 6), then `ExceptionCheck()` (offset `0x720`, index
+  228); if an exception is pending OR the returned `jclass` is null, it
+  calls `ExceptionDescribe()`/`ExceptionClear()` (offsets `0x80`/`0x88`,
+  indices 16/17) and falls into a `RTC_CHECK`-style `FatalMessage` builder
+  (`0x3a2808`, a `vsnprintf`-into-growing-buffer routine — the
+  `Check failed:`-formatter pattern) which ends in `__builtin_trap()`
+  (`BRK #imm`) → exactly `SIGTRAP`/`TRAP_BRKPT`, `esr 0x92000006`, matching
+  the tombstone frame-for-frame.
+- `org.jni_zero.JniInit` (and ~15 siblings: `CalledByNative`,
+  `JNINamespace`, `NativeMethods`, …) IS present in the resolved AAR's
+  `classes.jar` (`unzip -l`, confirmed) but lives in a package the
+  `org.webrtc.**` keep rule never covers, and is only ever referenced via
+  JNI reflection — R8 full mode has nothing else keeping it reachable, so
+  it strips it. **Falsified against the actual crashing build**: `grep -c
+  jni_zero` on `.worktrees/vc56/app/build/outputs/mapping/release/
+  mapping.txt` → `0`, and `strings` on both `classes*.dex` inside
+  `vc56`'s own `app-release.apk` → zero `jni_zero`/`JniInit` hits anywhere.
+  `FindClass` on a class absent from the dex is exactly a
+  `ClassNotFoundException` → the exact failure branch traced above.
+
+**Fix**: `app/proguard-rules.pro` — added `-keep class org.jni_zero.** { *;
+}` / `-keepclassmembers` / `-dontwarn`, mirroring the existing
+`org.webrtc.**` block, with the disassembly trail documented inline.
+**Re-verified against a freshly built release APK from this branch**:
+`grep -c jni_zero mapping.txt` → `39` (all `org.jni_zero.*` classes present,
+unrenamed), and `strings classes2.dex | grep jni_zero/JniInit` →
+`Lorg/jni_zero/JniInit;` present. `org.webrtc.PeerConnectionFactory` still
+unrenamed (regression check) and every bundled `.so`'s `PT_LOAD` segments
+still align at `2**14` (16 KB — unrelated to this fix, re-checked anyway).
+
+**Bulletproofing on top of the root-cause fix** (`LiveWebRtc.kt`) — a native
+`BRK` trap can never be caught by `try`/`catch`, so the only thing Kotlin
+code can do is (a) guarantee the risky native init call runs AT MOST ONCE
+per process no matter how many callers race it, and (b) move that one
+attempt to a moment the app can afford to lose it, off the guest-join
+critical path:
+- New `OneShotInit<T>` (double-checked-locking, `@Volatile` cached
+  `Result<T>`): `LiveWebRtc.factory()` now routes through
+  `factoryInit.getOrInit { createFactory(context) }` instead of its own
+  ad hoc synchronized block. Every caller after the first winner —
+  success or failure — gets the SAME cached outcome; a failed attempt is
+  NEVER retried. `WhipPublisher` (guest) and `WhepSubscriber` (host) can
+  race this concurrently (a guest publish and a host subscribe landing in
+  the same instant) and only one native init attempt will ever happen.
+- New `LiveWebRtc.warmUp(context)` — proactively runs `factory()` off a
+  background dispatcher at a safe moment, wired into `LaunchedEffect(Unit)`
+  in `GoLiveSetupSheet.kt` (host, fires the instant the Go Live sheet
+  opens — well before the broadcast starts or any guest can join) and
+  `LivePlayerScreen.kt` (any viewer of a LIVE stream — before they'd ever
+  raise a hand and get accepted as a guest). Fire-and-forget; failures are
+  logged, not blocking — the existing `guestTileErrors`/`GuestStageState.
+  Error` surfaces from `sub.start()`'s own `runCatching` already turn any
+  cached `OneShotInit` failure into the honest in-app error chip the task
+  asked for, with no new UI needed.
+- `lastInitError()`/`isReady()` exposed for any future caller that wants to
+  check WebRTC availability without triggering an attempt.
+
+**If the root cause had turned out to be a genuine SDK incompatibility**:
+it isn't — `org.jni_zero.JniInit` is present, loadable, and simply needs
+keeping, so no `io.github.webrtc-sdk:android` version change is warranted
+or was made.
+
+### Bug 2 — guests could never authenticate (WHIP/WHEP query-param auth silently ignored)
+
+Reported as already proven by the owner via a controlled production
+experiment before this session started: POSTing to the WHIP endpoint with
+`?user=&pass=` in the URL (the app's existing behavior) reaches the auth
+webhook with an EMPTY `user` (`400 VALIDATION_FAILED`); probing the same
+endpoint with fabricated `?user=PROBEUSER&pass=PROBEPASS` still forwarded an
+empty user (MediaMTX v1.19.3 ignores WHIP/WHEP query-param auth entirely);
+the same probe with HTTP Basic auth reached the webhook with the real
+username (correctly denied — proving Basic is the mechanism this MediaMTX
+version honours).
+
+**Fix** (`LiveWebRtc.kt`, `WhipPublisher.kt`, `WhepSubscriber.kt`):
+credentials no longer go in the URL at all. New `basicAuthHeader(user,
+pass)` (pure function, `java.util.Base64` — not `android.util.Base64` —
+specifically so it runs unmocked in plain JVM unit tests) builds
+`Authorization: Basic base64(user:pass)`; `postSdpOffer`/`deleteResource`
+now take `(url, user, pass)` and attach that header via two new pure
+request builders (`buildSdpOfferRequest`/`buildDeleteRequest`, split out
+so tests can inspect the built `Request` without a real network call).
+Both `WhipPublisher` and `WhepSubscriber` cache their session's
+`(user, pass)` as instance fields (set in `startLocked`) so `stopLocked`'s
+teardown DELETE against the WHIP/WHEP `Location` resource URL carries the
+SAME Basic auth header the offer POST used — previously that DELETE carried
+NO auth at all (the `Location` header never carried the query-param
+credentials either), which would have silently no-op'd server-side rather
+than failing loudly. Query-string auth is gone entirely — the reported
+mechanism-mismatch is fixed at the transport level for both the guest's
+publish (`WhipPublisher`) and the host's subscribe (`WhepSubscriber`).
+
+**New tests** (`LiveWebRtcTest.kt`, plain JUnit, no Robolectric — matches
+this file's existing posture): `basicAuthHeader` correctness (base64
+round-trip, correct user:pass pairing not swapped, credentials containing
+colons/special chars still round-trip correctly); `buildSdpOfferRequest`/
+`buildDeleteRequest` never put credentials in the URL (`request.url.query`
+is null, URL string doesn't contain the raw secret) and always attach the
+matching `Authorization` header; different credentials produce different
+headers. `OneShotInit` (Bug 1's guard): single-shot value caching, single-
+shot failure caching (init never re-invoked on a second call), and a real
+50-thread concurrency test (all threads released simultaneously via a
+`CountDownLatch`, a slow/racy 20ms init body to maximize the collision
+window) asserting the init lambda ran exactly once and every thread
+observed the identical cached result.
+
+**What else was audited for the same class of bug**: grepped this repo's
+`Request.Builder()` call sites — `LiveWebRtc.kt`'s `postSdpOffer`/
+`deleteResource` were the only WHIP/WHEP-authenticated requests; the
+RTMP publish path (`LiveBroadcastEngine.buildPublishUrl`) already used
+query-param `?user=&pass=` too but is RootEncoder's own RTMP client, a
+completely different protocol/auth path (RTMP has no HTTP Basic-auth
+concept) that the owner's brief explicitly did not report as broken and
+this session did not touch.
+
+**Honest limits**: Bug 1's fix is proven by disassembly of the exact
+crashing binary AND falsified/re-verified against real built APKs (before:
+`org.jni_zero` absent from both `mapping.txt` and the shipped dex of the
+actual vc56 build the tombstone came from; after: present, unrenamed, in a
+release APK built from this branch) — as close to a device-level proof as
+is possible without a physical device in this session. It was NOT re-run on
+the owner's S24 this session (no adb/device access here); the owner's next
+sideload is the final confirmation. Bug 2's fix directly matches the
+owner's own controlled experiment (Basic auth reached the webhook with the
+real username; query params did not) but the actual guest-join round trip
+against the LIVE MediaMTX/webhook was likewise not re-run end-to-end this
+session (backend webhook changes are explicitly out of scope / being done
+by a separate agent per the task brief) — only the client-side request
+construction is covered by tests here.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+:app:assembleRelease` → BUILD SUCCESSFUL, 86 tests total (77 baseline + 9
+new, all in `LiveWebRtcTest`), 0 failures. `assembleRelease` succeeded
+(unsigned — this worktree's copied `local.properties` doesn't carry release
+signing secrets, immaterial to dex/mapping verification above). Committed,
+not pushed / no PR opened (isolated worktree `.worktrees/guestfix`, branch
+`fix/live-guest-auth-and-crash`, built on top of origin/main 3c98751 /
+rel/vc56).
