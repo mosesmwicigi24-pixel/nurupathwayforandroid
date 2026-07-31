@@ -126,6 +126,11 @@ dependencies {
     // Nuru Live (L3) — RootEncoder RTMP publisher (broadcaster side). Ships
     // only via JitPack (see settings.gradle.kts for the repo declaration).
     implementation(libs.rootencoder)
+    // Nuru Live L6b — guest WHIP publish + host WHEP subscribe (real-time
+    // guest video, docs/LIVE_INTERACTIVE.md). LiveKit-maintained Google
+    // WebRTC prebuilt on Maven Central; verified 16 KB page-size aligned at
+    // this pinned version (see libs.versions.toml comment + PARITY_AUDIT.md).
+    implementation(libs.webrtc.sdk)
     // 16 KB page-size compliance (Play requirement for targetSdk 35): the old
     // transitive graphics-path 1.0.0 ships a 4 KB-aligned .so — pin the fixed one.
     implementation("androidx.graphics:graphics-path:1.0.1")

@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -263,6 +264,45 @@ fun LiveBroadcastScreen(
         }
     }
 
+    // ── L6b — real guest video (docs/LIVE_INTERACTIVE.md): one WhepSubscriber
+    // per accepted guest whose pulse row carries a whepUrl (owner-only field),
+    // added/removed as that set changes; each renders into a tile in
+    // HostGuestRail below. GuestAudioMixer.kt is where their decoded audio
+    // also rides the outgoing RTMP mix — this screen only owns the video
+    // rendering + subscription lifecycle. ──────────────────────────────────
+    val whepSubscribers = remember(streamId) { mutableStateMapOf<String, WhepSubscriber>() }
+    val guestVideoGuests = pulse?.guests
+        ?.filter { it.status == "accepted" && !it.whepUrl.isNullOrBlank() }
+        .orEmpty()
+    LaunchedEffect(guestVideoGuests.map { it.userId }.toSet()) {
+        val currentIds = guestVideoGuests.map { it.userId }.toSet()
+        val stale = whepSubscribers.keys - currentIds
+        stale.forEach { id -> whepSubscribers.remove(id)?.let { sub -> scope.launch { runCatching { sub.stop() } } } }
+        guestVideoGuests.forEach { guest ->
+            val whepUrl = guest.whepUrl
+            if (whepUrl != null && !whepSubscribers.containsKey(guest.userId)) {
+                val sub = WhepSubscriber(context, guest.userId)
+                whepSubscribers[guest.userId] = sub
+                scope.launch { runCatching { sub.start(whepUrl, streamId, streamKey) } }
+            }
+        }
+    }
+    DisposableEffect(streamId) {
+        onDispose {
+            whepSubscribers.values.forEach { sub -> Net.client.bgScope.launch { runCatching { sub.stop() } } }
+            whepSubscribers.clear()
+        }
+    }
+    val guestTiles = guestVideoGuests.mapNotNull { guest ->
+        whepSubscribers[guest.userId]?.let { sub ->
+            HostGuestTileState(
+                guest = guest,
+                onRendererReady = { renderer -> sub.attachRenderer(renderer) },
+                onRendererReleased = { renderer -> sub.detachRenderer(renderer) },
+            )
+        }
+    }
+
     // Hardware/gesture back must never silently abandon a live broadcast —
     // route it through the same confirmation as the End button.
     BackHandler(enabled = phase == BroadcastPhase.LIVE || phase == BroadcastPhase.RECONNECTING || phase == BroadcastPhase.CONNECTING) {
@@ -354,6 +394,11 @@ fun LiveBroadcastScreen(
                             )
                         }
                     }
+
+                    // L6b — real guest video, draggable rail of up to 6 tiles
+                    // over the preview (GuestStageUi.kt). Renders nothing
+                    // when no guest currently has live video.
+                    HostGuestRail(guestTiles, Modifier.fillMaxSize())
                 } else if (isVideo) {
                     // Minimal LIVE indicator (top) + mute/switch-back/End
                     // (bottom) — see ScreenModeControls' header comment for

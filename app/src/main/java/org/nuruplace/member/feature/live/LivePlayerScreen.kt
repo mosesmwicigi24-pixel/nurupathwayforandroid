@@ -55,6 +55,10 @@
 // backend repo).
 package org.nuruplace.member.feature.live
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -73,6 +77,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -109,6 +114,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -128,6 +136,7 @@ import org.nuruplace.member.ui.components.LivePulsingDot
 import org.nuruplace.member.ui.components.startedAgoLabel
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.webrtc.SurfaceViewRenderer
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -296,6 +305,98 @@ fun LivePlayerScreen(
 
     val myGuestState = myGuestStatus(pulse?.guests ?: emptyList(), myUserId)
 
+    // ── L6b — real guest video (docs/LIVE_INTERACTIVE.md): the moment
+    // `myGuestState` reports "accepted", this device checks camera/mic
+    // permission (same pattern as GoLiveSetupSheet's Go Live flow — a hard
+    // denial must never leave the member thinking they're "on stage" with
+    // nothing actually publishing) and starts a WhipPublisher session. If
+    // the invite is later withdrawn/the stream ends, this stops locally
+    // without re-issuing the DELETE (the server already knows). ──────────
+    var guestStageState by remember(streamId) { mutableStateOf<GuestStageState>(GuestStageState.Idle) }
+    var guestMuted by remember(streamId) { mutableStateOf(false) }
+    val whipPublisher = remember(streamId) { WhipPublisher(context) }
+    var selfPreviewRenderer by remember(streamId) { mutableStateOf<SurfaceViewRenderer?>(null) }
+
+    fun requiredGuestPermissions(): Array<String> = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+    fun hasGuestPermissions(): Boolean = requiredGuestPermissions().all {
+        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    suspend fun startGuestPublish() {
+        val sid = streamId ?: return
+        val uid = myUserId ?: return
+        guestStageState = GuestStageState.Connecting
+        val ingest = runCatching { Net.client.api.getLiveGuestIngest(sid) }.getOrNull()
+        if (ingest == null || ingest.whipUrl.isBlank()) {
+            guestStageState = GuestStageState.Error("Couldn't join the stage. Tap to retry.")
+            return
+        }
+        runCatching { whipPublisher.start(ingest.whipUrl, uid, ingest.token, selfPreviewRenderer) }
+            .onSuccess { guestStageState = GuestStageState.Live }
+            .onFailure { e -> guestStageState = GuestStageState.Error(e.message ?: "Couldn't join the stage. Tap to retry.") }
+    }
+
+    /** [leaveServerSide] is false when the server has ALREADY moved this
+     *  guest out of "accepted" (removed, stream ended) — re-issuing the
+     *  DELETE then would be a harmless no-op but a wasted round-trip; it's
+     *  true for an intentional Leave Stage tap or backgrounding. */
+    fun stopGuestPublish(leaveServerSide: Boolean) {
+        val wasActive = guestStageState is GuestStageState.Live || guestStageState is GuestStageState.Connecting
+        if (!wasActive) return
+        guestStageState = GuestStageState.Idle
+        scope.launch { runCatching { whipPublisher.stop() } }
+        if (leaveServerSide && streamId != null && myUserId != null) {
+            scope.launch { runCatching { Net.client.api.deleteLiveGuest(streamId, myUserId) } }
+        }
+    }
+
+    val guestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        if (results.values.all { it }) {
+            scope.launch { startGuestPublish() }
+        } else {
+            guestStageState = GuestStageState.Error("Camera and microphone access is needed to join the stage.")
+        }
+    }
+
+    LaunchedEffect(myGuestState) {
+        if (myGuestState == "accepted" && guestStageState is GuestStageState.Idle) {
+            if (hasGuestPermissions()) startGuestPublish() else guestPermissionLauncher.launch(requiredGuestPermissions())
+        } else if (myGuestState != "accepted") {
+            stopGuestPublish(leaveServerSide = false)
+        }
+    }
+
+    // Backgrounding while on stage must never half-die (item 6 of the L6b
+    // brief) — leave cleanly rather than leaving a dangling WHIP session the
+    // server has to notice is gone on its own.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        stopGuestPublish(leaveServerSide = true)
+    }
+
+    // Screen fully leaving composition (back/close) — bgScope survives past
+    // this composable's own cancelled scope, same precedent ApiClient.kt
+    // documents for the engagement-flush-on-exit call.
+    DisposableEffect(streamId) {
+        onDispose {
+            if (guestStageState is GuestStageState.Live || guestStageState is GuestStageState.Connecting) {
+                Net.client.bgScope.launch { runCatching { whipPublisher.stop() } }
+                if (streamId != null && myUserId != null) {
+                    Net.client.bgScope.launch { runCatching { Net.client.api.deleteLiveGuest(streamId, myUserId) } }
+                }
+            }
+        }
+    }
+
+    // Auto-mute the HLS playback's own audio while on stage (per the L6b
+    // brief) — the WHIP publish is send-only (no return audio), so without
+    // this a guest would hear their own voice echo back several seconds
+    // later over HLS while actively speaking, which is disorienting.
+    LaunchedEffect(guestStageState) {
+        player.volume = if (guestStageState is GuestStageState.Live) 0f else 1f
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
             ended -> EndedState(onOpenReplays)
@@ -375,9 +476,12 @@ fun LivePlayerScreen(
             }
             Spacer(Modifier.weight(1f))
 
-            // Guest invite (L6 scaffolding) sits just above the chat/title area
-            // — auto-collapses to a small gold corner pill after ~3s (owner
-            // taste pass), same for the on-stage-soon banner once accepted.
+            // Guest invite sits just above the chat/title area — auto-
+            // collapses to a small gold corner pill after ~3s (owner taste
+            // pass). Once accepted, this is superseded by the real L6b
+            // publish-state chip right below (connecting/error — Live shows
+            // the self-preview PiP instead, rendered at the Box root so it
+            // can be dragged across the whole stage).
             if (streamId != null) {
                 GuestStageBanner(
                     status = myGuestState,
@@ -385,6 +489,14 @@ fun LivePlayerScreen(
                     onDecline = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } } },
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
+                when (val s = guestStageState) {
+                    is GuestStageState.Connecting -> GuestConnectingChip("Joining the stage…", Modifier.padding(bottom = 12.dp))
+                    is GuestStageState.Error -> GuestConnectingChip(
+                        s.message,
+                        Modifier.padding(bottom = 12.dp).clickable { scope.launch { startGuestPublish() } },
+                    )
+                    else -> {}
+                }
             }
 
             if (!ended) {
@@ -427,6 +539,33 @@ fun LivePlayerScreen(
                             .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
                     }
                 },
+            )
+        }
+
+        // L6b — the guest's own draggable self-preview PiP, real camera+mic
+        // video over WHIP (docs/LIVE_INTERACTIVE.md). Fills the whole stage
+        // as its own layer purely for drag room, same idiom as the chat
+        // overlay above; renders nothing unless actually publishing.
+        if (guestStageState is GuestStageState.Live) {
+            GuestSelfPreviewPiP(
+                muted = guestMuted,
+                onToggleMute = {
+                    guestMuted = !guestMuted
+                    whipPublisher.setMicMuted(guestMuted)
+                },
+                onRendererReady = { renderer ->
+                    selfPreviewRenderer = renderer
+                    whipPublisher.attachLocalPreview(renderer)
+                },
+                onRendererReleased = { renderer ->
+                    whipPublisher.detachLocalPreview(renderer)
+                    if (selfPreviewRenderer === renderer) selfPreviewRenderer = null
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+            LeaveStagePill(
+                onClick = { stopGuestPublish(leaveServerSide = true) },
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp),
             )
         }
     }

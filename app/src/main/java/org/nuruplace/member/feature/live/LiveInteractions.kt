@@ -462,21 +462,6 @@ fun GuestInviteCard(onAccept: () -> Unit, onDecline: () -> Unit, modifier: Modif
     }
 }
 
-@Composable
-fun OnStageSoonChip(modifier: Modifier = Modifier) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(Nuru.gold.copy(alpha = 0.9f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("🎤", fontSize = 13.sp)
-        Spacer(Modifier.width(6.dp))
-        Text("On stage soon", style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold)
-    }
-}
-
 /** Small corner pill either banner above collapses to — a tap re-expands. */
 @Composable
 private fun GoldCornerPill(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -497,13 +482,12 @@ private fun GoldCornerPill(label: String, onClick: () -> Unit, modifier: Modifie
 }
 
 /**
- * Owner taste pass: the guest invite card and the "on stage soon" banner both
- * auto-collapse to a small gold corner pill ~3s after they appear (initial
- * show, OR after tapping a collapsed pill to re-expand) — tap the pill to
- * bring the full banner back. Also covers "the invite card after responding"
- * — accepting/declining swaps in a fresh banner (the on-stage chip, or
- * nothing) that runs the very same 3s cycle, keyed on [status] so it always
- * starts expanded on a state change.
+ * Owner taste pass: the guest invite card auto-collapses to a small gold
+ * corner pill ~3s after it appears (initial show, OR after tapping a
+ * collapsed pill to re-expand) — tap the pill to bring the full card back.
+ * Renders nothing once responded to — an "accepted" status is L6b's real
+ * publish flow now (LivePlayerScreen's own GuestConnectingChip/self-preview
+ * PiP/error chip, WhipPublisher-driven), not a static banner here anymore.
  */
 @Composable
 fun GuestStageBanner(
@@ -512,7 +496,7 @@ fun GuestStageBanner(
     onDecline: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (status != "invited" && status != "accepted") return
+    if (status != "invited") return
     var expanded by remember(status) { mutableStateOf(true) }
     LaunchedEffect(status, expanded) {
         if (expanded) {
@@ -520,11 +504,10 @@ fun GuestStageBanner(
             expanded = false
         }
     }
-    when {
-        status == "invited" && expanded -> GuestInviteCard(onAccept, onDecline, modifier.fillMaxWidth(0.85f))
-        status == "invited" -> GoldCornerPill("Invited", onClick = { expanded = true }, modifier = modifier)
-        status == "accepted" && expanded -> OnStageSoonChip(modifier)
-        else -> GoldCornerPill("", onClick = { expanded = true }, modifier = modifier)
+    if (expanded) {
+        GuestInviteCard(onAccept, onDecline, modifier.fillMaxWidth(0.85f))
+    } else {
+        GoldCornerPill("Invited", onClick = { expanded = true }, modifier = modifier)
     }
 }
 

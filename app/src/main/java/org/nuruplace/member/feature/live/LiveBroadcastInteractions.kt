@@ -195,7 +195,7 @@ private fun HandRow(
         }
         Spacer(Modifier.width(Spacing.sm))
         when (guestStatus) {
-            "accepted" -> Text("Joining soon", style = NuruType.micro, color = Nuru.success, fontWeight = FontWeight.SemiBold)
+            "accepted" -> Text("On stage", style = NuruType.micro, color = Nuru.success, fontWeight = FontWeight.SemiBold)
             "invited" -> Text("Invited", style = NuruType.micro, color = Nuru.ink400, fontWeight = FontWeight.SemiBold)
             else -> Pill(
                 label = if (atGuestCap) "6 guests max" else "Invite to join",
@@ -218,7 +218,7 @@ private fun GuestRow(guest: LiveGuestRow, busy: Boolean, onRemove: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(guest.fullName.ifBlank { "Member" }, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (guest.status == "accepted") "Joining soon — video in a later update" else "Invited — waiting to accept",
+                if (guest.status == "accepted") "Live on stage — see the guest rail above" else "Invited — waiting to accept",
                 style = NuruType.caption, color = if (guest.status == "accepted") Nuru.success else Nuru.ink400,
             )
         }

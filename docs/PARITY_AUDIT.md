@@ -2802,3 +2802,187 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 → BUILD SUCCESSFUL, 49 tests, 0 failures/errors (45 baseline + 4 new). Not
 pushed / no PR opened (isolated worktree `.worktrees/live-taste`, branch
 `feat/live-taste`, built on top of origin/main #73/#74/#76).
+
+## 2026-07-31 — Nuru Live L6b: real guest video (WHIP publish + WHEP subscribe), replacing the "joining soon" placeholders (branch feat/live-l6b-guest-video, this repo only, on top of #73/#74/#76/#78)
+
+L6a shipped guest invite/accept as pure scaffolding (`status: accepted` on
+`pulse.guests[]`, no media). This session wires the actual video: guests
+WHIP-publish camera+mic to MediaMTX; the broadcaster WHEP-subscribes to
+each accepted guest and renders a tile; guest audio is additionally mixed
+into the broadcaster's own outgoing RTMP audio so the CONGREGATION hears
+guests too, not just the host.
+
+**1. WebRTC dependency + 16 KB verification.** `io.github.webrtc-sdk:
+android:144.7559.09` (latest stable on Maven Central at session time,
+LiveKit-maintained Google WebRTC prebuilt). Verified BEFORE wiring any code
+against it: unzipped the resolved `.aar`'s `arm64-v8a`/`x86_64`
+`libjingle_peerconnection_so.so` and ran `llvm-objdump -p` — every LOAD
+segment aligns `2**14` (16 KB) on both 64-bit ABIs. Re-verified post-build
+by extracting the SAME `.so` out of the actual assembled debug APK (not
+just the raw `.aar`) — alignment survives AGP's merge/strip step unchanged
+(`stripDebugDebugSymbols` logs "Unable to strip … libjingle_peerconnection_
+so.so, packaging them as they are", i.e. untouched, not re-packed
+unaligned). Declared in `gradle/libs.versions.toml` (`webrtcSdk`,
+`webrtc-sdk`) + `app/build.gradle.kts`; no new repository needed
+(`mavenCentral()` already declared in `settings.gradle.kts`).
+
+**2. Shared WebRTC plumbing** (`feature/live/LiveWebRtc.kt`, new): one
+process-wide `PeerConnectionFactory`/`EglBase` (WebRTC's own guidance —
+expensive to recreate), suspend wrappers around `SdpObserver`/
+`PeerConnection`'s callback API (`createOfferSuspend`/
+`setLocalDescriptionSuspend`/`setRemoteDescriptionSuspend`/
+`awaitIceGatheringComplete` — polls `iceGatheringState()` with a 4s cap
+rather than wiring a second observer callback, since MediaMTX's WHIP/WHEP
+is gather-then-send with no trickle channel in the HTTP exchange anyway),
+and the WHIP/WHEP HTTP exchange itself (`postSdpOffer`/`deleteResource` —
+POST `application/sdp` → 201 + SDP answer body + `Location` header,
+resolved against the request URL if relative; DELETE the resolved
+`Location` to tear down). One public STUN server
+(`stun.l.google.com:19302`) for ICE server-reflexive candidates — no TURN
+needed since MediaMTX itself sits on a publicly routable VPS, not behind
+NAT. Auth is query-param (`?user=&pass=`), never a header — same idiom as
+the RTMP publish URL (`LiveBroadcastEngine.kt`'s `buildPublishUrl`).
+
+**3. `WhipPublisher`** (`feature/live/WhipPublisher.kt`, new) — guest side.
+Front camera via `Camera2Enumerator` at 960×540@24 (~800 kbps target,
+matches the L6b spec's modest thumbnail-rail profile regardless of device
+capability) + mic with echo-cancellation/noise-suppression/AGC
+`MediaConstraints`, two `SEND_ONLY` transceivers, offer → gather → POST →
+`setRemoteDescription(answer)`. `attachLocalPreview`/`detachLocalPreview`
+are decoupled from `start`/`stop` so the self-preview `SurfaceViewRenderer`
+(created by Compose on its own schedule) can wire up whichever side of the
+race it lands on. `stop()` DELETEs the WHIP resource, stops+disposes the
+camera capturer, and tears down the `PeerConnection`.
+
+**4. Guest UX** (`LivePlayerScreen.kt`): the moment `pulse.guests[]` reports
+ME as `accepted`, a `LaunchedEffect` checks CAMERA/RECORD_AUDIO permission
+(same `rememberLauncherForActivityResult(RequestMultiplePermissions())`
+pattern as `GoLiveSetupSheet`'s Go Live flow — a hard denial surfaces an
+honest error chip with tap-to-retry, never a silent hang) and drives a
+`GuestStageState` (`Idle`/`Connecting`/`Live`/`Error`) through
+`GET .../guests/me/ingest` → `WhipPublisher.start()`. `Live` renders a
+draggable rounded self-preview PiP (`GuestSelfPreviewPiP`, `GuestStageUi.kt`
+— same `clampDragOffset`/`pointerInput(detectDragGestures)` idiom as
+`LiveFloatingChat`) with a mic-mute toggle baked into its corner, plus a
+red `LeaveStagePill` (→ stop publish + `DELETE guests/{me}`, same visual
+weight as the broadcaster HUD's End button). The HLS player's own audio is
+muted while `Live` (`player.volume = 0f`) — WHIP is send-only, so without
+this a guest hears their own voice echo back several seconds later over
+HLS while actively speaking. Backgrounding while on stage
+(`LifecycleEventEffect(ON_STOP)`) leaves cleanly rather than half-dying;
+screen teardown (`DisposableEffect`) does the same via `Net.client.bgScope`
+(survives past the composable's own cancelled `rememberCoroutineScope`,
+same precedent `ApiClient.kt` documents for the engagement-flush-on-exit
+call). `GuestStageBanner` (`LiveInteractions.kt`) now only handles the
+`invited` prompt — the old static `OnStageSoonChip` ("On stage soon") is
+gone; `accepted` is real publish state now. Guest publishing does NOT need
+a foreground service (per the brief — the screen is on the whole time it's
+relevant; `ON_STOP` above is exactly the "otherwise stop cleanly" case).
+
+**5. `WhepSubscriber`** (`feature/live/WhepSubscriber.kt`, new) — host side,
+one instance per accepted guest with a `whepUrl` (owner-only field on
+`pulse.guests[]`). Two `RECV_ONLY` transceivers; `onTrack` routes a
+`VideoTrack` to whatever renderer is attached (or queues until one is,
+same decoupled `attachRenderer`/`detachRenderer` pattern as the publisher)
+and an `AudioTrack` to `GuestAudioMixer.attach(guestId)`. Authenticated as
+the STREAM's own id + streamKey (`?user=<streamId>&pass=<streamKey>`, both
+already in scope as `LiveBroadcastScreen` params) — a WHEP subscription is
+a broadcaster-authority action, not the guest's own credential.
+
+**6. Host UX** (`LiveBroadcastScreen.kt`): a `mutableStateMapOf` of
+`WhepSubscriber` keyed by guest id, reconciled each time `pulse.guests`'
+accepted-with-`whepUrl` set changes (`LaunchedEffect` keyed on that id set —
+adds a subscriber + starts it, stops+removes ones no longer present).
+Renders as `HostGuestRail` (`GuestStageUi.kt`) — a draggable strip (left-
+edge grip handle, mirrors `LiveFloatingChat`'s "only the handle drags, the
+content scrolls" idiom) of up to `MAX_GUESTS` (6) rounded ~96×128dp tiles
+with a name label, horizontally scrollable since 6 tiles don't fit most
+phone widths. The host hears guests automatically — WebRTC plays received
+audio through the default output regardless of `addSink()`, which is an
+additive tap, not a replacement. `LiveBroadcastInteractions.kt`'s
+`LiveHandsGuestsSheet` guest-row copy updated: "Joining soon — video in a
+later update" → "Live on stage — see the guest rail above"; the raised-
+hand row's "Joining soon" → "On stage" (both were stale now that L6b ships
+real video).
+
+**7. Reach goal — congregation hears guests too, SHIPPED** (not a fallback):
+verified two independent, real mechanisms exist rather than assuming from
+memory. (a) `org.webrtc.AudioTrack.addSink(AudioTrackSink)` — confirmed via
+`javap` against the resolved 144.7559.09 `classes.jar` — is a genuine
+playout/received-side PCM tap (`onData(ByteBuffer, bitsPerSample,
+sampleRate, numberOfChannels, numberOfFrames, timestamp)`) per remote
+track, additive to normal speaker playback, NOT the capture-side-only
+`JavaAudioDeviceModule.SamplesReadyCallback` the task brief flagged as a
+dead end. (b) RootEncoder 2.5.9's `AudioSource` (verified against the
+pinned tag) is a bare abstract class — `start(getMicrophoneData)`/`stop()`/
+`isRunning()`, nothing codec-specific — so a from-scratch subclass is free
+to call `getMicrophoneData.inputPCMData(Frame)` with whatever PCM it wants,
+whenever it wants (the sanctioned pattern RootEncoder's own
+`MixAudioSource.kt` uses, though THAT particular implementation leans on
+`AudioPlaybackCaptureConfiguration` — Q+, a second screen-share-style
+MediaProjection consent prompt, and the OS hard-blocks capturing
+`USAGE_VOICE_COMMUNICATION` content, which is WebRTC's default attribute —
+not reused here for exactly those reasons). `GuestAudioMixer.kt` (new)
+wires the two together: each guest's `AudioTrackSink` downmixes to mono +
+linearly resamples to 44.1 kHz into a bounded (~2s) per-guest ring buffer;
+`MixingMicrophoneSource` (a from-scratch RootEncoder `AudioSource`,
+mirroring stock `MicrophoneSource.kt`'s exact `MicrophoneManager` wrapping)
+sums all active guests' queued samples into the broadcaster's own mic
+`Frame` in place, in `inputPCMData`, before forwarding upstream — no
+MediaProjection, no second consent prompt, no OS capture restriction.
+Swapped in as the VIDEO broadcast's audio source from the very start
+(`LiveBroadcastEngine.kt`'s `buildBroadcaster`, the `GenericStream`
+4-arg constructor with `Camera2Source` + `MixingMicrophoneSource`, not the
+2-arg convenience constructor which bakes in stock `MicrophoneSource`) and
+preserved across mute/unmute (`VideoBroadcaster.setMuted` swaps
+`NoAudioSource`↔`MixingMicrophoneSource`, never back to plain
+`MicrophoneSource` — that would silently drop guest mixing the moment
+someone taps mute). `GuestAudioMixer.reset()` on broadcast start + full
+teardown (`LiveBroadcastService.kt`) so a stale guest from a previous
+session can never bleed into a new one's mix.
+
+**Files**: `feature/live/LiveWebRtc.kt`, `WhipPublisher.kt`,
+`WhepSubscriber.kt`, `GuestAudioMixer.kt`, `GuestStageUi.kt` (all new);
+`feature/live/LivePlayerScreen.kt` (guest publish state machine +
+self-preview PiP + Leave Stage), `LiveBroadcastScreen.kt` (WhepSubscriber
+reconciliation + `HostGuestRail`), `LiveBroadcastEngine.kt`
+(`MixingMicrophoneSource` wiring, mute-swap fix), `LiveBroadcastService.kt`
+(`GuestAudioMixer.reset()` at start + cleanup), `LiveInteractions.kt`
+(`GuestStageBanner` simplified to `invited`-only, `OnStageSoonChip`
+removed), `LiveBroadcastInteractions.kt` (stale "joining soon" copy fixed
+in both the hand row and guest row), `data/net/LiveDtos.kt`
+(`LiveGuestRow.whepUrl`, new `LiveGuestIngest`), `data/net/MemberApi.kt`
+(`getLiveGuestIngest`), `gradle/libs.versions.toml` + `app/build.gradle.kts`
+(webrtc-sdk dependency).
+
+**Honest limits**: (a) audio mixing is wired for VIDEO broadcasts only
+(`GenericStream`/`VideoBroadcaster`) — audio-only (`kind: "audio"`)
+broadcasts still get host-only guest audio; `GenericOnlyAudio`/
+`OnlyAudioBase`'s narrower API wasn't traced for an equivalent
+`changeAudioSource` hook in this session, and guests-on-an-audio-only-
+broadcast is the rarer combination anyway. (b) the mixer's resampling is
+linear interpolation, not a proper sample-rate-conversion filter — correct
+math, adequate for spoken voice, not broadcast-grade audio engineering.
+(c) none of this was exercised on a real device or against the live
+MediaMTX server this session — every claim here is either compile-verified
+or traced against the resolved library's actual decompiled API (`javap`)/
+source (pinned RootEncoder tag via `gh api`), never assumed from memory,
+but WHIP/WHEP's actual on-the-wire behavior (ICE connectivity through real
+NATs, MediaMTX's exact SDP answer shape, whether the audio mix sounds
+right) needs a live two-device test before this ships. (d) per the task
+brief's own flag: coexistence between WebRTC's `JavaAudioDeviceModule`
+(host's WHEP playout) and RootEncoder's `MicrophoneManager` (host's own
+mic capture) running concurrently was reasoned through the API surface
+(playout needs no `AudioRecord` since WHEP here is recvonly, so no capture-
+side conflict was found on paper) but never verified against real
+`AudioManager` mode/routing behavior on a device — the one item most worth
+a live check before this is trusted in front of a congregation.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 49 tests, 0 failures/errors (baseline, unchanged — this
+session is client-plumbing/UI, no new unit-testable pure functions).
+16 KB alignment re-verified against the actual assembled debug APK (see
+item 1). Not pushed / no PR opened (isolated worktree `.worktrees/l6b`,
+branch `feat/live-l6b-guest-video`, built on top of origin/main
+#73/#74/#76/#78).
