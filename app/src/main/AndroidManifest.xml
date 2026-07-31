@@ -11,6 +11,12 @@
     <!-- Nuru Radio keeps playing when the screen closes / phone locks. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Broadcast Studio (Nuru Live) — the broadcast must survive
+         navigation/backgrounding/lock, so LiveBroadcastService runs as a
+         typed foreground service for the whole life of a broadcast. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
@@ -71,6 +77,18 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- Broadcast Studio — owns the RootEncoder engine for the whole
+             life of a broadcast so it survives navigation/backgrounding/
+             lock (see LiveBroadcastService.kt's header comment). Declares
+             the superset of types it may need across a session (plain
+             camera broadcast, or a mid-broadcast switch to screen/document
+             share); the actual runtime type passed to startForeground()
+             narrows to whichever of these is genuinely active. -->
+        <service
+            android:name=".feature.live.LiveBroadcastService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|mediaProjection" />
 
         <!-- Shares authed-downloaded files (certificate PDFs) with viewer apps. -->
         <provider

@@ -1,17 +1,26 @@
-// Nuru Live — the broadcaster's own screen (L3). Publishes RTMP to the
-// self-hosted MediaMTX server via RootEncoder. Video kind shows the camera
-// preview; audio kind shows the Radio-style waveform backdrop. Both share one
-// LIVE HUD (pulsing dot, elapsed timer, "N watching"), mute/flip controls, an
-// End confirmation, connection-drop retry with backoff, and a summary screen.
+// Nuru Live — the broadcaster's own screen (L3), Broadcast Studio rework.
+// Full-bleed center-crop preview, floating inset-aware HUD, a Camera/Screen/
+// Document source switcher, and — the headline change — a screen this thin:
+// the actual RootEncoder engine now lives in LiveBroadcastService, reached
+// only through BroadcastController, so navigating away, switching tabs, or
+// locking the phone no longer ends the broadcast (see that service's header
+// comment for the full "why"). This file owns UI-only concerns: the HUD
+// chrome, the L5 interaction polling (pulse/reactions/hands/chat — all
+// resubscribe-on-return rather than living in the service, since they're
+// idempotent GETs with nothing lost by re-fetching), and the source-switcher
+// consent flows (MediaProjection, SAF) that only an Activity can launch.
 package org.nuruplace.member.feature.live
 
-import android.Manifest
 import android.app.Activity
-import android.content.pm.PackageManager
+import android.content.Intent
+import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,12 +44,14 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,20 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
-import com.pedro.common.ConnectChecker
-import com.pedro.common.VideoCodec
-import com.pedro.common.onMainThreadHandler
-import com.pedro.encoder.input.sources.audio.MicrophoneSource
-import com.pedro.encoder.input.sources.audio.NoAudioSource
-import com.pedro.encoder.input.sources.video.Camera2Source
-import com.pedro.encoder.input.video.CameraHelper
-import com.pedro.library.generic.GenericOnlyAudio
-import com.pedro.library.generic.GenericStream
-import com.pedro.library.util.streamclient.StreamBaseClient
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.LivePulsingDot
@@ -79,86 +78,6 @@ import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
-
-private const val VIDEO_WIDTH = 1920
-private const val VIDEO_HEIGHT = 1080
-private const val VIDEO_BITRATE = 6_000_000 // ~6 Mbps, per docs/LIVE_STREAMING.md
-private const val AUDIO_SAMPLE_RATE = 44_100
-private const val AUDIO_BITRATE = 128_000
-private val RETRY_BACKOFFS_MS = longArrayOf(2_000, 5_000, 10_000)
-private const val MAX_RETRIES = 3
-
-private enum class Phase { CONNECTING, LIVE, RECONNECTING, FAILED, ENDING, SUMMARY }
-
-/** Uniform wrapper over RootEncoder's two unrelated base classes
- *  (StreamBase for GenericStream/video, OnlyAudioBase for GenericOnlyAudio/
- *  audio-only) — they share no common supertype and differ in small ways
- *  (mute mechanism, prepareAudio's parameter order) that this hides so the
- *  rest of the screen doesn't need to branch on `kind` everywhere. */
-private interface Broadcaster {
-    val isStreaming: Boolean
-    fun startStream(url: String)
-    fun stopStream()
-    fun release()
-    fun setMuted(muted: Boolean)
-    fun client(): StreamBaseClient
-    fun startPreview(view: SurfaceView) {}
-    fun stopPreview() {}
-    fun switchCamera() {}
-}
-
-/** StreamBase.prepareVideo's own internal formula (verified against the
- *  pinned 2.5.9 source, library/src/main/java/com/pedro/library/base/
- *  StreamBase.kt: `glInterface.setCameraOrientation(if (rotation == 0) 270
- *  else rotation - 90)`) for converting the `rotation` degrees passed to
- *  prepareVideo into the `cameraOrientation` value setOrientation()/
- *  setCameraOrientation() expect. Used ONLY to re-assert the SAME locked
- *  orientation after a camera flip, never to change it. */
-internal fun cameraOrientationFor(rotation: Int): Int = if (rotation == 0) 270 else rotation - 90
-
-private class VideoBroadcaster(val stream: GenericStream, private val rotation: Int) : Broadcaster {
-    override val isStreaming get() = stream.isStreaming
-    override fun startStream(url: String) = stream.startStream(url)
-    override fun stopStream() { stream.stopStream() }
-    override fun release() = stream.release()
-    // StreamBase (video) has no disableAudio()/enableAudio() — mute by
-    // swapping the audio source itself (verified against the resolved
-    // 2.5.9 tag: NoAudioSource exists there; the newer SilenceAudioSource
-    // used by master does not, so this is deliberately NOT used).
-    override fun setMuted(muted: Boolean) {
-        stream.changeAudioSource(if (muted) NoAudioSource() else MicrophoneSource())
-    }
-    override fun client() = stream.getStreamClient()
-    override fun startPreview(view: SurfaceView) { if (!stream.isOnPreview) stream.startPreview(view) }
-    override fun stopPreview() { if (stream.isOnPreview) stream.stopPreview() }
-    override fun switchCamera() {
-        (stream.videoSource as? Camera2Source)?.switchCamera()
-        // Defensive re-assert of the locked orientation after a camera flip —
-        // mirrors the iOS port's BroadcastController.flipCamera() comment
-        // ("re-attach resets it — keep the locked orientation"). Verified
-        // against the pinned 2.5.9 Camera2Source.switchCamera() source that
-        // this is a no-op TODAY: it only stops/restarts capture on the SAME
-        // glInterface surface and never touches cameraOrientation itself
-        // (only StreamBase.changeVideoSource() — a call path this app never
-        // uses — does that, via glInterface.forceOrientation). Kept anyway:
-        // it's one cheap call, and it's exactly the guard that would matter
-        // if a future RootEncoder version changes that behavior.
-        stream.setOrientation(cameraOrientationFor(rotation))
-    }
-}
-
-private class AudioBroadcaster(val stream: GenericOnlyAudio) : Broadcaster {
-    override val isStreaming get() = stream.isStreaming
-    override fun startStream(url: String) = stream.startStream(url)
-    override fun stopStream() { stream.stopStream() }
-    // OnlyAudioBase exposes no release() in this version — stopStream() is
-    // the documented full teardown for the audio-only path.
-    override fun release() {}
-    override fun setMuted(muted: Boolean) { if (muted) stream.disableAudio() else stream.enableAudio() }
-    override fun client() = stream.getStreamClient()
-}
-
-private class BroadcasterHolder { var value: Broadcaster? = null }
 
 @Composable
 fun LiveBroadcastScreen(
@@ -171,222 +90,83 @@ fun LiveBroadcastScreen(
     myUserId: String? = null,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val isVideo = kind == "video"
 
-    // ── RTMP publish URL construction — READ THIS BEFORE TOUCHING ──
-    //
-    // MediaMTX's simple query-based publish auth expects the FINAL, fully
-    // reconstructed RTMP request to look like ".../church?user=<id>&pass=<key>"
-    // (path, then query). ffmpeg achieves this by treating the whole
-    // "church?user=..&pass=.." as ONE opaque connect string with an EMPTY
-    // stream name/playpath — this matches MediaMTX's own documented "Server=
-    // rtmp://host/mypath, Stream Key=(blank)" OBS convention.
-    //
-    // RootEncoder does NOT behave the same way if you hand it a URL with a
-    // real, un-escaped '?'. I verified this by reading the actual resolved
-    // library's source (RootEncoder 2.5.9's common/UrlParser.kt) together
-    // with MediaMTX's RTMP server (gortmplib's server_conn.go buildURL()):
-    // RootEncoder's UrlParser splits the URL into an RTMP "app" (sent in the
-    // connect command) and a separate "streamName"/playpath (sent in the
-    // publish command). For a FLAT single-segment path like "church" plus a
-    // query string, UrlParser puts "church" in appName (clean) and
-    // "user=..&pass=.." in streamName, WITHOUT the leading '?' (its
-    // getStreamName() strips it via removePrefix("?")). MediaMTX's gortmplib
-    // then reconstructs the wire path as `"/" + app + "/" + streamName`
-    // whenever streamName is non-empty — i.e. it ALWAYS re-joins app and
-    // streamName with a literal "/", never a "?". The result for church is
-    // "/church/user=..&pass=.." — no '?' survives ANYWHERE in that string, so
-    // MediaMTX's Go URL parser sees an empty query and the credentials are
-    // silently dropped. I confirmed this end-to-end with a small transliteration
-    // of both files plus a real `java.net.URI` test (java.net.URI is what
-    // UrlParser.parse() actually calls). The NESTED "cell/{cellId}" scope is
-    // unaffected — its extra path segment happens to keep the '?' embedded
-    // mid-token in streamName, so gortmplib's re-join reconstructs it
-    // correctly by coincidence. Church (flat) is the one that breaks.
-    //
-    // THE FIX: percent-encode the '?' as "%3F" before handing the string to
-    // RootEncoder. `java.net.URI` decodes %3F back to a literal '?' when you
-    // read `.getPath()`, but — critically — does NOT treat it as a genuine
-    // query delimiter, so `.getQuery()` comes back null. Verified live
-    // against java.net.URI: for "rtmp://host:1935/church%3Fuser=X&pass=Y",
-    // getPath() == "/church?user=X&pass=Y" and getQuery() == null. Fed
-    // through UrlParser with query == null, the WHOLE "church?user=X&pass=Y"
-    // string becomes one opaque appName with an EMPTY streamName — exactly
-    // the ffmpeg-equivalent shape — so gortmplib never inserts a spurious
-    // "/" and the '?' survives exactly where MediaMTX expects it. This is
-    // harmless for the nested cell/{cellId} case too (still splits
-    // correctly). Both `streamId` (a UUID) and `streamKey` (32 hex chars)
-    // are URL-safe as-is, so only the '?' itself needs escaping.
-    val publishUrl = remember(rtmpUrl, streamId, streamKey) {
-        "$rtmpUrl%3Fuser=$streamId&pass=$streamKey"
+    val state by BroadcastController.state.collectAsState()
+    val phase = state.phase
+
+    // Idempotent per streamId — a fresh "Go Live" call starts the service +
+    // the engine; landing back here for the SAME streamId (tab switch, the
+    // "tap to return" pill, the notification) just re-attaches to whatever's
+    // already running. See BroadcastController.start()/LiveBroadcastService.
+    LaunchedEffect(streamId) {
+        BroadcastController.start(context, streamId, rtmpUrl, streamKey, title, kind)
     }
 
-    var phase by remember { mutableStateOf(Phase.CONNECTING) }
-    var muted by remember { mutableStateOf(false) }
-    var viewerCount by remember { mutableIntStateOf(0) }
-    var peakViewers by remember { mutableIntStateOf(0) }
-    var elapsedSec by remember { mutableIntStateOf(0) }
-    var startedAtMillis by remember { mutableStateOf<Long?>(null) }
-    var retryAttempt by remember { mutableIntStateOf(0) }
-    var failReason by remember { mutableStateOf<String?>(null) }
     var showEndConfirm by remember { mutableStateOf(false) }
-    var endedInBackground by remember { mutableStateOf(false) }
-    // Set right before WE call stopStream() ourselves (End flow, background
-    // teardown) so the ConnectChecker's onDisconnect() doesn't mistake an
-    // intentional stop for a dropped connection and try to reconnect.
-    var endingIntentionally by remember { mutableStateOf(false) }
+    var showSourceSheet by remember { mutableStateOf(false) }
+    // Non-null exactly when Document mode's PDF is picked AND the engine has
+    // actually switched to the Screen source — see the `documentUri != null
+    // && state.source == SCREEN` gate below, which is what actually decides
+    // whether the full-screen pager renders.
+    var documentUri by remember { mutableStateOf<Uri?>(null) }
 
-    val broadcasterHolder = remember { BroadcasterHolder() }
+    fun endStream() {
+        showEndConfirm = false
+        BroadcastController.end()
+    }
 
-    fun handleDrop(reason: String) {
-        if (endingIntentionally || phase == Phase.ENDING || phase == Phase.SUMMARY) return
-        if (retryAttempt < MAX_RETRIES) {
-            val delayMs = RETRY_BACKOFFS_MS.getOrElse(retryAttempt) { RETRY_BACKOFFS_MS.last() }
-            retryAttempt += 1
-            phase = Phase.RECONNECTING
-            val willRetry = runCatching { broadcasterHolder.value?.client()?.reTry(delayMs, reason, null) }.getOrDefault(false) == true
-            if (!willRetry) {
-                runCatching { broadcasterHolder.value?.stopStream() }
-                phase = Phase.FAILED
-                failReason = reason
-            }
+    // ── Source switcher consent flows (MediaProjection + SAF) — must be
+    // launched from an Activity, so they live here, not inside the sheet or
+    // the Service. ──────────────────────────────────────────────────────
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            BroadcastController.switchToScreenSource(result.resultCode, result.data!!)
         } else {
-            runCatching { broadcasterHolder.value?.stopStream() }
-            phase = Phase.FAILED
-            failReason = reason
+            // Consent denied/cancelled — nothing switched, so a Document
+            // pick that was in flight never actually shows (the render gate
+            // above requires source == SCREEN too), but clear it anyway so
+            // a later plain Camera→Document pick doesn't inherit a stale uri.
+            documentUri = null
+        }
+    }
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            documentUri = uri
+            val mpm = context.getSystemService(MediaProjectionManager::class.java)
+            screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
         }
     }
 
-    val connectChecker = remember {
-        object : ConnectChecker {
-            override fun onConnectionStarted(url: String) {}
-            override fun onConnectionSuccess() {
-                onMainThreadHandler {
-                    retryAttempt = 0
-                    if (startedAtMillis == null) startedAtMillis = System.currentTimeMillis()
-                    phase = Phase.LIVE
-                }
-            }
-            override fun onConnectionFailed(reason: String) {
-                onMainThreadHandler { handleDrop(reason) }
-            }
-            override fun onDisconnect() {
-                onMainThreadHandler {
-                    if (!endingIntentionally && phase == Phase.LIVE) handleDrop("Disconnected")
-                }
-            }
-            override fun onAuthError() {
-                onMainThreadHandler {
-                    runCatching { broadcasterHolder.value?.stopStream() }
-                    phase = Phase.FAILED
-                    failReason = "Authentication failed."
-                }
-            }
-            override fun onAuthSuccess() {}
-            override fun onNewBitrate(bitrate: Long) {}
-        }
+    fun requestScreenShare() {
+        val mpm = context.getSystemService(MediaProjectionManager::class.java)
+        screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
     }
 
-    // Built + prepared once for this screen's lifetime. Video: 1920x1080@30,
-    // hardware H.264 ~6 Mbps, back camera + mic. Audio: 44.1kHz stereo AAC
-    // 128kbps mic only, no camera at all (GenericOnlyAudio never touches
-    // Camera2/CameraX).
-    //
-    // Codec: explicitly H.264, not HEVC. docs/LIVE_STREAMING.md's aspiration
-    // is "HEVC where the device supports hardware encode, else H.264", but
-    // RTMP-transported HEVC requires the newer "Enhanced RTMP" extension
-    // (confirmed in RootEncoder's own README/feature list — H.265 is listed
-    // under RTMP only "using RTMP enhanced"). Whether the deployed MediaMTX
-    // version correctly ingests + re-muxes Enhanced-RTMP HEVC into HLS for
-    // the ALREADY-SHIPPED L2 viewers (media3 ExoPlayer) is unverified without
-    // a live server to test against — a wrong codec here would silently
-    // break playback for every viewer, a much worse failure than slightly
-    // larger H.264 frames. H.264 is universally supported by every RTMP
-    // server generation including MediaMTX, so it's the safe default; ~6
-    // Mbps 1080p H.264 already looks excellent. Flagged here rather than
-    // guessed toward the riskier option.
-    var prepareOk by remember { mutableStateOf(false) }
-    val broadcaster = remember {
-        if (isVideo) {
-            val s = GenericStream(context, connectChecker)
-            // Live camera-TILT compensation only (verified against the pinned
-            // 2.5.9 GlStreamInterface source): this wires a SensorRotationManager
-            // that keeps re-asserting `cameraOrientation` from the live
-            // accelerometer for the rest of the broadcast, so footage stays
-            // upright if the phone tilts slightly — but `encoderWidth`/
-            // `encoderHeight` are set ONCE below by prepareVideo() and never
-            // touched again by that callback, so the encoded RESOLUTION (the
-            // thing that must never change mid-stream or every viewer's player
-            // breaks) is still genuinely locked for the session. Orthogonal to,
-            // and compatible with, the orientation-follow fix right below.
-            s.getGlInterface().autoHandleOrientation = true
-            s.setVideoCodec(VideoCodec.H264)
-            // ── Orientation-follow fix (port of iOS 80f4fdd) ──
-            // Was: hard-coded `rotation = 90`, so a broadcast was ALWAYS
-            // encoded portrait even when the phone was actually held
-            // landscape. Fix: read how the phone is held ONCE, right here at
-            // go-live, and bake it into prepareVideo's `rotation` param.
-            // StreamBase.prepareVideo (pinned 2.5.9 source, library/src/main/
-            // java/com/pedro/library/base/StreamBase.kt) computes the ACTUAL
-            // encoder width/height from that single value internally
-            // (`if (rotation == 90 || rotation == 270)
-            // glInterface.setEncoderSize(height, width) else
-            // setEncoderSize(width, height)`) — so VIDEO_WIDTH/VIDEO_HEIGHT
-            // below are deliberately left as the fixed "landscape-native" base
-            // (1920x1080) for BOTH cases; no manual width/height swap needed,
-            // the library already does it internally. This is the exact same
-            // fixed-base + rotation-flag pattern RootEncoder's own "rotation"
-            // sample app uses (app/src/main/java/com/pedro/streamer/rotation/
-            // CameraFragment.kt: `rotation = if (isVertical) 90 else 0`).
-            // `CameraHelper.getCameraOrientation(context)` (encoder/src/main/
-            // java/com/pedro/encoder/input/video/CameraHelper.java — the
-            // "encoder" module RootEncoder pulls in transitively, already on
-            // this app's classpath, same as Camera2Source/MicrophoneSource
-            // above) is the library's own canonical helper for exactly this:
-            // it reads `windowManager.getDefaultDisplay().getRotation()` and
-            // returns it ALREADY converted to the 0/90/180/270 convention
-            // prepareVideo's `rotation` param expects (ROTATION_0→90
-            // portrait, ROTATION_90→0 landscape, ROTATION_180→270 reverse
-            // portrait, ROTATION_270→180 reverse landscape) — the same helper
-            // RootEncoder's own ScreenOrientation.lockScreen() sample uses.
-            // Read once, here, and never touched again for the rest of the
-            // broadcast — re-orienting mid-publish would change the encoded
-            // frame size and break every viewer's player.
-            val rotation = CameraHelper.getCameraOrientation(context)
-            val ok = runCatching {
-                s.prepareVideo(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_BITRATE, fps = 30, rotation = rotation) &&
-                    s.prepareAudio(AUDIO_SAMPLE_RATE, true, AUDIO_BITRATE)
-            }.getOrDefault(false)
-            prepareOk = ok
-            VideoBroadcaster(s, rotation).also { broadcasterHolder.value = it }
-        } else {
-            val s = GenericOnlyAudio(connectChecker)
-            val ok = runCatching { s.prepareAudio(AUDIO_BITRATE, AUDIO_SAMPLE_RATE, true) }.getOrDefault(false)
-            prepareOk = ok
-            AudioBroadcaster(s).also { broadcasterHolder.value = it }
-        }
+    fun switchToCamera() {
+        documentUri = null
+        BroadcastController.switchToCameraSource()
     }
 
-    LaunchedEffect(broadcaster) {
-        if (prepareOk) {
-            runCatching { broadcaster.startStream(publishUrl) }
-                .onFailure { phase = Phase.FAILED; failReason = it.message ?: "Couldn't start the stream." }
-        } else {
-            phase = Phase.FAILED
-            failReason = "Camera or microphone couldn't be configured on this device."
-        }
+    // ── Preview attach/detach — the SurfaceView's own OS lifecycle (created
+    // when this screen is composed and visible, destroyed when it isn't) is
+    // exactly "detach on background/navigate-away, re-attach on return", so
+    // no ON_STOP/ON_RESUME wiring is needed here at all; the callback below
+    // is the whole mechanism. broadcaster.startPreview()/stopPreview() are
+    // StreamBase.startPreview(surface,...)/stopPreview() under the hood
+    // (verified 2.5.9 source, LiveBroadcastEngine.kt) — while isStreaming,
+    // detaching the preview does NOT stop the publish, it just frees the GL
+    // preview surface; the encoder keeps consuming frames the whole time. ──
+    DisposableEffect(Unit) {
+        onDispose { BroadcastController.detachPreview() }
     }
 
-    DisposableEffect(broadcaster) {
-        onDispose {
-            runCatching { if (broadcaster.isStreaming) broadcaster.stopStream() }
-            runCatching { broadcaster.release() }
-        }
-    }
-
-    // Keep the screen on for the whole broadcast; always cleared on exit,
-    // including an abnormal teardown, via DisposableEffect.
+    // Keep the screen on for the whole broadcast (locally — cleared the
+    // instant this screen leaves composition, same as before).
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -394,12 +174,17 @@ fun LiveBroadcastScreen(
     }
 
     // "N watching" — poll GET /live/now every 15s while actually live,
-    // filtered to our own stream_id, tracking a running peak client-side
-    // (there's no dedicated peak field returned at end time).
+    // filtered to our own stream_id, tracking a running peak client-side.
+    // Resubscribe-on-return (not service-owned): a harmless re-fetch, and
+    // peak resets if you navigate fully away and back — a documented, minor
+    // cosmetic tradeoff, not a data-loss concern (the server is still the
+    // one true viewer count).
+    var viewerCount by remember { mutableIntStateOf(0) }
+    var peakViewers by remember { mutableIntStateOf(0) }
     LaunchedEffect(streamId) {
         while (true) {
             delay(15_000)
-            if (phase == Phase.LIVE) {
+            if (BroadcastController.state.value.phase == BroadcastPhase.LIVE) {
                 val row = runCatching { Net.client.api.getLiveNow().data }.getOrNull()
                     ?.firstOrNull { it.streamId == streamId }
                 if (row != null) {
@@ -410,9 +195,12 @@ fun LiveBroadcastScreen(
         }
     }
 
-    // Elapsed mm:ss, ticking only once we're actually connected.
-    LaunchedEffect(startedAtMillis) {
-        val started = startedAtMillis ?: return@LaunchedEffect
+    // Elapsed mm:ss, ticking only once we're actually connected. Reads from
+    // the service's own startedAtMillis, so it's correct even on a fresh
+    // resubscribe (doesn't restart from 0 when you return to the screen).
+    var elapsedSec by remember { mutableIntStateOf(0) }
+    LaunchedEffect(state.startedAtMillis) {
+        val started = state.startedAtMillis ?: return@LaunchedEffect
         while (true) {
             elapsedSec = ((System.currentTimeMillis() - started) / 1000).toInt()
             delay(1_000)
@@ -420,14 +208,7 @@ fun LiveBroadcastScreen(
     }
 
     // ── L5 interactions (docs/LIVE_INTERACTIVE.md) — broadcaster side ──────
-    // One GET .../pulse poll every 3s (the wire contract's broadcaster
-    // cadence, vs the viewer's 5s in LivePlayerScreen) folded into this same
-    // "only while actually LIVE" idiom as the viewer-count poll above. Drives
-    // the ✋ hand badge + hands/guests sheet and the floating reaction
-    // overlay; the 💬 chat sheet polls messages on its own while it's open.
     var pulse by remember { mutableStateOf<LivePulse?>(null) }
-    // null = not yet seeded (first poll) — prevents the whole reaction
-    // history from bursting as particles the instant the broadcast connects.
     var seenReactionKeys by remember { mutableStateOf<Set<String>?>(null) }
     var reduceMotionReactionTotal by remember { mutableIntStateOf(0) }
     val reactionParticles = rememberLiveParticleController()
@@ -443,7 +224,7 @@ fun LiveBroadcastScreen(
     LaunchedEffect(streamId) {
         while (true) {
             delay(3_000)
-            if (phase == Phase.LIVE) {
+            if (BroadcastController.state.value.phase == BroadcastPhase.LIVE) {
                 val p = runCatching { Net.client.api.getLivePulse(streamId) }.getOrNull()
                 if (p != null) {
                     pulse = p
@@ -460,124 +241,137 @@ fun LiveBroadcastScreen(
         }
     }
 
-    fun endStream(background: Boolean) {
-        showEndConfirm = false
-        if (endingIntentionally) return
-        endingIntentionally = true
-        endedInBackground = background
-        phase = Phase.ENDING
-        runCatching { broadcaster.stopStream() }
-        scope.launch {
-            // Idempotent + best-effort — never block the summary screen on
-            // the network the way sign-out never blocks on logout (AuthStore
-            // precedent). The row still gets cleaned up eventually even if
-            // this particular call drops.
-            runCatching { Net.client.api.postLiveStreamEnd(streamId) }
-            phase = Phase.SUMMARY
-        }
-    }
-
-    // App-background behavior. VIDEO: end gracefully rather than try to keep
-    // publishing camera frames from the background (Android would stop
-    // camera capture almost immediately anyway once backgrounded without a
-    // camera-type foreground service, so a half-alive publish is worse than
-    // an honest end). AUDIO: the task allows either choice (Android CAN keep
-    // a foreground-service-backed audio publish alive, mirroring how Radio's
-    // player uses one) — this implementation ends on background for BOTH
-    // kinds, matching video's behavior, for time-budget reasons: wiring a
-    // dedicated foreground-service audio publish path (own Service class,
-    // manifest entry, mic foreground-service type) is real, non-trivial
-    // scope beyond this pass. Documented tradeoff, not an oversight.
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (phase == Phase.LIVE || phase == Phase.RECONNECTING || phase == Phase.CONNECTING) {
-            endStream(background = true)
-        }
-    }
-
     // Hardware/gesture back must never silently abandon a live broadcast —
     // route it through the same confirmation as the End button.
-    BackHandler(enabled = phase == Phase.LIVE || phase == Phase.RECONNECTING || phase == Phase.CONNECTING) {
+    BackHandler(enabled = phase == BroadcastPhase.LIVE || phase == BroadcastPhase.RECONNECTING || phase == BroadcastPhase.CONNECTING) {
         showEndConfirm = true
-    }
-
-    fun manualRetry() {
-        retryAttempt = 0
-        failReason = null
-        phase = Phase.CONNECTING
-        runCatching { broadcaster.startStream(publishUrl) }
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
-            phase == Phase.SUMMARY -> SummaryView(
+            phase == BroadcastPhase.SUMMARY -> SummaryView(
                 title = title,
                 elapsedSec = elapsedSec,
                 peakViewers = peakViewers,
-                endedInBackground = endedInBackground,
+                endedInBackground = state.endedViaNotification,
                 onDone = onEnded,
             )
-            phase == Phase.FAILED -> FailedView(
-                reason = failReason,
-                onRetry = ::manualRetry,
-                onEnd = { endStream(background = false) },
+            phase == BroadcastPhase.FAILED -> FailedView(
+                reason = state.failReason,
+                onRetry = { BroadcastController.manualRetry() },
+                onEnd = { endStream() },
+            )
+            documentUri != null && state.source == BroadcastSource.SCREEN -> DocumentPagerScreen(
+                uri = documentUri!!,
+                muted = state.muted,
+                onToggleMute = { BroadcastController.toggleMute() },
+                onExit = { switchToCamera() },
+                onEnd = { showEndConfirm = true },
             )
             else -> {
                 if (isVideo) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            SurfaceView(ctx).apply {
-                                holder.addCallback(object : SurfaceHolder.Callback {
-                                    override fun surfaceCreated(h: SurfaceHolder) { broadcaster.startPreview(this@apply) }
-                                    override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) {}
-                                    override fun surfaceDestroyed(h: SurfaceHolder) { broadcaster.stopPreview() }
-                                })
-                            }
-                        },
-                    )
+                    if (state.source == BroadcastSource.CAMERA) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                SurfaceView(ctx).apply {
+                                    holder.addCallback(object : SurfaceHolder.Callback {
+                                        override fun surfaceCreated(h: SurfaceHolder) { BroadcastController.attachPreview(this@apply) }
+                                        override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) {}
+                                        override fun surfaceDestroyed(h: SurfaceHolder) { BroadcastController.detachPreview() }
+                                    })
+                                }
+                            },
+                        )
+                    } else {
+                        // Plain screen share, not Document — nothing to
+                        // preview locally besides a calm backdrop; the
+                        // congregation sees whatever's actually on the
+                        // broadcaster's screen (MediaProjection mirrors the
+                        // whole display, ScreenModeControls included).
+                        Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient))
+                    }
                 } else {
                     AudioHud(title)
                 }
 
-                LiveHudOverlay(
-                    phase = phase,
-                    title = title,
-                    kind = kind,
-                    elapsedSec = elapsedSec,
-                    viewerCount = viewerCount,
-                    retryAttempt = retryAttempt,
-                    muted = muted,
-                    isVideo = isVideo,
-                    handCount = pulse?.hands?.size ?: 0,
-                    onToggleMute = { muted = !muted; broadcaster.setMuted(muted) },
-                    onFlipCamera = { broadcaster.switchCamera() },
-                    onEndTapped = { showEndConfirm = true },
-                    onHandsTapped = { showHandsSheet = true },
-                    onChatTapped = { showChatSheet = true },
-                )
+                if (state.source == BroadcastSource.CAMERA) {
+                    LiveHudOverlay(
+                        phase = phase,
+                        title = title,
+                        kind = kind,
+                        elapsedSec = elapsedSec,
+                        viewerCount = viewerCount,
+                        retryAttempt = state.retryAttempt,
+                        muted = state.muted,
+                        isVideo = isVideo,
+                        handCount = pulse?.hands?.size ?: 0,
+                        onToggleMute = { BroadcastController.toggleMute() },
+                        onFlipCamera = { BroadcastController.switchCamera() },
+                        onSourceTapped = { showSourceSheet = true },
+                        onEndTapped = { showEndConfirm = true },
+                        onHandsTapped = { showHandsSheet = true },
+                        onChatTapped = { showChatSheet = true },
+                    )
 
-                // Floating reaction particles from pulse.recent_reactions —
-                // everyone else's ❤️/👍/🔥 (reuses #73's LiveParticleController/
-                // LiveParticleLayer verbatim). Reduce Motion swaps to a static
-                // counter chip instead of suppressing the feature entirely,
-                // matching the viewer overlay's exact same fallback.
-                if (phase == Phase.LIVE || phase == Phase.RECONNECTING) {
-                    if (reduceMotion) {
-                        if (reduceMotionReactionTotal > 0) {
-                            ReactionCounterChip(
-                                reduceMotionReactionTotal,
-                                Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 16.dp),
+                    if (phase == BroadcastPhase.LIVE || phase == BroadcastPhase.RECONNECTING) {
+                        if (reduceMotion) {
+                            if (reduceMotionReactionTotal > 0) {
+                                ReactionCounterChip(
+                                    reduceMotionReactionTotal,
+                                    Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 120.dp, end = 16.dp),
+                                )
+                            }
+                        } else {
+                            LiveParticleLayer(
+                                reactionParticles,
+                                Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 120.dp, end = 24.dp)
+                                    .width(70.dp).height(220.dp),
                             )
                         }
-                    } else {
-                        LiveParticleLayer(
-                            reactionParticles,
-                            Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 24.dp)
-                                .width(70.dp).height(220.dp),
-                        )
                     }
+                } else if (isVideo) {
+                    // Minimal LIVE indicator (top) + mute/switch-back/End
+                    // (bottom) — see ScreenModeControls' header comment for
+                    // why the full HUD is deliberately NOT shown here.
+                    Row(
+                        Modifier.align(Alignment.TopStart).statusBarsPadding().padding(Spacing.md)
+                            .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        LivePulsingDot()
+                        Text(if (phase == BroadcastPhase.LIVE) "LIVE" else "RECONNECTING…", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    ScreenModeControls(
+                        muted = state.muted,
+                        onToggleMute = { BroadcastController.toggleMute() },
+                        onSwitchToCamera = { switchToCamera() },
+                        onEnd = { showEndConfirm = true },
+                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = Spacing.lg),
+                    )
                 }
             }
+        }
+
+        if (showSourceSheet) {
+            LiveSourceSheet(
+                current = when {
+                    documentUri != null -> SourceChoice.DOCUMENT
+                    state.source == BroadcastSource.SCREEN -> SourceChoice.SCREEN
+                    else -> SourceChoice.CAMERA
+                },
+                onDismiss = { showSourceSheet = false },
+                onPick = { choice ->
+                    showSourceSheet = false
+                    when (choice) {
+                        SourceChoice.CAMERA -> switchToCamera()
+                        SourceChoice.SCREEN -> requestScreenShare()
+                        SourceChoice.DOCUMENT -> documentPickerLauncher.launch(arrayOf("application/pdf"))
+                    }
+                },
+            )
         }
 
         if (showHandsSheet) {
@@ -605,7 +399,7 @@ fun LiveBroadcastScreen(
                 confirmButton = {
                     Text(
                         "End", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { endStream(background = false) }.padding(Spacing.sm),
+                        modifier = Modifier.clickable { endStream() }.padding(Spacing.sm),
                     )
                 },
                 dismissButton = {
@@ -635,9 +429,16 @@ private fun AudioHud(title: String) {
     }
 }
 
+/** Broadcast Studio's floating HUD — every element floats over the full-
+ *  bleed video with its own WindowInsets handling so nothing ever sits
+ *  under the status bar or the gesture nav bar: top-left LIVE pill (status-
+ *  bar inset), bottom-left title chip + bottom-center controls row
+ *  (navigation-bar inset), both anchored independently rather than sharing
+ *  one padded Column like the pre-rework HUD did (that's what let the title
+ *  clip under the gesture bar on 3-button/gesture-nav devices). */
 @Composable
 private fun LiveHudOverlay(
-    phase: Phase,
+    phase: BroadcastPhase,
     title: String,
     kind: String,
     elapsedSec: Int,
@@ -648,58 +449,63 @@ private fun LiveHudOverlay(
     handCount: Int,
     onToggleMute: () -> Unit,
     onFlipCamera: () -> Unit,
+    onSourceTapped: () -> Unit,
     onEndTapped: () -> Unit,
     onHandsTapped: () -> Unit,
     onChatTapped: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                LivePulsingDot()
-                Text(
-                    when (phase) {
-                        Phase.RECONNECTING -> "RECONNECTING…"
-                        Phase.CONNECTING -> "CONNECTING…"
-                        else -> "LIVE"
-                    },
-                    style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
-                )
-                if (phase == Phase.LIVE) {
-                    Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                    Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
-                    Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                    Text("$viewerCount watching", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
-                }
-            }
-            Spacer(Modifier.weight(1f))
-        }
-        Spacer(Modifier.weight(1f))
-        // [mic, End, flip, ✋, 💬] — deliberately the SAME order as the iOS
-        // port's controlsRow (GoLiveBroadcastView.swift), not the old
-        // mic/flip-then-push-End-to-the-right layout: a fixed-spacing row,
-        // left-aligned, End sitting right after mic rather than pinned to
-        // the trailing edge.
+    Box(Modifier.fillMaxSize()) {
+        // Top-left — LIVE pill + duration + watching count.
         Row(
-            Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            Modifier.align(Alignment.TopStart).statusBarsPadding().padding(Spacing.md)
+                .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            LivePulsingDot()
+            Text(
+                when (phase) {
+                    BroadcastPhase.RECONNECTING -> "RECONNECTING…"
+                    BroadcastPhase.CONNECTING -> "CONNECTING…"
+                    else -> "LIVE"
+                },
+                style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
+            )
+            if (phase == BroadcastPhase.LIVE) {
+                Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                Text("$viewerCount watching", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+            }
+        }
+
+        // Bottom-left — title chip, above the gesture-nav inset.
+        title.takeIf { it.isNotBlank() }?.let {
+            Row(
+                Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = Spacing.md, bottom = 84.dp)
+                    .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) { Text(it, style = NuruType.body, color = Color.White.copy(alpha = 0.9f)) }
+        }
+
+        // Bottom-center — [mic, End, flip, source, ✋, 💬], above the
+        // gesture-nav inset. Same left-to-right order the iOS port's
+        // controlsRow uses (End right after mic, not pinned trailing).
+        Row(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = Spacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
             HudIconButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", onToggleMute)
             Row(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.danger).clickable { onEndTapped() }
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
             ) { Text("End", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.Bold) }
             if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
+            if (isVideo) HudIconButton(Icons.Filled.Tune, "Broadcast source", onSourceTapped)
             HudHandButton(count = handCount, onClick = onHandsTapped)
             HudEmojiIconButton("💬", "Live chat", onChatTapped)
-        }
-        title.takeIf { it.isNotBlank() }?.let {
-            Spacer(Modifier.height(Spacing.sm))
-            Text(it, style = NuruType.body, color = Color.White.copy(alpha = 0.85f))
         }
     }
 }
@@ -707,17 +513,17 @@ private fun LiveHudOverlay(
 @Composable
 private fun HudIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+        Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(22.dp)) }
+    ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(20.dp)) }
 }
 
 @Composable
 private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+        Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Text(emoji, fontSize = 20.sp, modifier = Modifier.semantics { contentDescription = label }) }
+    ) { Text(emoji, fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = label }) }
 }
 
 /** ✋ raise-hand queue toggle — gold badge counts hands from the 3s pulse
@@ -725,11 +531,11 @@ private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit
  *  count > 0, capped display at 99). */
 @Composable
 private fun HudHandButton(count: Int, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp)) {
+    Box(Modifier.size(44.dp)) {
         Box(
-            Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+            Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
             contentAlignment = Alignment.Center,
-        ) { Text("✋", fontSize = 20.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
+        ) { Text("✋", fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
         if (count > 0) {
             Box(
                 Modifier.size(20.dp).align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
@@ -791,7 +597,7 @@ private fun SummaryView(title: String, elapsedSec: Int, peakViewers: Int, endedI
             Spacer(Modifier.height(8.dp))
             if (endedInBackground) {
                 Text(
-                    "The broadcast ended because Nuru left the foreground.",
+                    "The broadcast was ended from the notification.",
                     style = NuruType.body, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -813,4 +619,35 @@ private fun SummaryView(title: String, elapsedSec: Int, peakViewers: Int, endedI
 private fun mmss(totalSeconds: Int): String {
     val s = totalSeconds.coerceAtLeast(0)
     return "%d:%02d".format(s / 60, s % 60)
+}
+
+/** App-wide "you're still broadcasting" pill — the return path for the
+ *  "in-app floating pill... shows on other screens while broadcasting"
+ *  requirement. Mirrors AppLiveBar's (LiveDiscoveryUi.kt) exact idiom for
+ *  viewers, one screen over: MainShell shows this in the SAME bottomBar
+ *  slot, keyed off [BroadcastController.state] instead of
+ *  [LiveDiscoveryCenter], whenever a broadcast is running and this isn't
+ *  already the screen showing it. */
+@Composable
+fun BroadcastReturnBar(session: BroadcastSession, elapsedSec: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .background(Nuru.danger.copy(alpha = 0.92f))
+            .clickable { onClick() }
+            .padding(horizontal = Spacing.base),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LivePulsingDot()
+        Text("LIVE", style = NuruType.kicker, color = Color.White)
+        Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+        Text("—", color = Color.White.copy(alpha = 0.4f), style = NuruType.micro)
+        Text(
+            session.title.ifBlank { "Nuru Live" }, style = NuruType.cardCta, color = Color.White,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+        Text("tap to return ›", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+    }
 }

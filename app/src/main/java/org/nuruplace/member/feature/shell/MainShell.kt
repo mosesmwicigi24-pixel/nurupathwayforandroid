@@ -199,18 +199,45 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         }
     }
     val liveStreamsNow by LiveDiscoveryCenter.streams.collectAsState()
+    val onLiveBroadcast = route?.startsWith("live-broadcast") == true
     // Every screen but Home, while a stream is watchable and the player it
-    // would open isn't already the thing on screen.
+    // would open isn't already the thing on screen — and never while this
+    // member is themselves mid-broadcast (they'd otherwise see "someone
+    // else is live, join" while already live themselves).
     val showAppLiveBar = liveStreamsNow.isNotEmpty() && route != "home" &&
-        route?.startsWith("live-player") != true
+        route?.startsWith("live-player") != true && !onLiveBroadcast
+
+    // Broadcast Studio's "tap to return" pill (requirement #2) — the same
+    // AppLiveBar idiom, one screen over: shown on every screen but the
+    // broadcast screen itself while BroadcastController has a session
+    // running (LiveBroadcastService keeps it alive across navigation).
+    val broadcastState by org.nuruplace.member.feature.live.BroadcastController.state.collectAsState()
+    val activeBroadcast = broadcastState.session
+        ?.takeIf { broadcastState.phase != org.nuruplace.member.feature.live.BroadcastPhase.SUMMARY }
+    val showBroadcastBar = activeBroadcast != null && !onLiveBroadcast
+    var broadcastElapsed by remember { mutableIntStateOf(0) }
+    LaunchedEffect(broadcastState.startedAtMillis) {
+        val started = broadcastState.startedAtMillis ?: return@LaunchedEffect
+        while (true) {
+            broadcastElapsed = ((System.currentTimeMillis() - started) / 1000).toInt()
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
 
     Scaffold(
         containerColor = Nuru.paper,
         bottomBar = {
-            // The LIVE bar sits ABOVE the bottom nav (when the bottom nav is
-            // even showing — it also floats on non-tab screens like a module
-            // reader, since "not on Home" is the only scope rule).
+            // Both bars sit ABOVE the bottom nav (when the bottom nav is
+            // even showing — they also float on non-tab screens like a
+            // module reader, since "not on Home" is the only scope rule).
             Column {
+                if (showBroadcastBar) {
+                    org.nuruplace.member.feature.live.BroadcastReturnBar(
+                        session = activeBroadcast!!, elapsedSec = broadcastElapsed,
+                    ) {
+                        nav.navigate(org.nuruplace.member.feature.live.liveBroadcastRoute(activeBroadcast))
+                    }
+                }
                 if (showAppLiveBar) {
                     AppLiveBar(stream = liveStreamsNow.first()) {
                         val stream = liveStreamsNow.first()
@@ -270,7 +297,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         },
     ) { pad ->
         Box(Modifier.fillMaxSize()) {
-            NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
+            // Broadcast Studio's full-bleed stage (requirement #1) needs the
+            // video edge-to-edge, including under the status/nav bars — it
+            // handles its own WindowInsets per HUD element (LiveBroadcastScreen's
+            // LiveHudOverlay) rather than being pre-inset by Scaffold's padding
+            // the way every other destination is.
+            val contentPadding = if (onLiveBroadcast) androidx.compose.foundation.layout.PaddingValues(0.dp) else pad
+            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding)) {
             composable("home") {
                 HomeScreen(
                     me,

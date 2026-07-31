@@ -46,3 +46,13 @@ fun liveBroadcastRoute(created: CreatedLiveStream, title: String, kind: String):
     "live-broadcast?streamId=${Uri.encode(created.streamId)}" +
         "&rtmpUrl=${Uri.encode(created.rtmpUrl)}&streamKey=${Uri.encode(created.streamKey)}" +
         "&title=${Uri.encode(title)}&kind=${Uri.encode(kind)}"
+
+/** The SAME route, reached from a running [BroadcastSession] instead of a
+ *  just-minted CreatedLiveStream — what the "tap to return" pill
+ *  (BroadcastReturnBar, LiveBroadcastScreen.kt) and the persistent
+ *  notification's own re-open action (LiveBroadcastService.kt) both
+ *  navigate to when a broadcast is already running. */
+fun liveBroadcastRoute(session: BroadcastSession): String =
+    "live-broadcast?streamId=${Uri.encode(session.streamId)}" +
+        "&rtmpUrl=${Uri.encode(session.rtmpUrl)}&streamKey=${Uri.encode(session.streamKey)}" +
+        "&title=${Uri.encode(session.title)}&kind=${Uri.encode(session.kind)}"
