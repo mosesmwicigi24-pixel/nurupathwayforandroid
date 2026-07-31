@@ -674,26 +674,31 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // and heartbeat/live-ness travel with the navigation, not a
             // second fetch).
             composable(
-                "live-player?streamId={streamId}&url={url}&title={title}&kind={kind}&live={live}&startedAt={startedAt}&viewers={viewers}",
+                "live-player?streamId={streamId}&url={url}&fallbackUrl={fallbackUrl}&title={title}&kind={kind}&live={live}&startedAt={startedAt}&viewers={viewers}&startedByName={startedByName}",
                 arguments = listOf(
                     navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("url") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("fallbackUrl") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("kind") { type = NavType.StringType; nullable = true; defaultValue = "video" },
                     navArgument("live") { type = NavType.StringType; nullable = true; defaultValue = "false" },
                     navArgument("startedAt") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("viewers") { type = NavType.IntType; defaultValue = 0 },
+                    navArgument("startedByName") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { entry ->
                 val a = entry.arguments
                 org.nuruplace.member.feature.live.LivePlayerScreen(
                     url = a?.getString("url").orEmpty(),
+                    fallbackUrl = a?.getString("fallbackUrl")?.takeIf { it.isNotBlank() },
                     title = a?.getString("title").orEmpty(),
                     kind = a?.getString("kind") ?: "video",
                     live = a?.getString("live") == "true",
                     streamId = a?.getString("streamId")?.takeIf { it.isNotBlank() },
                     startedAt = a?.getString("startedAt"),
                     initialViewerCount = a?.getInt("viewers") ?: 0,
+                    startedByName = a?.getString("startedByName")?.takeIf { it.isNotBlank() },
+                    myUserId = me?.profile?.userId,
                     onBack = { nav.popBackStack() },
                     onOpenReplays = { nav.navigate("live-replays") { popUpTo("home") } },
                 )
