@@ -142,6 +142,11 @@ dependencies {
     // fired at the next program's scheduledAt — avoids the exact-alarm
     // permission AlarmManager would need.
     implementation(libs.androidx.work.runtime.ktx)
+    // Home-screen widgets (Pathway + Radio) — Jetpack Glance. glance-appwidget
+    // pulls the glance core transitively; glance-material3 is only for the
+    // ColorProviders(light, dark) brand-theme builder (WidgetBrand.kt).
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
     // Firebase (add-alongside): FCM push + Email/Password auth. Postgres stays the
     // source of truth — Firestore is intentionally NOT used (see FIREBASE_SETUP.md).
     implementation(platform(libs.firebase.bom))

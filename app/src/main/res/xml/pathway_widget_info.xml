@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pathway widget — 2x1 minimum (small), resizable up to 4x1 (medium) where
+     the gold "Continue" pill + level title appear. updatePeriodMillis is
+     Android's manifest-level floor (30 min); the real ~15-min cadence comes
+     from WidgetRefresher's WorkManager job (WorkManager's own periodic floor
+     happens to match iOS's intended widget-timeline interval). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:maxResizeWidth="250dp"
+    android:maxResizeHeight="120dp"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="1800000"
+    android:previewImage="@drawable/ic_sc_pathway"
+    android:initialLayout="@layout/nuru_widget_loading"
+    android:description="@string/widget_pathway_description" />

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Glance requires a real android:initialLayout for the app-widget-provider
+     XML (the RemoteViews shown for the split-second before Glance's own
+     composition takes over). Just the brand navy, so a fresh widget doesn't
+     flash white before its first render. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF16273F" />

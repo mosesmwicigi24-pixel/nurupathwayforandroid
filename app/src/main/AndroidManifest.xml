@@ -90,6 +90,32 @@
             android:exported="false"
             android:foregroundServiceType="camera|microphone|mediaProjection" />
 
+        <!-- Home-screen widgets (Pathway + Radio, Jetpack Glance). Both are
+             pure read-only renderers of WidgetSnapshotStore — no network,
+             no exported surface. -->
+        <receiver
+            android:name=".widget.PathwayWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_pathway_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pathway_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.RadioWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_radio_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/radio_widget_info" />
+        </receiver>
+
         <!-- Shares authed-downloaded files (certificate PDFs) with viewer apps. -->
         <provider
             android:name="androidx.core.content.FileProvider"

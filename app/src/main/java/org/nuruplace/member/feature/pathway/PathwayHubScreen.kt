@@ -174,6 +174,25 @@ fun PathwayHubScreen(
     val activeMods = modulesByLevel[active?.levelNumber]
     val resume = activeMods?.let { it.firstOrNull { m -> m.status == ModuleStatus.NEXT } ?: it.firstOrNull { m -> !m.completed } ?: it.lastOrNull() }
 
+    // Home-screen Pathway widget (Glance) — mirrors iOS's intended
+    // progress-ring/streak/next-module snapshot trigger points. Fires once
+    // the active level is known, and again once its module trail resolves
+    // the "resume" module title. Writes only; the widget itself never
+    // touches the network (docs/PARITY_AUDIT.md, widgets entry).
+    val widgetContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(active?.levelNumber, active?.completedModules, resume?.moduleId, streak) {
+        val lvl = active ?: return@LaunchedEffect
+        org.nuruplace.member.widget.WidgetSnapshotStore.writePathway(
+            context = widgetContext,
+            currentLevel = summary?.currentLevel ?: lvl.levelNumber,
+            levelTitle = lvl.title,
+            completedModules = lvl.completedModules,
+            totalModules = lvl.totalModules,
+            nextModuleTitle = resume?.title,
+            streak = streak,
+        )
+    }
+
     NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
             HubHeader(firstName, streak, active, levels, overallPct, resume, onOpenModule)

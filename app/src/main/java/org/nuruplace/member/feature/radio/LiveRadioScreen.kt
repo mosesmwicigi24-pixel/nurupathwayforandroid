@@ -377,6 +377,20 @@ fun LiveRadioScreen(onBack: () -> Unit) {
                 reminderOn = RadioReminder.toggle(context, next)
             }
 
+            // Radio home-screen widget (Glance) — this screen has the richest
+            // on-air state (listeners, host, next program), so it overwrites
+            // whatever lighter snapshot Home's own radioNowPlaying poll wrote.
+            LaunchedEffect(now?.id, now?.live, now?.peakListeners, nextScheduled?.id) {
+                org.nuruplace.member.widget.WidgetSnapshotStore.writeRadio(
+                    context = context,
+                    onAir = now?.live == true,
+                    programTitle = now?.title,
+                    host = now?.speaker,
+                    listeners = now?.peakListeners,
+                    nextProgramTitle = nextScheduled?.title,
+                )
+            }
+
             // Live-listener presence — while we're actually playing a LIVE program,
             // heartbeat every 20s so the studio roster shows this member by name.
             LaunchedEffect(playing, now?.id, now?.live) {
