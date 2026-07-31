@@ -154,6 +154,24 @@ class WhipPublisher(private val context: Context) {
         localAudioTrack?.setEnabled(!muted)
     }
 
+    /** Camera on/off (owner layout redesign, 2026-08-01 — the bottom dock's
+     *  camera-toggle control) — disables the OUTGOING video track rather
+     *  than stopping the capturer, so re-enabling is instant (no camera
+     *  re-open latency) and the broadcaster's WHEP-subscribed tile simply
+     *  goes black/frozen on its last frame while off, exactly like a normal
+     *  video-call "camera off" toggle. */
+    fun setVideoEnabled(enabled: Boolean) {
+        localVideoTrack?.setEnabled(enabled)
+    }
+
+    /** Front/back camera swap (owner layout redesign — the bottom dock's
+     *  switch-camera control). A no-op if this device only has one camera or
+     *  publishing hasn't started yet; [CameraVideoCapturer.switchCamera]
+     *  itself already tolerates being called with no handler. */
+    fun switchCamera() {
+        videoCapturer?.switchCamera(null)
+    }
+
     /** [stopRequested] flips BEFORE the lock so a start() that's still
      *  queued (hasn't acquired the mutex yet) bails immediately rather than
      *  waiting its turn just to build WebRTC objects we're about to tear

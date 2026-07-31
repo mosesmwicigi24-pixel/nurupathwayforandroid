@@ -57,6 +57,7 @@ package org.nuruplace.member.feature.live
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -70,10 +71,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,14 +80,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -121,9 +116,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -134,8 +129,6 @@ import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.LiveReactionBody
 import org.nuruplace.member.data.net.LiveSendMessageBody
 import org.nuruplace.member.data.net.Net
-import org.nuruplace.member.ui.components.LivePulsingDot
-import org.nuruplace.member.ui.components.startedAgoLabel
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.webrtc.SurfaceViewRenderer
@@ -147,6 +140,51 @@ import kotlin.math.sin
  *  certainly caught up to a just-started stream. See the flicker-fix header
  *  comment above. */
 private const val CDN_WARM_UP_MS = 8_000L
+
+// ── Low-latency playback tuning (owner ask, 2026-08-01) ─────────────────────
+// "the round trip tight enough that we are able to communicate, ask
+// questions, raise hands, and get answers" — two client-side levers, both
+// safe no-ops for a VOD/replay (ExoPlayer only applies LiveConfiguration to
+// an actual live HLS manifest; a tighter-but-not-starved buffer just makes
+// VOD start faster too, it never causes a replay to stall):
+//  1. [MediaItem.LiveConfiguration] — a low `targetOffsetMs` tells ExoPlayer
+//     to sit close to the live edge, with a narrow [1.0, 1.04] playback-speed
+//     band so it gently speeds up to catch up rather than visibly jumping
+//     forward.
+//  2. A tightened [DefaultLoadControl] — small min/max buffers and a short
+//     "wait this long before first frame" so playback starts fast and never
+//     silently accumulates several seconds of buffered-but-already-stale
+//     live video before the viewer sees anything.
+// Server-side HLS segment/part tuning (the OTHER half of genuine low-latency
+// HLS — LL-HLS partial segments, shorter segment duration) is explicitly OUT
+// OF SCOPE here: the task brief says that's being handled separately, and
+// this repo has no access to the MediaMTX/nginx config that would need to
+// change. Not measured end-to-end against a live broadcast in this session
+// (no device/server round-trip available in this sandbox) — see
+// docs/PARITY_AUDIT.md's dated entry for the honest "changed but unverified
+// on-device" limit.
+private const val LIVE_TARGET_OFFSET_MS = 3_000L
+private const val LIVE_MIN_BUFFER_MS = 3_000
+private const val LIVE_MAX_BUFFER_MS = 8_000
+private const val LIVE_BUFFER_FOR_PLAYBACK_MS = 500
+private const val LIVE_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 1_000
+
+private fun liveMediaItem(uri: String): MediaItem =
+    MediaItem.Builder()
+        .setUri(uri)
+        .setLiveConfiguration(
+            MediaItem.LiveConfiguration.Builder()
+                .setTargetOffsetMs(LIVE_TARGET_OFFSET_MS)
+                .setMinPlaybackSpeed(1.0f)
+                .setMaxPlaybackSpeed(1.04f)
+                .build(),
+        )
+        .build()
+
+private fun liveLoadControl(): DefaultLoadControl =
+    DefaultLoadControl.Builder()
+        .setBufferDurationsMs(LIVE_MIN_BUFFER_MS, LIVE_MAX_BUFFER_MS, LIVE_BUFFER_FOR_PLAYBACK_MS, LIVE_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+        .build()
 
 @Composable
 fun LivePlayerScreen(
@@ -163,6 +201,8 @@ fun LivePlayerScreen(
     startedByName: String? = null,
     startedByAvatarUrl: String? = null,
     myUserId: String? = null,
+    myFullName: String? = null,
+    myAvatarUrl: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -179,8 +219,16 @@ fun LivePlayerScreen(
     val playerKey = streamId ?: url
     val usesFallbackFirst = live && !fallbackUrl.isNullOrBlank() && fallbackUrl != url
     val player = remember(playerKey) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(if (usesFallbackFirst) fallbackUrl!! else url))
+        ExoPlayer.Builder(context)
+            // Low-latency lever #1 (owner ask, 2026-08-01: "the round trip
+            // tight enough that we are able to communicate, ask questions,
+            // raise hands, and get answers") — small buffers so the player
+            // starts fast and never sits several seconds behind the live
+            // edge just because it accumulated a big buffer. See
+            // liveLoadControl()'s own doc for the exact numbers.
+            .setLoadControl(liveLoadControl())
+            .build().apply {
+            setMediaItem(liveMediaItem(if (usesFallbackFirst) fallbackUrl!! else url))
             addListener(object : Player.Listener {
                 // ExoPlayer surfacing a playback error (the HLS manifest 404ing
                 // once the broadcaster stops, a stalled fetch, etc.) is the
@@ -225,7 +273,7 @@ fun LivePlayerScreen(
             delay(CDN_WARM_UP_MS)
             runCatching {
                 val wasPlaying = player.isPlaying || player.playWhenReady
-                player.setMediaItem(MediaItem.fromUri(url))
+                player.setMediaItem(liveMediaItem(url))
                 player.prepare()
                 player.playWhenReady = wasPlaying
             }
@@ -256,6 +304,16 @@ fun LivePlayerScreen(
     var seenReactionKeys by remember(streamId) { mutableStateOf<Set<String>?>(null) }
     var messages by remember(streamId) { mutableStateOf<List<LiveMessageRow>>(emptyList()) }
     var messageCursor by remember(streamId) { mutableStateOf<String?>(null) }
+    // Optimistic, purely-local chat sends (latency lever — owner ask: "make
+    // interactions... feel instant by rendering them optimistically before
+    // the server round trip confirms"). A send appends here immediately;
+    // once the server confirms, the real row lands in [messages] via the
+    // existing onSuccess path below and its local placeholder is dropped —
+    // never double-appended, and [messageCursor] (the poll's own since-
+    // cursor) is untouched by anything in here, so the 3s poll's dedup logic
+    // is unaffected. Dropped silently on failure, matching every other
+    // interaction's error handling in this file (sendReaction/toggleHand).
+    var pendingMessages by remember(streamId) { mutableStateOf<List<LiveMessageRow>>(emptyList()) }
     var chatOpen by remember(streamId) { mutableStateOf(false) }
     var lastReactionAt by remember { mutableStateOf(0L) }
     val particles = rememberLiveParticleController()
@@ -332,8 +390,19 @@ fun LivePlayerScreen(
     // without re-issuing the DELETE (the server already knows). ──────────
     var guestStageState by remember(streamId) { mutableStateOf<GuestStageState>(GuestStageState.Idle) }
     var guestMuted by remember(streamId) { mutableStateOf(false) }
+    var guestCameraOn by remember(streamId) { mutableStateOf(true) }
     val whipPublisher = remember(streamId) { WhipPublisher(context) }
     var selfPreviewRenderer by remember(streamId) { mutableStateOf<SurfaceViewRenderer?>(null) }
+    // Owner layout redesign (2026-08-01): the self-preview's own minimize/
+    // restore state, "remembered within the session" — see GuestStageUi.kt's
+    // reduceSelfPreview doc for why this is a small reducer, not a raw flag.
+    var selfPreviewState by remember(streamId) { mutableStateOf(SelfPreviewUiState()) }
+    // The bottom dock's SPEAKER control — device audio output route, offered
+    // to every role (see LiveDockLogic.kt's doc on why it's not guest-only).
+    // Defaults ON: this is a "watch party" surface, not a phone call, so the
+    // speaker (not the earpiece WebRTC's own communication audio mode can
+    // silently default to) is the right starting point for almost everyone.
+    var speakerOn by remember(streamId) { mutableStateOf(true) }
 
     fun requiredGuestPermissions(): Array<String> = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
     fun hasGuestPermissions(): Boolean = requiredGuestPermissions().all {
@@ -344,6 +413,11 @@ fun LivePlayerScreen(
         val sid = streamId ?: return
         val uid = myUserId ?: return
         guestStageState = GuestStageState.Connecting
+        // A fresh join starts from a clean slate — camera on, mic unmuted —
+        // regardless of whatever the guest left a PREVIOUS stint on this
+        // same stream set to (Leave Stage then get re-invited, say).
+        guestCameraOn = true
+        guestMuted = false
         val ingest = runCatching { Net.client.api.getLiveGuestIngest(sid) }.getOrNull()
         if (ingest == null || ingest.whipUrl.isBlank()) {
             guestStageState = GuestStageState.Error("Couldn't join the stage. Tap to retry.")
@@ -415,6 +489,27 @@ fun LivePlayerScreen(
         player.volume = if (guestStageState is GuestStageState.Live) 0f else 1f
     }
 
+    // Dock SPEAKER control (owner ask: "speaker" among the guest's own
+    // publish controls) — WebRTC's JavaAudioDeviceModule flips the device
+    // into MODE_IN_COMMUNICATION the moment a guest starts sending their own
+    // mic (a well-known WebRTC-Android gotcha: that audio mode can default
+    // routing to the EARPIECE instead of the speaker), so this both applies
+    // the user's own speakerOn choice AND forces communication mode back to
+    // "normal" the instant the guest is no longer on stage — never leave the
+    // device's audio route in a call-like state after Leave Stage.
+    LaunchedEffect(guestStageState, speakerOn) {
+        runCatching {
+            val am = context.getSystemService(AudioManager::class.java) ?: return@runCatching
+            am.mode = if (guestStageState is GuestStageState.Live) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
+            // isSpeakerphoneOn is deprecated (API 31+ prefers
+            // setCommunicationDevice) but remains the only mechanism that
+            // works across this app's full minSdk 26 range — same tradeoff
+            // VoiceRecorder.kt already accepts for MediaRecorder().
+            @Suppress("DEPRECATION")
+            am.isSpeakerphoneOn = speakerOn
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
             ended -> EndedState(onOpenReplays)
@@ -445,100 +540,89 @@ fun LivePlayerScreen(
             }
         }
 
-        // Ambient + tap reaction particles float up from roughly the rail's
-        // position (bottom-right).
+        // Ambient + tap reaction particles float up from roughly the
+        // reaction cluster's own position at the left of the dock's audience
+        // row (owner layout redesign — the rail that used to anchor these no
+        // longer exists).
         LiveParticleLayer(
             particles,
-            Modifier.fillMaxSize().padding(bottom = 220.dp, end = 28.dp),
+            Modifier.fillMaxSize().padding(bottom = 250.dp),
         )
 
-        // Chrome overlay — close (top-left), LIVE badge + eye/viewer chip and
-        // raised-hands chip (top-right), broadcaster identity chip below it,
-        // action rail (right edge, mid-height), floating chat (bottom-left).
-        Column(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
-                        .clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp)) }
-                Spacer(Modifier.weight(1f))
-                Column(horizontalAlignment = Alignment.End) {
-                    if (live && !ended) {
-                        GentleEntrance(reduceMotion) {
-                            Row(
-                                Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                LivePulsingDot(size = 7.dp)
-                                Text("LIVE", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
-                                Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                                Icon(Icons.Filled.RemoveRedEye, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(12.dp))
-                                Text("$viewerCount", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
-                            }
-                        }
-                    }
-                    pulse?.hands?.takeIf { it.isNotEmpty() }?.let { hands ->
-                        Spacer(Modifier.height(6.dp))
-                        RaisedHandsChip(hands)
-                    }
-                }
-            }
-            if (!ended && (title.isNotBlank() || !startedByName.isNullOrBlank())) {
-                Spacer(Modifier.height(10.dp))
-                GentleEntrance(reduceMotion, Modifier.align(Alignment.Start)) {
-                    BroadcasterIdentityChip(startedByName, startedByAvatarUrl, title)
-                }
-            }
-            Spacer(Modifier.weight(1f))
+        // ONE top row (owner requirement #2) — close, host identity, title,
+        // LIVE pill, counters, all on one line, replacing the old three
+        // scattered rows (close+badge / identity chip / bottom title box).
+        GentleEntrance(reduceMotion, Modifier.align(Alignment.TopCenter)) {
+            LiveTopBar(
+                onClose = onBack,
+                live = live && !ended,
+                hostName = startedByName,
+                hostAvatarUrl = startedByAvatarUrl,
+                title = title,
+                viewerCount = viewerCount,
+                handCount = pulse?.hands?.size ?: 0,
+            )
+        }
 
-            // Guest invite sits just above the chat/title area — auto-
-            // collapses to a small gold corner pill after ~3s (owner taste
-            // pass). Once accepted, this is superseded by the real L6b
-            // publish-state chip right below (connecting/error — Live shows
-            // the self-preview PiP instead, rendered at the Box root so it
-            // can be dragged across the whole stage).
-            if (streamId != null) {
+        // Guest invite sits just above the dock — auto-collapses to a small
+        // gold corner pill after ~3s (owner taste pass, pre-existing). Once
+        // accepted, this is superseded by the real L6b publish-state chip
+        // right below (connecting/error — Live shows the self-preview
+        // instead, and the dock's own controls, rendered at the Box root so
+        // both can be positioned/dragged across the whole stage).
+        if (streamId != null && !ended) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 226.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 GuestStageBanner(
                     status = myGuestState,
                     onAccept = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } } },
                     onDecline = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } } },
-                    modifier = Modifier.padding(bottom = 12.dp),
                 )
                 when (val s = guestStageState) {
-                    is GuestStageState.Connecting -> GuestConnectingChip("Joining the stage…", Modifier.padding(bottom = 12.dp))
+                    is GuestStageState.Connecting -> GuestConnectingChip("Joining the stage…", Modifier.padding(top = 8.dp))
                     is GuestStageState.Error -> GuestConnectingChip(
                         s.message,
-                        Modifier.padding(bottom = 12.dp).clickable { scope.launch { startGuestPublish() } },
+                        Modifier.padding(top = 8.dp).clickable { scope.launch { startGuestPublish() } },
                     )
                     else -> {}
                 }
             }
-
-            if (!ended) {
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(14.dp),
-                ) {
-                    Text(title.ifBlank { "Nuru Live" }, style = NuruType.rowTitle, color = Color.White)
-                    Spacer(Modifier.height(2.dp))
-                    Text(startedAgoLabel(startedAt), style = NuruType.micro, color = Color.White.copy(alpha = 0.7f))
-                }
-            }
         }
 
-        // Right-side vertical action rail (TikTok) — mid-height, clear of the
-        // top chrome and bottom title/chat.
+        // ONE bottom dock (owner requirement #3) — EVERY control lives here:
+        // reactions, raise hand, chat, and — once accepted onto the stage —
+        // camera on/off, switch camera, mic, speaker, and Leave Stage.
+        // Item set/order comes from the pure liveDockItems (LiveDockLogic.kt).
         if (live && !ended && streamId != null) {
-            GentleEntrance(reduceMotion, Modifier.align(Alignment.CenterEnd).padding(end = 10.dp, bottom = 90.dp)) {
-                LiveActionRail(
-                    counts = pulse?.reactions ?: emptyMap(),
-                    handRaised = handRaised,
-                    chatOpen = chatOpen,
+            val dockRole = if (guestStageState is GuestStageState.Live) LiveDockRole.GUEST_ON_STAGE else LiveDockRole.VIEWER
+            val dockItems = liveDockItems(dockRole, isVideoKind = !isAudio)
+            GentleEntrance(reduceMotion, Modifier.align(Alignment.BottomCenter)) {
+                LiveBottomDock(
+                    items = dockItems,
+                    state = LiveDockState(
+                        reactionCounts = pulse?.reactions ?: emptyMap(),
+                        handRaised = handRaised,
+                        chatOpen = chatOpen,
+                        cameraOn = guestCameraOn,
+                        micMuted = guestMuted,
+                        speakerOn = speakerOn,
+                    ),
                     onReact = ::sendReaction,
                     onToggleHand = ::toggleHand,
                     onToggleChat = { chatOpen = !chatOpen },
+                    onToggleCamera = {
+                        guestCameraOn = !guestCameraOn
+                        whipPublisher.setVideoEnabled(guestCameraOn)
+                    },
+                    onSwitchCamera = { whipPublisher.switchCamera() },
+                    onToggleMic = {
+                        guestMuted = !guestMuted
+                        whipPublisher.setMicMuted(guestMuted)
+                    },
+                    onToggleSpeaker = { speakerOn = !speakerOn },
+                    onLeaveStage = { stopGuestPublish(leaveServerSide = true) },
                 )
             }
         }
@@ -546,31 +630,44 @@ fun LivePlayerScreen(
         // Floating chat — draggable, collapsible to a bubble, NEVER a sheet
         // and never covering the whole stage. Fills the whole screen as its
         // own layer purely so it has real room to be dragged around in —
-        // it positions its own content, nothing here is `align`ed.
+        // it positions its own content, nothing here is `align`ed. Confirmed
+        // sends (messages) plus optimistic local-only sends (pendingMessages,
+        // the latency lever) render as one merged, ordered list; see
+        // pendingMessages' own doc above for why they're kept separate
+        // rather than folded into [messages] directly.
         if (live && !ended && streamId != null) {
             LiveFloatingChat(
                 visible = chatOpen,
-                messages = messages,
+                messages = messages + pendingMessages,
                 onSend = { body ->
+                    val localId = "local-${System.nanoTime()}"
+                    pendingMessages = pendingMessages + LiveMessageRow(
+                        messageId = localId,
+                        userId = myUserId.orEmpty(),
+                        fullName = myFullName?.takeIf { it.isNotBlank() } ?: "You",
+                        avatarUrl = myAvatarUrl,
+                        body = body,
+                        sentAt = java.time.Instant.now().toString(),
+                    )
                     scope.launch {
                         runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
                             .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
+                        pendingMessages = pendingMessages.filterNot { it.messageId == localId }
                     }
                 },
             )
         }
 
-        // L6b — the guest's own draggable self-preview PiP, real camera+mic
-        // video over WHIP (docs/LIVE_INTERACTIVE.md). Fills the whole stage
-        // as its own layer purely for drag room, same idiom as the chat
-        // overlay above; renders nothing unless actually publishing.
+        // L6b — the guest's own draggable self-preview, real camera+mic
+        // video over WHIP (docs/LIVE_INTERACTIVE.md). Defaults to the LEFT
+        // edge and is minimizable to a small handle (owner requirement #4);
+        // fills the whole stage as its own layer purely for drag room, same
+        // idiom as the chat overlay above; renders nothing unless actually
+        // publishing. Mic mute now lives in the bottom dock above.
         if (guestStageState is GuestStageState.Live) {
             GuestSelfPreviewPiP(
-                muted = guestMuted,
-                onToggleMute = {
-                    guestMuted = !guestMuted
-                    whipPublisher.setMicMuted(guestMuted)
-                },
+                collapsed = selfPreviewState.collapsed,
+                onToggleCollapsed = { selfPreviewState = reduceSelfPreview(selfPreviewState, SelfPreviewAction.Toggle) },
                 onRendererReady = { renderer ->
                     selfPreviewRenderer = renderer
                     whipPublisher.attachLocalPreview(renderer)
@@ -581,53 +678,6 @@ fun LivePlayerScreen(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-            LeaveStagePill(
-                onClick = { stopGuestPublish(leaveServerSide = true) },
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun BroadcasterIdentityChip(name: String?, avatarUrl: String?, streamTitle: String, modifier: Modifier = Modifier) {
-    val displayName = name?.takeIf { it.isNotBlank() } ?: "Nuru Place"
-    Row(
-        modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(Color.Black.copy(alpha = 0.4f))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(26.dp).clip(CircleShape).background(Nuru.gold),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (!avatarUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = avatarUrl, contentDescription = null,
-                    modifier = Modifier.size(26.dp).clip(CircleShape),
-                )
-            } else {
-                Text(
-                    displayName.trim().split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString(""),
-                    style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(displayName, style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.width(5.dp))
-                Box(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.gold)
-                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                ) { Text("HOST", style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold) }
-            }
-            if (streamTitle.isNotBlank()) {
-                Text(streamTitle, style = NuruType.micro, color = Color.White.copy(alpha = 0.75f))
-            }
         }
     }
 }

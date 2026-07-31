@@ -739,6 +739,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     startedByName = a?.getString("startedByName")?.takeIf { it.isNotBlank() },
                     startedByAvatarUrl = a?.getString("startedByAvatarUrl")?.takeIf { it.isNotBlank() },
                     myUserId = me?.profile?.userId,
+                    myFullName = me?.profile?.fullName,
+                    myAvatarUrl = me?.profile?.avatarUrl,
                     onBack = { nav.popBackStack() },
                     onOpenReplays = { nav.navigate("live-replays") { popUpTo("home") } },
                 )

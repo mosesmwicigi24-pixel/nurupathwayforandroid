@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -222,10 +221,19 @@ private class PdfDocumentSession(private val pfd: ParcelFileDescriptor, private 
     }
 }
 
-/** Full-screen PDF pager — Broadcast Studio's Document mode. Lives entirely
- *  in Compose (the engine only knows "screen source is active"); MediaProjection
- *  captures this exact UI, so what's rendered here is what the congregation
- *  sees. Swipe to turn pages; the indicator + exit chip are the only chrome. */
+/**
+ * Full-screen PDF pager — Broadcast Studio's Document mode. Lives entirely
+ * in Compose (the engine only knows "screen source is active"); MediaProjection
+ * captures this exact UI, so what's rendered here is what the congregation
+ * sees. Swipe to turn pages.
+ *
+ * Owner layout redesign (2026-08-01): the page indicator used to float top-
+ * center, separate from the mute/End/exit row at bottom-right — two floating
+ * chrome groups instead of one. It now lives in the SAME bottom-right dock
+ * as those controls ("the document page indicator... belongs in this dock
+ * too, not floating"), on a soft gradient scrim rather than its own opaque
+ * pill, matching the viewer/guest screen's grammar (LiveChrome.kt).
+ */
 @Composable
 internal fun DocumentPagerScreen(uri: Uri, muted: Boolean, onToggleMute: () -> Unit, onExit: () -> Unit, onEnd: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -241,6 +249,12 @@ internal fun DocumentPagerScreen(uri: Uri, muted: Boolean, onToggleMute: () -> U
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         val s = session
+        // Hoisted here (rather than written into a second mutableState from
+        // inside the `when` below) so pageCount/currentPage stay Compose's
+        // own derived state, readable by the dock further down without a
+        // manual state-write-during-composition — [pagerState] is only ever
+        // non-null once [s] is, exactly mirroring that same null-check.
+        val pagerState = if (s != null) rememberPagerState(pageCount = { s.pageCount }) else null
         when {
             openFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Couldn't open that PDF.", style = NuruType.body, color = Color.White)
@@ -249,43 +263,47 @@ internal fun DocumentPagerScreen(uri: Uri, muted: Boolean, onToggleMute: () -> U
                 CircularProgressIndicator(color = Nuru.gold)
             }
             else -> {
-                val pagerState = rememberPagerState(pageCount = { s.pageCount })
-                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                HorizontalPager(state = pagerState!!, modifier = Modifier.fillMaxSize()) { page ->
                     PdfPage(session = s, pageIndex = page)
-                }
-                Row(
-                    Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = Spacing.md)
-                        .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        "Page ${pagerState.currentPage + 1} / ${s.pageCount}",
-                        style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold,
-                    )
                 }
             }
         }
+        val pageLabel = if (s != null && pagerState != null) "Page ${pagerState.currentPage + 1} / ${s.pageCount}" else null
 
-        Row(
+        // ONE bottom-right dock — page indicator, mute, End, exit, on a
+        // gradient scrim rather than a heavy opaque bar.
+        Box(
+            Modifier.fillMaxWidth().align(Alignment.BottomCenter).height(140.dp)
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)))),
+        )
+        Column(
             Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(Spacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            horizontalAlignment = Alignment.End,
         ) {
-            Box(
-                Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { onToggleMute() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, contentDescription = "Mute",
-                    tint = Color.White, modifier = Modifier.size(20.dp),
-                )
+            pageLabel?.let {
+                Box(
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) { Text(it, style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold) }
+                Spacer(Modifier.height(Spacing.sm))
             }
-            MinimalEndPill(onEnd)
-            Box(
-                Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
-                    .clickable { onExit() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Close, contentDescription = "Exit document, back to camera", tint = Color.White, modifier = Modifier.size(20.dp)) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { onToggleMute() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, contentDescription = "Mute",
+                        tint = Color.White, modifier = Modifier.size(20.dp),
+                    )
+                }
+                MinimalEndPill(onEnd)
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+                        .clickable { onExit() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Close, contentDescription = "Exit document, back to camera", tint = Color.White, modifier = Modifier.size(20.dp)) }
+            }
         }
     }
 }

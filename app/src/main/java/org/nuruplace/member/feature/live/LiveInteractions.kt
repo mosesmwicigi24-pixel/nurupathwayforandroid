@@ -198,37 +198,15 @@ fun reactionEmoji(key: String): String = when (key) {
     else -> "✨"
 }
 
-// ── The right-side vertical action rail (TikTok) ───────────────────────────
-
-/** ❤️ 🔥 👍 (each with its abbreviated count underneath), then ✋ raise-hand
- *  (fills gold when raised), then 💬 chat toggle. [onReact] is called with
- *  "love" | "fire" | "like" — the caller owns the ~1s client cooldown so a
- *  double-tap-to-heart gesture elsewhere on screen can share the exact same
- *  gate. */
-@Composable
-fun LiveActionRail(
-    counts: Map<String, Int>,
-    handRaised: Boolean,
-    chatOpen: Boolean,
-    onReact: (String) -> Unit,
-    onToggleHand: () -> Unit,
-    onToggleChat: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        RailButton(reactionEmoji("love"), abbreviateCount(counts["love"] ?: 0)) { onReact("love") }
-        RailButton(reactionEmoji("fire"), abbreviateCount(counts["fire"] ?: 0)) { onReact("fire") }
-        RailButton(reactionEmoji("like"), abbreviateCount(counts["like"] ?: 0)) { onReact("like") }
-        RailButton(
-            "✋", null,
-            filled = handRaised,
-            onClick = onToggleHand,
-        )
-        RailButton("💬", null, filled = chatOpen, onClick = onToggleChat)
-    }
-}
-
 // ── Broadcaster-side read-only reaction counts ──────────────────────────────
+// (The old right-side vertical TikTok-style action rail — LiveActionRail/
+// RailButton — was removed in the owner's 2026-08-01 layout redesign: every
+// viewer/guest control now lives in the ONE bottom dock, LiveChrome.kt's
+// LiveBottomDock, driven by LiveDockLogic.kt's pure liveDockItems. Its own
+// glyph buttons (DockGlyphButton/DockIconButton) took over this file's
+// KNOWN_REACTION_ORDER/reactionEmoji/abbreviateCount building blocks
+// directly — nothing here needed to change shape for that move, only the
+// composable that consumed it did.)
 
 /** Stable display order for the reaction row — known keys first (so the row
  *  doesn't jitter position across polls as counts change), anything the
@@ -254,9 +232,10 @@ internal fun orderedReactionEntries(counts: Map<String, Int>): List<Pair<String,
         .map { it.key to it.value }
 
 /** Read-only per-emoji reaction counts for the broadcaster HUD — same
- *  emoji+count pairing and pill styling as [LiveActionRail]'s own buttons,
- *  just non-tappable (the broadcaster sees the SAME reaction picture the
- *  viewer's rail shows; it never originates a reaction on its own stream).
+ *  emoji+count pairing and pill styling as the viewer/guest dock's own
+ *  reaction buttons (LiveChrome.kt's DockGlyphButton), just non-tappable
+ *  (the broadcaster sees the SAME reaction picture the viewer/guest dock
+ *  shows; it never originates a reaction on its own stream).
  *  Iterates whatever keys [counts] actually reports rather than a hardcoded
  *  three, so a reaction type added server-side shows up here with zero
  *  client change (see [reactionEmoji]'s doc on why that matters). Renders
@@ -281,27 +260,12 @@ fun LiveReactionCounts(counts: Map<String, Int>, modifier: Modifier = Modifier) 
 }
 
 // Chrome polish (owner taste pass): every round chrome control on the stage —
-// this rail, the broadcaster HUD's mic/End/flip/source/hand/chat circles —
-// is a SOFT TRANSLUCENT 48dp circle, one shared size/opacity so the viewer
-// and broadcaster surfaces read as the same visual system.
+// the bottom dock's own buttons (LiveChrome.kt), the broadcaster HUD's mic/
+// End/flip/source/hand/chat circles — is a SOFT TRANSLUCENT 48dp circle, one
+// shared size/opacity so the viewer, guest, and broadcaster surfaces read as
+// the same visual system.
 val LiveChromeCircleSize = 48.dp
 val LiveChromeCircleBg = Color.Black.copy(alpha = 0.38f)
-
-@Composable
-private fun RailButton(glyph: String, count: String?, filled: Boolean = false, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier.size(LiveChromeCircleSize).clip(CircleShape)
-                .background(if (filled) Nuru.gold.copy(alpha = 0.9f) else LiveChromeCircleBg)
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center,
-        ) { Text(glyph, fontSize = 22.sp) }
-        count?.let {
-            Spacer(Modifier.height(2.dp))
-            Text(it, style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
-        }
-    }
-}
 
 /** Gentle fade+rise entrance for a piece of chrome (the host chip, the LIVE
  *  pill, the action rail) — Reduce Motion just shows it immediately, matching
@@ -492,23 +456,11 @@ fun LiveFloatingChat(
     }
 }
 
-// ── Classroom touch: "✋ N" chip near the top when hands are raised ────────
-
-@Composable
-fun RaisedHandsChip(hands: List<LiveHandRow>, modifier: Modifier = Modifier) {
-    if (hands.isEmpty()) return
-    Row(
-        modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(Color.Black.copy(alpha = 0.5f))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("✋", fontSize = 13.sp)
-        Spacer(Modifier.width(4.dp))
-        Text("${hands.size}", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
-    }
-}
+// (The old standalone "✋ N" RaisedHandsChip — a floating top-right corner
+// chip — was folded into LiveChrome.kt's LiveTopBar counters in the owner's
+// 2026-08-01 layout redesign: raised-hand count now renders inline in the
+// SAME one-line top bar as the viewer/LIVE count, never a second floating
+// element.)
 
 // ── L6 scaffolding: guest invite card + "on stage soon" chip ───────────────
 

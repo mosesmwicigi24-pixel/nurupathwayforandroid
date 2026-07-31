@@ -4202,3 +4202,139 @@ compile/assemble gate, not by an instrumented UI test. `RAIL_MARGIN_*`/
 strength of reading iOS's source; not re-verified against a live two-device
 screenshot in this session (no device/emulator available in this
 environment).
+
+## 2026-08-01 — LIVE screen layout redesign: one top row, one bottom dock (branch feat/live-screen-layout, this repo only, on top of #73/#74/#76/#78/L6b/L6c/host-stability/#85/#86/#87/#88/#89/#90/#91, worktree `.worktrees/livelayout`)
+
+Owner-directed redesign from a screenshot of the shipped vc60 guest-on-stage
+screen: the shared content was squeezed into the middle with a vertical
+reaction rail floating down the right edge on top of it, a broadcaster
+identity chip floating loose mid-screen, the self-preview overlapping
+content top-right (dragged to bottom-left in the reported screenshot), three
+scattered top rows (close+badge / identity chip / bottom title box), and a
+separate scattered bottom row (Leave stage / page indicator / controls) — an
+iOS agent built the identical redesign in parallel on that surface.
+
+**Layout (both the viewer/member screen and the guest-on-stage screen — same
+`LivePlayerScreen.kt`, since a guest-on-stage viewer is that composable with
+`GuestStageState.Live`):**
+- Content is now genuinely edge-to-edge; the `PlayerView`/`AndroidView` was
+  already `fillMaxSize()` (no change needed there) — everything else now
+  overlays it instead of squeezing it.
+- **ONE top row** (`LiveChrome.kt`'s `LiveTopBar`) — close, host avatar +
+  name, stream title, LIVE pill, viewer count, raised-hand count, all on one
+  line on a downward gradient scrim (never an opaque bar). Replaces the old
+  close-badge row + separate `BroadcasterIdentityChip` row + the standalone
+  `RaisedHandsChip` corner chip (all three deleted/folded in).
+- **ONE bottom dock** (`LiveChrome.kt`'s `LiveBottomDock`), roughly the lower
+  two inches (210dp gradient scrim), holding every control: reactions
+  (❤️🔥👍), raise hand, chat always; camera on/off, switch camera, mic,
+  speaker, and Leave Stage once the viewer is accepted onto the stage.
+  Laid out as two rows inside one scrim (audience controls on top, publish
+  controls below) purely so a phone-width row never has to fit more than
+  five 48dp targets — visually one cohesive dock, not two floating groups.
+  Item eligibility/order is a pure function, `LiveDockLogic.kt`'s
+  `liveDockItems(role, isVideoKind)` — unit-tested (`LiveDockLogicTest`,
+  6 cases: viewer excludes publish controls, guest-on-stage gets every
+  control in the owner-specified order, audio-kind guest never sees camera
+  controls, reaction order matches the old rail's `KNOWN_REACTION_ORDER`).
+  Deleted as dead code once nothing called them any more: the old vertical
+  `LiveActionRail`/`RailButton` (right-edge rail) and `RaisedHandsChip`.
+- **Self-preview moved to the LEFT edge and is now minimizable** — the guest's
+  own camera preview (`GuestStageUi.kt`'s `GuestSelfPreviewPiP`) defaults to
+  a left-margin position (was top-right), has its name ("You") attached to
+  the tile itself (bottom gradient chrome, mirroring `LiveStageView.kt`'s
+  `StageTileChrome` idiom — never a loose floating label, requirement #5),
+  and collapses to a small 48dp handle on tap, tappable to restore. Backed
+  by a tiny explicit reducer, `SelfPreviewUiState`/`SelfPreviewAction`/
+  `reduceSelfPreview` (Collapse/Expand/Toggle), unit-tested
+  (`GuestStageUiTest`, 4 cases) rather than a raw boolean flip, per the task
+  brief's own ask for "self-preview collapsed-state reducer" coverage.
+  State lives in a plain `remember` at the `LivePlayerScreen` call site —
+  "remembered within the session," the SAME idiom `LiveFloatingChat`'s own
+  collapsed/expanded drag offsets already use, never persisted to disk.
+  Mic mute moved OUT of the PiP's corner button into the shared dock (one
+  control, one place) — `WhipPublisher` gained `setVideoEnabled(Boolean)`
+  and `switchCamera()` for the dock's new camera controls (previously only
+  `setMicMuted` existed).
+- **Broadcast Studio follows the same grammar where it shares components**
+  (`LiveBroadcastScreen.kt`'s `LiveHudOverlay`): the top-left LIVE/duration/
+  watching pill and the separate bottom-left title chip merged into ONE top
+  row (gradient scrim, ellipsized title sharing the line); the bottom-center
+  controls row was already the one dock (mic/End/flip/source/hands/chat)
+  and is unchanged. `LiveBroadcastSourceUi.kt`'s `DocumentPagerScreen`
+  (Document-share mode — MediaProjection mirrors this exact screen, so it's
+  literally what the congregation/guests see): the "Page N / M" indicator
+  used to float top-center, separate from the mute/End/exit row at
+  bottom-right; it now lives in that SAME bottom-right dock, stacked above
+  the controls on one gradient scrim.
+
+**Latency (client-side levers only — server-side HLS tuning is being handled
+separately per the task brief, not touched here):**
+- `ExoPlayer` now builds with a tightened `DefaultLoadControl`
+  (min/max buffer 3000/8000ms, buffer-for-playback 500ms, buffer-for-
+  playback-after-rebuffer 1000ms — down from Media3's defaults of
+  50000/50000/2500/5000ms) so playback starts fast and never sits several
+  seconds behind the live edge just because it accumulated a big buffer.
+- Every `MediaItem` (initial load AND the CDN-warm-up swap) now carries a
+  `LiveConfiguration` with a 3000ms target offset and a narrow
+  [1.0, 1.04] playback-speed band, so ExoPlayer gently speeds up to sit
+  close to the live edge instead of silently drifting behind or visibly
+  jumping forward. Both levers are safe no-ops for a VOD replay — ExoPlayer
+  only applies `LiveConfiguration` to an actual live manifest, and a
+  tighter-but-not-starved buffer just makes VOD start faster too.
+- Reactions and raise-hand were ALREADY optimistic pre-existing (the pulse
+  state updates locally before the POST resolves) — confirmed, not changed.
+  Chat was NOT: a sent message only appeared once `POST /live/messages`
+  resolved. Fixed with a small local-only `pendingMessages` list appended
+  immediately on send and reconciled (dropped) once the real row lands via
+  the existing success path or the send fails — `messageCursor` (the 3s
+  poll's own since-cursor) is untouched by this, so the poll's dedup logic
+  needed no changes. Applied to both `LivePlayerScreen` and
+  `LiveBroadcastScreen`'s chat send paths (both use the shared
+  `LiveFloatingChat`). `myFullName`/`myAvatarUrl` now flow from
+  `MeResponse.profile` through `MainShell` so an optimistic message shows
+  the real sender identity, not a placeholder.
+
+**Honest limits:**
+- Latency levers were changed and compile/build-verified, but NOT measured
+  end-to-end against a live broadcast — no device or live server round-trip
+  available in this sandbox. The exact buffer/target-offset numbers are a
+  reasoned starting point (Media3's own low-latency-live guidance), not
+  tuned against a live measurement.
+- `WhipPublisher` still always captures camera video for a guest publish
+  regardless of the overall broadcast's `kind` ("audio" vs "video") — a
+  pre-existing gap, not introduced or fixed here. The new dock's
+  `isVideoKind` gate only hides the camera/switch-camera CONTROLS for an
+  audio-kind broadcast; it doesn't change what `WhipPublisher.start()`
+  actually captures. Flagged, not fixed — out of scope for a layout task.
+- The SPEAKER dock control forces `AudioManager.MODE_IN_COMMUNICATION`
+  while a guest is live-publishing (a real, known WebRTC-Android gotcha:
+  that mode can otherwise default routing to the earpiece) and restores
+  `MODE_NORMAL` on Leave Stage — reasoned from the WebRTC audio-routing
+  literature, not verified against a physical device in this sandbox
+  (`isSpeakerphoneOn` is deprecated API 31+ in favor of
+  `setCommunicationDevice`, but remains the only mechanism spanning this
+  app's full minSdk 26 range — same tradeoff `VoiceRecorder.kt` already
+  accepts for a deprecated `MediaRecorder()` constructor).
+- No Compose UI-test harness exists in this repo (confirmed, matching every
+  prior session's note) — the new chrome/dock composables are verified by
+  code reading + the compile/assemble gate + the pure-logic unit tests
+  behind them, not an instrumented screenshot test.
+- The 210dp dock scrim height is a reasoned approximation of "roughly the
+  lower two inches," not a device-measured one (dp is defined relative to a
+  160dpi baseline, so 210dp ≈ 1.3in — comfortably fits the dock's own
+  content including the navigation-bar inset on every device class reasoned
+  through, but no physical-device photo was taken to confirm the visual
+  "two inches" read).
+
+**Verify**: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+:app:assembleRelease` → BUILD SUCCESSFUL. 176 tests total (166 baseline + 6
+new in `LiveDockLogicTest` + 4 new in `GuestStageUiTest`), 0 failures.
+`assembleRelease` (R8-minified) succeeded — only pre-existing, unrelated
+deprecation warnings (AutoMirrored icon variants elsewhere in the app; the
+two new ones this session introduced, `Icons.Filled.VolumeUp`/`VolumeOff`
+and `AudioManager.isSpeakerphoneOn`, were switched to the AutoMirrored
+variant / explicitly suppressed respectively). Committed in this worktree
+(`.worktrees/livelayout`, branch `feat/live-screen-layout`, built on top of
+origin/main `40b2993`); not pushed, no PR opened.
