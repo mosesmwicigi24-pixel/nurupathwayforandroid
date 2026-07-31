@@ -13,12 +13,18 @@ import org.nuruplace.member.data.net.LiveRecordingRow
 import org.nuruplace.member.data.net.Net
 
 /** The nav route for a currently-live stream (heartbeat + end-of-stream
- *  polling stay on while this is open — see LivePlayerScreen). */
+ *  polling stay on while this is open — see LivePlayerScreen). `fallbackUrl`
+ *  rides along when the server sent one (church scope + CDN configured) — the
+ *  player prefers it for the first seconds of playback; see LivePlayerScreen's
+ *  header comment for why (the flicker-to-previous-broadcast fix). */
 fun liveNowRoute(row: LiveNowRow): String {
     val url = Net.client.resolveMediaUrl(row.hlsUrl.orEmpty())
+    val fallback = row.hlsFallbackUrl?.let { Net.client.resolveMediaUrl(it) }
     return "live-player?streamId=${Uri.encode(row.streamId)}&url=${Uri.encode(url)}" +
+        "&fallbackUrl=${Uri.encode(fallback ?: "")}" +
         "&title=${Uri.encode(row.title)}&kind=${Uri.encode(row.kind)}&live=true" +
-        "&startedAt=${Uri.encode(row.startedAt)}&viewers=${row.viewerCount}"
+        "&startedAt=${Uri.encode(row.startedAt)}&viewers=${row.viewerCount}" +
+        "&startedByName=${Uri.encode(row.startedByName.orEmpty())}"
 }
 
 /** The nav route for a hosted recording (Replays list) — no heartbeat, no

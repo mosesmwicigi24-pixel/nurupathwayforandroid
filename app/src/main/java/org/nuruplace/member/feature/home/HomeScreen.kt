@@ -7,7 +7,11 @@
 package org.nuruplace.member.feature.home
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -235,6 +239,8 @@ fun HomeScreen(
                 personalWord = personalWord,
                 onBell = onOpenNotifications,
                 onRadio = { onNavigate("radio") },
+                churchLive = churchLive,
+                onLive = { churchLive?.let { onNavigate(liveNowRoute(it)) } },
             )
 
             Column(
@@ -461,6 +467,8 @@ private fun HomeHeader(
     personalWord: String? = null,
     onBell: () -> Unit,
     onRadio: () -> Unit,
+    churchLive: LiveNowRow? = null,
+    onLive: () -> Unit = {},
 ) {
     val now = LocalDate.now()
     val kicker = buildString {
@@ -487,6 +495,14 @@ private fun HomeHeader(
             Text(kicker, style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
             CircleButton("🔔", Nuru.goldChipBg, onBell)
             Spacer(Modifier.width(Spacing.sm))
+            // Nuru Live (L2) — a church stream is live right now. Same 40dp
+            // circle language as the bell/radio buttons either side of it, so
+            // the row reads as one family; the pulsing red ring (not a static
+            // border) is what says "this one is happening right now".
+            if (churchLive != null) {
+                LiveHeaderChip(onClick = onLive)
+                Spacer(Modifier.width(Spacing.sm))
+            }
             CircleButton("📻", Nuru.dangerBg, onRadio)
             Spacer(Modifier.width(Spacing.sm))
             Box {
@@ -536,6 +552,26 @@ private fun CircleButton(glyph: String, bg: Color, onClick: () -> Unit) {
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, style = NuruType.body) }
+}
+
+/** The header's LIVE entry point (owner ask: "re-imagine this part" of the
+ *  bell/radio row) — same 40dp circle as [CircleButton], a dark navy fill
+ *  (echoing [LiveStreamBanner]'s navy card) with a breathing red ring instead
+ *  of a static border, so it visually says "live" before you even read it. */
+@Composable
+private fun LiveHeaderChip(onClick: () -> Unit) {
+    val t = rememberInfiniteTransition(label = "liveHeaderPulse")
+    val ringAlpha by t.animateFloat(
+        initialValue = 0.9f, targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "liveHeaderRingAlpha",
+    )
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy)
+            .border(2.dp, Nuru.liveRed.copy(alpha = ringAlpha), RoundedCornerShape(999.dp))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { Text("📺", style = NuruType.body) }
 }
 
 // ─────────────────────────── Primitives ───────────────────────────

@@ -709,6 +709,39 @@ interface MemberApi {
     @POST("live/streams/{id}/end")
     suspend fun postLiveStreamEnd(@Path("id") streamId: String): EndedLiveStream
 
+    // --- Nuru Live — L5 interactions (docs/LIVE_INTERACTIVE.md) ---
+    // Append-only, server rate-limited to >=1s/user (any emoji) — 204 on
+    // success, RATE_LIMITED (429-shaped ApiError) if the caller is too fast.
+    @POST("live/streams/{id}/reactions")
+    suspend fun postLiveReaction(@Path("id") streamId: String, @Body body: LiveReactionBody): Unit
+
+    // One hand state per (stream, user); idempotent upsert.
+    @POST("live/streams/{id}/hand")
+    suspend fun postLiveHand(@Path("id") streamId: String, @Body body: LiveHandBody): Unit
+
+    @GET("live/streams/{id}/messages")
+    suspend fun getLiveMessages(@Path("id") streamId: String, @Query("since") since: String? = null): LiveMessagesRes
+
+    @POST("live/streams/{id}/messages")
+    suspend fun postLiveMessage(@Path("id") streamId: String, @Body body: LiveSendMessageBody): LiveMessageRow
+
+    // One poll for the whole overlay — viewer_count, reactions, recent
+    // reactions (ambient particles), raised hands, active guest invites.
+    @GET("live/streams/{id}/pulse")
+    suspend fun getLivePulse(@Path("id") streamId: String): LivePulse
+
+    // Broadcaster-only server-side (403 FORBIDDEN_SCOPE otherwise); cap 6 active.
+    @POST("live/streams/{id}/guests/{userId}")
+    suspend fun postLiveGuestInvite(@Path("id") streamId: String, @Path("userId") userId: String): Unit
+
+    // Invitee only — accept/decline a pending invite.
+    @POST("live/streams/{id}/guests/respond")
+    suspend fun postLiveGuestRespond(@Path("id") streamId: String, @Body body: LiveGuestRespondBody): Unit
+
+    // Broadcaster (remove) or the guest themselves (leave) — idempotent.
+    @DELETE("live/streams/{id}/guests/{userId}")
+    suspend fun deleteLiveGuest(@Path("id") streamId: String, @Path("userId") userId: String): Unit
+
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")
     suspend fun syncPush(@Body body: SyncPushBody): SyncPushResult
