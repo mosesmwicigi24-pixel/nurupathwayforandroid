@@ -215,7 +215,6 @@ fun LiveBroadcastScreen(
     val scope = rememberCoroutineScope()
     var pulse by remember { mutableStateOf<LivePulse?>(null) }
     var seenReactionKeys by remember { mutableStateOf<Set<String>?>(null) }
-    var reduceMotionReactionTotal by remember { mutableIntStateOf(0) }
     val reactionParticles = rememberLiveParticleController()
     var showHandsSheet by remember { mutableStateOf(false) }
     var showChatSheet by remember { mutableStateOf(false) }
@@ -253,10 +252,19 @@ fun LiveBroadcastScreen(
                     pulse = p
                     val keys = p.recentReactions.map { "${it.emoji}@${it.at}" }.toSet()
                     val prevSeen = seenReactionKeys
-                    if (prevSeen != null) {
+                    if (prevSeen != null && !reduceMotion) {
                         val fresh = keys - prevSeen
-                        if (reduceMotion) reduceMotionReactionTotal += fresh.size
-                        else fresh.take(6).forEach { k -> reactionParticles.spawn(k.substringBefore('@')) }
+                        // Raw reaction key ("like"/"love"/"fire") -> emoji
+                        // glyph via the SAME mapping the viewer's rail uses
+                        // (LiveInteractions.kt's reactionEmoji) — previously
+                        // this rendered the bare key as literal text (a
+                        // floating "fire" instead of 🔥). The persistent
+                        // per-emoji count below (LiveReactionCounts, driven
+                        // straight off pulse.reactions — the server-
+                        // authoritative tally, not a locally-accumulated
+                        // guess) is what actually answers "no count"; this
+                        // block is just the decorative float.
+                        fresh.take(6).forEach { k -> reactionParticles.spawn(reactionEmoji(k.substringBefore('@'))) }
                     }
                     seenReactionKeys = keys
                 }
@@ -280,13 +288,23 @@ fun LiveBroadcastScreen(
     // removed from this map is exactly the kind of orphaned work that made
     // that race possible in the first place.
     val whepStartJobs = remember(streamId) { mutableMapOf<String, kotlinx.coroutines.Job>() }
-    // Per-guest connect error, surfaced honestly on the tile (GuestStageUi.kt
-    // GuestTile) instead of an indefinite black box — the old behavior when
-    // sub.start() threw (swallowed by runCatching with nothing shown).
-    val guestTileErrors = remember(streamId) { mutableStateMapOf<String, String>() }
     val guestVideoGuests = pulse?.guests
         ?.filter { it.status == "accepted" && !it.whepUrl.isNullOrBlank() }
         .orEmpty()
+    // (Re)launches a guest's subscribe loop — WhepSubscriber.start() now
+    // OWNS the whole retry-with-backoff lifecycle internally (2026-07-31 fix,
+    // see that file's header) and only returns once genuinely stopped or a
+    // non-retryable/window-expired failure leaves connectionState = Error;
+    // this coroutine just needs to stay alive for as long as that takes, so
+    // cancelling it (Leave/removal, see the stale-guest cleanup below) is
+    // the only way this ever ends early. Also the Retry tap's entry point
+    // once a tile shows Error — start() is safe to call again as long as
+    // stop() was never called on this instance.
+    fun launchWhepStart(guestId: String, whepUrl: String) {
+        val sub = whepSubscribers[guestId] ?: return
+        whepStartJobs[guestId]?.cancel()
+        whepStartJobs[guestId] = scope.launch { runCatching { sub.start(whepUrl, streamId, streamKey) } }
+    }
     // L6c — GuestStageCompositor (the congregation-facing GL composite) only
     // ever sees WebRTC tracks + guestIds, never the REST guest row, so the
     // display names for its rail name plates have to be pushed in from here.
@@ -298,7 +316,6 @@ fun LiveBroadcastScreen(
         val stale = whepSubscribers.keys - currentIds
         stale.forEach { id ->
             whepStartJobs.remove(id)?.cancel()
-            guestTileErrors.remove(id)
             whepSubscribers.remove(id)?.let { sub ->
                 GuestWebRtcSupervisor.unregister(id)
                 scope.launch { runCatching { sub.stop() } }
@@ -310,11 +327,7 @@ fun LiveBroadcastScreen(
                 val sub = WhepSubscriber(context, guest.userId)
                 whepSubscribers[guest.userId] = sub
                 GuestWebRtcSupervisor.register(guest.userId, sub)
-                guestTileErrors.remove(guest.userId)
-                whepStartJobs[guest.userId] = scope.launch {
-                    runCatching { sub.start(whepUrl, streamId, streamKey) }
-                        .onFailure { e -> guestTileErrors[guest.userId] = e.message ?: "Couldn't connect this guest." }
-                }
+                launchWhepStart(guest.userId, whepUrl)
             }
         }
     }
@@ -331,9 +344,17 @@ fun LiveBroadcastScreen(
         whepSubscribers[guest.userId]?.let { sub ->
             HostGuestTileState(
                 guest = guest,
-                errorMessage = guestTileErrors[guest.userId],
+                // sub.connectionState is Compose-observable (mutableStateOf)
+                // — reading it here means this tile recomposes the instant
+                // WhepSubscriber's own retry loop moves between Connecting/
+                // Live/Error, no separate error map to keep in sync.
+                connectionState = sub.connectionState,
                 onRendererReady = { renderer -> sub.attachRenderer(renderer) },
                 onRendererReleased = { renderer -> sub.detachRenderer(renderer) },
+                onRetry = {
+                    val whepUrl = guest.whepUrl
+                    if (whepUrl != null) launchWhepStart(guest.userId, whepUrl)
+                },
             )
         }
     }
@@ -414,17 +435,22 @@ fun LiveBroadcastScreen(
                     )
 
                     if (phase == BroadcastPhase.LIVE || phase == BroadcastPhase.RECONNECTING) {
-                        if (reduceMotion) {
-                            if (reduceMotionReactionTotal > 0) {
-                                ReactionCounterChip(
-                                    reduceMotionReactionTotal,
-                                    Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 120.dp, end = 16.dp),
-                                )
-                            }
-                        } else {
+                        // Persistent per-emoji counts — same emoji+count
+                        // pairing the viewer's own action rail shows, driven
+                        // by the same server-authoritative pulse.reactions
+                        // map. Shown regardless of Reduce Motion (a static
+                        // count is data, not a decorative animation — same
+                        // reasoning as isReduceMotionEnabled's own doc).
+                        // Previously the broadcaster had NO persistent count
+                        // at all outside the Reduce-Motion fallback.
+                        LiveReactionCounts(
+                            pulse?.reactions ?: emptyMap(),
+                            Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 120.dp, end = 16.dp),
+                        )
+                        if (!reduceMotion) {
                             LiveParticleLayer(
                                 reactionParticles,
-                                Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 120.dp, end = 24.dp)
+                                Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 156.dp, end = 24.dp)
                                     .width(70.dp).height(220.dp),
                             )
                         }
@@ -662,23 +688,6 @@ private fun HudHandButton(count: Int, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Text("${count.coerceAtMost(99)}", style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold) }
         }
-    }
-}
-
-/** Reduce-Motion fallback for the floating reaction particles — a static
- *  "❤ N" pill showing the running total seen this broadcast, mirroring the
- *  viewer overlay's and the iOS port's ReactionBurstQueue.reduceMotionTotal
- *  fallback (a value change, not a decorative animation). */
-@Composable
-private fun ReactionCounterChip(total: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Text("❤️", fontSize = 12.sp)
-        Text("$total", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold)
     }
 }
 

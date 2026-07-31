@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -208,14 +209,17 @@ data class HostGuestTileState(
     val guest: LiveGuestRow,
     val onRendererReady: (SurfaceViewRenderer) -> Unit,
     val onRendererReleased: (SurfaceViewRenderer) -> Unit,
-    // Non-null when this guest's WHEP subscribe failed — previously silently
-    // swallowed (LiveBroadcastScreen's runCatching around sub.start() had
-    // nothing shown for it), leaving an indefinite black tile the host had
-    // no way to distinguish from "still connecting". Surfaced honestly here
-    // instead, per the resilience requirement that a guest-subsystem failure
-    // degrades gracefully (an error chip on ITS tile) rather than looking
-    // like a silent hang or taking anything else down with it.
-    val errorMessage: String? = null,
+    // Straight off WhepSubscriber's own retry loop (2026-07-31 fix) — the
+    // tile reads as Connecting (with the guest's name and a subtle
+    // indicator, never "Couldn't connect") for as long as the subscriber is
+    // still within its retry window, since production MediaMTX logs proved
+    // a guest's WHIP publish routinely lands seconds after the host's WHEP
+    // subscribe first tries and is told "no stream is available" — that is
+    // completely normal, not a failure. Only becomes Error, with a Retry
+    // affordance, once the retry window has genuinely elapsed or the
+    // failure is non-retryable (e.g. bad credentials).
+    val connectionState: WhepConnectionState = WhepConnectionState.Connecting,
+    val onRetry: () -> Unit = {},
 )
 
 /** Up to [MAX_GUESTS] rounded ~96x128dp tiles (name label under each),
@@ -286,21 +290,44 @@ private fun GuestTile(tile: HostGuestTileState) {
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black),
     ) {
-        // Even a guest whose WHEP subscribe failed still gets its renderer
-        // wired (harmless — no track ever arrives to feed it), so a LATER
-        // retry that succeeds without recomposing this tile still lights up.
+        // Even a guest whose WHEP subscribe is still retrying (or has failed)
+        // still gets its renderer wired (harmless — no track feeds it until
+        // one actually arrives), so a LATER retry that succeeds without
+        // recomposing this tile still lights up on its own.
         WebRtcSurfaceView(
             modifier = Modifier.fillMaxSize(),
             onRendererReady = tile.onRendererReady,
             onRendererReleased = tile.onRendererReleased,
         )
-        if (tile.errorMessage != null) {
-            Box(
-                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("⚠︎ Couldn't connect", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(6.dp))
+        // Honest states (2026-07-31 fix): Connecting reads as "still trying"
+        // — a subtle indicator, never the alarming "Couldn't connect" — for
+        // as long as WhepSubscriber's own retry loop is within its window
+        // (production logs proved a guest's publish routinely lands seconds
+        // after the host's first WHEP attempt; that used to look identical
+        // to a permanent failure). Live shows nothing extra — the video
+        // speaks for itself. Only Error gets the warning chip, WITH a
+        // tappable Retry affordance instead of a dead end.
+        when (val state = tile.connectionState) {
+            is WhepConnectionState.Connecting -> {
+                Box(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Connecting…", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.SemiBold)
+                }
             }
+            is WhepConnectionState.Error -> {
+                Box(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable { tile.onRetry() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("⚠︎ Couldn't connect", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 6.dp))
+                        Text("Tap to retry", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+            }
+            is WhepConnectionState.Live -> {} // nothing extra — the renderer's own video is the whole story.
         }
         Text(
             tile.guest.fullName.ifBlank { "Guest" },
