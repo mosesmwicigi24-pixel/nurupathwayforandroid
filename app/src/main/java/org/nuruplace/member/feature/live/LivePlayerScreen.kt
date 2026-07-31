@@ -57,6 +57,7 @@ package org.nuruplace.member.feature.live
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
@@ -123,6 +124,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.LiveGuestRespondBody
@@ -198,6 +200,22 @@ fun LivePlayerScreen(
     // (back, system back, or navigating to Replays) — Live never keeps
     // playing in the background the way Radio's foreground-service player does.
     DisposableEffect(playerKey) { onDispose { player.release() } }
+
+    // WebRTC warm-up (2026-07-31 host-process-death incident) — see
+    // GoLiveSetupSheet.kt's matching effect for the full doc. Any viewer of
+    // a LIVE (never a replay) stream might go on to raise their hand and get
+    // accepted as a guest, at which point WhipPublisher makes THIS device's
+    // first native WebRTC touch; probing it here, the moment the live player
+    // opens, means that first touch already happened well before "join
+    // stage" is even requested, off a background dispatcher.
+    LaunchedEffect(streamId, live) {
+        if (!live || streamId.isNullOrBlank()) return@LaunchedEffect
+        kotlinx.coroutines.withContext(Dispatchers.Default) {
+            LiveWebRtc.warmUp(context).onFailure { e ->
+                Log.w("LivePlayerScreen", "WebRTC warm-up failed — joining the stage will be unavailable", e)
+            }
+        }
+    }
 
     // Flicker fix, part 2: swap from the direct-origin fallback to the CDN
     // url after a warm-up window, once the R2 mirror has almost certainly

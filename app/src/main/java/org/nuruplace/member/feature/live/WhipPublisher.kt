@@ -9,7 +9,6 @@
 package org.nuruplace.member.feature.live
 
 import android.content.Context
-import android.net.Uri
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.nuruplace.member.feature.live.LiveWebRtc.awaitIceGatheringComplete
@@ -42,6 +41,15 @@ class WhipPublisher(private val context: Context) {
     private var localVideoTrack: VideoTrack? = null
     private var localAudioTrack: org.webrtc.AudioTrack? = null
     private var resourceUrl: String? = null
+
+    // WHIP auth credentials for THIS session, held so stop()'s teardown
+    // DELETE can carry the same Basic auth header the offer POST used (see
+    // LiveWebRtc.kt's header doc — query-param auth is silently ignored by
+    // MediaMTX v1.19.3, proven by a controlled production experiment).
+    // start()'s params aren't in scope inside stop(), so these are cached
+    // the moment startLocked() has them.
+    private var authUser: String? = null
+    private var authPass: String? = null
 
     // Re-entrancy guard — LivePlayerScreen's `LaunchedEffect(myGuestState)`
     // re-runs this ENTIRE start/stop dance from scratch on every pulse-driven
@@ -88,6 +96,8 @@ class WhipPublisher(private val context: Context) {
     }
 
     private suspend fun startLocked(whipUrl: String, myUserId: String, token: String, previewRenderer: SurfaceViewRenderer?) {
+        authUser = myUserId
+        authPass = token
         val factory = LiveWebRtc.factory(context)
         val eglBase = LiveWebRtc.eglBase
         // See LiveWebRtc.kt's audioDeviceModuleRef doc — recording is OFF by
@@ -135,8 +145,7 @@ class WhipPublisher(private val context: Context) {
         pc.awaitIceGatheringComplete()
 
         val finalSdp = pc.localDescription?.description ?: offer.description
-        val urlWithAuth = "$whipUrl?user=${Uri.encode(myUserId)}&pass=${Uri.encode(token)}"
-        val result = LiveWebRtc.postSdpOffer(urlWithAuth, finalSdp)
+        val result = LiveWebRtc.postSdpOffer(whipUrl, finalSdp, myUserId, token)
         resourceUrl = result.resourceUrl
         pc.setRemoteDescriptionSuspend(SessionDescription(SessionDescription.Type.ANSWER, result.answerSdp))
     }
@@ -161,8 +170,14 @@ class WhipPublisher(private val context: Context) {
     }
 
     private suspend fun stopLocked() {
-        resourceUrl?.let { LiveWebRtc.deleteResource(it) }
+        resourceUrl?.let { url ->
+            val user = authUser
+            val pass = authPass
+            if (user != null && pass != null) LiveWebRtc.deleteResource(url, user, pass)
+        }
         resourceUrl = null
+        authUser = null
+        authPass = null
         runCatching { videoCapturer?.stopCapture() }
         videoCapturer?.dispose()
         videoCapturer = null

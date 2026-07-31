@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -54,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CreateLiveStreamBody
@@ -112,6 +114,22 @@ fun GoLiveSetupSheet(
     LaunchedEffect(cellEligible) {
         if (cellEligible) {
             cellName = runCatching { Net.client.api.cellSummary().cell?.name }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    // WebRTC warm-up (2026-07-31 host-process-death incident) — proactively
+    // runs WebRTC's native init HERE, off the guest-join critical path and
+    // well before this host's own broadcast even starts, rather than letting
+    // the first-ever guest join be the FIRST time PeerConnectionFactory
+    // touches native code. See LiveWebRtc.kt's [warmUp] doc: a failure here
+    // is just a log line on a setup sheet the host hasn't submitted yet, not
+    // a broadcast dying mid-stream. Fire-and-forget on a background
+    // dispatcher — this sheet's own submit flow never awaits it.
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(Dispatchers.Default) {
+            LiveWebRtc.warmUp(context).onFailure { e ->
+                Log.w("GoLiveSetupSheet", "WebRTC warm-up failed — guest video will be unavailable this broadcast", e)
+            }
         }
     }
 

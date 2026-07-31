@@ -12,7 +12,6 @@
 package org.nuruplace.member.feature.live
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +42,13 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
     private var remoteAudioTrack: org.webrtc.AudioTrack? = null
     private var attachedRenderer: SurfaceViewRenderer? = null
     private var audioSink: AudioTrackSink? = null
+
+    // WHEP auth credentials for THIS session — see WhipPublisher.kt's
+    // matching field doc. stop()'s teardown DELETE needs the same Basic auth
+    // header the offer POST used (query-param auth is silently ignored by
+    // MediaMTX v1.19.3 for WHIP/WHEP).
+    private var authUser: String? = null
+    private var authPass: String? = null
 
     // ── Native-crash prevention (2026-07-31 host-process-death investigation) ──
     //
@@ -114,6 +120,8 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
 
     private suspend fun startLocked(whepUrl: String, streamId: String, streamKey: String) {
         Log.d(TAG, "guest=$guestId start() begin")
+        authUser = streamId
+        authPass = streamKey
         val factory = LiveWebRtc.factory(context)
 
         // `pc` is captured by this observer closure — every branch below
@@ -170,8 +178,7 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
         pc.awaitIceGatheringComplete()
 
         val finalSdp = pc.localDescription?.description ?: offer.description
-        val urlWithAuth = "$whepUrl?user=${Uri.encode(streamId)}&pass=${Uri.encode(streamKey)}"
-        val result = LiveWebRtc.postSdpOffer(urlWithAuth, finalSdp)
+        val result = LiveWebRtc.postSdpOffer(whepUrl, finalSdp, streamId, streamKey)
         resourceUrl = result.resourceUrl
         pc.setRemoteDescriptionSuspend(SessionDescription(SessionDescription.Type.ANSWER, result.answerSdp))
         Log.d(TAG, "guest=$guestId start() subscribed, awaiting tracks")
@@ -193,8 +200,14 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
 
     private suspend fun stopLocked() {
         Log.d(TAG, "guest=$guestId stop() begin")
-        resourceUrl?.let { LiveWebRtc.deleteResource(it) }
+        resourceUrl?.let { url ->
+            val user = authUser
+            val pass = authPass
+            if (user != null && pass != null) LiveWebRtc.deleteResource(url, user, pass)
+        }
         resourceUrl = null
+        authUser = null
+        authPass = null
         // AWAITED, not fire-and-forget — GuestStageCompositor.detachVideo is
         // main-thread-dispatched internally (see its own doc); this suspend
         // point guarantees BOTH detaches fully complete before dispose()
