@@ -105,12 +105,12 @@ object WhepRetryPolicy {
      *  warm-up, ICE, all on a mobile connection) are the NORMAL case here,
      *  not the exception; per the fix brief this window must comfortably
      *  outlast the ~32s worst case actually observed in production logs. */
-    const val DEFAULT_WINDOW_MS: Long = 45_000
+    const val DEFAULT_WINDOW_MS: Long = 60_000
 
     /** How long tolerated between the FIRST attempt and either giving up
      *  (window expired) or waiting for a subscribed-but-silent connection to
      *  either receive media or officially time out. */
-    const val TRACK_WAIT_TIMEOUT_MS: Long = 12_000
+    const val TRACK_WAIT_TIMEOUT_MS: Long = 25_000
 
     /** Exponential backoff, doubling from [initialMs] and capped at [capMs]
      *  (~0.5s -> 1s -> 2s -> 4s -> 8s -> 8s -> ...). [attempt] is the 0-based
