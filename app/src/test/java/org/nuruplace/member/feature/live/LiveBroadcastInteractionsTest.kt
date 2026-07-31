@@ -51,4 +51,23 @@ class LiveBroadcastInteractionsTest {
     @Test fun `guest cap is six`() {
         assertEquals(6, MAX_GUESTS)
     }
+
+    // ── buildPublishUrl (Broadcast Studio, LiveBroadcastEngine.kt) — the
+    // '?' must survive as %3F so RootEncoder's UrlParser treats the whole
+    // "path?user=..&pass=.." as one opaque appName. See the function's own
+    // header comment for the full MediaMTX/UrlParser trace. ──
+
+    @Test fun `publish url percent-encodes the query delimiter`() {
+        assertEquals(
+            "rtmp://host/church%3Fuser=stream-1&pass=abc123",
+            buildPublishUrl("rtmp://host/church", "stream-1", "abc123"),
+        )
+    }
+
+    @Test fun `publish url preserves a nested scope path untouched`() {
+        assertEquals(
+            "rtmp://host/cell/42%3Fuser=stream-1&pass=abc123",
+            buildPublishUrl("rtmp://host/cell/42", "stream-1", "abc123"),
+        )
+    }
 }

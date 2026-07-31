@@ -2403,3 +2403,228 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 new in `LiveBroadcastInteractionsTest`: 4 `cameraOrientationFor` rotations +
 2 `LiveGuestRow.isActive` cases + 1 `MAX_GUESTS` pin). Not pushed / no PR
 opened (per task instruction — isolated worktree `feat/live-broadcaster-l5`).
+
+## 2026-07-31 — Broadcast Studio: full-bleed stage, background persistence, Camera/Screen/Document source switcher (branch feat/broadcast-studio, this repo only, on top of #73 + #74)
+
+Owner-directed rework of the Go Live screen (screenshot evidence): plain
+letterboxed preview with black bars, controls sitting in the black band,
+title clipped under the gesture nav bar, no screen/document sharing, and the
+stream died the instant you left the live page. All four fixed. Built on top
+of origin/main tip (#75, which already includes #73 viewer L5 + #74
+broadcaster L5 HUD + orientation-follow) in an isolated worktree
+(`.worktrees/bcast-studio`), not pushed.
+
+**1. Full-bleed stage (no more black bars).** Root cause verified against
+the pinned RootEncoder 2.5.9 source, not guessed: `GlStreamInterface`
+defaults `aspectRatioMode = AspectRatioMode.Adjust`, and
+`SizeCalculator.calculateViewPort()`'s `Adjust` branch fits the stream
+*inside* the preview view (classic letterbox/pillarbox) — that default was
+never overridden anywhere in the old screen. `Fill` runs the same formula
+inverted (scales so the stream *covers* the view, cropping the overflow) —
+exactly TikTok-style center-crop. Fix is one call at engine build time:
+`stream.getGlInterface().setAspectRatioMode(AspectRatioMode.Fill)`
+(`LiveBroadcastEngine.kt`, `buildBroadcaster()`). Separately, the HUD itself
+was rebuilt so every element floats with its own `WindowInsets` handling
+instead of one shared `Column.statusBarsPadding().padding(16.dp)` (the old
+layout only padded the TOP for the status bar — nothing accounted for the
+bottom gesture-nav inset, which is what actually clipped the title/controls
+row on 3-button/gesture-nav devices). New layout: top-left LIVE pill+
+duration+watching (`statusBarsPadding()`), bottom-left title chip and
+bottom-center controls row, each independently `navigationBarsPadding()`'d
+(`LiveHudOverlay` in `LiveBroadcastScreen.kt`). `MainShell.kt`'s `NavHost`
+also now skips Scaffold's own content padding entirely for the
+`live-broadcast` route (`val contentPadding = if (onLiveBroadcast)
+PaddingValues(0.dp) else pad`) so the video genuinely reaches every edge
+instead of being pre-inset by the Scaffold slot the way every other
+destination is.
+
+**2. Background persistence — the actual headline change.** The RootEncoder
+engine (`GenericStream`/`GenericOnlyAudio`, wrapped as before by the
+`Broadcaster` interface) moved OUT of the Compose screen entirely and into a
+new foreground `Service` (`LiveBroadcastService.kt`) that owns it for the
+whole life of a broadcast — a state-machine rewrite of what used to live as
+`remember`/`LaunchedEffect` state directly in `LiveBroadcastScreen.kt` (phase,
+retry/backoff, ConnectChecker callbacks, mute, camera flip, source switch,
+End). `LiveBroadcastScreen.kt` is now a thin observer: it never touches
+RootEncoder directly, only through `BroadcastController` (new, singleton,
+same "bind once, mirror a StateFlow" idiom as the existing `RadioController`
+— it binds to the service, republishes `service.state` into its own
+`StateFlow<BroadcastState>`, and every action method is a one-line delegate
+to the bound service).
+- **The `ON_STOP`-ends-the-broadcast code is GONE, deliberately.** The old
+  screen had `LifecycleEventEffect(ON_STOP) { endStream(background = true) }`
+  — backgrounding, switching tabs, or locking the phone always ended the
+  stream. There is no replacement for it: nothing in the new screen reacts to
+  `ON_STOP` at all. The service (started via
+  `ContextCompat.startForegroundService` + `ServiceCompat.startForeground`
+  with a typed foreground service, `camera|microphone` narrowing to
+  `microphone|mediaProjection` while screen-sharing) keeps running
+  independent of the Activity/Compose lifecycle entirely; that IS the fix.
+- **View re-attach, verified against the pinned source, not guessed.**
+  `StreamBase.startPreview(surface, width, height)` / `stopPreview()`
+  (library/src/main/java/com/pedro/library/base/StreamBase.kt) only touch
+  `glInterface.attachPreview()/deAttachPreview()` — `stopSources()`'s
+  `videoSource.stop()` and `glInterface.stop()` calls are BOTH gated on
+  `if (!isOnPreview) ...`, and separately `stopStream()`'s own teardown path
+  never touches the preview surface at all. So while `isStreaming == true`,
+  detaching the preview (leaving the screen) neither stops camera capture
+  nor drops the RTMP publish — only the local preview surface goes away;
+  `startSources()`'s `addMediaCodecSurface(videoEncoder.inputSurface)` (set
+  once at `startStream()`) is what actually feeds the encoder, and it's
+  completely independent of the preview attach state. Compose reaches this
+  through the exact same `SurfaceHolder.Callback` idiom the old screen used
+  (`surfaceCreated → attachPreview`, `surfaceDestroyed → detachPreview`),
+  just redirected to `BroadcastController.attachPreview/detachPreview()`
+  instead of a locally-owned `broadcaster` val — the SurfaceView's own OS
+  lifecycle (created when the composable is placed and visible, destroyed
+  when it isn't) already IS "detach on navigate-away/background, re-attach
+  on return," so no extra `ON_STOP`/`ON_RESUME` wiring was needed at all.
+- **Persistent notification**: "● LIVE — `<title>`" on a new `nuru_live_
+  broadcast` channel (`IMPORTANCE_LOW`, silent — this is a status
+  indicator, not an alert), tapping it re-opens the exact broadcast route via
+  the existing `PendingDest`/`nuru.dest` deep-link plumbing (same mechanism
+  `RadioService` already uses to reopen the radio player); its "End" action
+  is a `PendingIntent.getService(...)` targeting a new `ACTION_END` the
+  service's `onStartCommand` checks for, routing to the SAME
+  `endBroadcast()` path a manual End-button tap uses (tagged
+  `viaNotification = true` só the eventual Summary screen — if anyone's
+  still looking at it — reads "Nuru Live ended" instead of "You were live!").
+- **In-app "tap to return" pill** (`BroadcastReturnBar`, new, in
+  `LiveBroadcastScreen.kt`): the exact same idiom as the existing viewer-side
+  `AppLiveBar` (`LiveDiscoveryUi.kt`) one screen over — a slim strip in
+  `MainShell`'s `Scaffold.bottomBar`, above the bottom nav, shown on every
+  screen but the broadcast screen itself while `BroadcastController.state`
+  has an active (non-SUMMARY) session, ticking its own local `mm:ss` off the
+  service's `startedAtMillis`. Tapping it rebuilds the same
+  `live-broadcast?...` route from the running `BroadcastSession` (new
+  `liveBroadcastRoute(BroadcastSession)` overload in `LiveRoutes.kt`,
+  shared with the notification's own PendingIntent so there's exactly one
+  route-string builder, not two copies drifting apart). Also fixed, while
+  touching this code: the pre-existing viewer `AppLiveBar` could show
+  "someone else is live, join" while YOU were the one broadcasting — now
+  explicitly excluded via the same `onLiveBroadcast` route check.
+- **Service lifecycle / cleanup**: `LiveBroadcastService` is
+  started+bound (started so it survives independent of any binding; bound
+  so the Controller/UI can reach it). `endBroadcast()` stops the RootEncoder
+  engine, best-effort `POST /live/streams/:id/end` (same fire-and-forget-on-
+  network-failure precedent as sign-out never blocking on logout), sets
+  phase to `SUMMARY`, then `stopSelf()`s its "started" life. Because a bound
+  service with an active binding doesn't actually get destroyed by
+  `stopSelf()` alone, `BroadcastController` watches for `phase == SUMMARY`
+  (a separate one-shot `svc.state.first { ... }` coroutine, NOT folded into
+  the state-mirroring `collect{}` loop — self-cancelling a coroutine from
+  inside its own `StateFlow.collect{}` block hit a genuine Kotlin type-
+  inference recursion error, "Type checking has run into a recursive
+  problem," and needed both the split into two coroutines AND an explicit
+  `ServiceConnection` type annotation on the `connection` property to
+  resolve) and unbinds once it sees it, letting the service actually die
+  instead of lingering as a dead-weight bound instance for the rest of the
+  app session.
+
+**3. Source switcher — Camera / Screen / Document.** New `Tune` icon button
+in the controls row (video kind only) opens `LiveSourceSheet`
+(`LiveBroadcastSourceUi.kt`, new file).
+- **Runtime switching is genuinely live, not faked.** Verified against
+  `StreamBase.changeVideoSource(source: VideoSource)`: it stops+releases the
+  OLD `VideoSource`, starts the NEW one on the SAME
+  `glInterface.surfaceTexture`, and does none of this through
+  `stopStream()`/`startStream()` — `isStreaming` (and the RTMP publish
+  itself) never drops. This is the exact mechanism RootEncoder's own
+  `app/src/main/java/com/pedro/streamer/screen/ScreenService.kt` sample uses
+  for its camera↔screen toggle (fetched and read in full, not inferred),
+  including the orientation handling that sample's own comment states
+  verbatim: "ScreenSource need use always setCameraOrientation(0) because
+  the MediaProjection handle orientation. You also need remove
+  autoHandleOrientation if you are using it" — ported into
+  `VideoBroadcaster.useScreenSource()`/`useCameraSource()`
+  (`LiveBroadcastEngine.kt`), which also restores whichever camera facing
+  (front/back) was active before a screen-share round-trip (`Camera2Source.
+  switchCamera()` just flips an internal field when the source isn't
+  running yet — verified — so calling it on the freshly-constructed
+  `Camera2Source` before handing it to `changeVideoSource()` is safe).
+- **Camera**: unchanged behavior, default on entry.
+- **Screen share**: `MediaProjectionManager.createScreenCaptureIntent()`
+  via `rememberLauncherForActivityResult` (must be launched from the
+  Activity — the sheet/Service can't own this consent dialog) →
+  `BroadcastController.switchToScreenSource(resultCode, data)` →
+  `LiveBroadcastService` re-asserts `startForeground` with the
+  `mediaProjection` type added, calls `mediaProjectionManager.
+  getMediaProjection(resultCode, data)`, and hands it to
+  `useScreenSource()`. Mic keeps streaming throughout (untouched — only the
+  video source changes).
+- **Document**: SAF `ActivityResultContracts.OpenDocument()` (PDF mime)
+  picks a `Uri`, THEN the same MediaProjection consent flow runs (Document
+  mode rides on the identical Screen source at the engine layer — see below)
+  → a full-screen in-app pager (`DocumentPagerScreen`, `HorizontalPager` +
+  `android.graphics.pdf.PdfRenderer`, one page open/rendered/closed at a
+  time under a `Mutex` since `PdfRenderer` only allows a single open `Page`)
+  replaces the camera preview. Because MediaProjection mirrors the WHOLE
+  display compositor output (`DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_
+  MIRROR`, verified against `ScreenSource.kt`), whatever Compose draws on
+  Nuru's own screen IS what's captured — so the pager, drawn full-screen
+  locally, is exactly what the congregation sees; no extra plumbing needed
+  beyond "put the right UI on screen while the Screen source is active."
+- **Engine-vs-UI split**: `BroadcastSource` at the engine layer is only
+  `CAMERA`/`SCREEN` — "Document" is a Compose-only mode layered on top of
+  `SCREEN` (a `documentUri: Uri?` local to `LiveBroadcastScreen`, gated by
+  `documentUri != null && state.source == SCREEN`), not a third engine
+  state, since the RootEncoder video source is identical either way.
+
+**Honest, documented limit (source switcher chrome):** MediaProjection
+captures the whole display, so there is no way to draw broadcaster-only HUD
+chrome that viewers won't also see once Screen/Document is active — unlike
+Camera mode, where the HUD lives purely in Compose, entirely separate from
+the raw sensor frames RootEncoder encodes. Rather than either (a) hide End/
+mute entirely behind "switch back to camera first" — a real safety gap for a
+live tool — or (b) keep showing the FULL camera-mode HUD (LIVE pill,
+hand/chat buttons, everything) baked into the stream, both Screen and
+Document modes deliberately show a MINIMAL control set only (`ScreenMode
+Controls`: mic mute, a "Sharing your screen · switch to camera" chip, End;
+`DocumentPagerScreen`'s own page-indicator + mute/End/exit row) — the same
+tradeoff every mobile screen-share tool with an in-app control accepts, not
+a bug. Raised hands / live chat are unreachable while Screen/Document is
+active (by the same logic — the full HUD housing those buttons is
+intentionally suppressed); switching back to Camera restores them. Peak-
+viewer tracking (`peakViewers`, still Compose-local, resubscribes on return
+rather than living in the Service) resets to 0 if you fully navigate away
+from the broadcast screen and back (e.g. via a bottom-tab switch, which
+`popUpTo`s the route out of the back stack) — a cosmetic-only tradeoff, not
+a data-loss one, since `/live/now`'s viewer count itself stays server-
+authoritative throughout. Pulse polling (raised hands, reactions, chat) is
+likewise resubscribe-on-return, not service-owned, per the task's own
+either/or framing — nothing is lost since every one of those is an
+idempotent GET.
+
+**Manifest**: `FOREGROUND_SERVICE_CAMERA` / `FOREGROUND_SERVICE_MICROPHONE`
+/ `FOREGROUND_SERVICE_MEDIA_PROJECTION` added (alongside the pre-existing
+`FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` for Radio);
+`LiveBroadcastService` declared with `android:foregroundServiceType=
+"camera|microphone|mediaProjection"` (the manifest-declared superset —
+`ServiceCompat.startForeground()`'s runtime type param narrows to whichever
+subset is actually active at each point in the session, gated
+`Build.VERSION_CODES.R` since `FOREGROUND_SERVICE_TYPE_CAMERA`/
+`_MICROPHONE` need API 30, below which the type param is a no-op — correct,
+since pre-R foreground services aren't typed at all).
+
+**Files**: `feature/live/LiveBroadcastEngine.kt` (new — `Broadcaster`/
+`VideoBroadcaster`/`AudioBroadcaster`/`buildBroadcaster()` moved out of the
+screen so the Service can own them; `buildPublishUrl()` extracted as a pure,
+now-tested function; `BroadcastPhase`/`BroadcastSource`/`BroadcastSession`/
+`BroadcastState`), `feature/live/LiveBroadcastService.kt` (new — the
+foreground service), `feature/live/BroadcastController.kt` (new — the
+singleton facade), `feature/live/LiveBroadcastSourceUi.kt` (new — source
+sheet, `ScreenModeControls`, `DocumentPagerScreen`/`PdfPage`),
+`feature/live/LiveBroadcastScreen.kt` (rewritten — thin observer, rebuilt
+inset-aware HUD, `BroadcastReturnBar`), `feature/live/LiveRoutes.kt`
+(`liveBroadcastRoute(BroadcastSession)` overload), `feature/shell/
+MainShell.kt` (`BroadcastReturnBar` wiring, `onLiveBroadcast` route guard on
+both the viewer `AppLiveBar` and the Scaffold content padding),
+`AndroidManifest.xml` (permissions + service declaration),
+`app/src/test/java/.../LiveBroadcastInteractionsTest.kt` (+2:
+`buildPublishUrl` cases for the flat-scope and nested-scope publish URLs).
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 45 tests, 0 failures/errors (43 baseline + 2 new). Not
+pushed / no PR opened (isolated worktree `.worktrees/bcast-studio`, branch
+`feat/broadcast-studio`, built on top of origin/main #75).
