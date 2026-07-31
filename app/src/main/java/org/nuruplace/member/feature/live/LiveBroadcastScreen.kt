@@ -62,12 +62,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -591,13 +593,16 @@ private fun AudioHud(title: String) {
     }
 }
 
-/** Broadcast Studio's floating HUD — every element floats over the full-
- *  bleed video with its own WindowInsets handling so nothing ever sits
- *  under the status bar or the gesture nav bar: top-left LIVE pill (status-
- *  bar inset), bottom-left title chip + bottom-center controls row
- *  (navigation-bar inset), both anchored independently rather than sharing
- *  one padded Column like the pre-rework HUD did (that's what let the title
- *  clip under the gesture bar on 3-button/gesture-nav devices). */
+/**
+ * Broadcast Studio's floating HUD — same grammar as the viewer/guest screen's
+ * redesign (LiveChrome.kt, owner ask 2026-08-01): ONE top row (status/phase
+ * pill, duration, watching count, and the stream title, all on one line — no
+ * separate floating title chip any more) and ONE bottom dock (mic, End,
+ * flip, source, raise-hand queue, chat — already consolidated pre-existing).
+ * Both sit on a soft gradient scrim, never a heavy opaque bar, matching the
+ * viewer surface's design-quality bar. Full-bleed video/preview underneath;
+ * WindowInsets handled per-row so nothing sits under the status/gesture bars.
+ */
 @Composable
 private fun LiveHudOverlay(
     phase: BroadcastPhase,
@@ -618,43 +623,50 @@ private fun LiveHudOverlay(
     reduceMotion: Boolean,
 ) {
     Box(Modifier.fillMaxSize()) {
-        // Top-left — LIVE pill + duration + watching count.
-        GentleEntrance(reduceMotion, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(Spacing.md)) {
+        // ONE top row — status pill (LIVE/RECONNECTING/CONNECTING) + duration
+        // + watching count + the stream title, all on one line.
+        Box(
+            Modifier.fillMaxWidth().align(Alignment.TopCenter)
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent))),
+        ) {
             Row(
-                Modifier
-                    .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = Spacing.md, vertical = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                LivePulsingDot()
-                Text(
-                    when (phase) {
-                        BroadcastPhase.RECONNECTING -> "RECONNECTING…"
-                        BroadcastPhase.CONNECTING -> "CONNECTING…"
-                        else -> "LIVE"
-                    },
-                    style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
-                )
-                if (phase == BroadcastPhase.LIVE) {
-                    Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                    Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
-                    Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                    Text("$viewerCount watching", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                Row(
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    LivePulsingDot()
+                    Text(
+                        when (phase) {
+                            BroadcastPhase.RECONNECTING -> "RECONNECTING…"
+                            BroadcastPhase.CONNECTING -> "CONNECTING…"
+                            else -> "LIVE"
+                        },
+                        style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
+                    )
+                    if (phase == BroadcastPhase.LIVE) {
+                        Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                        Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                        Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                        Text("$viewerCount watching", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                    }
+                }
+                if (title.isNotBlank()) {
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        title, style = NuruType.body, color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
 
-        // Bottom-left — title chip, above the gesture-nav inset.
-        title.takeIf { it.isNotBlank() }?.let {
-            Row(
-                Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = Spacing.md, bottom = 84.dp)
-                    .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text(it, style = NuruType.body, color = Color.White.copy(alpha = 0.9f)) }
-        }
-
-        // Bottom-center — [mic, End, flip, source, ✋, 💬], above the
+        // Bottom-center dock — [mic, End, flip, source, ✋, 💬], above the
         // gesture-nav inset. Same left-to-right order the iOS port's
         // controlsRow uses (End right after mic, not pinned trailing).
         GentleEntrance(reduceMotion, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = Spacing.lg)) {

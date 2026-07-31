@@ -36,10 +36,10 @@ enum class LiveDockItem {
 }
 
 /** The three reaction dock items, in the SAME left-to-right order
- *  [LiveActionRail]/[orderedReactionEntries]'s `KNOWN_REACTION_ORDER` already
- *  established — a viewer/guest who reaches for the rail muscle-memory
- *  shouldn't find the emojis reordered just because they moved from a
- *  vertical rail into a horizontal dock. */
+ *  [orderedReactionEntries]'s `KNOWN_REACTION_ORDER` already established —
+ *  a viewer/guest who reaches for the old rail's muscle-memory shouldn't
+ *  find the emojis reordered just because they moved from a vertical rail
+ *  into this horizontal dock. */
 private val REACTION_ITEMS = listOf(LiveDockItem.REACT_LOVE, LiveDockItem.REACT_FIRE, LiveDockItem.REACT_LIKE)
 
 /** Every viewer/guest gets the audience cluster (react, raise hand, chat)
