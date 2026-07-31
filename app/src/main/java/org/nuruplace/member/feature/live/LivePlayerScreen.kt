@@ -273,7 +273,7 @@ fun LivePlayerScreen(
                 val keys = p.recentReactions.map { "${it.emoji}@${it.at}" }.toSet()
                 val prevSeen = seenReactionKeys
                 if (prevSeen != null && !reduceMotion) {
-                    (keys - prevSeen).take(6).forEach { k -> particles.spawn(k.substringBefore('@')) }
+                    (keys - prevSeen).take(6).forEach { k -> particles.spawn(reactionEmoji(k.substringBefore('@'))) }
                 }
                 seenReactionKeys = keys
             }
@@ -303,7 +303,7 @@ fun LivePlayerScreen(
         pulse = (current ?: LivePulse()).let { c ->
             c.copy(reactions = c.reactions.toMutableMap().apply { this[emoji] = (this[emoji] ?: 0) + 1 })
         }
-        if (!reduceMotion) particles.spawn(emoji)
+        if (!reduceMotion) particles.spawn(reactionEmoji(emoji))
         if (streamId != null) {
             scope.launch { runCatching { Net.client.api.postLiveReaction(streamId, LiveReactionBody(emoji)) } }
         }

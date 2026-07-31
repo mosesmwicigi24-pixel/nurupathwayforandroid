@@ -175,6 +175,29 @@ private fun BoxScope.FloatingParticle(emoji: String, modifier: Modifier, onExpir
     )
 }
 
+// ── Reaction key -> emoji glyph (shared by viewer AND broadcaster) ─────────
+
+/** THE single reaction-key -> emoji mapping for the whole Live feature —
+ *  every place a reaction key gets rendered as a glyph (the rail's own
+ *  buttons below, the ambient/self-tap floating particles in both
+ *  LivePlayerScreen and LiveBroadcastScreen, and the broadcaster's read-only
+ *  [LiveReactionCounts]) MUST go through this function, never a second
+ *  hand-rolled `when`. Backend reaction keys ("like"/"love"/"fire", widened
+ *  by migration 1758000000182_live-reaction-fire) are a free string, not a
+ *  closed enum (see LiveDtos.kt's LiveRecentReaction doc) specifically so a
+ *  new key can be added server-side without breaking older clients — which
+ *  means an unrecognized key here is an EXPECTED case, not a bug, and must
+ *  never fall through to rendering the raw key text on screen (that's
+ *  exactly the bug that shipped for the broadcaster's reaction surface: it
+ *  rendered "fire" as literal text instead of 🔥). Falls back to a neutral
+ *  glyph instead. */
+fun reactionEmoji(key: String): String = when (key) {
+    "love" -> "❤️"
+    "fire" -> "🔥"
+    "like" -> "👍"
+    else -> "✨"
+}
+
 // ── The right-side vertical action rail (TikTok) ───────────────────────────
 
 /** ❤️ 🔥 👍 (each with its abbreviated count underneath), then ✋ raise-hand
@@ -193,15 +216,67 @@ fun LiveActionRail(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        RailButton("❤️", abbreviateCount(counts["love"] ?: 0)) { onReact("love") }
-        RailButton("🔥", abbreviateCount(counts["fire"] ?: 0)) { onReact("fire") }
-        RailButton("👍", abbreviateCount(counts["like"] ?: 0)) { onReact("like") }
+        RailButton(reactionEmoji("love"), abbreviateCount(counts["love"] ?: 0)) { onReact("love") }
+        RailButton(reactionEmoji("fire"), abbreviateCount(counts["fire"] ?: 0)) { onReact("fire") }
+        RailButton(reactionEmoji("like"), abbreviateCount(counts["like"] ?: 0)) { onReact("like") }
         RailButton(
             "✋", null,
             filled = handRaised,
             onClick = onToggleHand,
         )
         RailButton("💬", null, filled = chatOpen, onClick = onToggleChat)
+    }
+}
+
+// ── Broadcaster-side read-only reaction counts ──────────────────────────────
+
+/** Stable display order for the reaction row — known keys first (so the row
+ *  doesn't jitter position across polls as counts change), anything the
+ *  client doesn't recognize yet sorted alphabetically after. */
+private val KNOWN_REACTION_ORDER = listOf("love", "fire", "like")
+
+/** Zero-count keys dropped, known keys first (stable position across polls),
+ *  anything unrecognized alphabetical after — split out from
+ *  [LiveReactionCounts] as a plain function so the ordering/aggregation is
+ *  unit-testable without a Compose/Robolectric harness (same posture as
+ *  every other pure helper in this file). Both host and viewer read counts
+ *  straight off the SAME server-authoritative `pulse.reactions` map — there
+ *  is deliberately no separate client-side tally to drift out of sync. */
+internal fun orderedReactionEntries(counts: Map<String, Int>): List<Pair<String, Int>> =
+    counts.entries
+        .filter { it.value > 0 }
+        .sortedWith(
+            compareBy(
+                { entry -> KNOWN_REACTION_ORDER.indexOf(entry.key).let { if (it < 0) Int.MAX_VALUE else it } },
+                { entry -> entry.key },
+            ),
+        )
+        .map { it.key to it.value }
+
+/** Read-only per-emoji reaction counts for the broadcaster HUD — same
+ *  emoji+count pairing and pill styling as [LiveActionRail]'s own buttons,
+ *  just non-tappable (the broadcaster sees the SAME reaction picture the
+ *  viewer's rail shows; it never originates a reaction on its own stream).
+ *  Iterates whatever keys [counts] actually reports rather than a hardcoded
+ *  three, so a reaction type added server-side shows up here with zero
+ *  client change (see [reactionEmoji]'s doc on why that matters). Renders
+ *  nothing when every count is zero. */
+@Composable
+fun LiveReactionCounts(counts: Map<String, Int>, modifier: Modifier = Modifier) {
+    val ordered = orderedReactionEntries(counts)
+    if (ordered.isEmpty()) return
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ordered.forEach { (key, count) ->
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(reactionEmoji(key), fontSize = 12.sp)
+                Text(abbreviateCount(count), style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 

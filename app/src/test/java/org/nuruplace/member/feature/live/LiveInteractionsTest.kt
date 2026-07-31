@@ -87,4 +87,53 @@ class LiveInteractionsTest {
         assertEquals(Offset(0f, 0f), clampDragOffset(Offset(-10f, -10f), container, hugeElement))
         assertEquals(Offset(0f, 0f), clampDragOffset(Offset(999f, 999f), container, hugeElement))
     }
+
+    // ── reactionEmoji — the ONE key->glyph mapping shared by the viewer's
+    // rail, both screens' floating particles, and the broadcaster's
+    // read-only LiveReactionCounts (2026-07-31 fix: the broadcaster surface
+    // was rendering the raw backend key, e.g. literal text "fire", instead
+    // of 🔥). Backend keys are a free string on purpose (LiveDtos.kt), so an
+    // unrecognized key is an expected case that must fall back to a neutral
+    // glyph — never raw text on screen. ──────────────────────────────────
+
+    @Test fun `reactionEmoji maps every known backend key to its glyph`() {
+        assertEquals("❤️", reactionEmoji("love"))
+        assertEquals("🔥", reactionEmoji("fire"))
+        assertEquals("👍", reactionEmoji("like"))
+    }
+
+    @Test fun `reactionEmoji never renders an unknown key as raw text`() {
+        assertEquals("✨", reactionEmoji("unknown-future-reaction"))
+        assertEquals("✨", reactionEmoji(""))
+        // Especially: none of the known keys leak through verbatim for a
+        // key that merely CONTAINS them or differs in case — the mapping is
+        // exact-match only, so drift (a typo, a differently-cased key) still
+        // gets the safe fallback instead of silently matching the wrong emoji.
+        assertEquals("✨", reactionEmoji("Fire"))
+        assertEquals("✨", reactionEmoji("fire2"))
+    }
+
+    // ── orderedReactionEntries — the broadcaster HUD's read-only counts row
+    // (LiveReactionCounts) aggregation/ordering, split out as a pure function
+    // specifically so this is testable without Compose. ──────────────────
+
+    @Test fun `orderedReactionEntries drops zero and negative counts`() {
+        val counts = mapOf("love" to 0, "fire" to 3, "like" to -1)
+        assertEquals(listOf("fire" to 3), orderedReactionEntries(counts))
+    }
+
+    @Test fun `orderedReactionEntries puts known keys first in a stable order`() {
+        val counts = mapOf("like" to 1, "fire" to 1, "love" to 1)
+        assertEquals(listOf("love" to 1, "fire" to 1, "like" to 1), orderedReactionEntries(counts))
+    }
+
+    @Test fun `orderedReactionEntries sorts unknown keys alphabetically after the known set`() {
+        val counts = mapOf("zeal" to 1, "fire" to 1, "amen" to 1)
+        assertEquals(listOf("fire" to 1, "amen" to 1, "zeal" to 1), orderedReactionEntries(counts))
+    }
+
+    @Test fun `orderedReactionEntries on an empty or all-zero map is empty`() {
+        assertEquals(emptyList<Pair<String, Int>>(), orderedReactionEntries(emptyMap()))
+        assertEquals(emptyList<Pair<String, Int>>(), orderedReactionEntries(mapOf("love" to 0)))
+    }
 }

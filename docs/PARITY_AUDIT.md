@@ -3841,3 +3841,115 @@ new, all in `GoLiveCellPickerTest`), 0 failures. `assembleRelease`
 succeeded. Committed, not pushed / no PR opened (isolated worktree
 `.worktrees/celltarget`, branch `feat/live-cell-targeting`, built on top of
 origin/main 2b1522f / rel/vc57).
+
+---
+
+## 2026-07-31 — WHEP subscribe retry-with-backoff + host reaction-emoji bug
+
+**Bug 1 — guest video tile permanently dead ("Couldn't connect to the
+stage") even though the guest joins fine.** PROVEN from production MediaMTX
+logs (owner testing S24-as-host + iPhone-as-guest, same session guest auth
+was confirmed fixed): the host's WHEP subscribe (`WhepSubscriber.kt`,
+driven by `GuestWebRtcSupervisor.kt`) fired the INSTANT a guest was marked
+accepted, but the guest's own WHIP publish only began 4–32s later
+(permission prompt, camera warm-up, ICE) — MediaMTX answered `closed: no
+stream is available on path 'guest/…'` (HTTP 404) and the OLD one-shot
+`start()` gave up forever, leaving a dead tile under the guest's own name
+(that part came from our API and was never wrong). A guest stopping and
+restarting publish (`closed: terminated` then a fresh `is publishing`
+moments later) hit the exact same dead end. Also observed once: `peer
+connection established … closed: deadline exceeded while waiting tracks` —
+a connection that came up but never carried media.
+
+**Fix**: `WhepSubscriber.start()` is now the WHOLE connect lifecycle, not a
+single attempt — `WhepRetryPolicy.kt` (new, pure, coroutine-free) supplies
+the backoff schedule (0.5s → 8s cap, exponential) and failure
+classification: HTTP 404/5xx and bare `IOException`s classify as
+`NotYetAvailable` (retry), a new client-mirrored
+`WhepTracksTimeoutException` (thrown after `TRACK_WAIT_TIMEOUT_MS=12s` of
+no `onTrack`) classifies as `TracksTimedOut` (retry, and the half-dead
+connection is torn down before the next attempt — never left hanging),
+401/403/anything else classifies `Terminal` (surfaced immediately, no point
+retrying bad credentials). The whole cycle gets a 45s window
+(`WhepRetryPolicy.DEFAULT_WINDOW_MS`) before actually surfacing an error.
+Once live, the peer connection's ICE state (`DISCONNECTED`/`FAILED`/
+`CLOSED`) is watched; a drop reconnects automatically with a FRESH 45s
+window (a guest republish is treated as a brand-new join, not a countdown
+already half spent) instead of sticking on a dead tile.
+`LiveWebRtc.postSdpOffer` now throws the new `WhipWhepHttpException(code)`
+(carries the HTTP status) instead of a bare `IllegalStateException`, so the
+policy can classify precisely instead of parsing message strings.
+
+New `WhepConnectionState` (Connecting/Live/Error — shape matches the
+guest's own `GuestStageState`) replaces the old boolean-ish
+`guestTileErrors` map; `HostGuestTileState`/`GuestTile`
+(`GuestStageUi.kt`) now read it directly (Compose `mutableStateOf` on the
+subscriber) — the tile shows a subtle "Connecting…" label while retrying
+(never the alarming "Couldn't connect" mid-retry — that's what made a join
+seconds from working look like the whole feature was broken) and only
+flips to the warning chip + a tap-to-retry affordance once the window
+genuinely expires or the failure is terminal. `lifecycleMutex` now scopes
+to each INDIVIDUAL connect attempt (not the retry loop's backoff waits or
+the live-monitoring suspension) so Leave Stage/screen-exit/broadcast-end
+can still preempt promptly instead of blocking for up to a backoff or
+track-wait duration; `stop()` cancels the track-arrived/connection-drop
+signals before acquiring the lock specifically so an attempt parked inside
+either wait wakes immediately.
+
+**Bug 2 (owner-reported, fixed alongside) — host sees raw reaction key text
+instead of an emoji, with no count.** When a viewer tapped 🔥, the host's
+broadcast screen rendered the literal string `"fire"` as floating text and
+had NO persistent reaction count at all outside the Reduce-Motion fallback
+(`ReactionCounterChip`, a single hardcoded ❤️ total). Root cause: backend
+reaction keys (`"like"|"love"|"fire"`, migration
+`1758000000182_live-reaction-fire`) are a free string on purpose (an
+unclosed set — a new key can ship server-side without breaking old
+clients), and there was no shared key→emoji mapping — `LiveActionRail`
+(viewer) had the glyphs hardcoded per-button; both screens' floating
+particles (`reactionParticles.spawn(...)` / `particles.spawn(...)`) spawned
+the RAW key text directly. Added ONE canonical `reactionEmoji(key): String`
+(`LiveInteractions.kt`) with a neutral `"✨"` fallback for anything
+unrecognized — an unknown key must never render as raw text, which is
+exactly how this bug shipped. Every glyph-rendering call site now routes
+through it: `LiveActionRail`'s buttons, both screens' particle spawns
+(including the viewer's own-tap spawn, which had the same latent bug), and
+a new `LiveReactionCounts` composable that gives the broadcaster HUD the
+SAME persistent emoji+count pairing the viewer's rail shows (driven
+straight off the server-authoritative `pulse.reactions` map, not a
+separately-accumulated local tally — the old `reduceMotionReactionTotal`
+counter is gone) — shown regardless of Reduce Motion, since a count is
+data, not a decorative animation. Ordering/aggregation split into a pure
+`orderedReactionEntries()` for testability.
+
+**Tests** (all pure, no real network/WebRTC, per the fix brief):
+`WhepRetryPolicyTest.kt` (20 cases) — backoff schedule (initial/doubling/
+cap/overflow-safety/custom params), window expiry, HTTP-status
+classification (404/5xx retryable, 401/403/unknown terminal),
+`WhepTracksTimeoutException`/`WhipWhepHttpException`/bare-`IOException`
+classification, and the retryable/terminal partition + reason strings.
+`LiveInteractionsTest.kt` (+6 cases) — `reactionEmoji` for every known key
+plus unknown/blank/wrong-case never falling through to raw text, and
+`orderedReactionEntries` (zero/negative dropped, known-first stable order,
+unknown alphabetical after, empty-safe).
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+:app:assembleRelease` → BUILD SUCCESSFUL, 133 tests total (107 baseline +
+26 new: 20 in `WhepRetryPolicyTest`, 6 added to `LiveInteractionsTest`), 0
+failures. `assembleRelease` succeeded. Committed, not pushed / no PR opened
+(isolated worktree `.worktrees/wheprace`, branch
+`fix/whep-subscribe-retry`, built on top of origin/main 8bc3d9e).
+
+**Honest limits**: the retry loop, ICE-drop detection, and republish
+recovery are exercised by the pure policy tests plus manual reasoning
+about the coroutine/mutex structure — NOT against a real MediaMTX server or
+real WebRTC engine (explicitly out of scope per the fix brief: "do not
+test real network"). `TRACK_WAIT_TIMEOUT_MS` (12s) and the retry window
+(45s) are informed estimates from the production log evidence (worst case
+observed: 32s to first publish), not values MediaMTX itself documents —
+worth revisiting if a guest join genuinely needs longer than 45s total to
+land. The republish-recovery path assumes a drop always shows up as an ICE
+state transition to DISCONNECTED/FAILED/CLOSED; if MediaMTX ever tears down
+a WHEP session in a way that leaves ICE looking healthy (no such case is in
+the log evidence), that specific drop wouldn't be caught until the next
+unrelated signal.

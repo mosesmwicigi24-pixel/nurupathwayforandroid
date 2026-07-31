@@ -249,6 +249,18 @@ object LiveWebRtc {
 
     data class WhipWhepResult(val answerSdp: String, val resourceUrl: String)
 
+    /** Thrown by [postSdpOffer] when MediaMTX answers the WHIP/WHEP offer
+     *  POST with anything other than 201 — carries the raw HTTP status so
+     *  callers can classify it (WhepRetryPolicy.kt): a 404 "no stream is
+     *  available" is the PROVEN, routine race between the host's WHEP
+     *  subscribe and the guest's own WHIP publish starting seconds later
+     *  (production MediaMTX logs, 2026-07-31 — see WhepSubscriber.kt's
+     *  header), not a real failure — while a 401/403 means the credentials
+     *  themselves are wrong and retrying is pointless. An [IOException], not
+     *  a plain [IllegalStateException], so it reads as the transient/
+     *  network-shaped failure it actually is. */
+    class WhipWhepHttpException(val code: Int) : java.io.IOException("WHIP/WHEP POST failed: HTTP $code")
+
     /** Builds the `Authorization: Basic base64(user:pass)` header value —
      *  the ONLY auth mechanism MediaMTX v1.19.3 honours for WHIP/WHEP (see
      *  this file's header doc for the proof). Pure/stateless so it's
@@ -294,7 +306,7 @@ object LiveWebRtc {
             val request = buildSdpOfferRequest(url, offerSdp, user, pass)
             httpClient.newCall(request).execute().use { response ->
                 if (response.code != 201) {
-                    throw IllegalStateException("WHIP/WHEP POST failed: HTTP ${response.code}")
+                    throw WhipWhepHttpException(response.code)
                 }
                 val answer = response.body?.string().orEmpty()
                 if (answer.isBlank()) throw IllegalStateException("WHIP/WHEP POST returned an empty SDP answer")
