@@ -203,7 +203,15 @@ fun HomeScreen(
             .forEach { CelebrationCenter.fire(Moment("badge-${it.code}", "${it.name} earned!", "Badges celebrate your growth — keep walking.")) }
     }
 
-    val churchLive = liveNow.firstOrNull { it.scope == "church" }
+    // Defensive guard, on top of LiveDiscoveryCenter.ingest()'s own filter
+    // below (this file's `liveNow` is fetched directly, not read from
+    // LiveDiscoveryCenter.streams, so it needs its own exclusion too) — a
+    // broadcaster must never see their OWN stream offered back to them as
+    // "LIVE NOW · tap to watch" (2026-07-31 device report; see
+    // LiveDiscoveryCenter.kt's header for the root cause and iOS parity).
+    val churchLive = liveNow.firstOrNull {
+        it.scope == "church" && it.streamId != org.nuruplace.member.feature.live.BroadcastController.activeSelfStreamId()
+    }
 
     // Home-screen Radio/Live widgets (Glance) — Home is the first screen every
     // session lands on, so it's the earliest point a fresh snapshot can reach
@@ -444,7 +452,14 @@ fun HomeScreen(
         // stream_id again.
         val discoveryStreams by org.nuruplace.member.feature.live.LiveDiscoveryCenter.streams.collectAsState()
         val popupStreamId by org.nuruplace.member.feature.live.LiveDiscoveryCenter.popupStreamId.collectAsState()
-        discoveryStreams.firstOrNull { it.streamId == popupStreamId }?.let { popupStream ->
+        // Defensive guard on top of LiveDiscoveryCenter.ingest()'s own filter
+        // — this is the exact site of the 2026-07-31 device report (Home's
+        // "● LIVE test 2 [Join live]" mini-window offering the broadcaster
+        // their own stream); belt-and-braces against `discoveryStreams` ever
+        // carrying a self-stream row again, from here or a future caller.
+        discoveryStreams.firstOrNull {
+            it.streamId == popupStreamId && it.streamId != org.nuruplace.member.feature.live.BroadcastController.activeSelfStreamId()
+        }?.let { popupStream ->
             org.nuruplace.member.feature.live.LiveMiniPopup(
                 stream = popupStream,
                 onJoin = {

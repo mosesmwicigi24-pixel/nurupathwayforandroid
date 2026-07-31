@@ -18,6 +18,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.Net
 
+/** Pure filter behind [LiveDiscoveryCenter.ingest] — kept as a plain
+ *  top-level function so it's unit-testable without a StateFlow/Net harness
+ *  (same posture as this codebase's other Live pure-logic functions, e.g.
+ *  LiveBroadcastEngine.kt's cameraOrientationFor/shouldWatchdogTriggerDrop).
+ *  Excludes [selfStreamId] (the local device's own in-progress broadcast, if
+ *  any — [BroadcastController.activeSelfStreamId]) from a `/live/now`
+ *  result — the root cause of the 2026-07-31 device report where a
+ *  broadcaster's OWN Home screen offered them "Join live" on the stream
+ *  they were actively hosting (iOS had this exact bug; its discovery centre
+ *  never filtered out the locally-broadcasting stream, routing the
+ *  broadcaster into their own stream's VIEWER — this is the Android twin of
+ *  that fix). Null [selfStreamId] (not currently broadcasting) is a no-op. */
+internal fun filterOutSelfStream(rows: List<LiveNowRow>, selfStreamId: String?): List<LiveNowRow> =
+    if (selfStreamId == null) rows else rows.filterNot { it.streamId == selfStreamId }
+
 object LiveDiscoveryCenter {
     private val _streams = MutableStateFlow<List<LiveNowRow>>(emptyList())
     val streams: StateFlow<List<LiveNowRow>> = _streams.asStateFlow()
@@ -33,7 +48,9 @@ object LiveDiscoveryCenter {
 
     /** The newest stream the member may watch, if any (server already orders
      *  `/live/now` newest-first) — what the app-wide bar names and what a
-     *  live_stream_started notification tap opens. */
+     *  live_stream_started notification tap opens. Already self-filtered
+     *  (see [ingest]), so a live_stream_started push for the local device's
+     *  OWN broadcast can never route it into that stream's viewer. */
     val newestWatchable: LiveNowRow? get() = _streams.value.firstOrNull()
 
     /** Re-fetch GET /live/now and fold the result in. Best-effort: a failed
@@ -46,11 +63,17 @@ object LiveDiscoveryCenter {
     /** Fold a fresh `/live/now` result (however it was fetched — Home's own
      *  poll piggybacks this too, so there is only ever one notion of "current
      *  streams") into shared state, and surface the mini-window for the
-     *  first row this session hasn't already seen. */
+     *  first row this session hasn't already seen. Filters out the local
+     *  device's own in-progress broadcast FIRST (see [filterOutSelfStream])
+     *  — this is the one choke point every discovery surface (AppLiveBar,
+     *  Home's mini-window, the live_stream_started notification route) reads
+     *  through, so a broadcaster is never offered a way to "Join live" their
+     *  own stream. */
     fun ingest(rows: List<LiveNowRow>) {
-        _streams.value = rows
+        val filtered = filterOutSelfStream(rows, BroadcastController.activeSelfStreamId())
+        _streams.value = filtered
         if (_popupStreamId.value != null) return   // one mini-window at a time
-        rows.firstOrNull { it.streamId !in seen }?.let { _popupStreamId.value = it.streamId }
+        filtered.firstOrNull { it.streamId !in seen }?.let { _popupStreamId.value = it.streamId }
     }
 
     /** X dismiss on the mini-window — collapses to the ordinary LIVE banner

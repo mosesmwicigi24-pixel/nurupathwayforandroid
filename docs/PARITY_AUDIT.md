@@ -3457,3 +3457,133 @@ project's standard DoD but required here to falsifiably prove the actual
 fix) → BUILD SUCCESSFUL, mapping.txt inspected as documented above. Not
 pushed / no PR opened (isolated worktree `.worktrees/hostfix`, branch
 `fix/live-host-stability`, built on top of origin/main #73/#74/#76/#78/L6b/L6c).
+
+## 2026-07-31 — Nuru Live vc55: broadcaster preview never appears (race, not the encoder) + host offered "Join live" on their own stream (branch fix/live-preview-and-selfdiscovery, this repo only, on top of #73/#74/#76/#78/L6b/L6c/host-stability)
+
+Two REAL bugs confirmed on the owner's S24 running vc55, with device evidence
+gathered via adb during the exact session ("for the last 20 seconds and
+counting the camera has not launched", plus a Home screenshot showing the
+broadcaster's own stream offered back to them).
+
+**Bug 1 — broadcast preview stayed black/frozen while the publish itself was
+completely healthy.** Device evidence ruled out both obvious hypotheses
+first: `RtmpSender: wrote Video packet, size 21325 / 28034 / 47341...`
+continuously (real imagery, not black frames — too large), the process
+stayed alive with an empty crash buffer (not a crash), and SurfaceFlinger
+showed a full 1080x2340 `SurfaceView[com.nuruplace/…MainActivity]` created
+and later destroyed on navigation — so the encoder/publish path (RootEncoder
+`GenericStream`, `LiveBroadcastService`) was never the problem.
+
+Root cause: a genuine, provable race between two independently-async things
+introduced by vc55's Broadcast Studio rework (#76), which moved the
+RootEncoder engine into the foreground `LiveBroadcastService`, reached only
+through `BroadcastController`. `LiveBroadcastScreen`'s `SurfaceView.holder.
+addCallback(...)` fires `surfaceCreated()` → `BroadcastController.
+attachPreview(view)` the instant the OS hands Compose a valid `Surface` —
+independent of, and often FASTER than, `BroadcastController.start()`'s own
+`bindService()` (async) and `LiveBroadcastService.startBroadcast()`'s
+`buildBroadcaster()` (opens the camera, calls `prepareVideo`/`prepareAudio`
+— not instant). Before this fix, `attachPreview()` was `service?.
+broadcaster?.startPreview(view)` — a null-safe chain that silently no-oped
+whenever either side wasn't ready. Verified against RootEncoder 2.5.9's own
+pinned source (`gh api repos/pedroSG94/RootEncoder/contents/library/src/
+main/java/com/pedro/library/base/StreamBase.kt?ref=2.5.9`): the SurfaceView
+overload of `startPreview()` takes a one-shot snapshot of `surfaceView.
+holder.surface` with no listener of its own — `SurfaceHolder.Callback.
+surfaceCreated()` fires EXACTLY ONCE per surface lifecycle, so nothing ever
+retried the attach once the engine became ready a moment later. Also
+confirmed `startPreview(surface, width, height)` throws
+`IllegalArgumentException` if the surface isn't valid yet — the absence of
+any crash in the device evidence is itself consistent with the call never
+reaching RootEncoder at all (the null-safe chain ate it silently), not with
+a caught exception.
+
+`GuestStageCompositor` (L6c) was independently audited as a possible
+interference source per the task brief — ruled out: it only adds
+zero-alpha `SurfaceFilterRender`/`TextObjectFilterRender` object-filters to
+the SAME `GlStreamInterface` the preview also renders from, and only
+becomes visible once a guest is actually assigned to a slot; it has no
+surface-attach/detach interaction with `startPreview`/`stopPreview` at all.
+
+**Fix** (`BroadcastController.kt`): remember whatever `SurfaceView` Compose
+most recently handed `attachPreview()` (`pendingPreviewView`) and retry the
+attach at every point `service.broadcaster` can transition from null to
+non-null — the end of the `pendingStart` branch in `onServiceConnected`, and
+the "already bound" branch of `start()`. `Broadcaster.startPreview()`
+already no-ops via RootEncoder's own `isOnPreview` flag, so a redundant
+reattach is always harmless. Added always-on `Log.d`/`Log.w` breadcrumbs
+around every preview lifecycle call (`attachPreview`, `detachPreview`,
+`reattachPendingPreview`, each success/failure) tagged `BroadcastController`
+so the next device session is diagnosable without adding new instrumentation
+first. This closes the race for first go-live (the reported case — cold
+`bindService()`), and structurally covers minimize/restore and return-from-
+background too (same `service`/`broadcaster` null→non-null transition
+points; the SurfaceView's own OS-driven `surfaceDestroyed`/`surfaceCreated`
+pair around a backgrounding event already worked correctly once broadcaster
+was ready — this fix's gap was specifically the FIRST attach).
+
+**Bug 2 — the host saw a "Join live" bar for their OWN broadcast.** The
+owner's Home screenshot (`● LIVE test 2 [Join live]` while THEY were live)
+matches `LiveMiniPopup` (`LiveDiscoveryUi.kt`) exactly — Home's floating
+muted-preview mini-window, driven end-to-end by `LiveDiscoveryCenter`.
+`LiveDiscoveryCenter.ingest()` folded every `GET /live/now` row into shared
+state and picked the first not-yet-`seen` stream_id for the popup with NO
+filter for the local device's own in-progress broadcast — the exact bug
+already root-caused and fixed on iOS's discovery centre, un-ported to
+Android.
+
+**Fix**: `BroadcastController.activeSelfStreamId()` (delegating to a new
+pure `selfStreamIdFrom(BroadcastState)` in `LiveBroadcastEngine.kt`, unit-
+testable without the live StateFlow/Service plumbing — mirrors this file's
+existing `shouldWatchdogTriggerDrop` posture) exposes the stream_id THIS
+device is currently broadcasting, excluding `SUMMARY` (broadcast genuinely
+over). `LiveDiscoveryCenter.ingest()` now filters every incoming row through
+a new pure `filterOutSelfStream(rows, selfStreamId)` BEFORE it reaches
+`_streams`/the popup-selection logic — the one choke point every discovery
+surface reads through (`AppLiveBar`, the mini-window, and `newestWatchable`
+— which the `live-now` notification-routed destination in `MainShell.kt`
+also reads, so a `live_stream_started` push for the broadcaster's OWN stream
+can no longer route them into their own viewer either). Added defensive
+guards at three render sites per the task brief, on top of the ingest-level
+fix: `HomeScreen.kt`'s `churchLive` (a SEPARATE, directly-fetched `liveNow`
+local var, not read from `LiveDiscoveryCenter.streams` — would NOT have been
+covered by the ingest fix alone), the mini-popup's own render check, and
+`MainShell.kt`'s `showAppLiveBar` condition.
+
+**What else was audited for the same class of bug**: grepped every reader of
+`LiveDiscoveryCenter.streams`/`newestWatchable`/`popupStreamId` (`HomeScreen.
+kt`, `MainShell.kt`, `LiveTabScreen.kt`) — all either read through the now-
+filtered `streams`/`newestWatchable` or got an explicit defensive guard
+added directly. No other local/unfiltered `/live/now` fetch site found
+besides `HomeScreen.kt`'s `liveNow`.
+
+**New tests** (both pure functions, JVM-only, no Robolectric/Compose
+harness — matching this file's existing posture): `LiveDiscoveryCenterTest`
+(`filterOutSelfStream` — 5 cases: no self id, self id excluded, self-only
+list empties out, unmatched id is a no-op, empty input stays empty) and 3
+new cases appended to `LiveBroadcastInteractionsTest` for `selfStreamIdFrom`
+(no session → null; CONNECTING/LIVE/RECONNECTING/FAILED/ENDING → surfaced;
+SUMMARY → cleared).
+
+**Honest limits**: Bug 1's fix is proven by source-level tracing (the
+one-shot `SurfaceHolder.Callback` contract verified against RootEncoder
+2.5.9's pinned source) and closes every code path that can produce the
+reported symptom, but was NOT re-verified against a live two-device repro
+this session (no adb access this run beyond what the owner already
+gathered) — the added breadcrumb logging is specifically so the next device
+session can confirm the fix (or point at a different gap) directly from
+logcat. Bug 2's fix is straightforward and directly matches the reported
+screenshot/UI text ("Join live" only exists on `LiveMiniPopup`), but the
+owner's literal phrase "app-wide LIVE discovery bar" was interpreted as this
+mini-popup rather than the (route-guarded-off-Home) `AppLiveBar` strip,
+since only the mini-popup renders on Home at all — the `AppLiveBar` guard
+was still added defensively since it shares the same underlying data source.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 77 tests, 0 failures/errors (69 baseline + 8 new:
+5 in `LiveDiscoveryCenterTest`, 3 in `LiveBroadcastInteractionsTest`).
+Additionally ran `./gradlew :app:assembleRelease` → BUILD SUCCESSFUL.
+Committed, not pushed / no PR opened (isolated worktree
+`.worktrees/prevfix`, branch `fix/live-preview-and-selfdiscovery`, built on
+top of origin/main c63a9b9 / rel/vc55b).
