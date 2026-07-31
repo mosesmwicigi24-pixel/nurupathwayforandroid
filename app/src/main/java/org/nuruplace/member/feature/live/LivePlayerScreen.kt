@@ -552,16 +552,17 @@ fun LivePlayerScreen(
         // ONE top row (owner requirement #2) — close, host identity, title,
         // LIVE pill, counters, all on one line, replacing the old three
         // scattered rows (close+badge / identity chip / bottom title box).
-        LiveTopBar(
-            onClose = onBack,
-            live = live && !ended,
-            hostName = startedByName,
-            hostAvatarUrl = startedByAvatarUrl,
-            title = title,
-            viewerCount = viewerCount,
-            handCount = pulse?.hands?.size ?: 0,
-            modifier = Modifier.align(Alignment.TopCenter),
-        )
+        GentleEntrance(reduceMotion, Modifier.align(Alignment.TopCenter)) {
+            LiveTopBar(
+                onClose = onBack,
+                live = live && !ended,
+                hostName = startedByName,
+                hostAvatarUrl = startedByAvatarUrl,
+                title = title,
+                viewerCount = viewerCount,
+                handCount = pulse?.hands?.size ?: 0,
+            )
+        }
 
         // Guest invite sits just above the dock — auto-collapses to a small
         // gold corner pill after ~3s (owner taste pass, pre-existing). Once
@@ -597,32 +598,33 @@ fun LivePlayerScreen(
         if (live && !ended && streamId != null) {
             val dockRole = if (guestStageState is GuestStageState.Live) LiveDockRole.GUEST_ON_STAGE else LiveDockRole.VIEWER
             val dockItems = liveDockItems(dockRole, isVideoKind = !isAudio)
-            LiveBottomDock(
-                items = dockItems,
-                state = LiveDockState(
-                    reactionCounts = pulse?.reactions ?: emptyMap(),
-                    handRaised = handRaised,
-                    chatOpen = chatOpen,
-                    cameraOn = guestCameraOn,
-                    micMuted = guestMuted,
-                    speakerOn = speakerOn,
-                ),
-                onReact = ::sendReaction,
-                onToggleHand = ::toggleHand,
-                onToggleChat = { chatOpen = !chatOpen },
-                onToggleCamera = {
-                    guestCameraOn = !guestCameraOn
-                    whipPublisher.setVideoEnabled(guestCameraOn)
-                },
-                onSwitchCamera = { whipPublisher.switchCamera() },
-                onToggleMic = {
-                    guestMuted = !guestMuted
-                    whipPublisher.setMicMuted(guestMuted)
-                },
-                onToggleSpeaker = { speakerOn = !speakerOn },
-                onLeaveStage = { stopGuestPublish(leaveServerSide = true) },
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            GentleEntrance(reduceMotion, Modifier.align(Alignment.BottomCenter)) {
+                LiveBottomDock(
+                    items = dockItems,
+                    state = LiveDockState(
+                        reactionCounts = pulse?.reactions ?: emptyMap(),
+                        handRaised = handRaised,
+                        chatOpen = chatOpen,
+                        cameraOn = guestCameraOn,
+                        micMuted = guestMuted,
+                        speakerOn = speakerOn,
+                    ),
+                    onReact = ::sendReaction,
+                    onToggleHand = ::toggleHand,
+                    onToggleChat = { chatOpen = !chatOpen },
+                    onToggleCamera = {
+                        guestCameraOn = !guestCameraOn
+                        whipPublisher.setVideoEnabled(guestCameraOn)
+                    },
+                    onSwitchCamera = { whipPublisher.switchCamera() },
+                    onToggleMic = {
+                        guestMuted = !guestMuted
+                        whipPublisher.setMicMuted(guestMuted)
+                    },
+                    onToggleSpeaker = { speakerOn = !speakerOn },
+                    onLeaveStage = { stopGuestPublish(leaveServerSide = true) },
+                )
+            }
         }
 
         // Floating chat — draggable, collapsible to a bubble, NEVER a sheet
