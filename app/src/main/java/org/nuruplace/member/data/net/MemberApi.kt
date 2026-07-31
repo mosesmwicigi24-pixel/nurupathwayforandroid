@@ -753,6 +753,11 @@ interface MemberApi {
     @DELETE("live/streams/{id}/guests/{userId}")
     suspend fun deleteLiveGuest(@Path("id") streamId: String, @Path("userId") userId: String): Unit
 
+    // L6b (docs/LIVE_INTERACTIVE.md) — accepted-guest-only server-side; mints
+    // a fresh WHIP publish credential for MY OWN guest slot on this stream.
+    @GET("live/streams/{id}/guests/me/ingest")
+    suspend fun getLiveGuestIngest(@Path("id") streamId: String): LiveGuestIngest
+
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")
     suspend fun syncPush(@Body body: SyncPushBody): SyncPushResult

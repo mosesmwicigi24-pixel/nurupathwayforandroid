@@ -155,6 +155,9 @@ class LiveBroadcastService : Service() {
         val session = BroadcastSession(streamId, rtmpUrl, streamKey, title, kind)
         _state.value = BroadcastState(session = session)
         endingIntentionally = false
+        // L6b — a stale guest's audio from a previous broadcast must never
+        // bleed into this one's mix (see GuestAudioMixer.kt's header).
+        GuestAudioMixer.reset()
 
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(session), foregroundTypeFor(session, screenSharing = false))
 
@@ -246,6 +249,7 @@ class LiveBroadcastService : Service() {
         broadcaster = null
         mediaProjection?.stop()
         mediaProjection = null
+        GuestAudioMixer.reset()
     }
 
     override fun onDestroy() {

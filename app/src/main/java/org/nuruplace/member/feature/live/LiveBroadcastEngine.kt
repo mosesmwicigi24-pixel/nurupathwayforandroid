@@ -12,7 +12,6 @@ import android.media.projection.MediaProjection
 import android.view.SurfaceView
 import com.pedro.common.ConnectChecker
 import com.pedro.common.VideoCodec
-import com.pedro.encoder.input.sources.audio.MicrophoneSource
 import com.pedro.encoder.input.sources.audio.NoAudioSource
 import com.pedro.encoder.input.sources.video.Camera2Source
 import com.pedro.encoder.input.sources.video.ScreenSource
@@ -155,9 +154,12 @@ private class VideoBroadcaster(
     // StreamBase (video) has no disableAudio()/enableAudio() — mute by
     // swapping the audio source itself (verified against the resolved
     // 2.5.9 tag: NoAudioSource exists there; the newer SilenceAudioSource
-    // used by master does not, so this is deliberately NOT used).
+    // used by master does not, so this is deliberately NOT used). Unmuting
+    // swaps back to MixingMicrophoneSource (L6b), NOT the stock
+    // MicrophoneSource — using the latter here would silently drop guest
+    // audio mixing the moment someone mutes/unmutes mid-broadcast.
     override fun setMuted(muted: Boolean) {
-        stream.changeAudioSource(if (muted) NoAudioSource() else MicrophoneSource())
+        stream.changeAudioSource(if (muted) NoAudioSource() else MixingMicrophoneSource())
     }
     override fun client() = stream.getStreamClient()
     override fun startPreview(view: SurfaceView) { if (!stream.isOnPreview) stream.startPreview(view) }
@@ -234,7 +236,13 @@ private class AudioBroadcaster(val stream: GenericOnlyAudio) : Broadcaster {
  *  support etc.) — caller (the Service) surfaces FAILED phase for that. */
 fun buildBroadcaster(context: Context, connectChecker: ConnectChecker, kind: String): Pair<Broadcaster, Boolean> {
     return if (kind == "video") {
-        val s = GenericStream(context, connectChecker)
+        // MixingMicrophoneSource (L6b, GuestAudioMixer.kt) from the very
+        // start of the broadcast — NOT the GenericStream(context,
+        // connectChecker) 2-arg convenience constructor, which bakes in the
+        // stock MicrophoneSource and would silently drop guest-audio mixing.
+        // Video source (Camera2Source) is unchanged from that convenience
+        // constructor's own default.
+        val s = GenericStream(context, connectChecker, Camera2Source(context), MixingMicrophoneSource())
         // Live camera-TILT compensation only (verified against the pinned
         // 2.5.9 GlStreamInterface source): keeps footage upright if the
         // phone tilts, while encoderWidth/Height (set once by prepareVideo,

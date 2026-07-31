@@ -121,6 +121,23 @@ data class LiveGuestRow(
     val fullName: String = "",
     val avatarUrl: String? = null,
     val status: String = "invited", // invited | accepted | declined | removed | ended
+    // L6b (docs/LIVE_INTERACTIVE.md) — ADDITIVE, owner-only: the WHEP URL the
+    // broadcaster's own device subscribes to for this guest's live WebRTC
+    // video/audio (service.ts's LiveGuestRow.whep_url). Absent for every
+    // caller other than the stream's own owner.
+    val whepUrl: String? = null,
+)
+
+/** GET /live/streams/{id}/guests/me/ingest (L6b) — the one-time mint of a
+ *  guest's own WHIP publish credentials. `whipUrl` is the bare MediaMTX WHIP
+ *  endpoint with NO query params baked in; the client appends
+ *  `?user={myUserId}&pass={token}` itself (mirrors the RTMP publish URL
+ *  construction in LiveBroadcastEngine.kt's buildPublishUrl). */
+@Serializable
+data class LiveGuestIngest(
+    val whipUrl: String = "",
+    val token: String = "",
+    val path: String = "",
 )
 
 @Serializable
