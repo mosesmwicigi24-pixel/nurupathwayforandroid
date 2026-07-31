@@ -1,10 +1,14 @@
-// Nuru Live L6b — host-side WHEP subscriber: one instance per accepted guest,
-// recvonly (video + audio), rendering into a small tile on the broadcaster's
-// own HUD (LiveBroadcastScreen.kt's guest rail) and feeding the guest's
-// decoded audio into GuestAudioMixer.kt so it can also ride the outgoing
-// RTMP stream to the congregation (see that file's header for the mechanism).
-// The host ALSO simply hears guests via WebRTC's own default audio output —
-// addSink() is an additive tap, not a replacement for normal playout.
+// Nuru Live L6b/L6c — host-side WHEP subscriber: one instance per accepted
+// guest, recvonly (video + audio), rendering into a small tile on the
+// broadcaster's own HUD (LiveBroadcastScreen.kt's guest rail), feeding the
+// guest's decoded audio into GuestAudioMixer.kt so it can also ride the
+// outgoing RTMP stream to the congregation (see that file's header for the
+// mechanism), and — L6c — feeding the guest's decoded VIDEO into
+// GuestStageCompositor.kt so the congregation SEES the stage too, not just
+// the host's own local HUD. All three are additive taps on the SAME remote
+// tracks (VideoTrack.addSink/AudioTrack.addSink are documented multi-sink),
+// never exclusive of each other. The host ALSO simply hears guests via
+// WebRTC's own default audio output — addSink() never replaces normal playout.
 package org.nuruplace.member.feature.live
 
 import android.content.Context
@@ -59,6 +63,7 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
                     is VideoTrack -> {
                         remoteVideoTrack = track
                         attachedRenderer?.let { track.addSink(it) }
+                        GuestStageCompositor.attachVideo(guestId, track)
                     }
                     is org.webrtc.AudioTrack -> {
                         val sink = GuestAudioMixer.attach(guestId)
@@ -96,6 +101,7 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
         resourceUrl?.let { LiveWebRtc.deleteResource(it) }
         resourceUrl = null
         GuestAudioMixer.detach(guestId)
+        GuestStageCompositor.detachVideo(guestId)
         remoteVideoTrack?.let { track -> attachedRenderer?.let { track.removeSink(it) } }
         attachedRenderer = null
         remoteVideoTrack = null
