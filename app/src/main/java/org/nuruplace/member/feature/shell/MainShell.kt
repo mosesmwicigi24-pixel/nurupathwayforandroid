@@ -203,9 +203,14 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     // Every screen but Home, while a stream is watchable and the player it
     // would open isn't already the thing on screen — and never while this
     // member is themselves mid-broadcast (they'd otherwise see "someone
-    // else is live, join" while already live themselves).
+    // else is live, join" while already live themselves). `liveStreamsNow`
+    // is already self-filtered by LiveDiscoveryCenter.ingest(), but the
+    // `.first()`-is-self check below is a defensive guard on top of that
+    // (2026-07-31 device report — see LiveDiscoveryCenter.kt's header):
+    // this bar must never be able to offer a broadcaster their OWN stream.
     val showAppLiveBar = liveStreamsNow.isNotEmpty() && route != "home" &&
-        route?.startsWith("live-player") != true && !onLiveBroadcast
+        route?.startsWith("live-player") != true && !onLiveBroadcast &&
+        liveStreamsNow.first().streamId != org.nuruplace.member.feature.live.BroadcastController.activeSelfStreamId()
 
     // Broadcast Studio's "tap to return" pill (requirement #2) — the same
     // AppLiveBar idiom, one screen over: shown on every screen but the

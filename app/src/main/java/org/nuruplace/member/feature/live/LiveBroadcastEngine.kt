@@ -127,6 +127,15 @@ internal fun cameraOrientationFor(rotation: Int): Int = if (rotation == 0) 270 e
 internal fun shouldWatchdogTriggerDrop(phase: BroadcastPhase, isStreaming: Boolean?): Boolean =
     phase == BroadcastPhase.LIVE && isStreaming == false
 
+/** [BroadcastController.activeSelfStreamId]'s actual logic, pulled out as a
+ *  pure function of [BroadcastState] so it's unit-testable without
+ *  BroadcastController's live StateFlow/Service/bindService plumbing (same
+ *  reasoning as [shouldWatchdogTriggerDrop] above). See that function's KDoc
+ *  for why SUMMARY is excluded — this is the guard behind the 2026-07-31
+ *  self-stream discovery fix (LiveDiscoveryCenter.kt's header). */
+internal fun selfStreamIdFrom(state: BroadcastState): String? =
+    state.session?.streamId?.takeIf { state.phase != BroadcastPhase.SUMMARY }
+
 /** Uniform wrapper over RootEncoder's two unrelated base classes
  *  (StreamBase for GenericStream/video, OnlyAudioBase for GenericOnlyAudio/
  *  audio-only) — they share no common supertype and differ in small ways

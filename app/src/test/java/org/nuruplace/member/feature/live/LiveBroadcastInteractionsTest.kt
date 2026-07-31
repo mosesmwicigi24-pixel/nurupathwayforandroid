@@ -98,4 +98,25 @@ class LiveBroadcastInteractionsTest {
         // same as "broadcaster exists but silently died" — must not fire.
         assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.LIVE, isStreaming = null))
     }
+
+    // ── selfStreamIdFrom (BroadcastController.activeSelfStreamId, 2026-07-31
+    // self-stream discovery fix) — LiveDiscoveryCenter's self-exclusion guard
+    // reads this so a broadcaster is never offered "Join live" on their own
+    // stream (iOS had the exact same bug, root-caused there first). ──
+
+    @Test fun `no active session means no self stream id`() {
+        assertEquals(null, selfStreamIdFrom(BroadcastState(session = null)))
+    }
+
+    @Test fun `an active session's stream id is surfaced while CONNECTING, LIVE, RECONNECTING or FAILED`() {
+        val session = BroadcastSession("s1", "rtmp://x", "key", "Title", "video")
+        for (phase in listOf(BroadcastPhase.CONNECTING, BroadcastPhase.LIVE, BroadcastPhase.RECONNECTING, BroadcastPhase.FAILED, BroadcastPhase.ENDING)) {
+            assertEquals("s1", selfStreamIdFrom(BroadcastState(session = session, phase = phase)))
+        }
+    }
+
+    @Test fun `SUMMARY clears the self stream id — the broadcast is genuinely over`() {
+        val session = BroadcastSession("s1", "rtmp://x", "key", "Title", "video")
+        assertEquals(null, selfStreamIdFrom(BroadcastState(session = session, phase = BroadcastPhase.SUMMARY)))
+    }
 }
