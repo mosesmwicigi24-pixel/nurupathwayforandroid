@@ -70,4 +70,32 @@ class LiveBroadcastInteractionsTest {
             buildPublishUrl("rtmp://host/cell/42", "stream-1", "abc123"),
         )
     }
+
+    // ── shouldWatchdogTriggerDrop (LiveBroadcastService's resilience
+    // backstop, 2026-07-31 host-stability investigation) — ConnectChecker's
+    // own callbacks are network-level only; this is the periodic check that
+    // catches a publish pipeline that died SILENTLY (app still thinks it's
+    // LIVE, but RootEncoder's isStreaming has quietly gone false). ──
+
+    @Test fun `watchdog fires when live but not actually streaming`() {
+        assertTrue(shouldWatchdogTriggerDrop(BroadcastPhase.LIVE, isStreaming = false))
+    }
+
+    @Test fun `watchdog stays quiet while actually streaming`() {
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.LIVE, isStreaming = true))
+    }
+
+    @Test fun `watchdog never fires outside the LIVE phase`() {
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.CONNECTING, isStreaming = false))
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.RECONNECTING, isStreaming = false))
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.FAILED, isStreaming = false))
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.ENDING, isStreaming = false))
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.SUMMARY, isStreaming = false))
+    }
+
+    @Test fun `watchdog stays quiet when there is no broadcaster at all`() {
+        // null (no broadcaster built yet, or already torn down) is NOT the
+        // same as "broadcaster exists but silently died" — must not fire.
+        assertFalse(shouldWatchdogTriggerDrop(BroadcastPhase.LIVE, isStreaming = null))
+    }
 }

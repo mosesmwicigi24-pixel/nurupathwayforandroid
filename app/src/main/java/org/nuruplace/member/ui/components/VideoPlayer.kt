@@ -50,3 +50,36 @@ fun openExternal(context: Context, url: String) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
+
+// Hosts that genuinely need their own app/webview chrome to play (no direct
+// media file at the URL for ExoPlayer to point at). Everything else —
+// including every one of this app's own self-hosted uploads
+// (MEDIA_PUBLIC_BASE_URL's `/media/<uuid>.mp4|.mov` — welcome/featured
+// video, event video, plan-segment video) — is a direct video file URL that
+// plays fine in-app via [InlineVideo]. Real-device bug (2026-07-31): a guest
+// device's browser popped a raw "Download file again?" prompt for a
+// `/media/....mov` — the signature of a direct video URL being handed to
+// openExternal() instead of played in-app. Traced every ACTION_VIEW/
+// openExternal call site in the app (grep for both): the live/guest feature
+// itself never calls openExternal at all — the two ACTUAL unconditional
+// (ungated) call sites were PlanPartReaderScreen.kt/PlanSegmentScreen.kt's
+// plan-video cards (RMediaCard/VideoCard in PlanReaderKit.kt/
+// PlanSegmentScreen.kt), which called openExternal() for ANY videoUrl with
+// no host check at all — unlike HomeScreen's FeaturedVideo, which already
+// gates on the server's own `isExternal` flag. Fixed at the source (those
+// two card composables now check this helper and play self-hosted URLs
+// in-app), this constant stays exported so any FUTURE video-tap call site
+// gets it right by construction instead of reinventing (or omitting) the
+// check.
+private val EXTERNAL_VIDEO_HOSTS = setOf("youtube.com", "youtu.be", "vimeo.com")
+
+// java.net.URI (plain JDK), not android.net.Uri — deliberately, so this stays
+// a genuinely unit-testable pure function under this module's plain-JUnit
+// posture (android.net.Uri is a stub in JVM unit tests; with this project's
+// `unitTests.isReturnDefaultValues = true` it silently returns null instead
+// of throwing, which would make every call here return false regardless of
+// input — a test using it could pass while checking nothing at all).
+fun isExternalVideoHost(url: String): Boolean =
+    runCatching { java.net.URI(url).host?.lowercase() }.getOrNull()
+        ?.let { host -> EXTERNAL_VIDEO_HOSTS.any { host == it || host.endsWith(".$it") } }
+        ?: false

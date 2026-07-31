@@ -32,6 +32,7 @@ import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.audio.JavaAudioDeviceModule
 import java.net.URI
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -49,6 +50,27 @@ object LiveWebRtc {
 
     @Volatile
     private var factoryRef: PeerConnectionFactory? = null
+
+    // Owner-flagged hypothesis (2026-07-31, demoted after device evidence
+    // showed a full HOST PROCESS DEATH, not a degraded/silent publish — a mic
+    // conflict alone can't kill the process). Kept as a real, independently
+    // worthwhile fix: verified via javap against the resolved io.github.
+    // webrtc-sdk:android:144.7559.09 Builder.createPeerConnectionFactory()
+    // bytecode that when no AudioDeviceModule is supplied, WebRTC silently
+    // creates a DEFAULT `JavaAudioDeviceModule.builder(context).
+    // createAudioDeviceModule()` — a long-standing WebRTC-Android gotcha
+    // (upstream bug 8214: the ADM opens AudioRecord even for a purely
+    // RECV_ONLY connection) that this SDK version's `setAudioRecordEnabled`
+    // API exists specifically to work around. On the HOST device only
+    // WhepSubscriber (recvonly, never sends audio) ever touches this
+    // factory — RootEncoder owns the real broadcast mic entirely outside
+    // WebRTC (MixingMicrophoneSource, GuestAudioMixer.kt) — so the host has
+    // ZERO legitimate need for WebRTC audio recording, ever. Recording stays
+    // OFF by default and is only switched on for the narrow window a GUEST
+    // device (WhipPublisher, LivePlayerScreen — never the host/broadcast
+    // screen) is actually sending its own mic. See setAudioRecordEnabled().
+    @Volatile
+    private var audioDeviceModuleRef: JavaAudioDeviceModule? = null
 
     /** A public STUN server for ICE server-reflexive candidates — MediaMTX
      *  itself sits on a publicly routable VPS (no NAT on its side), so once
@@ -71,13 +93,31 @@ object LiveWebRtc {
             )
             val encoderFactory = DefaultVideoEncoderFactory(eglBase.eglBaseContext, /* enableIntelVp8Encoder */ true, /* enableH264HighProfile */ true)
             val decoderFactory = DefaultVideoDecoderFactory(eglBase.eglBaseContext)
+            // Explicit ADM (rather than letting the Builder default one in)
+            // so we hold a reference to gate recording — see the field doc
+            // above. Off by default; WhipPublisher flips it on/off around
+            // its own publish lifecycle.
+            val adm = JavaAudioDeviceModule.builder(appContext).createAudioDeviceModule()
+            runCatching { adm.setAudioRecordEnabled(false) }
+            audioDeviceModuleRef = adm
             val f = PeerConnectionFactory.builder()
+                .setAudioDeviceModule(adm)
                 .setVideoEncoderFactory(encoderFactory)
                 .setVideoDecoderFactory(decoderFactory)
                 .createPeerConnectionFactory()
             factoryRef = f
             return f
         }
+    }
+
+    /** Guest-publish-only mic gate (see [audioDeviceModuleRef]'s doc) —
+     *  WhipPublisher calls this true right before it creates its own local
+     *  AudioSource/AudioTrack, and false the moment it stops. A no-op if the
+     *  factory hasn't been created yet (setAudioRecordEnabled(true) before
+     *  any publish would be pointless — WhipPublisher always calls
+     *  [factory] first in its own start()). */
+    fun setAudioRecordEnabled(enabled: Boolean) {
+        runCatching { audioDeviceModuleRef?.setAudioRecordEnabled(enabled) }
     }
 
     fun rtcConfig(): PeerConnection.RTCConfiguration =

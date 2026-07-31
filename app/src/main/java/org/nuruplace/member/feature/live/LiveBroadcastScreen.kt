@@ -271,6 +271,19 @@ fun LiveBroadcastScreen(
     // also rides the outgoing RTMP mix — this screen only owns the video
     // rendering + subscription lifecycle. ──────────────────────────────────
     val whepSubscribers = remember(streamId) { mutableStateMapOf<String, WhepSubscriber>() }
+    // Tracks each subscriber's OWN start() job so a guest that drops out of
+    // the pulse while its start() is still in flight gets that job cancelled
+    // — belt-and-braces on top of WhepSubscriber's own internal start()/stop()
+    // mutex (see that file's header for the actual race this closes): the
+    // guest's own device process died mid-join in the real-device report,
+    // and a stray in-flight start() coroutine outliving its subscriber being
+    // removed from this map is exactly the kind of orphaned work that made
+    // that race possible in the first place.
+    val whepStartJobs = remember(streamId) { mutableMapOf<String, kotlinx.coroutines.Job>() }
+    // Per-guest connect error, surfaced honestly on the tile (GuestStageUi.kt
+    // GuestTile) instead of an indefinite black box — the old behavior when
+    // sub.start() threw (swallowed by runCatching with nothing shown).
+    val guestTileErrors = remember(streamId) { mutableStateMapOf<String, String>() }
     val guestVideoGuests = pulse?.guests
         ?.filter { it.status == "accepted" && !it.whepUrl.isNullOrBlank() }
         .orEmpty()
@@ -283,18 +296,33 @@ fun LiveBroadcastScreen(
     LaunchedEffect(guestVideoGuests.map { it.userId }.toSet()) {
         val currentIds = guestVideoGuests.map { it.userId }.toSet()
         val stale = whepSubscribers.keys - currentIds
-        stale.forEach { id -> whepSubscribers.remove(id)?.let { sub -> scope.launch { runCatching { sub.stop() } } } }
+        stale.forEach { id ->
+            whepStartJobs.remove(id)?.cancel()
+            guestTileErrors.remove(id)
+            whepSubscribers.remove(id)?.let { sub ->
+                GuestWebRtcSupervisor.unregister(id)
+                scope.launch { runCatching { sub.stop() } }
+            }
+        }
         guestVideoGuests.forEach { guest ->
             val whepUrl = guest.whepUrl
             if (whepUrl != null && !whepSubscribers.containsKey(guest.userId)) {
                 val sub = WhepSubscriber(context, guest.userId)
                 whepSubscribers[guest.userId] = sub
-                scope.launch { runCatching { sub.start(whepUrl, streamId, streamKey) } }
+                GuestWebRtcSupervisor.register(guest.userId, sub)
+                guestTileErrors.remove(guest.userId)
+                whepStartJobs[guest.userId] = scope.launch {
+                    runCatching { sub.start(whepUrl, streamId, streamKey) }
+                        .onFailure { e -> guestTileErrors[guest.userId] = e.message ?: "Couldn't connect this guest." }
+                }
             }
         }
     }
     DisposableEffect(streamId) {
         onDispose {
+            whepStartJobs.values.forEach { it.cancel() }
+            whepStartJobs.clear()
+            whepSubscribers.keys.forEach { GuestWebRtcSupervisor.unregister(it) }
             whepSubscribers.values.forEach { sub -> Net.client.bgScope.launch { runCatching { sub.stop() } } }
             whepSubscribers.clear()
         }
@@ -303,6 +331,7 @@ fun LiveBroadcastScreen(
         whepSubscribers[guest.userId]?.let { sub ->
             HostGuestTileState(
                 guest = guest,
+                errorMessage = guestTileErrors[guest.userId],
                 onRendererReady = { renderer -> sub.attachRenderer(renderer) },
                 onRendererReleased = { renderer -> sub.detachRenderer(renderer) },
             )

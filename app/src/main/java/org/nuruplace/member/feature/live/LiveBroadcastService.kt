@@ -32,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,6 +69,35 @@ class LiveBroadcastService : Service() {
     // ConnectChecker's onDisconnect() doesn't mistake an intentional stop
     // for a dropped connection and try to reconnect.
     private var endingIntentionally = false
+
+    // Resilience backstop (owner directive, 2026-07-31): ConnectChecker's
+    // onConnectionFailed/onDisconnect are RootEncoder's own network-level
+    // signals — they fire for a dropped socket, but NOT for every way the
+    // publish pipeline can go silently wrong (e.g. an internal
+    // encoder/mic-capture thread that dies without ever touching the RTMP
+    // socket itself). This periodic check is a backstop for exactly that
+    // gap: if the app's own state still says LIVE but RootEncoder's
+    // `isStreaming` has quietly gone false, treat it as a drop and run the
+    // SAME handleDrop() path (guests torn down first, then retry/fail) that
+    // a normal ConnectChecker callback would have triggered.
+    private var watchdogJob: kotlinx.coroutines.Job? = null
+
+    private fun startWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = scope.launch {
+            while (true) {
+                delay(5_000)
+                if (shouldWatchdogTriggerDrop(_state.value.phase, broadcaster?.isStreaming)) {
+                    handleDrop("Publish stopped unexpectedly")
+                }
+            }
+        }
+    }
+
+    private fun stopWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = null
+    }
 
     private val notificationManager by lazy { getSystemService<NotificationManager>() }
     private val mediaProjectionManager by lazy {
@@ -129,6 +159,14 @@ class LiveBroadcastService : Service() {
     private fun handleDrop(reason: String) {
         val s = _state.value
         if (endingIntentionally || s.phase == BroadcastPhase.ENDING || s.phase == BroadcastPhase.SUMMARY) return
+        // Resilience (owner directive, 2026-07-31): a guest-subsystem
+        // failure must never be allowed to keep taking the broadcast down
+        // on every retry. Whatever caused THIS drop, every live guest's
+        // WebRTC gets torn down FIRST (best-effort, isolated per-guest — see
+        // GuestWebRtcSupervisor's doc) so the reconnect attempt below starts
+        // from a clean slate instead of immediately re-fighting whatever
+        // guest state was live when the drop happened.
+        if (GuestWebRtcSupervisor.hasActiveGuests) GuestWebRtcSupervisor.disconnectAllForWatchdog(scope)
         if (s.retryAttempt < MAX_RETRIES) {
             val delayMs = RETRY_BACKOFFS_MS.getOrElse(s.retryAttempt) { RETRY_BACKOFFS_MS.last() }
             _state.update { it.copy(phase = BroadcastPhase.RECONNECTING, retryAttempt = it.retryAttempt + 1) }
@@ -172,6 +210,7 @@ class LiveBroadcastService : Service() {
             // for audio-only (glStreamInterface() is null there).
             built.glStreamInterface()?.let { GuestStageCompositor.bind(it) }
             runCatching { built.startStream(buildPublishUrl(rtmpUrl, streamId, streamKey)) }
+                .onSuccess { startWatchdog() }
                 .onFailure { e -> _state.update { it.copy(phase = BroadcastPhase.FAILED, failReason = e.message ?: "Couldn't start the stream.") } }
         } else {
             _state.update { it.copy(phase = BroadcastPhase.FAILED, failReason = "Camera or microphone couldn't be configured on this device.") }
@@ -257,6 +296,7 @@ class LiveBroadcastService : Service() {
     }
 
     private fun cleanupEngine() {
+        stopWatchdog()
         runCatching { if (broadcaster?.isStreaming == true) broadcaster?.stopStream() }
         runCatching { broadcaster?.release() }
         broadcaster = null
