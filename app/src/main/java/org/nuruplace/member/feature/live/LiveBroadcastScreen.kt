@@ -274,6 +274,12 @@ fun LiveBroadcastScreen(
     val guestVideoGuests = pulse?.guests
         ?.filter { it.status == "accepted" && !it.whepUrl.isNullOrBlank() }
         .orEmpty()
+    // L6c — GuestStageCompositor (the congregation-facing GL composite) only
+    // ever sees WebRTC tracks + guestIds, never the REST guest row, so the
+    // display names for its rail name plates have to be pushed in from here.
+    LaunchedEffect(guestVideoGuests.map { it.userId to it.fullName }) {
+        GuestStageCompositor.updateNames(guestVideoGuests.associate { it.userId to it.fullName })
+    }
     LaunchedEffect(guestVideoGuests.map { it.userId }.toSet()) {
         val currentIds = guestVideoGuests.map { it.userId }.toSet()
         val stale = whepSubscribers.keys - currentIds

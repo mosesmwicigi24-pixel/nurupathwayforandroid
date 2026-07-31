@@ -156,14 +156,21 @@ class LiveBroadcastService : Service() {
         _state.value = BroadcastState(session = session)
         endingIntentionally = false
         // L6b — a stale guest's audio from a previous broadcast must never
-        // bleed into this one's mix (see GuestAudioMixer.kt's header).
+        // bleed into this one's mix (see GuestAudioMixer.kt's header). L6c —
+        // same discipline for a stale guest's VIDEO tile (GuestStageCompositor.kt).
         GuestAudioMixer.reset()
+        GuestStageCompositor.reset()
 
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(session), foregroundTypeFor(session, screenSharing = false))
 
         val (built, ok) = buildBroadcaster(applicationContext, connectChecker, kind)
         broadcaster = built
         if (ok) {
+            // L6c — bind the compositor to THIS session's GL pipeline before
+            // starting the stream, so a guest who joins seconds into a live
+            // broadcast has somewhere to composite into immediately. No-op
+            // for audio-only (glStreamInterface() is null there).
+            built.glStreamInterface()?.let { GuestStageCompositor.bind(it) }
             runCatching { built.startStream(buildPublishUrl(rtmpUrl, streamId, streamKey)) }
                 .onFailure { e -> _state.update { it.copy(phase = BroadcastPhase.FAILED, failReason = e.message ?: "Couldn't start the stream.") } }
         } else {
@@ -195,6 +202,11 @@ class LiveBroadcastService : Service() {
         val projection = mediaProjectionManager.getMediaProjection(resultCode, data)
         mediaProjection = projection
         val switched = runCatching { broadcaster?.useScreenSource(projection) }.isSuccess
+        // L6c — task brief item 4: while sharing the screen (or Document,
+        // which rides on the same SCREEN source), the shared content stays
+        // large and every live guest drops to the rail — never promoted to
+        // the speaker slot. See GuestStageCompositor.setScreenSource's doc.
+        if (switched) GuestStageCompositor.setScreenSource(true)
         _state.update {
             it.copy(source = if (switched) BroadcastSource.SCREEN else BroadcastSource.CAMERA, switchingSource = false)
         }
@@ -205,6 +217,7 @@ class LiveBroadcastService : Service() {
         if (_state.value.source != BroadcastSource.SCREEN) return
         _state.update { it.copy(switchingSource = true) }
         runCatching { broadcaster?.useCameraSource() }
+        GuestStageCompositor.setScreenSource(false)
         mediaProjection?.stop()
         mediaProjection = null
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(session), foregroundTypeFor(session, screenSharing = false))
@@ -250,6 +263,7 @@ class LiveBroadcastService : Service() {
         mediaProjection?.stop()
         mediaProjection = null
         GuestAudioMixer.reset()
+        GuestStageCompositor.reset()
     }
 
     override fun onDestroy() {

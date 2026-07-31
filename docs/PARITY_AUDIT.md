@@ -3104,3 +3104,156 @@ compile clean. Confirmed zero `.so` files across all three resolved Glance
 AARs (`unzip -l` on `~/.gradle/caches`). Not pushed / no PR opened
 (isolated worktree `.worktrees/widgets`, branch `feat/android-widgets`,
 built on top of origin/main).
+## 2026-07-31 — Nuru Live L6c: guest video composited into the outgoing RTMP stream — the CONGREGATION now sees the stage (branch feat/live-l6c-compositing, this repo only, on top of #73/#74/#76/#78/L6b)
+
+L6b got guest audio onto the outgoing mix and gave the HOST a local rail of
+guest video tiles (`GuestStageUi.kt`'s `HostGuestRail`) — but that rail was
+pure Compose UI on the broadcaster's own screen; nothing about it reached
+the RTMP frame the congregation actually watches, which still showed only
+the host's camera. This session closes that gap: the host's RootEncoder GL
+pipeline now composites live guest video directly into the frame it
+publishes, speaker-large + thumbnail rail, with name plates.
+
+**The mechanism** (all read from the pinned RootEncoder 2.5.9 source via
+`gh api repos/pedroSG94/RootEncoder/contents/<path>?ref=2.5.9`, and the
+resolved `io.github.webrtc-sdk:android:144.7559.09` classes via `javap` —
+never assumed from memory, per the task brief). RootEncoder's GL pipeline
+(`library/.../view/GlStreamInterface.kt` + `encoder/.../render/
+MainRender.kt`) renders the active camera/screen source into an off-screen
+FBO at the locked encoder canvas size, then walks a chain of
+`BaseFilterRender` objects — each draws a full-screen quad compositing the
+PREVIOUS stage's output as background with its own "object" texture
+overlaid at a percent-of-canvas position/scale
+(`BaseObjectFilterRender.setPosition/setScale`, `Sprite.java`'s own doc:
+"0,0 top-left, 100,100 bottom-right"). This is RootEncoder's own sanctioned
+sticker/watermark mechanism, verified from source, not a hack.
+`SurfaceFilterRender` (`encoder/.../filters/object/SurfaceFilterRender.
+java`) is the one object-filter subclass backed by an arbitrary
+`android.view.Surface` rather than a static bitmap — exactly what's needed
+to feed it LIVE guest frames. On the WebRTC side, `org.webrtc.EglRenderer`
+(verified via `javap` against the SAME resolved artifact this app already
+depends on) `implements VideoSink`, so `videoTrack.addSink(eglRenderer)`
+just works — additively, the same multi-sink pattern
+`GuestAudioMixer.kt`/`WhepSubscriber.kt` already established for audio —
+and exposes `createEglSurface(Surface)` to bind the `SurfaceFilterRender`'s
+Surface as its render target, plus `init(EglBase.Context, int[],
+RendererCommon.GlDrawer)` to share GL context with `LiveWebRtc`'s existing
+`EglBase` (so the VideoFrame's hardware texture, decoded in that same
+context, is valid to sample). RootEncoder's own GL context and WebRTC's
+`EglRenderer` never need to share a context WITH EACH OTHER — Android's
+`Surface`/`SurfaceTexture` is a `BufferQueue` at the platform level,
+deliberately safe across independent GL contexts/threads — so the two
+libraries hand frames to each other purely through that `Surface`.
+
+**Fixed slots, not per-guest filters.** A naive per-guest
+add/removeFilter design breaks compositing order: `MainRender` chains
+filters strictly by insertion order (`reOrderFilters()`'s `previousTexId`
+links — read from source), so whichever filter was added first always
+renders underneath. If the active speaker swapped to a guest who joined
+EARLIER than someone now relegated to the rail, that rail tile — inserted
+before the now-fullscreen speaker overlay — would render underneath it and
+vanish. Instead `GuestStageCompositor.kt` pre-allocates `MAX_GUESTS` (6)
+FIXED slots once per broadcast at `bind()` (slot 0 = speaker role, always
+drawn first/underneath; slots 1-5 = rail, always drawn after/on top) and
+only ever REASSIGNS which guest's `VideoTrack` feeds a slot's
+already-created `EglRenderer` (`removeSink` the old track, `addSink` the
+new one) as the active speaker changes — no GL churn, no flicker, no
+ordering bug possible. Percent-based geometry means this never touches
+encoder resolution — the "never change encoded dimensions mid-publish"
+guardrail is satisfied by construction, not by discipline.
+
+**Speaker selection**, per the task brief's own fallback chain, implemented
+verbatim: loudest live guest (by audio level) → else most-recently-joined
+guest → else no overlay at all (host fills the frame, unchanged behavior).
+"Loudest" reuses `GuestAudioMixer.kt`'s ALREADY-decoded, already-resampled
+mono PCM (`GuestAudioMixer.push`) — added a `ConcurrentHashMap<String,
+Float>` of IIR-smoothed mean-abs-amplitude per guest, updated for free in
+the same hot path that already runs for the audio mix, exposed via
+`currentLevels()`. No second audio tap.
+
+**Layout.** Speaker slot: ~100%x100% (near-fullscreen — task brief's
+"active speaker large"). Rail: vertical stack of ~16%x21% tiles down the
+top-right edge, each with a `TextObjectFilterRender` name plate
+(RootEncoder's own bundled text-bitmap object filter — `setText` renders a
+`Bitmap` via a plain `Canvas`, texture upload deferred to the GL thread
+inside `drawFilter()`, so it's safe to call from the compositor's
+Main-dispatcher reflow loop) fed guestId→fullName from
+`LiveBroadcastScreen.kt`'s pulse poll (the compositor itself only ever
+sees WebRTC tracks + ids, never the REST guest row). Screen/Document mode
+(task brief item 4): `setScreenSource(true)` disables the speaker-overlay
+entirely — the shared screen/document always stays the "large" content,
+every live guest (however many) drops into the rail instead, never
+promoted over the shared content. Reflow runs on a 1.2s timer (catches a
+loudness change with no join/leave event) plus an immediate call +
+300ms quick-retry on every attach/detach (catches the common case fast
+without waiting on the timer; the retry exists because a `SurfaceFilterRender`'s
+`Surface` is only valid once its `addFilter()` has actually been processed
+on RootEncoder's own GL thread — async relative to the call site).
+
+**Files**: `feature/live/GuestStageCompositor.kt` (new — the compositor
+itself); `GuestAudioMixer.kt` (`currentLevels()` + level tracking, additive
+to the existing mix path); `LiveBroadcastEngine.kt`
+(`Broadcaster.glStreamInterface()`, `VideoBroadcaster` override returning
+`stream.getGlInterface()`, null default for `AudioBroadcaster` since
+`GenericOnlyAudio` has no GL pipeline); `LiveBroadcastService.kt`
+(`GuestStageCompositor.bind()` at broadcast start alongside
+`GuestAudioMixer.reset()`'s existing "no stale guest" discipline,
+`.reset()` at `cleanupEngine()`, `.setScreenSource()` in both source-switch
+paths); `WhepSubscriber.kt` (`attachVideo`/`detachVideo` calls, additive to
+the existing renderer-tile and audio-mixer taps on the same `onTrack`
+callback); `LiveBroadcastScreen.kt` (pushes guestId→fullName into the
+compositor whenever the pulse poll refreshes).
+
+**Honest limits** (per the task brief's own "never fake" instruction):
+(a) **orientation of the composite was reasoned from source, not visually
+verified on a device** — traced that `MainRender.drawOffScreen()` (where
+filters run) operates on the SAME already-upright, already-oriented-correct
+canvas that `screenRender.drawEncoder()` later rotates as one unit for the
+final portrait/landscape output, so percent coordinates SHOULD map
+correctly onto what the viewer sees in both orientations — but this
+session had no way to actually watch a portrait broadcast with a live
+guest to confirm the rail lands top-right rather than, say, rotated 90°.
+(b) **no aspect-ratio correction on guest tiles** — `EglRenderer` letterboxes
+a guest's video into whatever buffer size the target `Surface` was given
+(the full locked canvas, e.g. 1080x1920), and `SurfaceFilterRender`'s object
+shader then stretches THAT into the assigned rail rectangle with no
+crop-to-fill logic (`BaseObjectFilterRender` has no aspect-aware scaling
+mode, verified from source) — a guest whose own video aspect doesn't match
+the tile shape will look letterboxed-then-stretched, a real but purely
+cosmetic defect; fixing it needs a custom `RendererCommon.GlDrawer`
+implementing crop, out of scope this session. (c) **name-plate text is not
+aspect-corrected either** — `TextStreamObject` bakes text to a
+tightly-cropped bitmap sized by string length, then that bitmap gets
+stretched into a fixed-percent plate rectangle, so a very short or very
+long name may look subtly thin/wide. (d) **not exercised against a live
+two-guest broadcast on real devices or the deployed MediaMTX server** —
+every claim here is compile-verified or traced against the resolved
+library's actual source/decompiled API, never assumed from memory, but
+whether the composite actually looks right, holds 30fps under real camera
++ 2 guest decode load, and reflows smoothly as guests join/leave needs a
+live test before this is trusted in front of a congregation — the single
+most important follow-up. (e) the host's OWN camera can never be shrunk
+into a rail tile alongside guests (e.g. if the host wanted to appear small
+while a guest is the large speaker) — RootEncoder's base camera/screen
+layer is captured directly into the FBO `MainRender.drawOffScreen()`
+composites everything else on top of; there is no traced mechanism in the
+2.5.9 GL pipeline to re-texture that base layer as a separately
+positionable object without a second camera capture session. This is a
+deliberate, documented scope boundary, not an oversight: the task brief's
+"speaker large + rail" is satisfied for GUEST speakers (which is the
+common case — a host on video hosting guests), and the host himself simply
+IS the base/background whenever no guest is currently speaking.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 49 tests, 0 failures/errors (baseline unchanged — this
+session's new logic, `GuestStageCompositor.kt`'s slot/layout/speaker-
+selection math, isn't yet covered by a new unit test — it depends on
+RootEncoder/WebRTC concrete classes that aren't mockable without a real GL
+context or device, the same category of limitation `GuestAudioMixer.kt`'s
+mixing math worked around by being pure-function-testable in isolation;
+this session's speaker-selection function (`pickSpeaker`) COULD be
+extracted and tested the same way as a fast-follow). Not pushed / no PR
+opened (isolated worktree `.worktrees/l6c`, branch
+`feat/live-l6c-compositing`, built on top of origin/main
+#73/#74/#76/#78/L6b).
