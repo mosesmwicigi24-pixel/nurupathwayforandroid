@@ -20,6 +20,7 @@ import com.pedro.encoder.utils.gl.AspectRatioMode
 import com.pedro.library.generic.GenericOnlyAudio
 import com.pedro.library.generic.GenericStream
 import com.pedro.library.util.streamclient.StreamBaseClient
+import com.pedro.library.view.GlStreamInterface
 
 internal const val VIDEO_WIDTH = 1920
 internal const val VIDEO_HEIGHT = 1080
@@ -129,6 +130,14 @@ interface Broadcaster {
     fun stopPreview() {}
     fun switchCamera() {}
 
+    /** L6c (GuestStageCompositor.kt) — the RootEncoder GL pipeline handle
+     *  guest video tiles get composited into, so the outgoing RTMP frame
+     *  carries the guest stage, not just the camera. Video-only; audio-only
+     *  broadcasts (GenericOnlyAudio) have no GL pipeline at all, so this
+     *  stays null for them and the compositor never binds — see that file's
+     *  class doc. */
+    fun glStreamInterface(): GlStreamInterface? = null
+
     /** Camera → screen source, live, without stopping the publish (verified
      *  against StreamBase.changeVideoSource — see LiveBroadcastService.kt's
      *  header comment). No-op for audio-only broadcasts. */
@@ -164,6 +173,7 @@ private class VideoBroadcaster(
     override fun client() = stream.getStreamClient()
     override fun startPreview(view: SurfaceView) { if (!stream.isOnPreview) stream.startPreview(view) }
     override fun stopPreview() { if (stream.isOnPreview) stream.stopPreview() }
+    override fun glStreamInterface(): GlStreamInterface = stream.getGlInterface()
     override fun switchCamera() {
         (stream.videoSource as? Camera2Source)?.switchCamera()
         frontCamera = !frontCamera

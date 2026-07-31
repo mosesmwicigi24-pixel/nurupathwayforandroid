@@ -94,9 +94,20 @@ private const val MIX_SAMPLE_RATE = AUDIO_SAMPLE_RATE // 44_100 — matches Live
 object GuestAudioMixer {
     private val queues = ConcurrentHashMap<String, GuestQueue>()
 
+    // L6c — per-guest smoothed speaking level, piggybacked on the SAME
+    // decoded/resampled mono PCM already computed in [push] for the mix (no
+    // separate tap, no extra decoding work). GuestStageCompositor.kt reads
+    // this to pick which live guest's video tile should be the "active
+    // speaker" in the composited RTMP frame. Units are mean absolute 16-bit
+    // sample magnitude (0..32767ish) smoothed with a simple IIR average so a
+    // single loud syllable doesn't cause the composited layout to flicker
+    // between guests every ~20ms callback.
+    private val levels = ConcurrentHashMap<String, Float>()
+
     fun reset() {
         queues.values.forEach { it.clear() }
         queues.clear()
+        levels.clear()
     }
 
     /** Called by WhepSubscriber once a guest's remote AudioTrack arrives.
@@ -110,7 +121,12 @@ object GuestAudioMixer {
 
     fun detach(guestId: String) {
         queues.remove(guestId)
+        levels.remove(guestId)
     }
+
+    /** Snapshot of every guest's current smoothed speaking level — read by
+     *  GuestStageCompositor's reflow loop, never written from outside [push]. */
+    fun currentLevels(): Map<String, Float> = levels.toMap()
 
     /** Downmixes to mono + linearly resamples to [MIX_SAMPLE_RATE] before
      *  queuing — WebRTC's decoded output is commonly 48kHz (its internal
@@ -140,6 +156,16 @@ object GuestAudioMixer {
             }
         }
         queue.push(resampled)
+        if (resampled.isNotEmpty()) {
+            var sum = 0.0
+            for (s in resampled) sum += kotlin.math.abs(s.toInt())
+            val mean = (sum / resampled.size).toFloat()
+            val prev = levels[guestId] ?: 0f
+            // 60/40 IIR smoothing — same shape as GuestQueue's jitter buffer
+            // philosophy (self-correcting, no unbounded state) but here just
+            // damping frame-to-frame noise rather than latency.
+            levels[guestId] = prev * 0.6f + mean * 0.4f
+        }
     }
 
     /** Sums [count] mono samples (at [MIX_SAMPLE_RATE]) across every active
