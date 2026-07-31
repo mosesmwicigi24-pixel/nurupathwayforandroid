@@ -126,7 +126,10 @@ private fun RecordingRow(row: LiveRecordingRow, onClick: () -> Unit) {
     }
 }
 
-private fun replayDate(iso: String?): String {
+// Not private — LiveTabScreen.kt's "My Broadcasts" rows (the broadcaster's
+// own recordings, GET /live/recordings/mine) reuse this exact date format
+// rather than a second formatter.
+internal fun replayDate(iso: String?): String {
     if (iso.isNullOrBlank()) return ""
     val zone = ZoneId.of("Africa/Nairobi")
     val fmt = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)

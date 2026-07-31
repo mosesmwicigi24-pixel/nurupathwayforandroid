@@ -24,7 +24,8 @@ fun liveNowRoute(row: LiveNowRow): String {
         "&fallbackUrl=${Uri.encode(fallback ?: "")}" +
         "&title=${Uri.encode(row.title)}&kind=${Uri.encode(row.kind)}&live=true" +
         "&startedAt=${Uri.encode(row.startedAt)}&viewers=${row.viewerCount}" +
-        "&startedByName=${Uri.encode(row.startedByName.orEmpty())}"
+        "&startedByName=${Uri.encode(row.startedByName.orEmpty())}" +
+        "&startedByAvatarUrl=${Uri.encode(row.startedByAvatarUrl.orEmpty())}"
 }
 
 /** The nav route for a hosted recording (Replays list) — no heartbeat, no

@@ -12,17 +12,23 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -41,19 +47,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.nuruplace.member.data.net.LiveGuestRow
 import org.nuruplace.member.data.net.LiveHandRow
 import org.nuruplace.member.data.net.LiveMessageRow
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import kotlin.math.PI
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -189,12 +205,19 @@ fun LiveActionRail(
     }
 }
 
+// Chrome polish (owner taste pass): every round chrome control on the stage —
+// this rail, the broadcaster HUD's mic/End/flip/source/hand/chat circles —
+// is a SOFT TRANSLUCENT 48dp circle, one shared size/opacity so the viewer
+// and broadcaster surfaces read as the same visual system.
+val LiveChromeCircleSize = 48.dp
+val LiveChromeCircleBg = Color.Black.copy(alpha = 0.38f)
+
 @Composable
 private fun RailButton(glyph: String, count: String?, filled: Boolean = false, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(46.dp).clip(CircleShape)
-                .background(if (filled) Nuru.gold.copy(alpha = 0.9f) else Color.Black.copy(alpha = 0.35f))
+            Modifier.size(LiveChromeCircleSize).clip(CircleShape)
+                .background(if (filled) Nuru.gold.copy(alpha = 0.9f) else LiveChromeCircleBg)
                 .clickable { onClick() },
             contentAlignment = Alignment.Center,
         ) { Text(glyph, fontSize = 22.sp) }
@@ -205,68 +228,190 @@ private fun RailButton(glyph: String, count: String?, filled: Boolean = false, o
     }
 }
 
-// ── Floating chat overlay (owner's exact vision — anchored bottom-left) ────
-
-/** NOT a sheet: bottom-left, lower ~1/3 of the screen, ~2/3 width, translucent
- *  dark skin, last ~6 messages (oldest fading at the top, auto-updating as the
- *  poll advances), plus a translucent input pill above it while [visible]. */
+/** Gentle fade+rise entrance for a piece of chrome (the host chip, the LIVE
+ *  pill, the action rail) — Reduce Motion just shows it immediately, matching
+ *  every other motion decision in this file (a value/visibility change, not a
+ *  decorative animation, is still allowed). */
 @Composable
-fun LiveChatOverlay(
+fun GentleEntrance(reduceMotion: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val alpha = remember { Animatable(if (reduceMotion) 1f else 0f) }
+    val rise = remember { Animatable(if (reduceMotion) 0f else 10f) }
+    LaunchedEffect(Unit) {
+        if (!reduceMotion) {
+            alpha.animateTo(1f, tween(360, easing = LinearOutSlowInEasing))
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (!reduceMotion) {
+            rise.animateTo(0f, tween(360, easing = LinearOutSlowInEasing))
+        }
+    }
+    Box(modifier.graphicsLayer { this.alpha = alpha.value; translationY = rise.value.dp.toPx() }) { content() }
+}
+
+// ── Floating draggable chat — owner taste pass ──────────────────────────
+// Replaces the earlier fixed bottom-left overlay. NOT a sheet, and never a
+// full-screen/modal presentation either — this is the ONE shared chat
+// surface for both the viewer player (LivePlayerScreen) and the broadcaster
+// HUD (LiveBroadcastScreen), since neither may cover the whole stage.
+// Draggable by its header (clamped to the container it's placed in — the
+// caller should size [modifier] to the full stage so there's real room to
+// drag), collapsible to a small chat-bubble FAB that is ALSO independently
+// draggable. Both offsets live in `remember` (no key) — position survives
+// collapse/expand for as long as this composable stays in composition, i.e.
+// "remembered in-session" per the owner's spec, never persisted to disk.
+
+/** Clamps a floating overlay's drag offset so it always stays fully inside
+ *  its container — pure (no Compose runtime dependency) so it's unit-
+ *  testable; see LiveInteractionsTest. */
+fun clampDragOffset(offset: Offset, containerSize: Size, elementSize: Size): Offset {
+    val maxX = (containerSize.width - elementSize.width).coerceAtLeast(0f)
+    val maxY = (containerSize.height - elementSize.height).coerceAtLeast(0f)
+    return Offset(offset.x.coerceIn(0f, maxX), offset.y.coerceIn(0f, maxY))
+}
+
+@Composable
+fun LiveFloatingChat(
     visible: Boolean,
     messages: List<LiveMessageRow>,
     onSend: (String) -> Unit,
     modifier: Modifier = Modifier,
+    bottomMargin: Dp = 170.dp,
 ) {
     if (!visible) return
-    var draft by remember { mutableStateOf("") }
-    val shown = messages.takeLast(6)
-    Column(modifier) {
-        // Input pill — above the panel, per the owner's spec ("reveals a
-        // translucent input pill above it").
-        Row(
-            Modifier.fillMaxWidth(0.85f)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color.Black.copy(alpha = 0.45f))
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.weight(1f)) {
-                if (draft.isBlank()) Text("Say something…", style = NuruType.body, color = Color.White.copy(alpha = 0.5f))
-                BasicTextField(
-                    value = draft,
-                    onValueChange = { if (it.length <= 500) draft = it },
-                    textStyle = NuruType.body.copy(color = Color.White),
-                    cursorBrush = SolidColor(Nuru.gold),
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Nuru.gold,
-                modifier = Modifier.size(20.dp).clickable {
-                    val body = draft.trim()
-                    if (body.isNotEmpty()) { onSend(body); draft = "" }
-                },
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        // Message panel — translucent dark skin, rounded, last 6, oldest fading.
-        Column(
-            Modifier.fillMaxWidth(0.68f)
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.Black.copy(alpha = 0.32f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            shown.forEachIndexed { i, m ->
-                val fade = 0.35f + 0.65f * ((i + 1).toFloat() / shown.size.coerceAtLeast(1))
-                Row(Modifier.padding(vertical = 3.dp).graphicsLayer { alpha = fade }) {
-                    Text(m.fullName.ifBlank { "Member" } + "  ", style = NuruType.micro, color = Nuru.goldSoft, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(m.body, style = NuruType.micro, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    val density = LocalDensity.current
+    var collapsed by remember { mutableStateOf(false) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    var panelOffset by remember { mutableStateOf<Offset?>(null) }
+    var bubbleOffset by remember { mutableStateOf<Offset?>(null) }
+    var lastSeenCount by remember { mutableStateOf(messages.size) }
+    LaunchedEffect(collapsed, messages.size) { if (!collapsed) lastSeenCount = messages.size }
+    val hasUnread = collapsed && messages.size > lastSeenCount
+
+    Box(modifier.fillMaxSize().onGloballyPositioned { containerSize = it.size }) {
+        if (containerSize == IntSize.Zero) return@Box
+        val containerPx = Size(containerSize.width.toFloat(), containerSize.height.toFloat())
+        val marginPx = with(density) { bottomMargin.toPx() }
+        val startPx = with(density) { 12.dp.toPx() }
+
+        if (collapsed) {
+            val bubblePx = with(density) { 52.dp.toPx() }
+            val elementPx = Size(bubblePx, bubblePx)
+            val default = Offset(startPx, (containerPx.height - marginPx - bubblePx).coerceAtLeast(0f))
+            val current = clampDragOffset(bubbleOffset ?: default, containerPx, elementPx)
+            Box(
+                Modifier
+                    .offset { IntOffset(current.x.roundToInt(), current.y.roundToInt()) }
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(LiveChromeCircleBg)
+                    .pointerInput(containerSize) {
+                        detectDragGestures { change, drag ->
+                            change.consume()
+                            val base = bubbleOffset ?: default
+                            bubbleOffset = clampDragOffset(base + drag, containerPx, elementPx)
+                        }
+                    }
+                    .clickable { collapsed = false },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("💬", fontSize = 20.sp)
+                if (hasUnread) {
+                    Box(
+                        Modifier.size(11.dp).align(Alignment.TopEnd)
+                            .clip(CircleShape).background(Nuru.gold),
+                    )
                 }
             }
-            if (shown.isEmpty()) {
-                Text("Say hello 👋", style = NuruType.micro, color = Color.White.copy(alpha = 0.55f))
+        } else {
+            val panelWidthPx = containerPx.width * 0.55f
+            val panelHeightPx = containerPx.height * 0.26f
+            val elementPx = Size(panelWidthPx, panelHeightPx)
+            val default = Offset(startPx, (containerPx.height - marginPx - panelHeightPx).coerceAtLeast(0f))
+            val current = clampDragOffset(panelOffset ?: default, containerPx, elementPx)
+            val panelWidthDp = with(density) { panelWidthPx.toDp() }
+            val panelHeightDp = with(density) { panelHeightPx.toDp() }
+            var draft by remember { mutableStateOf("") }
+            val listState = rememberLazyListState()
+            LaunchedEffect(messages.size) {
+                if (messages.isNotEmpty()) listState.animateScrollToItem((messages.size - 1).coerceAtLeast(0))
+            }
+
+            Column(
+                Modifier
+                    .offset { IntOffset(current.x.roundToInt(), current.y.roundToInt()) }
+                    .size(width = panelWidthDp, height = panelHeightDp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.5f)),
+            ) {
+                // Header — the ONLY draggable strip (so a normal tap/scroll on
+                // the message list or input never accidentally moves the panel).
+                Row(
+                    Modifier.fillMaxWidth()
+                        .pointerInput(containerSize) {
+                            detectDragGestures { change, drag ->
+                                change.consume()
+                                val base = panelOffset ?: default
+                                panelOffset = clampDragOffset(base + drag, containerPx, elementPx)
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("⠿⠿", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Live chat", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f),
+                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        Modifier.size(20.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.15f))
+                            .clickable { collapsed = true },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("–", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                }
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    if (messages.isEmpty()) {
+                        item { Text("Say hello 👋", style = NuruType.micro, color = Color.White.copy(alpha = 0.55f)) }
+                    } else {
+                        items(messages.takeLast(60), key = { it.messageId.ifBlank { it.sentAt } }) { m ->
+                            Row(Modifier.padding(vertical = 2.dp)) {
+                                Text(m.fullName.ifBlank { "Member" } + "  ", style = NuruType.micro, color = Nuru.goldSoft, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(m.body, style = NuruType.micro, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (draft.isBlank()) Text("Say something…", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = { if (it.length <= 500) draft = it },
+                            textStyle = NuruType.micro.copy(color = Color.White),
+                            cursorBrush = SolidColor(Nuru.gold),
+                            maxLines = 2,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Nuru.gold,
+                        modifier = Modifier.size(16.dp).clickable {
+                            val body = draft.trim()
+                            if (body.isNotEmpty()) { onSend(body); draft = "" }
+                        },
+                    )
+                }
             }
         }
     }
@@ -329,6 +474,57 @@ fun OnStageSoonChip(modifier: Modifier = Modifier) {
         Text("🎤", fontSize = 13.sp)
         Spacer(Modifier.width(6.dp))
         Text("On stage soon", style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Small corner pill either banner above collapses to — a tap re-expands. */
+@Composable
+private fun GoldCornerPill(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Nuru.gold.copy(alpha = 0.9f))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("🎤", fontSize = 12.sp)
+        if (label.isNotBlank()) {
+            Spacer(Modifier.width(5.dp))
+            Text(label, style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * Owner taste pass: the guest invite card and the "on stage soon" banner both
+ * auto-collapse to a small gold corner pill ~3s after they appear (initial
+ * show, OR after tapping a collapsed pill to re-expand) — tap the pill to
+ * bring the full banner back. Also covers "the invite card after responding"
+ * — accepting/declining swaps in a fresh banner (the on-stage chip, or
+ * nothing) that runs the very same 3s cycle, keyed on [status] so it always
+ * starts expanded on a state change.
+ */
+@Composable
+fun GuestStageBanner(
+    status: String?,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (status != "invited" && status != "accepted") return
+    var expanded by remember(status) { mutableStateOf(true) }
+    LaunchedEffect(status, expanded) {
+        if (expanded) {
+            delay(3_000)
+            expanded = false
+        }
+    }
+    when {
+        status == "invited" && expanded -> GuestInviteCard(onAccept, onDecline, modifier.fillMaxWidth(0.85f))
+        status == "invited" -> GoldCornerPill("Invited", onClick = { expanded = true }, modifier = modifier)
+        status == "accepted" && expanded -> OnStageSoonChip(modifier)
+        else -> GoldCornerPill("", onClick = { expanded = true }, modifier = modifier)
     }
 }
 

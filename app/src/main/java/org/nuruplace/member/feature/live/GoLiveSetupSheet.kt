@@ -14,8 +14,10 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,10 +25,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Videocam
@@ -36,6 +40,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -96,6 +102,18 @@ fun GoLiveSetupSheet(
     var askedOnce by remember { mutableStateOf(false) }
     var permanentlyDenied by remember { mutableStateOf(false) }
     val activity = context as? Activity
+
+    // Audience picker (owner taste pass) — the cell row's subtitle names the
+    // broadcaster's own cell by reusing the exact same fetch CellInfoScreen
+    // already makes (GET /me/cell-summary); the wire contract itself is
+    // unchanged (scope "church"|"cell" + cell_id) — this is purely a nicer
+    // label than "My cell" for the cell they're actually about to go live to.
+    var cellName by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(cellEligible) {
+        if (cellEligible) {
+            cellName = runCatching { Net.client.api.cellSummary().cell?.name }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
+    }
 
     fun requiredPermissions(): Array<String> =
         if (kind == "video") arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
@@ -220,16 +238,32 @@ fun GoLiveSetupSheet(
                 KindChip("Audio only", Icons.Filled.GraphicEq, kind == "audio") { kind = "audio" }
             }
 
-            // Scope — hidden entirely when locked (Cell Info's entry point)
-            // or when only one option is actually eligible; a picker only
-            // appears when the member can genuinely choose between the two.
-            if (lockedScope == null && churchEligible && cellEligible) {
+            // Audience — hidden entirely when locked (Cell Info's entry
+            // point always forces "cell"); otherwise every scope this member
+            // is actually eligible for gets its own row so it reads like a
+            // real choice, not a cramped chip pair. The wire contract is
+            // unchanged either way: scope "church"|"cell" (+ cell_id).
+            if (lockedScope == null) {
                 Spacer(Modifier.height(Spacing.base))
-                Text("Where".uppercase(), style = NuruType.micro, color = Nuru.ink400)
+                Text("Audience".uppercase(), style = NuruType.micro, color = Nuru.ink400)
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    KindChip("Church", Icons.Filled.Videocam, selectedScope == "church") { selectedScope = "church" }
-                    KindChip("My cell", Icons.Filled.Videocam, selectedScope == "cell") { selectedScope = "cell" }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    if (churchEligible) {
+                        AudienceOption(
+                            title = "Everyone",
+                            subtitle = "All connected members",
+                            selected = selectedScope == "church",
+                            onClick = { selectedScope = "church" },
+                        )
+                    }
+                    if (cellEligible) {
+                        AudienceOption(
+                            title = "A cell / class",
+                            subtitle = cellName?.let { "Only $it sees this" } ?: "Only your cell sees this",
+                            selected = selectedScope == "cell",
+                            onClick = { selectedScope = "cell" },
+                        )
+                    }
                 }
             }
 
@@ -263,6 +297,38 @@ private fun Box2Close(onDismiss: () -> Unit) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(15.dp)) }
+}
+
+/** A full-width, selectable "who sees this" row — the Audience picker.
+ *  Mirrors KindChip's selected/unselected navy-vs-input-bg treatment but as
+ *  a row (title + subtitle + a gold check dot) rather than a small chip,
+ *  since each option needs room to say WHO it reaches. */
+@Composable
+private fun AudienceOption(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radii.control))
+            .background(if (selected) Nuru.navyDeep else Nuru.inputBg)
+            .clickable { onClick() }
+            .padding(horizontal = Spacing.md, vertical = Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = NuruType.cardCta, color = if (selected) Nuru.onNavy else Nuru.ink, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, style = NuruType.caption, color = if (selected) Nuru.onNavyDim else Nuru.ink400)
+        }
+        Spacer(Modifier.width(Spacing.sm))
+        Box(
+            Modifier.size(22.dp).clip(CircleShape)
+                .background(if (selected) Nuru.gold else Color.Transparent)
+                .border(1.dp, if (selected) Nuru.gold else Nuru.border, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(13.dp))
+        }
+    }
 }
 
 @Composable

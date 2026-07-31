@@ -1,13 +1,15 @@
 // Nuru Live — L5/L6 broadcaster-only surfaces (docs/LIVE_INTERACTIVE.md): the
 // raised-hands + guests bottom sheet opened from the broadcast HUD's ✋
-// control, and a lightweight live-chat sheet opened from 💬. Both are ported
-// from the iOS reference (LiveHandsGuestsSheet.swift, LiveChatSheet.swift) —
-// iOS presents both as sheets (`.sheet(isPresented:)`), a deliberate choice
-// there because the broadcaster is busy filming and a floating overlay over
-// their own camera preview would be distracting; Android mirrors that same
-// choice here (ModalBottomSheet) rather than reusing LiveChatOverlay's
-// translucent-over-video viewer styling, which assumes a video SURFACE
-// underneath it that the broadcaster's own preview already occupies.
+// control, ported from the iOS reference (LiveHandsGuestsSheet.swift) — iOS
+// presents it as a sheet (`.sheet(isPresented:)`), a deliberate choice there
+// because the broadcaster is busy filming and a floating overlay over their
+// own camera preview would be distracting for a multi-row management list;
+// Android mirrors that choice here (ModalBottomSheet). Live chat used to be
+// a second sheet in this file (LiveChatSheet.swift's port) — the owner's
+// taste pass moved it to the SAME shared floating draggable overlay the
+// viewer uses instead (LiveInteractions.kt's `LiveFloatingChat`), since a
+// full sheet was covering the broadcaster's own stage; see that composable
+// and LiveBroadcastScreen.kt for where chat lives now.
 package org.nuruplace.member.feature.live
 
 import androidx.compose.foundation.background
@@ -15,7 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,24 +25,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,17 +43,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.LiveGuestRow
 import org.nuruplace.member.data.net.LiveHandRow
-import org.nuruplace.member.data.net.LiveMessageRow
 import org.nuruplace.member.data.net.LivePulse
-import org.nuruplace.member.data.net.LiveSendMessageBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.minutesSince
 import org.nuruplace.member.ui.theme.Nuru
@@ -248,140 +236,13 @@ private fun Pill(label: String, bg: androidx.compose.ui.graphics.Color, fg: andr
     ) { Text(label, style = NuruType.micro, color = fg, fontWeight = FontWeight.Bold) }
 }
 
-// ── 💬 Live chat sheet ───────────────────────────────────────────────────
-
-/** Deliberately NOT the full Aurora chat thread (ChatThreadScreen) — no read
- *  receipts, no offline queue, no edit/delete, just a 3s-polled (since-
- *  cursor) message list + composer, matching the viewer overlay's own
- *  3s cadence and the iOS sheet's identical scope. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun LiveBroadcastChatSheet(streamId: String, myUserId: String?, onDismiss: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var messages by remember { mutableStateOf<List<LiveMessageRow>>(emptyList()) }
-    var cursor by remember { mutableStateOf<String?>(null) }
-    var draft by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(true) }
-    val listState = rememberLazyListState()
-
-    LaunchedEffect(streamId) {
-        val initial = runCatching { Net.client.api.getLiveMessages(streamId) }.getOrNull()
-        if (initial != null) {
-            messages = initial.messages
-            cursor = initial.messages.lastOrNull()?.sentAt
-        }
-        loading = false
-        while (true) {
-            delay(3_000)
-            val res = runCatching { Net.client.api.getLiveMessages(streamId, cursor) }.getOrNull()
-            if (res != null && res.messages.isNotEmpty()) {
-                val existing = messages.map { it.messageId }.toSet()
-                val fresh = res.messages.filter { it.messageId !in existing }
-                cursor = res.messages.last().sentAt
-                if (fresh.isNotEmpty()) messages = messages + fresh
-            }
-        }
-    }
-
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-    }
-
-    fun send() {
-        val body = draft.trim()
-        if (body.isEmpty() || body.length > 500) return
-        draft = ""
-        scope.launch {
-            val sent = runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }.getOrNull()
-            if (sent != null && messages.none { it.messageId == sent.messageId }) {
-                messages = messages + sent
-                cursor = sent.sentAt
-            }
-        }
-    }
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().heightIn(min = 420.dp, max = 560.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(bottom = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Live chat", style = NuruType.title, color = Nuru.ink)
-                Spacer(Modifier.weight(1f))
-                SheetCloseChip(onDismiss)
-            }
-
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = Spacing.screen),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-                contentPadding = PaddingValues(vertical = Spacing.sm),
-            ) {
-                when {
-                    loading -> item {
-                        Box(Modifier.fillMaxWidth().padding(top = Spacing.xl), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Nuru.gold)
-                        }
-                    }
-                    messages.isEmpty() -> item {
-                        Text(
-                            "Say hello 👋", style = NuruType.body, color = Nuru.ink400,
-                            modifier = Modifier.fillMaxWidth().padding(top = Spacing.xl),
-                        )
-                    }
-                    else -> itemsIndexed(messages, key = { _, m -> m.messageId }) { _, m ->
-                        ChatBubbleRow(m, mine = myUserId != null && m.userId == myUserId)
-                    }
-                }
-            }
-
-            Row(
-                Modifier.fillMaxWidth().padding(Spacing.screen),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { if (it.length <= 500) draft = it },
-                    placeholder = { Text("Say something…", style = NuruType.body) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    shape = RoundedCornerShape(999.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Nuru.inputBg,
-                        unfocusedContainerColor = Nuru.inputBg,
-                        focusedBorderColor = Nuru.gold,
-                        unfocusedBorderColor = Nuru.border,
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                val canSend = draft.isNotBlank()
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape)
-                        .background(if (canSend) Nuru.gold else Nuru.gold.copy(alpha = 0.4f))
-                        .clickable(enabled = canSend) { send() },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Nuru.homeNavy, modifier = Modifier.size(17.dp)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChatBubbleRow(message: LiveMessageRow, mine: Boolean) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
-        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start, modifier = Modifier.width(240.dp)) {
-            if (!mine) {
-                Text(message.fullName.ifBlank { "Member" }, style = NuruType.micro, color = Nuru.ink600, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(2.dp))
-            }
-            Box(
-                Modifier.clip(RoundedCornerShape(16.dp)).background(if (mine) Nuru.myBubble else Nuru.white)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text(message.body, style = NuruType.body, color = Nuru.ink) }
-        }
-    }
-}
+// ── 💬 Live chat ─────────────────────────────────────────────────────────
+// The broadcaster's own chat sheet used to live here (ModalBottomSheet,
+// ported from the iOS reference) — owner taste pass replaced it with the
+// SAME shared floating draggable overlay the viewer uses (LiveInteractions.
+// kt's `LiveFloatingChat`, wired up in LiveBroadcastScreen.kt) so chat never
+// covers the broadcaster's own stage the way a full sheet did. See that
+// file's header comment for the reasoning update.
 
 // ── Shared small pieces ─────────────────────────────────────────────────
 

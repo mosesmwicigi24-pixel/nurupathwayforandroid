@@ -114,6 +114,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.LiveGuestRespondBody
@@ -149,6 +150,7 @@ fun LivePlayerScreen(
     onOpenReplays: () -> Unit,
     fallbackUrl: String? = null,
     startedByName: String? = null,
+    startedByAvatarUrl: String? = null,
     myUserId: String? = null,
 ) {
     val context = LocalContext.current
@@ -344,17 +346,19 @@ fun LivePlayerScreen(
                 Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
                     if (live && !ended) {
-                        Row(
-                            Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            LivePulsingDot(size = 7.dp)
-                            Text("LIVE", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
-                            Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                            Icon(Icons.Filled.RemoveRedEye, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(12.dp))
-                            Text("$viewerCount", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                        GentleEntrance(reduceMotion) {
+                            Row(
+                                Modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                LivePulsingDot(size = 7.dp)
+                                Text("LIVE", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                                Icon(Icons.Filled.RemoveRedEye, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(12.dp))
+                                Text("$viewerCount", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                            }
                         }
                     }
                     pulse?.hands?.takeIf { it.isNotEmpty() }?.let { hands ->
@@ -365,21 +369,22 @@ fun LivePlayerScreen(
             }
             if (!ended && (title.isNotBlank() || !startedByName.isNullOrBlank())) {
                 Spacer(Modifier.height(10.dp))
-                BroadcasterIdentityChip(startedByName, title, Modifier.align(Alignment.Start))
+                GentleEntrance(reduceMotion, Modifier.align(Alignment.Start)) {
+                    BroadcasterIdentityChip(startedByName, startedByAvatarUrl, title)
+                }
             }
             Spacer(Modifier.weight(1f))
 
-            // Guest invite (L6 scaffolding) sits just above the chat/title area.
-            when (myGuestState) {
-                "invited" -> if (streamId != null) {
-                    GuestInviteCard(
-                        onAccept = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } } },
-                        onDecline = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } } },
-                        modifier = Modifier.fillMaxWidth(0.85f).padding(bottom = 12.dp),
-                    )
-                }
-                "accepted" -> OnStageSoonChip(Modifier.padding(bottom = 12.dp))
-                else -> Unit
+            // Guest invite (L6 scaffolding) sits just above the chat/title area
+            // — auto-collapses to a small gold corner pill after ~3s (owner
+            // taste pass), same for the on-stage-soon banner once accepted.
+            if (streamId != null) {
+                GuestStageBanner(
+                    status = myGuestState,
+                    onAccept = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } } },
+                    onDecline = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } } },
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
             }
 
             if (!ended) {
@@ -396,20 +401,24 @@ fun LivePlayerScreen(
         // Right-side vertical action rail (TikTok) — mid-height, clear of the
         // top chrome and bottom title/chat.
         if (live && !ended && streamId != null) {
-            LiveActionRail(
-                counts = pulse?.reactions ?: emptyMap(),
-                handRaised = handRaised,
-                chatOpen = chatOpen,
-                onReact = ::sendReaction,
-                onToggleHand = ::toggleHand,
-                onToggleChat = { chatOpen = !chatOpen },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp, bottom = 90.dp),
-            )
+            GentleEntrance(reduceMotion, Modifier.align(Alignment.CenterEnd).padding(end = 10.dp, bottom = 90.dp)) {
+                LiveActionRail(
+                    counts = pulse?.reactions ?: emptyMap(),
+                    handRaised = handRaised,
+                    chatOpen = chatOpen,
+                    onReact = ::sendReaction,
+                    onToggleHand = ::toggleHand,
+                    onToggleChat = { chatOpen = !chatOpen },
+                )
+            }
         }
 
-        // Floating chat — anchored bottom-left, NOT a sheet.
+        // Floating chat — draggable, collapsible to a bubble, NEVER a sheet
+        // and never covering the whole stage. Fills the whole screen as its
+        // own layer purely so it has real room to be dragged around in —
+        // it positions its own content, nothing here is `align`ed.
         if (live && !ended && streamId != null) {
-            LiveChatOverlay(
+            LiveFloatingChat(
                 visible = chatOpen,
                 messages = messages,
                 onSend = { body ->
@@ -418,14 +427,13 @@ fun LivePlayerScreen(
                             .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
                     }
                 },
-                modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 90.dp),
             )
         }
     }
 }
 
 @Composable
-private fun BroadcasterIdentityChip(name: String?, streamTitle: String, modifier: Modifier = Modifier) {
+private fun BroadcasterIdentityChip(name: String?, avatarUrl: String?, streamTitle: String, modifier: Modifier = Modifier) {
     val displayName = name?.takeIf { it.isNotBlank() } ?: "Nuru Place"
     Row(
         modifier
@@ -438,14 +446,28 @@ private fun BroadcasterIdentityChip(name: String?, streamTitle: String, modifier
             Modifier.size(26.dp).clip(CircleShape).background(Nuru.gold),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                displayName.trim().split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString(""),
-                style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold,
-            )
+            if (!avatarUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = avatarUrl, contentDescription = null,
+                    modifier = Modifier.size(26.dp).clip(CircleShape),
+                )
+            } else {
+                Text(
+                    displayName.trim().split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString(""),
+                    style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Spacer(Modifier.width(8.dp))
         Column {
-            Text(displayName, style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(displayName, style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(5.dp))
+                Box(
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.gold)
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                ) { Text("HOST", style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold) }
+            }
             if (streamTitle.isNotBlank()) {
                 Text(streamTitle, style = NuruType.micro, color = Color.White.copy(alpha = 0.75f))
             }

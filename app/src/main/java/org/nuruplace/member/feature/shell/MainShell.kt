@@ -707,7 +707,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // and heartbeat/live-ness travel with the navigation, not a
             // second fetch).
             composable(
-                "live-player?streamId={streamId}&url={url}&fallbackUrl={fallbackUrl}&title={title}&kind={kind}&live={live}&startedAt={startedAt}&viewers={viewers}&startedByName={startedByName}",
+                "live-player?streamId={streamId}&url={url}&fallbackUrl={fallbackUrl}&title={title}&kind={kind}&live={live}&startedAt={startedAt}&viewers={viewers}&startedByName={startedByName}&startedByAvatarUrl={startedByAvatarUrl}",
                 arguments = listOf(
                     navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("url") { type = NavType.StringType; nullable = true; defaultValue = null },
@@ -718,6 +718,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     navArgument("startedAt") { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument("viewers") { type = NavType.IntType; defaultValue = 0 },
                     navArgument("startedByName") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("startedByAvatarUrl") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { entry ->
                 val a = entry.arguments
@@ -731,6 +732,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     startedAt = a?.getString("startedAt"),
                     initialViewerCount = a?.getInt("viewers") ?: 0,
                     startedByName = a?.getString("startedByName")?.takeIf { it.isNotBlank() },
+                    startedByAvatarUrl = a?.getString("startedByAvatarUrl")?.takeIf { it.isNotBlank() },
                     myUserId = me?.profile?.userId,
                     onBack = { nav.popBackStack() },
                     onOpenReplays = { nav.navigate("live-replays") { popUpTo("home") } },

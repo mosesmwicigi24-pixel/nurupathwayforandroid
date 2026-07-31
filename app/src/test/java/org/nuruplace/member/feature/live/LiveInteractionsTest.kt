@@ -1,5 +1,7 @@
 package org.nuruplace.member.feature.live
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -57,5 +59,32 @@ class LiveInteractionsTest {
         assertEquals("accepted", myGuestStatus(guests, "u2"))
         assertNull(myGuestStatus(guests, "u3"))
         assertNull(myGuestStatus(guests, null))
+    }
+
+    // ── clampDragOffset — the floating chat overlay's drag math (owner
+    // taste pass, LiveFloatingChat) — pure so it's testable without a
+    // Compose/Robolectric harness, same posture as everything above. ──
+
+    private val container = Size(400f, 800f)
+    private val element = Size(220f, 180f)
+
+    @Test fun `an offset already inside the container is left untouched`() {
+        val offset = Offset(50f, 60f)
+        assertEquals(offset, clampDragOffset(offset, container, element))
+    }
+
+    @Test fun `a negative offset clamps to the top-left edge`() {
+        assertEquals(Offset(0f, 0f), clampDragOffset(Offset(-40f, -25f), container, element))
+    }
+
+    @Test fun `an offset past the far edge clamps so the element stays fully visible`() {
+        // container 400x800, element 220x180 -> max top-left is (180, 620)
+        assertEquals(Offset(180f, 620f), clampDragOffset(Offset(9000f, 9000f), container, element))
+    }
+
+    @Test fun `an element larger than its container never gets a negative max`() {
+        val hugeElement = Size(500f, 900f)
+        assertEquals(Offset(0f, 0f), clampDragOffset(Offset(-10f, -10f), container, hugeElement))
+        assertEquals(Offset(0f, 0f), clampDragOffset(Offset(999f, 999f), container, hugeElement))
     }
 }

@@ -2628,3 +2628,177 @@ Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
 → BUILD SUCCESSFUL, 45 tests, 0 failures/errors (43 baseline + 2 new). Not
 pushed / no PR opened (isolated worktree `.worktrees/bcast-studio`, branch
 `feat/broadcast-studio`, built on top of origin/main #75).
+
+## 2026-07-31 — Nuru Live "taste pass": floating draggable chat, auto-collapsing guest banners, chrome polish, Audience picker, Live hub hero + My Broadcasts, end-of-broadcast stewardship (branch feat/live-taste, this repo only, on top of #73/#74/#76)
+
+Owner feedback + a TikTok Live reference session, run against the finished
+Nuru Live epic (L0→L4 + Broadcast Studio) — polish and information-
+architecture, no new wire surfaces beyond two small additive endpoints. All
+Nuru brand tones throughout (gold `Nuru.gold`/`goldGradient` — the gradient's
+middle stop is literally `0xC9A227` — navy `homeNavy`/`homeNavyGradient`,
+paper `Nuru.paper`); every feature from the L5/L6/Broadcast Studio arcs is
+still present, nothing was removed, only re-presented.
+
+**1. Auto-collapsing guest banners** (`LiveInteractions.kt`'s new
+`GuestStageBanner`, replacing the raw `when(myGuestState)` block in
+`LivePlayerScreen.kt`): the invite card and the "on stage soon" chip both
+start expanded and collapse to a small gold corner pill (`GoldCornerPill`)
+~3s later (`LaunchedEffect(status, expanded)`, re-arms itself every time
+`expanded` flips back to `true`) — tap the pill to expand again, which
+re-arms the same 3s timer. Keyed on `status` (invited/accepted) so accepting
+or declining swaps in a fresh banner that starts expanded, satisfying "same
+for the invite card after responding" without extra state.
+
+**2 + 3. Shared floating draggable chat** (`LiveInteractions.kt`'s new
+`LiveFloatingChat`, ~180 lines) — the single biggest change. Replaces BOTH
+the viewer's old fixed bottom-left `LiveChatOverlay` (deleted) AND the
+broadcaster's `ModalBottomSheet`-based `LiveBroadcastChatSheet` (deleted from
+`LiveBroadcastInteractions.kt`) with one presentational composable used from
+both `LivePlayerScreen.kt` and `LiveBroadcastScreen.kt`. Sized ~55%w×26%h by
+default, draggable by its header only (`detectDragGestures`, keyed on the
+measured container `IntSize` so a rotation/resize restarts the gesture
+detector with fresh bounds rather than dragging against stale ones),
+collapsible to a 52dp chat-bubble FAB with a small gold unread dot — the FAB
+is independently draggable the same way. Offsets live in plain `remember`
+(no key), so position survives collapse/expand for the life of the screen —
+"remembered in-session," never persisted. The clamp math itself
+(`clampDragOffset(offset, containerSize, elementSize)`) is a pure top-level
+function specifically so it's unit-testable without Compose/Robolectric —
+4 new cases in `LiveInteractionsTest.kt` (inside bounds untouched, negative
+clamps to the origin, an offset past the far edge clamps so the element
+stays fully visible, an element larger than its own container never
+produces a negative max). The broadcaster side required lifting message
+polling (3s since-cursor, same cadence as the viewer) out of the deleted
+sheet and into `LiveBroadcastScreen.kt` itself, mirroring exactly what
+`LivePlayerScreen.kt` already did — the presentational component only ever
+takes `messages`/`onSend` as props, per this file's existing "pure UI, wire
+calls stay in the screen" rule.
+
+**4. Chrome polish**: `BroadcasterIdentityChip` (`LivePlayerScreen.kt`) now
+prefers a real Coil `AsyncImage` avatar (`startedByAvatarUrl`, new
+forward-tolerant nullable field on `LiveNowRow`/threaded through
+`liveNowRoute`/the `live-player` nav route/`LivePlayerScreen`'s params) over
+gold initials, and carries a small gold "HOST" tag next to the name. Every
+round chrome control — the viewer's action rail buttons AND the broadcaster
+HUD's mic/End/flip/source/hand/chat circles — now share one
+`LiveChromeCircleSize` (48dp) / `LiveChromeCircleBg` (`Color.Black` @ 0.38
+alpha) constant pair instead of three slightly different sizes/opacities
+across two files. A new `GentleEntrance` wrapper (fade + 10dp rise, 360ms)
+wraps the LIVE pill, host chip, and action rail (viewer) and the HUD's top
+pill + bottom controls row (broadcaster) — Reduce Motion (already-detected
+via the existing `isReduceMotionEnabled`) just shows everything immediately,
+consistent with every other motion decision already in this file. The
+eye-glyph "· 👁 N" watching pill next to LIVE already existed from the L5
+session — left as-is, it already matched the ask.
+
+**5. Go Live Audience picker** (`GoLiveSetupSheet.kt`): the old cramped
+"Where" chip pair (Church / My cell, shown only when BOTH were eligible) is
+now an "Audience" section of full-width rows (`AudienceOption` — navy when
+selected, a gold check dot), one row per scope the member is actually
+eligible for, so a member with only one eligible scope now sees a labeled
+row instead of no picker at all. The cell row's subtitle names the actual
+cell ("Only $name sees this") by reusing the SAME `GET /me/cell-summary`
+fetch `CellInfoScreen.kt` already makes — no new endpoint. Wire contract is
+byte-for-byte unchanged (`scope` "church"|"cell" + `cell_id`); this is
+presentation only. Honest limit: the member data model only carries one
+`cellGroupId` per user (no `leader_assignments` list ever reaches the
+client — `GoLiveShared.kt`'s own header comment already flags this), so
+"the broadcaster's own cells" is really "the broadcaster's own cell,"
+singular, same limit the L3 session already documented.
+
+**6. Live hub redesign** (`LiveTabScreen.kt`, effectively rewritten): a navy
+hero "studio card" (`LiveHeroCard`) fronts the tab — Fraunces `NuruType.
+display` "Nuru Live", a warm caption, and a large gold `BreathingGoLivePill`
+(a second, slightly-scaled-up gold pill behind the real one, animating
+scale 1→1.3 / alpha 0.4→0 on an infinite 1900ms loop — skipped entirely
+under Reduce Motion, not just sped up, since it's purely decorative). While
+a CHURCH-scope stream is live (`LiveDiscoveryCenter.streams`, the same
+app-wide source of truth the AppLiveBar already uses — refreshed once more
+on entering this tab for a snappier cold-open rather than waiting out
+MainShell's 75s cadence) the hero SWAPS to a "● LIVE now — Watch/Return"
+pill: "Return" when `BroadcastController`'s own active session IS that
+church stream (i.e. it's the broadcaster's own, still running), "Watch"
+otherwise. The "BROADCAST" kicker's owner-reported clipping got a defensive
+fix (an explicit `Spacing.sm` top margin ahead of Scaffold's own status-bar
+inset) — honest limit: root cause was never conclusively reproduced against
+a real device/emulator screenshot in this text-only session, so this is
+insurance, not a proven fix; flagged for a follow-up visual check.
+"Replays" → **My Broadcasts**: `GET /live/recordings/mine` (new
+`MemberApi.getMyLiveRecordings`, already staged pre-session) replaces the
+old `ReplaysList` reuse (which showed every PUBLIC replay, not just this
+broadcaster's own — the viewer-facing `LiveReplaysScreen`/`ReplaysList` are
+untouched and still serve that separate purpose from `EndedState`'s "View
+Replays"). Each row (navy tile + kind glyph, Fraunces `NuruType.rowTitle`,
+date + scope chip — `replayDate()` in `LiveReplaysScreen.kt` widened from
+`private` to `internal` so both files share one formatter) carries a ⋮
+`DropdownMenu` (Play · Share · Delete), matching `PrayerJournalScreen.kt`'s
+existing menu idiom: Share resolves `recording_url` to an ABSOLUTE url via
+`Net.client.resolveMediaUrl` (which resolves against `BuildConfig.
+API_BASE_URL`'s origin — `https://pathway.nuruplace.org` in prod, so this
+satisfies the "prefix https://pathway.nuruplace.org" ask exactly in
+production while staying environment-correct in dev/staging too) before
+handing it to a plain `ACTION_SEND` system share sheet; Delete opens the
+"Delete '<title>'? / The recording will be gone forever. / Delete forever /
+Cancel" confirm dialog → `DELETE /live/recordings/{id}` (new `MemberApi.
+deleteLiveRecording`, `recording_id == stream_id`, also pre-staged) → the
+list reloads in place via `AsyncContent`'s own `reload` callback. Tasteful
+empty state ("Nothing here yet / Every stream you go live with is saved
+here automatically").
+
+**7. End-of-broadcast stewardship** (`LiveBroadcastScreen.kt`'s
+`SummaryView`, now takes `streamId`): "Keep in Replays" is the gold,
+default-emphasis action (simply calls `onDone` — dismissing the whole
+screen without ever touching Delete keeps the recording, exactly like it
+always implicitly did); "Delete recording" is a quiet, low-emphasis red text
+link gated behind the SAME "gone forever" confirm dialog `LiveTabScreen.kt`
+uses, calling `DELETE /live/recordings/{streamId}` then `onDone`.
+Dismissing the confirm dialog itself (tap outside / Cancel) does not
+delete — "dismissing keeps," per the ask.
+
+**Files**: `feature/live/LiveInteractions.kt` (`clampDragOffset`,
+`LiveFloatingChat`, `GuestStageBanner`/`GoldCornerPill`, `GentleEntrance`,
+`LiveChromeCircleSize`/`Bg`, `RailButton` resized), `feature/live/
+LivePlayerScreen.kt` (`startedByAvatarUrl` param, `BroadcasterIdentityChip`
+avatar+HOST tag, `GuestStageBanner`/`LiveFloatingChat` wiring, `LiveChatOverlay`
+removed), `feature/live/LiveBroadcastScreen.kt` (lifted chat-message polling,
+`LiveFloatingChat` wiring replacing the sheet, HUD buttons resized,
+`GentleEntrance` wrapping, `SummaryView` stewardship actions + confirm
+dialog), `feature/live/LiveBroadcastInteractions.kt` (`LiveBroadcastChatSheet`
++ `ChatBubbleRow` deleted, unused imports trimmed), `feature/live/
+GoLiveSetupSheet.kt` (`AudienceOption`, cell-name fetch), `feature/live/
+LiveTabScreen.kt` (rewritten — `LiveHeroCard`/`BreathingGoLivePill`/
+`LiveNowPill`, `MyBroadcastsList`/`MyBroadcastRow`), `feature/live/
+LiveReplaysScreen.kt` (`replayDate` → `internal`), `feature/live/
+LiveRoutes.kt` (`startedByAvatarUrl` threaded through `liveNowRoute`),
+`feature/shell/MainShell.kt` (`startedByAvatarUrl` nav arg), `data/net/
+LiveDtos.kt` + `data/net/MemberApi.kt` (`startedByAvatarUrl`,
+`getMyLiveRecordings`, `deleteLiveRecording` — all three already staged by
+the predecessor session before it was interrupted; verified compiling and
+wired up end-to-end here), `app/src/test/java/.../LiveInteractionsTest.kt`
+(+4: `clampDragOffset` cases).
+
+**Predecessor session**: killed twice by transient API errors mid-rewrite
+of `LiveInteractions.kt`. Its only surviving work was the wire layer
+(`LiveDtos.kt`'s `startedByAvatarUrl`, `MemberApi.kt`'s
+`getMyLiveRecordings`/`deleteLiveRecording`) — no Compose changes had
+landed. This session kept that wire layer as-is and built the entire taste
+pass (all 7 items) on top of it.
+
+**Honest limits**: (a) the hero kicker inset fix is defensive, not a
+verified root-cause fix — no device/emulator screenshot was taken this
+session (text-only Kotlin/Gradle tooling); (b) "the broadcaster's own
+cells" is really "cell," singular — see item 5; (c) Share is a plain
+`ACTION_SEND` of the absolute url, not an actual on-device file download —
+matches the letter of "system share with ABSOLUTE url" but a user wanting a
+literal local file will need a share-target app that fetches it; (d) the
+chat panel's default resting position is an approximation (~170dp bottom
+margin, tuned by eye against the existing chrome layout in both files, not
+measured against a running emulator) — good enough to never overlap the
+rail/HUD in the common case, but not derived from real on-screen
+measurement.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 49 tests, 0 failures/errors (45 baseline + 4 new). Not
+pushed / no PR opened (isolated worktree `.worktrees/live-taste`, branch
+`feat/live-taste`, built on top of origin/main #73/#74/#76).
