@@ -71,7 +71,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.LiveMessageRow
 import org.nuruplace.member.data.net.LivePulse
+import org.nuruplace.member.data.net.LiveSendMessageBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.LivePulsingDot
 import org.nuruplace.member.ui.components.PrimaryButton
@@ -208,6 +211,7 @@ fun LiveBroadcastScreen(
     }
 
     // ── L5 interactions (docs/LIVE_INTERACTIVE.md) — broadcaster side ──────
+    val scope = rememberCoroutineScope()
     var pulse by remember { mutableStateOf<LivePulse?>(null) }
     var seenReactionKeys by remember { mutableStateOf<Set<String>?>(null) }
     var reduceMotionReactionTotal by remember { mutableIntStateOf(0) }
@@ -219,6 +223,24 @@ fun LiveBroadcastScreen(
     suspend fun refreshPulseNow() {
         val p = runCatching { Net.client.api.getLivePulse(streamId) }.getOrNull() ?: return
         pulse = p
+    }
+
+    // Chat — same shared floating overlay the viewer uses (LiveInteractions.kt's
+    // LiveFloatingChat), NOT the earlier ModalBottomSheet: it must never cover
+    // the broadcaster's own stage. Lifted up here (rather than living inside
+    // the sheet, the way LiveBroadcastChatSheet used to own it) since the
+    // presentational component now just takes messages/onSend as props.
+    var chatMessages by remember { mutableStateOf<List<LiveMessageRow>>(emptyList()) }
+    var chatCursor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(streamId) {
+        while (true) {
+            delay(3_000)
+            val res = runCatching { Net.client.api.getLiveMessages(streamId, chatCursor) }.getOrNull()
+            if (res != null && res.messages.isNotEmpty()) {
+                chatMessages = (chatMessages + res.messages).takeLast(60)
+                chatCursor = res.messages.last().sentAt
+            }
+        }
     }
 
     LaunchedEffect(streamId) {
@@ -250,6 +272,7 @@ fun LiveBroadcastScreen(
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when {
             phase == BroadcastPhase.SUMMARY -> SummaryView(
+                streamId = streamId,
                 title = title,
                 elapsedSec = elapsedSec,
                 peakViewers = peakViewers,
@@ -312,6 +335,7 @@ fun LiveBroadcastScreen(
                         onEndTapped = { showEndConfirm = true },
                         onHandsTapped = { showHandsSheet = true },
                         onChatTapped = { showChatSheet = true },
+                        reduceMotion = reduceMotion,
                     )
 
                     if (phase == BroadcastPhase.LIVE || phase == BroadcastPhase.RECONNECTING) {
@@ -383,13 +407,21 @@ fun LiveBroadcastScreen(
             )
         }
 
-        if (showChatSheet) {
-            LiveBroadcastChatSheet(
-                streamId = streamId,
-                myUserId = myUserId,
-                onDismiss = { showChatSheet = false },
-            )
-        }
+        // Fills the whole stage as its own hit-testable layer purely so it has
+        // room to be dragged around in — LiveFloatingChat positions its own
+        // content, nothing here is `align`ed, and it renders nothing when
+        // collapsed-away's `visible` is false, so it never blocks taps on the
+        // camera preview/HUD when chat is closed.
+        LiveFloatingChat(
+            visible = showChatSheet,
+            messages = chatMessages,
+            onSend = { body ->
+                scope.launch {
+                    runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
+                        .onSuccess { chatMessages = (chatMessages + it).takeLast(60); chatCursor = it.sentAt }
+                }
+            },
+        )
 
         if (showEndConfirm) {
             AlertDialog(
@@ -453,30 +485,33 @@ private fun LiveHudOverlay(
     onEndTapped: () -> Unit,
     onHandsTapped: () -> Unit,
     onChatTapped: () -> Unit,
+    reduceMotion: Boolean,
 ) {
     Box(Modifier.fillMaxSize()) {
         // Top-left — LIVE pill + duration + watching count.
-        Row(
-            Modifier.align(Alignment.TopStart).statusBarsPadding().padding(Spacing.md)
-                .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            LivePulsingDot()
-            Text(
-                when (phase) {
-                    BroadcastPhase.RECONNECTING -> "RECONNECTING…"
-                    BroadcastPhase.CONNECTING -> "CONNECTING…"
-                    else -> "LIVE"
-                },
-                style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
-            )
-            if (phase == BroadcastPhase.LIVE) {
-                Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
-                Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-                Text("$viewerCount watching", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+        GentleEntrance(reduceMotion, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(Spacing.md)) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                LivePulsingDot()
+                Text(
+                    when (phase) {
+                        BroadcastPhase.RECONNECTING -> "RECONNECTING…"
+                        BroadcastPhase.CONNECTING -> "CONNECTING…"
+                        else -> "LIVE"
+                    },
+                    style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
+                )
+                if (phase == BroadcastPhase.LIVE) {
+                    Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                    Text(mmss(elapsedSec), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                    Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
+                    Text("$viewerCount watching", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
+                }
             }
         }
 
@@ -492,28 +527,32 @@ private fun LiveHudOverlay(
         // Bottom-center — [mic, End, flip, source, ✋, 💬], above the
         // gesture-nav inset. Same left-to-right order the iOS port's
         // controlsRow uses (End right after mic, not pinned trailing).
-        Row(
-            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = Spacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        ) {
-            HudIconButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", onToggleMute)
+        GentleEntrance(reduceMotion, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = Spacing.lg)) {
             Row(
-                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.danger).clickable { onEndTapped() }
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
-            ) { Text("End", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.Bold) }
-            if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
-            if (isVideo) HudIconButton(Icons.Filled.Tune, "Broadcast source", onSourceTapped)
-            HudHandButton(count = handCount, onClick = onHandsTapped)
-            HudEmojiIconButton("💬", "Live chat", onChatTapped)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                HudIconButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", onToggleMute)
+                Row(
+                    Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.danger).clickable { onEndTapped() }
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                ) { Text("End", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.Bold) }
+                if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
+                if (isVideo) HudIconButton(Icons.Filled.Tune, "Broadcast source", onSourceTapped)
+                HudHandButton(count = handCount, onClick = onHandsTapped)
+                HudEmojiIconButton("💬", "Live chat", onChatTapped)
+            }
         }
     }
 }
 
+// Sizes/opacity shared with the viewer's action rail (LiveChromeCircleSize/Bg,
+// LiveInteractions.kt) — soft translucent 48dp circles, one visual system
+// across both the viewer and broadcaster stages (owner taste pass).
 @Composable
 private fun HudIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+        Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(20.dp)) }
 }
@@ -521,7 +560,7 @@ private fun HudIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
 @Composable
 private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+        Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Text(emoji, fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = label }) }
 }
@@ -531,9 +570,9 @@ private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit
  *  count > 0, capped display at 99). */
 @Composable
 private fun HudHandButton(count: Int, onClick: () -> Unit) {
-    Box(Modifier.size(44.dp)) {
+    Box(Modifier.size(LiveChromeCircleSize)) {
         Box(
-            Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+            Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
             contentAlignment = Alignment.Center,
         ) { Text("✋", fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
         if (count > 0) {
@@ -584,8 +623,29 @@ private fun FailedView(reason: String?, onRetry: () -> Unit, onEnd: () -> Unit) 
     }
 }
 
+/**
+ * End-of-broadcast stewardship (owner taste pass): once the broadcast has
+ * ended, the recording is already sitting in Replays server-side — this is
+ * just the ONE moment to say so plainly and offer a way out. "Keep in
+ * Replays" is gold and the assumed default (tapping Done without ever
+ * touching Delete — i.e. just dismissing this screen — keeps the recording,
+ * exactly like it always has); "Delete recording" is a quiet, low-emphasis
+ * red link, gated behind the same "gone forever" confirm dialog the "My
+ * Broadcasts" list uses (LiveTabScreen.kt).
+ */
 @Composable
-private fun SummaryView(title: String, elapsedSec: Int, peakViewers: Int, endedInBackground: Boolean, onDone: () -> Unit) {
+private fun SummaryView(
+    streamId: String,
+    title: String,
+    elapsedSec: Int,
+    peakViewers: Int,
+    endedInBackground: Boolean,
+    onDone: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(Spacing.lg)) {
             Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
@@ -611,8 +671,54 @@ private fun SummaryView(title: String, elapsedSec: Int, peakViewers: Int, endedI
                 Text(it, style = NuruType.caption, color = Color.White.copy(alpha = 0.6f), textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(24.dp))
-            PrimaryButton("Done", onClick = onDone)
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
+                    .background(if (!deleting) Nuru.goldGradient else androidx.compose.ui.graphics.SolidColor(Nuru.ink300))
+                    .then(if (!deleting) Modifier.clickable { onDone() } else Modifier)
+                    .padding(vertical = Spacing.md),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (deleting) "Please wait…" else "Keep in Replays",
+                    style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold,
+                )
+            }
+            if (streamId.isNotBlank()) {
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Delete recording", style = NuruType.cardCta, color = Color.White.copy(alpha = 0.55f),
+                    modifier = Modifier.clickable(enabled = !deleting) { showDeleteConfirm = true }.padding(Spacing.sm),
+                )
+            }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false }, // dismissing keeps the recording, per spec
+            title = { Text("Delete “${title.ifBlank { "Nuru Live" }}”?") },
+            text = { Text("The recording will be gone forever.") },
+            confirmButton = {
+                Text(
+                    "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        showDeleteConfirm = false
+                        deleting = true
+                        scope.launch {
+                            runCatching { Net.client.api.deleteLiveRecording(streamId) }
+                            deleting = false
+                            onDone()
+                        }
+                    }.padding(Spacing.sm),
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Cancel", style = NuruType.cardCta, color = Nuru.ink600,
+                    modifier = Modifier.clickable { showDeleteConfirm = false }.padding(Spacing.sm),
+                )
+            },
+        )
     }
 }
 

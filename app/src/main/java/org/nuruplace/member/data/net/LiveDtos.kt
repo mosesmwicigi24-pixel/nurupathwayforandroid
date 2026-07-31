@@ -24,6 +24,11 @@ data class LiveNowRow(
     // (the flicker-to-previous-broadcast root cause + client mitigation).
     val hlsFallbackUrl: String? = null,
     val startedByName: String? = null,
+    // Forward-tolerant, speculative: the taste-pass viewer chrome (LivePlayerScreen's
+    // BroadcasterIdentityChip) prefers a real avatar over gold initials the moment the
+    // server starts sending one — defaults to null and falls back gracefully today,
+    // same idiom as InitialsAvatar (LiveBroadcastInteractions.kt) for hands/guests.
+    val startedByAvatarUrl: String? = null,
     val viewerCount: Int = 0,
 ) {
     val isAudio: Boolean get() = kind == "audio"
