@@ -698,6 +698,17 @@ interface MemberApi {
         @Query("cell_id") cellId: String? = null,
     ): Envelope<LiveRecordingRow>
 
+    // "My Broadcasts" (Live hub taste pass) — recordings the caller started,
+    // regardless of scope. Same row shape as GET /live/recordings; recording_id
+    // == stream_id (see deleteLiveRecording below).
+    @GET("live/recordings/mine")
+    suspend fun getMyLiveRecordings(): Envelope<LiveRecordingRow>
+
+    // Broadcaster-only server-side. Idempotent — a repeat delete of an
+    // already-gone recording is a no-op, never surfaced as an error to the UI.
+    @DELETE("live/recordings/{id}")
+    suspend fun deleteLiveRecording(@Path("id") recordingId: String): Unit
+
     // --- Nuru Live — broadcaster routes (L3). RBAC-gated server-side
     // (live:go — 403 FORBIDDEN_SCOPE if missing); the client only mirrors the
     // gate to hide the UI (permissions.contains("live:go")), never trusts it.
