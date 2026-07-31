@@ -303,6 +303,7 @@ fun LivePlayerScreen(
     // from bursting as particles the instant the screen opens.
     var seenReactionKeys by remember(streamId) { mutableStateOf<Set<String>?>(null) }
     var messages by remember(streamId) { mutableStateOf<List<LiveMessageRow>>(emptyList()) }
+    var messageCursor by remember(streamId) { mutableStateOf<String?>(null) }
     // Optimistic, purely-local chat sends (latency lever — owner ask: "make
     // interactions... feel instant by rendering them optimistically before
     // the server round trip confirms"). A send appends here immediately;
@@ -500,6 +501,11 @@ fun LivePlayerScreen(
         runCatching {
             val am = context.getSystemService(AudioManager::class.java) ?: return@runCatching
             am.mode = if (guestStageState is GuestStageState.Live) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
+            // isSpeakerphoneOn is deprecated (API 31+ prefers
+            // setCommunicationDevice) but remains the only mechanism that
+            // works across this app's full minSdk 26 range — same tradeoff
+            // VoiceRecorder.kt already accepts for MediaRecorder().
+            @Suppress("DEPRECATION")
             am.isSpeakerphoneOn = speakerOn
         }
     }
