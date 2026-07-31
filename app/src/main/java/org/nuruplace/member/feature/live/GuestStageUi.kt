@@ -11,18 +11,13 @@ package org.nuruplace.member.feature.live
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,7 +40,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -203,7 +196,15 @@ fun GuestConnectingChip(label: String, modifier: Modifier = Modifier) {
     }
 }
 
-// ── Host side: the draggable rail of guest tiles ────────────────────────────
+// ── Host side: per-guest tile state ─────────────────────────────────────────
+// L7 — the draggable HostGuestRail that used to live here (a fixed strip
+// scrolled/dragged independently of the actual video) is GONE, replaced by
+// LiveStageView.kt's Zoom-style stage: one full-bleed main tile (whoever's
+// spotlighted) + a rail down the right edge for everyone else, tap-to-expand
+// reversible — see that file's header for why (mirrors iOS's L7 removal of
+// GuestTileRail.swift in favor of LiveStageView.swift). HostGuestTileState
+// itself is unchanged and still the shape LiveBroadcastScreen.kt builds per
+// accepted guest; only the composable that CONSUMED it moved.
 
 data class HostGuestTileState(
     val guest: LiveGuestRow,
@@ -221,122 +222,3 @@ data class HostGuestTileState(
     val connectionState: WhepConnectionState = WhepConnectionState.Connecting,
     val onRetry: () -> Unit = {},
 )
-
-/** Up to [MAX_GUESTS] rounded ~96x128dp tiles (name label under each),
- *  horizontally scrollable since 6 tiles don't fit most phone widths, the
- *  whole strip draggable by its left-edge grip handle (mirrors
- *  LiveFloatingChat's "only the header/handle drags" idiom so a horizontal
- *  scroll gesture on the tiles themselves is never mistaken for a
- *  reposition drag). Renders nothing when [tiles] is empty. */
-@Composable
-fun HostGuestRail(tiles: List<HostGuestTileState>, modifier: Modifier = Modifier) {
-    if (tiles.isEmpty()) return
-    val density = LocalDensity.current
-    var containerSize by remember { mutableStateOf(IntSize.Zero) }
-    var railOffset by remember { mutableStateOf<Offset?>(null) }
-    val scrollState = rememberScrollState()
-
-    Box(modifier.fillMaxSize().onGloballyPositioned { containerSize = it.size }) {
-        if (containerSize == IntSize.Zero) return@Box
-        val containerPx = Size(containerSize.width.toFloat(), containerSize.height.toFloat())
-        val tileWidthPx = with(density) { 96.dp.toPx() }
-        val tileHeightPx = with(density) { 128.dp.toPx() }
-        val gripWidthPx = with(density) { 18.dp.toPx() }
-        val railWidthPx = (containerPx.width * 0.72f).coerceAtMost(gripWidthPx + tileWidthPx * 2.4f)
-        val elementPx = Size(railWidthPx, tileHeightPx)
-        val topMarginPx = with(density) { 110.dp.toPx() }
-        val default = Offset((containerPx.width - railWidthPx) / 2f, topMarginPx)
-        val current = clampDragOffset(railOffset ?: default, containerPx, elementPx)
-        val railWidthDp = with(density) { railWidthPx.toDp() }
-        val tileHeightDp = with(density) { tileHeightPx.toDp() }
-
-        Row(
-            Modifier
-                .offset { IntOffset(current.x.roundToInt(), current.y.roundToInt()) }
-                .size(width = railWidthDp, height = tileHeightDp),
-        ) {
-            Box(
-                Modifier.width(18.dp).fillMaxSize()
-                    .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .pointerInput(containerSize) {
-                        detectDragGestures { change, drag ->
-                            change.consume()
-                            val base = railOffset ?: default
-                            railOffset = clampDragOffset(base + drag, containerPx, elementPx)
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) { Text("⠿", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp) }
-
-            Row(
-                Modifier.weight(1f).fillMaxSize().horizontalScroll(scrollState),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                tiles.take(MAX_GUESTS).forEach { tile ->
-                    key(tile.guest.userId) {
-                        GuestTile(tile)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GuestTile(tile: HostGuestTileState) {
-    Box(
-        Modifier.size(width = 96.dp, height = 128.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black),
-    ) {
-        // Even a guest whose WHEP subscribe is still retrying (or has failed)
-        // still gets its renderer wired (harmless — no track feeds it until
-        // one actually arrives), so a LATER retry that succeeds without
-        // recomposing this tile still lights up on its own.
-        WebRtcSurfaceView(
-            modifier = Modifier.fillMaxSize(),
-            onRendererReady = tile.onRendererReady,
-            onRendererReleased = tile.onRendererReleased,
-        )
-        // Honest states (2026-07-31 fix): Connecting reads as "still trying"
-        // — a subtle indicator, never the alarming "Couldn't connect" — for
-        // as long as WhepSubscriber's own retry loop is within its window
-        // (production logs proved a guest's publish routinely lands seconds
-        // after the host's first WHEP attempt; that used to look identical
-        // to a permanent failure). Live shows nothing extra — the video
-        // speaks for itself. Only Error gets the warning chip, WITH a
-        // tappable Retry affordance instead of a dead end.
-        when (val state = tile.connectionState) {
-            is WhepConnectionState.Connecting -> {
-                Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Connecting…", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.SemiBold)
-                }
-            }
-            is WhepConnectionState.Error -> {
-                Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable { tile.onRetry() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("⚠︎ Couldn't connect", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 6.dp))
-                        Text("Tap to retry", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                    }
-                }
-            }
-            is WhepConnectionState.Live -> {} // nothing extra — the renderer's own video is the whole story.
-        }
-        Text(
-            tile.guest.fullName.ifBlank { "Guest" },
-            style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.45f))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-        )
-    }
-}

@@ -274,10 +274,10 @@ fun LiveBroadcastScreen(
 
     // ── L6b — real guest video (docs/LIVE_INTERACTIVE.md): one WhepSubscriber
     // per accepted guest whose pulse row carries a whepUrl (owner-only field),
-    // added/removed as that set changes; each renders into a tile in
-    // HostGuestRail below. GuestAudioMixer.kt is where their decoded audio
-    // also rides the outgoing RTMP mix — this screen only owns the video
-    // rendering + subscription lifecycle. ──────────────────────────────────
+    // added/removed as that set changes; each renders into a tile in the
+    // LiveStage Zoom-style stage below (LiveStageView.kt). GuestAudioMixer.kt
+    // is where their decoded audio also rides the outgoing RTMP mix — this
+    // screen only owns the video rendering + subscription lifecycle. ───────
     val whepSubscribers = remember(streamId) { mutableStateMapOf<String, WhepSubscriber>() }
     // Tracks each subscriber's OWN start() job so a guest that drops out of
     // the pulse while its start() is still in flight gets that job cancelled
@@ -359,6 +359,15 @@ fun LiveBroadcastScreen(
         }
     }
 
+    // L7 — the SAME spotlight/mute state the composited RTMP frame is built
+    // from (GuestStageCompositor.reflow()), collected here so LiveStage
+    // (the host's own on-screen stage, below) renders the identical
+    // arrangement the congregation receives. Collecting at THIS level
+    // (rather than inside LiveStage itself) keeps that composable a pure
+    // "given this data, render this UI" function.
+    val stageSpotlightState by GuestStageCompositor.spotlight.collectAsState()
+    val stageMutedGuests by GuestStageCompositor.mutedGuests.collectAsState()
+
     // Hardware/gesture back must never silently abandon a live broadcast —
     // route it through the same confirmation as the End button.
     BackHandler(enabled = phase == BroadcastPhase.LIVE || phase == BroadcastPhase.RECONNECTING || phase == BroadcastPhase.CONNECTING) {
@@ -390,18 +399,37 @@ fun LiveBroadcastScreen(
             else -> {
                 if (isVideo) {
                     if (state.source == BroadcastSource.CAMERA) {
-                        AndroidView(
+                        // L7 — LiveStage owns BOTH the host's own camera
+                        // tile AND the guest rail/spotlight together (see
+                        // LiveStageView.kt's header for why they're one
+                        // composable now, not a raw full-screen preview
+                        // plus a separately-positioned HostGuestRail drawn
+                        // on top). tapStageTile is GuestStageCompositor's
+                        // single entry point — the SAME call the composited
+                        // RTMP frame's own spotlight state is driven from,
+                        // so the host's own screen and what viewers receive
+                        // can never independently drift.
+                        LiveStage(
+                            guestTiles = guestTiles,
+                            spotlightGuestId = stageSpotlightState.spotlightGuestId,
+                            mutedGuestIds = stageMutedGuests,
+                            onTapHost = { GuestStageCompositor.tapStageTile(null) },
+                            onTapGuest = { guestId -> GuestStageCompositor.tapStageTile(guestId) },
                             modifier = Modifier.fillMaxSize(),
-                            factory = { ctx ->
-                                SurfaceView(ctx).apply {
-                                    holder.addCallback(object : SurfaceHolder.Callback {
-                                        override fun surfaceCreated(h: SurfaceHolder) { BroadcastController.attachPreview(this@apply) }
-                                        override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) {}
-                                        override fun surfaceDestroyed(h: SurfaceHolder) { BroadcastController.detachPreview() }
-                                    })
-                                }
-                            },
-                        )
+                        ) {
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+                                factory = { ctx ->
+                                    SurfaceView(ctx).apply {
+                                        holder.addCallback(object : SurfaceHolder.Callback {
+                                            override fun surfaceCreated(h: SurfaceHolder) { BroadcastController.attachPreview(this@apply) }
+                                            override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) {}
+                                            override fun surfaceDestroyed(h: SurfaceHolder) { BroadcastController.detachPreview() }
+                                        })
+                                    }
+                                },
+                            )
+                        }
                     } else {
                         // Plain screen share, not Document — nothing to
                         // preview locally besides a calm backdrop; the
@@ -456,10 +484,6 @@ fun LiveBroadcastScreen(
                         }
                     }
 
-                    // L6b — real guest video, draggable rail of up to 6 tiles
-                    // over the preview (GuestStageUi.kt). Renders nothing
-                    // when no guest currently has live video.
-                    HostGuestRail(guestTiles, Modifier.fillMaxSize())
                 } else if (isVideo) {
                     // Minimal LIVE indicator (top) + mute/switch-back/End
                     // (bottom) — see ScreenModeControls' header comment for
