@@ -165,11 +165,12 @@ class WhepSubscriber(private val context: Context, private val guestId: String) 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** Attaches/detaches the tile's SurfaceViewRenderer independently of
-     *  [start]/[stop] — the host's guest rail (HostGuestRail, GuestStageUi.kt)
-     *  composes its AndroidView (and therefore creates the renderer) on
-     *  Compose's own schedule, which may land before OR after this
-     *  subscriber's remote track actually arrives via onTrack. Whichever
-     *  happens second wires the sink; harmless no-op the other way. */
+     *  [start]/[stop] — the host's Zoom-style stage (LiveStage,
+     *  LiveStageView.kt) composes its AndroidView (and therefore creates
+     *  the renderer) on Compose's own schedule, which may land before OR
+     *  after this subscriber's remote track actually arrives via onTrack.
+     *  Whichever happens second wires the sink; harmless no-op the other
+     *  way. */
     fun attachRenderer(renderer: SurfaceViewRenderer) {
         attachedRenderer = renderer
         remoteVideoTrack?.addSink(renderer)
