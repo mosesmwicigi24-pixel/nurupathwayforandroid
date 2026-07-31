@@ -3953,3 +3953,252 @@ state transition to DISCONNECTED/FAILED/CLOSED; if MediaMTX ever tears down
 a WHEP session in a way that leaves ICE looking healthy (no such case is in
 the log evidence), that specific drop wouldn't be caught until the next
 unrelated signal.
+
+## 2026-07-31 — Nuru Live L7: Zoom-style stage (host+guest compositing,
+no more portrait letterbox) + full iOS parity sweep (branch
+feat/live-stage-layout, this repo only, on top of #73/#74/#76/#78/L6b/L6c/
+host-stability/#85/#86/#87/#88/#89/#90)
+
+**Starting point**: a previous agent session was killed mid-task by an
+infrastructure error. Its work survived and compiled clean:
+`GuestStageCompositor.kt` already had the FULL fixed-slot GL-filter
+compositor mechanism (main slot 0 + `RAIL_SLOT_COUNT` rail slots,
+`TileRect`/`mainTileRect`/`railTileRects` pure layout math, the
+`StageSpotlightState`/`promoteSpotlight`/`demoteSpotlight`/
+`toggleSpotlight`/`reconcileSpotlightOnGuestsChanged`/`railItems` spotlight
+state machine, alpha-fade slot reassignment, per-guest name plates with a
+best-effort mute proxy), plus a new `StageTileFilterRender.kt` +
+`stage_rail_fragment.glsl` (a custom RootEncoder object filter with a
+rounded-corner + subtle-border fragment shader for the rail tiles). It
+stopped at the exact moment it was about to write the Compose UI — no
+`LiveStageView.kt`-equivalent existed, and the host's own on-screen stage
+was still the OLD draggable `HostGuestRail` (GuestStageUi.kt), completely
+disconnected from the spotlight state the compositor already had.
+
+**Owner report (live two-device test, root cause)**: "when now you invite
+the person, the 1080x1920 portrait seems to be lost a bit, and the host
+video is completely replaced by invited guest." iOS (nuru-member-ios
+origin/main 4ed9883, PR #106, same day) had ALREADY shipped and root-caused
+the Android-side analogue of both defects:
+- **Portrait loss** — a guest's non-matching-aspect track (e.g. landscape)
+  got aspect-FIT (letterboxed) instead of aspect-FILLED when it became the
+  full-frame tile; the canvas dimensions themselves never moved. On
+  Android, the previous agent had ALREADY fixed the Android-specific
+  version of this (`EglRenderer.setLayoutAspectRatio` per slot, matched to
+  that slot's destination rect aspect) before this session started — see
+  `GuestStageCompositor.kt`'s own "DEFECT A" header section.
+- **Host replaced outright** — an automatic active-speaker/loudest-guest
+  auto-promotion swapped the WHOLE frame with no user control. The previous
+  agent had ALREADY replaced this with the `StageSpotlightState` manual
+  tap-only model before this session started (no auto-promotion code exists
+  anywhere in this codebase's live feature — verified by grep for
+  loudest/activeSpeaker/audioLevel-driven promotion; the only place
+  `GuestAudioMixer.currentLevels()` is read is the best-effort MUTED
+  indicator, never a spotlight decision).
+
+**This session's work — finishing the Compose UI (the part that was never
+started)**:
+- New `LiveStageView.kt`: the `LiveStage` composable — one full-bleed main
+  tile (host by default, or whoever's spotlighted) + a right-edge rail for
+  everyone else, replacing `GuestStageUi.kt`'s old free-draggable
+  `HostGuestRail`/`GuestTile` (removed entirely — dead code once `LiveStage`
+  took over). Every tile (host + each guest) is wrapped in a stable `key()`
+  so its underlying `AndroidView` (the host's RootEncoder `SurfaceView` /
+  each guest's `WebRtcSurfaceView`) is NEVER recreated on a spotlight
+  swap — only `Modifier.offset`/`size`/corner-radius animate via
+  `animateDpAsState(tween(SWAP_ANIM_MS, LinearOutSlowInEasing))`, matching
+  this app's existing motion grammar and iOS's identical 250ms tween. Rail
+  tiles get a higher `zIndex` than the main tile — not cosmetic: the main
+  tile is full-canvas, so without it a rail tile would paint underneath and
+  vanish. Geometry comes from the SAME `mainTileRect`/`railTileRects`/
+  `railItems` the compositor uses (fed this Box's own measured screen size
+  instead of the encoder's 1080x1920 canvas) — one algorithm, two canvas
+  sizes, so the host's own preview and what the congregation receives
+  cannot independently drift.
+- Renamed `GuestStageCompositor.setSpotlight` → `tapStageTile` — the single
+  entry point `LiveStage`'s host-tile tap (`guestId = null`) and every
+  guest-tile tap (`guestId = <userId>`) both call, mirroring iOS's
+  `BroadcastController.tapStageTile(_:)` naming exactly per the task brief.
+- Wired `LiveBroadcastScreen.kt`: collects `GuestStageCompositor.spotlight`
+  + (new) `GuestStageCompositor.mutedGuests` as top-level Compose state,
+  replaces the raw full-screen `SurfaceView` `AndroidView` + the
+  `HostGuestRail(...)` call with one `LiveStage(...)`, passing the existing
+  SurfaceView/SurfaceHolder.Callback block through as `LiveStage`'s
+  `hostVideo` content lambda (unchanged internals — `BroadcastController.
+  attachPreview/detachPreview` still owns the actual preview attach).
+- New `GuestStageCompositorTest.kt` (28 tests): `mainTileRect`/
+  `railTileRects` for 0–6 guests (in-bounds, non-overlapping, stable
+  top-to-bottom ordering, right-edge placement, main-tile geometry provably
+  independent of guest count, invalid-canvas safety), the full
+  `StageSpotlightState` promote/demote/toggle/reconcile state machine
+  (promote, demote-is-a-no-op-at-host, revert, switch directly between
+  guests, full promote→demote→revert→promote→revert cycle, spotlighted
+  guest leaving falls back to host, non-spotlighted guest leaving is inert,
+  last guest leaving collapses the rail to empty), and `railItems`'s
+  display-order contract (host placeholder first when spotlighting, stale
+  spotlight ids ignored, capped at `MAX_GUESTS` either way). Mirrors iOS's
+  `LiveStageTests.swift` (21 tests) test-for-test where the API shapes
+  line up; Android's nullable-`String?` spotlight model needs two entry
+  points (`demoteSpotlight`/`tapStageTile(null)` for "tap host's own rail
+  thumbnail" vs `toggleSpotlight` for "tap the currently-spotlighted guest's
+  own main tile") where iOS's `UInt8` track-number space (host = track 0)
+  handles both through one `tap(track:)` — covered as separate cases here
+  rather than forced into one shared test.
+
+**Scope expansion mid-task (owner, direct instruction): "the next samsung
+build to be at parity with iphone"** — full live-feature parity sweep, not
+just the stage layout:
+
+1. **Church-broadcast eligibility widened, Instructor included.**
+   `isChurchLiveEligible` (`GoLiveShared.kt`) only offered the "Church"
+   scope to `Admin`/`SuperAdmin`; iOS's `LiveBroadcastEligibility.
+   churchEligible` (nuru-member-ios) already included `Instructor`, and
+   VERIFIED against the actual backend authority
+   (`packages/backend/src/modules/live/service.ts:326-327` `isStaff()` →
+   `IdentityService.STAFF_ROLES` = `{Instructor, Admin, SuperAdmin}`,
+   `packages/backend/src/modules/identity/service.ts:169`) — the backend
+   has ALWAYS allowed an Instructor to go live church-wide; Android's
+   client-side gate was simply narrower than the server's own rule, so an
+   Instructor could never SEE the option the server would have granted.
+   Widened to match, with an explicit "OWNER DECISION, 2026-07-31" comment
+   at the change site (`GoLiveShared.kt`) so a future session doesn't
+   "fix" it back to Admin/SuperAdmin-only assuming it's a regression.
+   5 new tests in `GoLiveCellPickerTest.kt`.
+2. **Mic-muted rail indicator, debounce ported from iOS.** iOS's
+   `BroadcastController.updateMuteHeuristic()` polls every 3s and only
+   flags a guest muted after 3 CONSECUTIVE quiet polls (~9s sustained
+   silence) — a deliberate anti-flicker debounce, not an instantaneous
+   check. `GuestStageCompositor.kt` gained the same shape: a new
+   `mutedGuests: StateFlow<Set<String>>`, a dedicated 3000ms ticker
+   (independent of the compositor's own 1200ms `reflow()` cadence, so the
+   debounce window means a real ~9s regardless of GL-slot timing), and a
+   3-consecutive-poll streak counter. Both the composited RTMP name plate
+   (`plateNameFor`) and `LiveStageView.kt`'s rail chrome now read this SAME
+   `StateFlow` — one debounce, not two independently-computed guesses (an
+   IMPROVEMENT over iOS, which has two separate poll loops — the
+   compositor's own `setMuted` calls and `BroadcastController`'s dict —
+   that happen to agree only because BroadcastController pushes into both).
+   The raw per-sample THRESHOLD is deliberately NOT numerically equal to
+   iOS's (0.02): Android's signal is `GuestAudioMixer`'s smoothed
+   mean-absolute-16-bit-PCM level (0..32767ish), iOS's is WebRTC's
+   normalized 0..1 `audioLevel` stat — different scales by construction:
+   what's ported exactly is the CADENCE (3000ms) and STREAK (3), so a
+   guest reads as muted on both platforms within the same ~9s window.
+3. **Rail margin/spacing constants aligned exactly to iOS's
+   `LiveStageLayout.swift`** — `RAIL_MARGIN_TOP/BOTTOM/RIGHT_FRACTION`
+   0.06/0.06/0.025 → 0.03/0.03/0.03 (iOS's single uniform `marginFraction`),
+   `RAIL_GAP_FRACTION` 0.02 → 0.018 (iOS's `spacingFraction`). Purely
+   visual — the overflow-proof rail algebra doesn't depend on the specific
+   values (re-verified by `GuestStageCompositorTest`'s in-bounds/no-overlap
+   coverage after the change). `RAIL_WIDTH_FRACTION` (0.22) already matched
+   iOS exactly before this session.
+4. **WHEP retry constants** (`WhepRetryPolicy.kt` vs iOS's
+   `WhepRetryPolicy.swift`, 4ed9883 tree) — already at exact numeric parity
+   before this session: `INITIAL_DELAY_MS`/`initialBackoff` 500ms,
+   `MAX_DELAY_MS`/`maxBackoff` 8000ms, `DEFAULT_WINDOW_MS`/`window` 60s,
+   `TRACK_WAIT_TIMEOUT_MS`/`attemptWatchdog` 25s. No change needed.
+5. **`MAX_GUESTS` cap** — Android 6, iOS `1...6` (host = track 0, guests
+   1–6) — already matched, confirmed by reading `BroadcastController.
+   nextFreeGuestTrack()`. No change needed.
+6. **Animation duration** — `SWAP_ANIM_MS` 250ms already matched iOS's
+   `LiveStageView.swapDuration` 0.25s exactly. No change needed.
+7. **Border/shadow on rail tiles** — Android's new `LiveStage` rail-tile
+   chrome (`Modifier.border(1.5.dp, Color.White.copy(alpha = 0.35f))`,
+   `Modifier.shadow(8.dp, ...)`) was written to match iOS's SwiftUI
+   `.stroke(Color.white.opacity(0.35), lineWidth: 1.5)` /
+   `.shadow(radius: 8, ...)` before this parity sweep even started —
+   confirmed matching, no change needed.
+
+**Deliberately NOT changed — genuine differences, not gaps**:
+- **401/403 retry classification.** iOS's `WhepRetryPolicy.classify(_:)`
+  is "deliberately generous" — only a structurally-bad URL and explicit
+  cancellation are non-retryable, so a guest with BAD CREDENTIALS retries
+  silently for the full 60s window before surfacing an error. Android's
+  `classifyWhepHttpStatus` fails FAST on 401/403 (`Terminal`, immediate
+  "Not authorized..." message) — matching Android's own pre-existing
+  reasoning ("retrying bad credentials changes nothing"). This was left
+  as-is rather than degraded to match iOS: it is a real behavioral
+  difference, not a numeric-constant gap, and Android's fail-fast behavior
+  is arguably the better UX (a guest who will never connect finds out in
+  under a second instead of after a minute). Flagged here rather than
+  silently changed OR silently left unmentioned.
+- **Composited-broadcast corner radius vs. the host's own local preview.**
+  The RTMP frame's rail-tile rounding is baked into
+  `stage_rail_fragment.glsl` as a GLSL `const float CORNER_RADIUS = 0.16`
+  (a fraction of the TILE's own width) — architecturally fixed at
+  shader-compile time (`StageTileFilterRender.kt`'s header explains why a
+  per-instance uniform isn't reachable from a `BaseObjectFilterRender`
+  subclass). iOS instead computes corner radius as a fraction of the
+  CANVAS's shortest side (`LiveStageLayout.cornerRadiusFraction = 0.05`),
+  shared identically by both its compositor and its SwiftUI stage. Rather
+  than making Android's Compose-side rail chrome match iOS's canvas-based
+  formula (which would make the host's OWN on-screen preview's rounding
+  drift slightly from what the GL shader actually bakes into the broadcast
+  frame the congregation receives — a regression against this feature's
+  own core "preview must match broadcast" requirement), `LiveStageView.kt`
+  computes its Compose corner radius as `rect.width * 0.16f` — the SAME
+  0.16 the shader already uses, in the same "fraction of tile width" units.
+  Net effect: Android's preview/broadcast pair is pixel-consistent with
+  itself; it is not byte-for-byte numerically identical to iOS's
+  canvas-fraction formula. A reworked shader mechanism that could accept a
+  canvas-relative radius as a uniform would close this, but that's a
+  bigger, riskier change than this task's scope justified.
+- **Shadow color/offset** — Compose's `Modifier.shadow` doesn't expose a
+  directional y-offset or an explicit shadow-color alpha the way SwiftUI's
+  `.shadow(color:radius:y:)` does; Android gets a platform-default ambient/
+  spot shadow at the same 8dp radius iOS uses, not a pixel-identical shadow
+  render. Not fixable without a custom `drawWithContent` shadow — out of
+  scope for a visual nuance this minor.
+
+### Parity table (Nuru Live, this session's scope)
+
+| Capability | iOS | Android (after this session) | Status |
+|---|---|---|---|
+| Stage model | One full-bleed main tile + right-edge rail, manual tap-to-spotlight | Same | PARITY |
+| Auto-promotion (active speaker) | Removed (L7) | Never existed in this codebase's current form (removed by the previous agent before this session) | PARITY |
+| Portrait/aspect-fill on the main tile | Fixed via `mainOverlay` (`.resizeAspectFill`) never touching the built-in object | Fixed via `EglRenderer.setLayoutAspectRatio` per slot (previous agent) | PARITY (different mechanism, same guarantee) |
+| Canvas/encoder dimensions vs. guest count | Never change (`mixer.setVideoMixerSettings` called once) | Never change (fixed GL filter slots, logged before/after) | PARITY |
+| Spotlight state machine (promote/demote/revert/switch/leave-fallback) | `LiveStageSpotlight` (`UInt8`, host=0) | `StageSpotlightState` (`String?`, host=null) | PARITY (equivalent semantics, different type shape — see host-tap vs guest-tap entry-point note above) |
+| Single tap entry point driving both compositor + local preview | `BroadcastController.tapStageTile(_:)` | `GuestStageCompositor.tapStageTile(guestId)` | PARITY (renamed to match this session) |
+| Rail width fraction | 0.22 | 0.22 | PARITY |
+| Rail margin/spacing fractions | 0.03 / 0.018 | 0.03 / 0.018 (aligned this session) | PARITY |
+| Rail tile aspect | 0.75 (portrait-ish) | 0.75 | PARITY |
+| Swap animation duration | 250ms | 250ms | PARITY |
+| Rail-tile border | white 0.35 alpha, 1.5pt/dp | white 0.35 alpha, 1.5dp | PARITY |
+| Rail-tile shadow | black 0.35 alpha, radius 8, y 4 | platform-default shadow, radius 8dp | DIFFERS — Compose's `shadow` modifier has no color/y-offset knob; visual nuance only |
+| Composited-broadcast corner radius | 0.05 × canvas short side | 0.16 × tile width (GLSL-shader-baked) | DIFFERS — different rendering pipelines (HaishinKit screen objects vs. RootEncoder GL filters); Android's choice keeps ITS OWN preview/broadcast pixel-consistent, which iOS's own formula also achieves for itself |
+| Max guests on stage | 6 (tracks 1...6) | 6 (`MAX_GUESTS`) | PARITY |
+| Guest connection states | connecting / live / failed(message) / ended | Connecting / Live / Error(message) | PARITY |
+| Compact vs. full failure-state text sizing | `guestFailureOverlay(..., compact:)` | `GuestConnectionOverlay(..., compact)` | PARITY |
+| Mic-muted rail indicator | 3s poll × 3-streak debounce, WebRTC audioLevel threshold 0.02 | 3000ms poll × 3-streak debounce (ported this session), `GuestAudioMixer` PCM-level threshold 60 | PARITY in cadence/debounce shape; threshold numbers intentionally NOT equal (different signal scales) |
+| WHEP retry backoff (initial/cap/window/watchdog) | 0.5s / 8s / 60s / 25s | 500ms / 8000ms / 60000ms / 25000ms | PARITY |
+| WHEP retry classification of 401/403 | Retryable (retries for the full window) | Terminal (fails immediately) | DIFFERS — deliberate, not changed (see "Deliberately NOT changed" above) |
+| Church-wide go-live eligibility | `{Instructor, Admin, SuperAdmin}` | `{Instructor, Admin, SuperAdmin}` (widened this session, owner-directed) | PARITY |
+| Cell-scoped go-live eligibility + multi-cell picker | Has a cell / leads several | Has a cell / leads several | PARITY (pre-existing, 2026-07-31 earlier session) |
+| Last guest leaving | Rail collapses to empty, host stays/falls back to main | Same (`reconcileSpotlightOnGuestsChanged` + empty `railItems`) | PARITY |
+| Video-surface identity across spotlight swaps | Persists (no recreate) | Persists (no recreate — stable `key()` per tile) | PARITY |
+
+**Verify**: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+:app:assembleRelease` → BUILD SUCCESSFUL. 166 tests total (133 baseline +
+28 new in `GuestStageCompositorTest` + 5 new in `GoLiveCellPickerTest`), 0
+failures. `assembleRelease` (R8-minified) succeeded — only pre-existing,
+unrelated deprecation warnings (AutoMirrored icon variants elsewhere in the
+app). Committed in this worktree (`.worktrees/stagelayout`, branch
+`feat/live-stage-layout`, built on top of origin/main `bc25308`); not
+pushed, no PR opened.
+
+**Honest limits**: `GuestStageCompositor`'s new mute-heuristic debounce
+(`updateMuteHeuristic`) is not unit-tested directly — it's a private method
+on the same GL/WebRTC-bound singleton the rest of this file's own
+convention (and iOS's identical choice for `LiveStageCompositor`) already
+excludes from direct testing; only its pure building block
+(`MUTED_LEVEL_THRESHOLD` comparison) is exercised indirectly through the
+existing `isLikelyMuted`-shaped logic. The Compose `LiveStage` composable
+itself has no Compose-UI-test coverage (no `createComposeRule` harness
+exists anywhere in this codebase yet) — verified by code reading + the
+compile/assemble gate, not by an instrumented UI test. `RAIL_MARGIN_*`/
+`RAIL_GAP_FRACTION` were changed to match iOS's numbers exactly on the
+strength of reading iOS's source; not re-verified against a live two-device
+screenshot in this session (no device/emulator available in this
+environment).

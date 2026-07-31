@@ -4,11 +4,14 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.nuruplace.member.data.net.CreateLiveStreamBody
+import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.RosterRow
+import org.nuruplace.member.data.net.UserProfile
 
 /**
  * Pure-logic coverage for the 2026-07-31 iOS→Android parity fix: a leader who
@@ -199,5 +202,36 @@ class GoLiveCellPickerTest {
         )
         val encoded = wireJson.encodeToString(CreateLiveStreamBody.serializer(), body)
         assertTrue("expected cell-b in the body, got: $encoded", encoded.contains("\"cell_id\":\"cell-b\""))
+    }
+
+    // ── isChurchLiveEligible — 2026-07-31 owner-directed iOS parity: widened
+    // from {Admin, SuperAdmin} to {Instructor, Admin, SuperAdmin}, matching
+    // the backend's OWN authority (IdentityService.STAFF_ROLES,
+    // packages/backend/src/modules/identity/service.ts) exactly, which iOS's
+    // LiveBroadcastEligibility.churchEligible already used. See
+    // GoLiveShared.kt's own doc for the full owner-decision paper trail. ────
+
+    private fun profile(role: String, permissions: List<String> = listOf("live:go")) =
+        MeResponse(profile = UserProfile(userId = "u1", fullName = "Test User", role = role, permissions = permissions))
+
+    @Test fun `Instructor is church-eligible — the 2026-07-31 owner-directed parity widening`() {
+        assertTrue(isChurchLiveEligible(profile("Instructor")))
+    }
+
+    @Test fun `Admin and SuperAdmin remain church-eligible`() {
+        assertTrue(isChurchLiveEligible(profile("Admin")))
+        assertTrue(isChurchLiveEligible(profile("SuperAdmin")))
+    }
+
+    @Test fun `a plain Student is never church-eligible`() {
+        assertFalse(isChurchLiveEligible(profile("Student")))
+    }
+
+    @Test fun `an Instructor without the live-go permission is not church-eligible`() {
+        assertFalse(isChurchLiveEligible(profile("Instructor", permissions = emptyList())))
+    }
+
+    @Test fun `no profile at all is never church-eligible`() {
+        assertFalse(isChurchLiveEligible(null))
     }
 }

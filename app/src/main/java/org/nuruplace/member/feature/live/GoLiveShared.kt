@@ -36,20 +36,27 @@ fun canGoLive(me: MeResponse?): Boolean =
 /**
  * Is CHURCH scope worth offering in the setup sheet's picker?
  *
- * The server is the only real authority on scope (RBAC grants are unscoped
- * for church-wide go-live vs. scoped to a leader's own cell via
- * `leader_assignments` — see docs/LIVE_STREAMING.md), and `GET /me` does not
- * currently return a single "is this an unscoped grant" boolean for the
- * client to key on. Absent that, this uses `role` as the closest available
- * proxy: paid staff (`Admin`/`SuperAdmin`) are the members realistically
- * holding an unscoped church-wide grant; `Instructor` (this app's stand-in
- * for a cell leader/mentor role) is treated as cell-scoped only. If this
- * guess is wrong for a given member the UI just shows an extra option that
- * the server will 403 on — never a security hole, just a worse empty state,
- * so it's an acceptable judgment call rather than a blocker.
+ * Mirrors the backend's OWN authority exactly — `LiveService.isStaff()`
+ * (packages/backend/src/modules/live/service.ts) accepts
+ * `IdentityService.STAFF_ROLES` (packages/backend/src/modules/identity/
+ * service.ts: `Instructor`, `Admin`, `SuperAdmin`) for `scope="church"` on
+ * `POST /live/streams` — verified straight from that source, not guessed.
+ * `STAFF_ROLES` is also the exact set iOS's `LiveBroadcastEligibility.
+ * churchEligible` already used (NuruMember/Features/Live/
+ * LiveBroadcastEligibility.swift).
+ *
+ * OWNER DECISION, 2026-07-31: this used to be narrower here — `Admin`/
+ * `SuperAdmin` only, treating `Instructor` as cell-scoped-only — after the
+ * owner was told explicitly about the iOS/Android difference, they asked
+ * for Android to match iPhone. This is that parity fix, not a bug fix for
+ * a regression; do not "fix" it back to Admin/SuperAdmin-only without
+ * another explicit owner decision — the backend has ALWAYS allowed
+ * Instructor here, so widening this client-side gate only lets an
+ * Instructor SEE the "Church" option they could already use; it grants
+ * nothing the server didn't already grant.
  */
 fun isChurchLiveEligible(me: MeResponse?): Boolean =
-    canGoLive(me) && me?.profile?.role in setOf("Admin", "SuperAdmin")
+    canGoLive(me) && me?.profile?.role in setOf("Instructor", "Admin", "SuperAdmin")
 
 /** Is MY-CELL scope offerable? Only if the profile actually has a cell. */
 fun isCellLiveEligible(me: MeResponse?): Boolean =
