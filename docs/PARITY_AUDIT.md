@@ -2986,3 +2986,121 @@ session is client-plumbing/UI, no new unit-testable pure functions).
 item 1). Not pushed / no PR opened (isolated worktree `.worktrees/l6b`,
 branch `feat/live-l6b-guest-video`, built on top of origin/main
 #73/#74/#76/#78).
+
+## 2026-07-31 — Home-screen widgets: Pathway + Radio (Jetpack Glance, branch feat/android-widgets, this repo only)
+
+**The gap**: iOS ships a `NuruWidgets` extension; Android had none — the
+last home-screen-parity item on the board.
+
+**What iOS actually ships, traced first (not assumed)**: `NuruWidgets/
+NuruWidgets.swift` (main, and the `feat/rich-widgets`-named branch — same
+content) is three **static** `.systemSmall` "door" widgets (Pathway/Chat/
+Radio) — a navy-gradient card with an SF Symbol, a kicker, a title and a
+caption, `widgetURL`-linking into `nuru://pathway|chat|radio`. No timeline
+data, no App Group, no snapshot bridge. The header comment explains why:
+*"the free personal signing team has no App Group entitlement, so no live
+data crosses the boundary."* There is no `WidgetShared.swift` — that file
+doesn't exist on either branch; it was never built. The rich progress-
+ring/ON-AIR/listener-count design implied by the brief describes intent
+that iOS itself never shipped, for a platform-specific signing reason that
+doesn't apply to Android (Glance widgets run in-process; no App Group
+needed to share data with the host app). Given that, and per this repo's
+autonomous-operation mandate, Android goes further than iOS currently does
+rather than cloning the static doors — same brand doors are trivial to add
+later if iOS's constraint is ever lifted.
+
+**Built**: two Glance widgets, small (2×2, 110×110dp) and medium (4×2, up
+to 250×120dp, `SizeMode.Responsive`), reading a single on-disk snapshot —
+**never the network**:
+- **Pathway widget** — a gold progress ring (module completion, pre-
+  rendered to a `Bitmap` via plain `android.graphics.Canvas`/`Paint` since
+  Glance has no arbitrary Canvas — `WidgetRing.kt`), "LEVEL N", "M of T
+  modules", the next-module title, and a 🔥 streak line; medium adds the
+  level's title (serif) and a gold "Continue" pill.
+- **Radio widget** — a red dot + "ON AIR"/"NURU RADIO" + the live program
+  title + listener count while on air; the next program (or "Tap to tune
+  in") off air. Medium adds a stylized artwork tile (a static gold note
+  glyph — NOT the real show art; fetching that would mean networking
+  *from the widget*, which is the one rule this feature never breaks) and
+  the host name, plus — the "nice touch" from the brief — a tappable
+  "● LIVE now" line when the church is broadcasting right now.
+- Both tap straight into the app via the SAME `nuru.dest` extra + route
+  vocabulary notifications/shortcuts already use (`MainActivity.kt`'s
+  `PendingDest`, `MainShell.kt`'s `NavHost` routes) — zero new nav wiring.
+
+**Snapshot bridge** (`widget/WidgetSnapshotStore.kt`, plain
+SharedPreferences, mirrors `data/AppPrefs.kt`'s existing pattern): the app
+writes a denormalized `WidgetSnapshot` (level/title/completed/total/next-
+module/streak, radio on-air/title/host/listeners/next-program, church-live)
+at the same points the app already loads that state, then triggers an
+immediate `updateAll` —
+- `PathwayHubScreen.kt`: once the active level + its resolved "resume"
+  module are known (`LaunchedEffect(active?.levelNumber,
+  active?.completedModules, resume?.moduleId, streak)`).
+- `HomeScreen.kt`: Home's own `radioNowPlaying`/`liveNow` poll, right after
+  `churchLive` is computed — the earliest point in a session a snapshot can
+  land, even if the member never opens Radio/Pathway.
+- `LiveRadioScreen.kt`: its own richer `now`/`nextScheduled` load overwrites
+  Home's lighter radio snapshot with listeners/host/next-program once the
+  player is opened.
+
+**Refresh cadence**: immediate on every snapshot write, plus a
+`WorkManager` periodic job (`WidgetRefresher.schedulePeriodic`, enqueued
+`KEEP` from `NuruApp.onCreate`) at WorkManager's own 15-minute floor —
+which happens to match iOS's intended 15-min widget-timeline cadence. A
+manifest `updatePeriodMillis="1800000"` (Android's 30-min floor) is the
+belt-and-suspenders fallback. The periodic worker only calls `updateAll`
+against whatever is already on disk — it never touches the network either.
+
+**Brand**: fixed navy `#16273F`/gold `#C9A227` (verified already in use for
+the radio panel + chat-bubble gradients, `LiveRadioScreen.kt`/
+`ChatShared.kt`), same for light/dark system theme — like every other Nuru
+chrome surface, the widget doesn't flip with the device. Display text uses
+`FontFamily.Serif` (system serif) for a Fraunces-like feel — **honest
+limit**: Glance's font API is system-family-only (`SansSerif`/`Serif`/
+`Monospace`/`Cursive`); the bundled Fraunces `.ttf`s in `res/font` cannot
+be attached to Glance `TextStyle` the way Compose's own `nuruSerif()` does,
+so the widget is visually close but not a pixel-exact Fraunces match.
+
+**Dependencies** (verified against `dl.google.com/android/maven2` — 1.2.0
+and 1.3.0 are alpha/beta/rc-only): `androidx.glance:glance-appwidget:1.1.1`
++ `androidx.glance:glance-material3:1.1.1` (only used for the
+`ColorProviders(light, dark)` brand-theme builder consumed by the core
+`androidx.glance.GlanceTheme` — confirmed via `javap` against the resolved
+AARs that `GlanceTheme` itself lives in the glance CORE artifact, not
+glance-material3, which ships nothing but that one builder function).
+**Zero new native libraries** — confirmed no `.so` in any of the three
+resolved Glance AARs, so the 16 KB page-size story (`libs.versions.toml`'s
+webrtc-sdk pin) is untouched.
+
+**Files**: `widget/WidgetSnapshotStore.kt`, `WidgetRefresher.kt`,
+`WidgetRing.kt`, `WidgetBrand.kt`, `WidgetIntents.kt`,
+`PathwayGlanceWidget.kt`, `RadioGlanceWidget.kt` (all new);
+`res/xml/pathway_widget_info.xml`, `res/xml/radio_widget_info.xml`,
+`res/layout/nuru_widget_loading.xml` (new); `AndroidManifest.xml` (two
+`<receiver>`s), `strings.xml` (widget labels/descriptions),
+`NuruApp.kt` (schedules the periodic worker), `HomeScreen.kt`/
+`PathwayHubScreen.kt`/`LiveRadioScreen.kt` (snapshot-write hooks, additive
+only), `gradle/libs.versions.toml` + `app/build.gradle.kts` (Glance deps).
+
+**Honest limits vs iOS**: (a) iOS's OWN widgets are static doors with no
+live data at all (App Group entitlement gap, not fixed here — out of this
+repo's scope); Android's are richer, so today Android widgets show real
+progress/on-air state that iOS's don't. (b) no live artwork/church-stream
+thumbnail in the widget — deliberately, per the "never network from the
+widget" rule. (c) Fraunces isn't attached to Glance text (system serif
+fallback, documented above). (d) not visually verified on a real launcher/
+home-screen grid this session (no screenshot pass) — compile + resource-
+link + unit-test verified only; worth a quick on-device pin-and-look before
+this ships to testers.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 57 tests (49 baseline + 8 new — `WidgetSnapshotTest`:
+`modulePct` clamping/rounding + `radioHeadline` on-air/off-air branches),
+0 failures/errors. Resource linking (aapt2) implicitly verified the two
+`appwidget-provider` XMLs, the loading layout, and the manifest receivers
+compile clean. Confirmed zero `.so` files across all three resolved Glance
+AARs (`unzip -l` on `~/.gradle/caches`). Not pushed / no PR opened
+(isolated worktree `.worktrees/widgets`, branch `feat/android-widgets`,
+built on top of origin/main).

@@ -6,4 +6,8 @@
     <string name="shortcut_prayer">Prayer Room</string>
     <string name="shortcut_give">Give</string>
     <string name="radio_channel_name">Nuru Radio</string>
+    <string name="widget_pathway_label">Nuru Pathway</string>
+    <string name="widget_pathway_description">Your level, streak and next module — right on your home screen.</string>
+    <string name="widget_radio_label">Nuru Radio</string>
+    <string name="widget_radio_description">See what\'s on air (or up next) and tap straight in.</string>
 </resources>

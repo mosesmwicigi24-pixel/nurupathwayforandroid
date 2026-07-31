@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Radio widget — same 2x1→4x1 responsive shape as the Pathway widget; the
+     medium size adds the artwork tile, host name, and (when the church is
+     live) a tappable "LIVE now" line. See pathway_widget_info.xml's header
+     for the refresh-cadence note. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:maxResizeWidth="250dp"
+    android:maxResizeHeight="120dp"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="1800000"
+    android:previewImage="@drawable/ic_sc_radio"
+    android:initialLayout="@layout/nuru_widget_loading"
+    android:description="@string/widget_radio_description" />

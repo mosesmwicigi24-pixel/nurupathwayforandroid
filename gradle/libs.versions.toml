@@ -41,6 +41,12 @@ rootEncoder = "2.5.9"
 # (arm64-v8a AND x86_64 .so LOAD segments both align 2**14 — checked via
 # `llvm-objdump -p libjingle_peerconnection_so.so`, see docs/PARITY_AUDIT.md).
 webrtcSdk = "144.7559.09"
+# Home-screen widgets (Pathway + Radio, Jetpack Glance). 1.1.1 is the newest
+# STABLE release on Google's Maven (1.2.0 only ships as alpha/beta/rc, 1.3.0
+# is alpha-only as of this writing — verified against
+# dl.google.com/android/maven2/androidx/glance/glance-appwidget/maven-metadata.xml).
+# Pure Kotlin — no native .so, so this doesn't touch the 16 KB page-size story.
+glance = "1.1.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -88,6 +94,8 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 rootencoder = { group = "com.github.pedroSG94.RootEncoder", name = "library", version.ref = "rootEncoder" }
 webrtc-sdk = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtcSdk" }
+glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

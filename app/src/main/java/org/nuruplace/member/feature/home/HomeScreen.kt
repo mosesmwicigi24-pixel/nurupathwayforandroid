@@ -204,6 +204,23 @@ fun HomeScreen(
     }
 
     val churchLive = liveNow.firstOrNull { it.scope == "church" }
+
+    // Home-screen Radio/Live widgets (Glance) — Home is the first screen every
+    // session lands on, so it's the earliest point a fresh snapshot can reach
+    // the widget even if the member never opens Radio/Pathway this session.
+    // LiveRadioScreen overwrites the radio half with richer data (listeners,
+    // host, next program) once/if the member opens the player.
+    LaunchedEffect(radio?.id, radio?.live, churchLive?.streamId) {
+        org.nuruplace.member.widget.WidgetSnapshotStore.writeRadio(
+            context = context,
+            onAir = radio?.live == true,
+            programTitle = radio?.title,
+            host = radio?.speaker,
+            listeners = radio?.peakListeners,
+            nextProgramTitle = null,
+        )
+        org.nuruplace.member.widget.WidgetSnapshotStore.writeChurchLive(context, churchLive != null)
+    }
     // An UNCONDITIONAL 60s re-check while Home is composed (this used to gate
     // on `churchLive != null` and only poll once a church stream was already
     // known live, but discovering a BRAND NEW stream is the whole point of
