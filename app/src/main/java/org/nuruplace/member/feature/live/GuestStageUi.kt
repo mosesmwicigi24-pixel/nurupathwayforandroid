@@ -208,6 +208,14 @@ data class HostGuestTileState(
     val guest: LiveGuestRow,
     val onRendererReady: (SurfaceViewRenderer) -> Unit,
     val onRendererReleased: (SurfaceViewRenderer) -> Unit,
+    // Non-null when this guest's WHEP subscribe failed — previously silently
+    // swallowed (LiveBroadcastScreen's runCatching around sub.start() had
+    // nothing shown for it), leaving an indefinite black tile the host had
+    // no way to distinguish from "still connecting". Surfaced honestly here
+    // instead, per the resilience requirement that a guest-subsystem failure
+    // degrades gracefully (an error chip on ITS tile) rather than looking
+    // like a silent hang or taking anything else down with it.
+    val errorMessage: String? = null,
 )
 
 /** Up to [MAX_GUESTS] rounded ~96x128dp tiles (name label under each),
@@ -278,11 +286,22 @@ private fun GuestTile(tile: HostGuestTileState) {
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black),
     ) {
+        // Even a guest whose WHEP subscribe failed still gets its renderer
+        // wired (harmless — no track ever arrives to feed it), so a LATER
+        // retry that succeeds without recomposing this tile still lights up.
         WebRtcSurfaceView(
             modifier = Modifier.fillMaxSize(),
             onRendererReady = tile.onRendererReady,
             onRendererReleased = tile.onRendererReleased,
         )
+        if (tile.errorMessage != null) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("⚠︎ Couldn't connect", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(6.dp))
+            }
+        }
         Text(
             tile.guest.fullName.ifBlank { "Guest" },
             style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold,

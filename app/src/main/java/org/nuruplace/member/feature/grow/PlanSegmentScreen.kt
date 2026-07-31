@@ -67,7 +67,9 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.ui.components.GrowCreamHeader
+import org.nuruplace.member.ui.components.InlineVideo
 import org.nuruplace.member.ui.components.VerseQuoteCard
+import org.nuruplace.member.ui.components.isExternalVideoHost
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
@@ -367,38 +369,53 @@ private fun SegmentBody(segment: PlanSegment, onPlay: (String) -> Unit) {
 
 // ── 16:9 video card (real `videoUrl` only) ──
 
+/** [onPlay] now fires ONLY for a genuinely external host (YouTube/Vimeo —
+ *  see [isExternalVideoHost]); a direct/self-hosted video URL plays right
+ *  here via InlineVideo instead of ever reaching openExternal(). See
+ *  VideoPlayer.kt's isExternalVideoHost doc for the real-device bug this
+ *  closes — a self-hosted `/media/<uuid>.mov` used to pop a bare "Download
+ *  file again?" Chrome prompt instead of playing in-app. */
 @Composable
 private fun VideoCard(imageUrl: String?, videoUrl: String?, onPlay: (String) -> Unit) {
+    var playingInline by remember(videoUrl) { mutableStateOf(false) }
+    val isExternal = videoUrl != null && isExternalVideoHost(videoUrl)
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(24.dp))
             .background(Nuru.navyGradient)
-            .clickable(enabled = !videoUrl.isNullOrEmpty()) { videoUrl?.let(onPlay) },
+            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) {
+                val url = videoUrl ?: return@clickable
+                if (isExternal) onPlay(url) else playingInline = true
+            },
         contentAlignment = Alignment.Center,
     ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        Box(
-            Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Nuru.gold),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Filled.PlayArrow,
-                contentDescription = "Play",
-                tint = Nuru.navy,
-                modifier = Modifier.size(30.dp),
-            )
+        if (playingInline && videoUrl != null) {
+            InlineVideo(videoUrl, modifier = Modifier.fillMaxSize())
+        } else {
+            if (!imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Box(
+                Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Nuru.gold),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "Play",
+                    tint = Nuru.navy,
+                    modifier = Modifier.size(30.dp),
+                )
+            }
         }
     }
 }

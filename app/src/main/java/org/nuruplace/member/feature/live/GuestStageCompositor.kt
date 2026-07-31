@@ -76,6 +76,7 @@
 package org.nuruplace.member.feature.live
 
 import android.graphics.Color
+import android.util.Log
 import com.pedro.encoder.input.gl.render.filters.`object`.SurfaceFilterRender
 import com.pedro.encoder.input.gl.render.filters.`object`.TextObjectFilterRender
 import com.pedro.library.view.GlStreamInterface
@@ -84,10 +85,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.webrtc.EglBase
 import org.webrtc.EglRenderer
 import org.webrtc.GlRectDrawer
 import org.webrtc.VideoTrack
+
+private const val TAG = "GuestStageCompositor"
 
 private const val REFLOW_INTERVAL_MS = 1_200L
 private const val QUICK_RETRY_MS = 300L // catches a just-attached guest whose GL surface wasn't ready yet on the first reflow
@@ -188,18 +192,32 @@ object GuestStageCompositor {
     /** Called by WhepSubscriber.onTrack for the VideoTrack case, additively
      *  alongside the existing Compose-rail attach and GuestAudioMixer's audio
      *  attach — this is a THIRD independent consumer of the same remote
-     *  track, not a replacement for either. */
-    @Synchronized
-    fun attachVideo(guestId: String, track: VideoTrack) {
-        liveTracks[guestId] = track
+     *  track, not a replacement for either.
+     *
+     *  MAIN-THREAD ONLY, enforced here via withContext (not just assumed of
+     *  the caller): RootEncoder's SurfaceFilterRender — the Surface
+     *  [ensureRenderer] binds a WebRTC EglRenderer to — documents, verbatim
+     *  in its own source (encoder/.../object/SurfaceFilterRender.java):
+     *  "This surface must be rendered using an api called on main thread to
+     *  avoid possible errors." WhepSubscriber.onTrack fires on WebRTC's own
+     *  signaling thread, never Main, so this used to violate that contract
+     *  directly — suspending here and hopping onto Main.immediate closes
+     *  that regardless of which thread calls in. */
+    suspend fun attachVideo(guestId: String, track: VideoTrack) = withContext(Dispatchers.Main.immediate) {
+        synchronized(this@GuestStageCompositor) { liveTracks[guestId] = track }
         reflow()
-        scope.launch { delay(QUICK_RETRY_MS); reflow() }
+        delay(QUICK_RETRY_MS)
+        reflow()
     }
 
-    /** Called by WhepSubscriber.stop() — mirrors GuestAudioMixer.detach(). */
-    @Synchronized
-    fun detachVideo(guestId: String) {
-        liveTracks.remove(guestId)
+    /** Called by WhepSubscriber.stop() — mirrors GuestAudioMixer.detach() and
+     *  [attachVideo]'s main-thread contract. AWAITED (suspend, not
+     *  fire-and-forget) by the caller so its addSink/removeSink work is
+     *  GUARANTEED complete before WhepSubscriber disposes the underlying
+     *  native track right after — see WhepSubscriber.stopLocked()'s doc for
+     *  why that ordering is the whole point. */
+    suspend fun detachVideo(guestId: String) = withContext(Dispatchers.Main.immediate) {
+        synchronized(this@GuestStageCompositor) { liveTracks.remove(guestId) }
         reflow()
     }
 
@@ -298,7 +316,11 @@ object GuestStageCompositor {
         runCatching {
             renderer.init(LiveWebRtc.eglBase.eglBaseContext, EglBase.CONFIG_PLAIN, GlRectDrawer())
             renderer.createEglSurface(surface)
-        }.onFailure { return }
+        }.onFailure { e ->
+            Log.w(TAG, "ensureRenderer failed for slot (guestId=${slot.guestId}) — will retry next reflow tick", e)
+            runCatching { renderer.release() }
+            return
+        }
         slot.renderer = renderer
     }
 

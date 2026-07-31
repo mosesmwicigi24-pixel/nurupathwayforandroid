@@ -3257,3 +3257,203 @@ extracted and tested the same way as a fast-follow). Not pushed / no PR
 opened (isolated worktree `.worktrees/l6c`, branch
 `feat/live-l6c-compositing`, built on top of origin/main
 #73/#74/#76/#78/L6b).
+
+## 2026-07-31 — Nuru Live host-stability incident: proven root cause (R8 stripped WebRTC's JNI bridge), plus native-crash-race hardening, guest-tile errors, and a self-hosted-video-to-browser bug (branch fix/live-host-stability, this repo only, on top of L6c)
+
+**Incident**: real two-device test (host Samsung S24 Ultra on vc54, guest
+Techno Spark 10/Android 13) found the host's process DYING the instant a
+guest joined the stage (viewers then saw "stream has ended"; server-side:
+the stream row stayed `status='live'` with zero RTMP publishers connected
+— the publish socket really did die, consistent with the whole process
+going down). Two more real-device findings rode along: the guest's video
+never appeared as a tile on the host, and the guest's phone popped Chrome's
+"Download file again?" prompt for a `/media/<uuid>.mov` self-hosted asset
+instead of playing it.
+
+**Root cause of the host process death — PROVEN, not inferred.** Mid-session
+the owner pulled the actual tombstone off the S24 via adb:
+```
+F libc: Fatal signal 5 (SIGTRAP), code 1 (TRAP_BRKPT) ... (com.nuruplace)
+#00-#03  libjingle_peerconnection_so.so
+#04      libjingle_peerconnection_so.so (JNI_OnLoad+64)
+...
+#15      org.webrtc.PeerConnectionFactory.b          <- obfuscated to "b"
+#20-#24  Q9.N1.a / Q9.Y1.a / Q9.g0.invokeSuspend       <- our own Kotlin, obfuscated
+```
+WebRTC's native library aborts (its own `RTC_CHECK`) inside `JNI_OnLoad`
+the FIRST time `PeerConnectionFactory.initialize()`/
+`createPeerConnectionFactory()` ever runs on that process — i.e. the
+instant the host subscribes to a guest (`WhepSubscriber`) or a guest
+publishes (`WhipPublisher`). `app/build.gradle.kts`'s release buildType runs
+`isMinifyEnabled=true` + `isShrinkResources=true` (the owner sideloads
+release builds), and `app/proguard-rules.pro` had **zero** rules for
+`org.webrtc.**`. Verified by unzipping the resolved
+`io.github.webrtc-sdk:android:144.7559.09` `.aar`: it ships no
+`proguard.txt`/`consumer-rules.pro` at all, so R8 got no automatic
+protection either. libjingle's `JNI_OnLoad` resolves Java members it needs
+(`@CalledByNative`/native-method counterparts) BY NAME via reflection/
+`RegisterNatives`; with no keep rule R8 was free to rename/strip exactly
+those members (the trace's `PeerConnectionFactory.b` is the smoking gun),
+so native registration failed and the library aborted the whole process.
+This is why every debug build, `compileDebugKotlin`, and `testDebugUnitTest`
+run passed clean all session — R8 only runs on `release`, which is what the
+owner's device actually runs; debug builds structurally cannot reproduce
+this class of bug.
+
+**Fix** (`app/proguard-rules.pro`):
+```
+-keep class org.webrtc.** { *; }
+-keepclassmembers class org.webrtc.** { *; }
+-keepattributes *Annotation*
+-dontwarn org.webrtc.**
+```
+Plus a narrow `-keep class com.pedro.** { *; }` for RootEncoder (audited,
+not proven-broken — see below) and a single-class keep for
+`androidx.datastore.core.NativeSharedCounter` (same audit, also latent —
+see below).
+
+**Proof, not plausibility** (owner's doctrine): built the actual RELEASE
+APK in the worktree (`./gradlew :app:assembleRelease`, unsigned — no
+`signingConfigs` present in this isolated worktree, which doesn't affect R8
+behavior) and inspected `app/build/outputs/mapping/release/mapping.txt`:
+`org.webrtc.PeerConnectionFactory -> org.webrtc.PeerConnectionFactory:`
+(identity — class not renamed), and every member that matters for the
+crash path preserved by name — `createPeerConnectionFactory`,
+`setAudioDeviceModule`, `createPeerConnection`, `initialize`, `dispose`,
+etc. all read `-> <same name>` throughout the class and its `$Builder`
+nested class. The only things still mapped to bare `a`/`b`/`c` in that
+class are three `-$$Nest$...` bridges, which are R8/D8-*synthesized*
+nestmate-access trampolines that never existed in the original library
+(their own names literally embed the real target's name, e.g.
+`-$$Nest$smnativeCreatePeerConnectionFactory -> c`) — not stripped
+originals, and not what `JNI_OnLoad`'s native registration looks up.
+Reconfirmed after adding the DataStore keep too (same identity lines,
+`androidx.datastore.core.NativeSharedCounter -> androidx.datastore.core.NativeSharedCounter:`).
+Also confirmed via `unzip -l` on the release APK that `libjingle_peerconnection_so.so`
+still ships in all 4 ABIs (arm64-v8a/armeabi-v7a/x86/x86_64) — R8's keep
+rules didn't accidentally cause it to be stripped from packaging either.
+
+**Sibling audit** (doctrine: "one failure = a class, audit for sibling
+occurrences") — every dependency in this app shipping a native `.so` was
+checked for a bundled consumer-proguard file via `unzip -l` on its resolved
+`.aar`: ML Kit `barcode-scanning:17.3.0`, CameraX `camera-core`/
+`camera-camera2:1.4.2`, and `androidx.graphics:graphics-path:1.0.1` **all**
+ship their own `proguard.txt` (auto-applied — never the gap).
+`androidx.datastore:datastore-core-android:1.1.4` (native
+`libdatastore_shared_counter.so`, backing
+`androidx.datastore.core.NativeSharedCounter`/`MultiProcessCoordinator`)
+does **not** ship one — the identical gap class as webrtc-sdk, but LATENT
+here: grepped the whole app for "MultiProcess"/"multiprocess" and found
+zero usage, so this app never constructs a multi-process DataStore and this
+native path is dead code today. Kept anyway as free, low-risk insurance.
+RootEncoder (`com.github.pedroSG94.RootEncoder:library`/`common`/`rtmp:2.5.9`)
+was also audited: none of its AARs contain a `jni/` directory or any `.so`
+file at all (it's pure Kotlin/Java over Android's own `MediaCodec`, no
+custom native library), so it carries none of this risk class; its `-keep`
+above is narrow insurance against reflection-sensitive constructor overload
+resolution being altered by shrinking, not a proven bug.
+
+**Also fixed, in the same session** (real-device bugs #2/#3 from the
+original report):
+
+- **Guest tile never appearing (#2)** — traced as almost certainly a
+  downstream consequence of #1 (the process dying kills everything, guest
+  video included), but hardened independently regardless: `sub.start()`
+  failures used to be silently swallowed by a bare `runCatching` in
+  `LiveBroadcastScreen.kt`, leaving an indefinite black tile with no way to
+  tell "still connecting" from "actually broken". `HostGuestTileState` now
+  carries an `errorMessage`, surfaced as a `⚠︎ Couldn't connect` overlay on
+  the tile (`GuestStageUi.kt`'s `GuestTile`) instead of a silent hang.
+
+- **Self-hosted video opened in Chrome instead of playing in-app (#3)** —
+  traced every `ACTION_VIEW`/`openExternal` call site in the app (there are
+  exactly three). The live/guest feature itself never calls `openExternal`
+  at all. `HomeScreen.kt`'s featured-video card already gates correctly on
+  the server's `isExternal` flag. The two real, UNGATED call sites were the
+  Reading Plan video cards — `RMediaCard` (`PlanReaderKit.kt`) and
+  `VideoCard` (`PlanSegmentScreen.kt`) — which handed ANY `videoUrl`
+  straight to `openExternal()` with no host check at all, which for a
+  self-hosted `/media/<uuid>.mov` upload is exactly the observed "Download
+  file again?" Chrome prompt instead of playing the clip. Added
+  `isExternalVideoHost(url)` (`VideoPlayer.kt`, pure `java.net.URI`-based,
+  not `android.net.Uri`, specifically so it's meaningfully unit-testable
+  under this project's plain-JUnit posture rather than silently returning
+  false-for-everything under `unitTests.isReturnDefaultValues=true`) gating
+  on YouTube/Vimeo hosts only; both cards now play a self-hosted URL in-app
+  via the existing `InlineVideo` (mirroring `HomeScreen`'s own pattern)
+  instead of ever reaching `openExternal`.
+
+**Resilience hardening kept from the (demoted, but still real) earlier
+hypotheses this session worked through before the tombstone landed** — not
+the fix for the process-death bug, but genuine, independently-worthwhile
+fixes for real races/gaps found while tracing it:
+
+- **`WhepSubscriber`/`WhipPublisher` start()/stop() race** — both classes'
+  `LaunchedEffect`-driven callers (`LiveBroadcastScreen.kt`'s pulse-set
+  reconciliation; `LivePlayerScreen.kt`'s `myGuestState` watcher) can call
+  `start()` and `stop()` concurrently on the SAME instance if a guest's
+  pulse row flickers (e.g. the backend mints `whepUrl` a beat after
+  flipping status to `accepted`). `stop()` starts with a suspending network
+  call (`LiveWebRtc.deleteResource`) before touching WebRTC objects, so a
+  concurrent `start()` racing `dispose()` on the same native `PeerConnection`
+  was a real, structural use-after-free risk independent of the R8 bug.
+  Both classes now serialize `start()`/`stop()` behind a `Mutex` with a fast
+  `stopRequested` pre-check.
+- **`GuestStageCompositor.attachVideo`/`detachVideo` off the main thread** —
+  `WhepSubscriber.onTrack` fires on WebRTC's own signaling thread, never
+  Android's main thread, but RootEncoder's `SurfaceFilterRender` documents,
+  verbatim in its own source: "This surface must be rendered using an api
+  called on main thread to avoid possible errors." Both methods are now
+  `suspend` + `withContext(Dispatchers.Main.immediate)`, and `stop()` AWAITS
+  `detachVideo` (previously fire-and-forget) so `dispose()` can never run
+  ahead of the detach's own `addSink`/`removeSink` calls.
+- **`GuestWebRtcSupervisor`** (new file) — a process-wide registry bridging
+  screen-scoped `WhepSubscriber`s to the service-scoped RTMP publish, so
+  `LiveBroadcastService.handleDrop()` can tear down every live guest's
+  WebRTC FIRST before a reconnect/retry attempt, and a new periodic
+  watchdog (`shouldWatchdogTriggerDrop`, extracted pure for testability)
+  backstops the case where RootEncoder's publish pipeline dies without ever
+  triggering `ConnectChecker`'s network-level callbacks. Documented in both
+  places as a last-resort breaker for the (fixed) mic/race hypotheses, not
+  a defense against a native SIGTRAP — a real process crash cannot be
+  caught or recovered from in-process; only the R8 keep-rule fix prevents
+  that class of failure.
+- **`LiveWebRtc`'s `AudioDeviceModule`** — the shared `PeerConnectionFactory`
+  had no explicit ADM, so WebRTC silently defaulted one in
+  (`JavaAudioDeviceModule.builder(context).createAudioDeviceModule()`), a
+  long-documented upstream WebRTC-Android gotcha (bug 8214) where the ADM
+  opens `AudioRecord` even for a purely recvonly connection. The host only
+  ever runs `WhepSubscriber` (recvonly, RootEncoder owns the real broadcast
+  mic entirely outside WebRTC) so it has zero legitimate need for WebRTC
+  audio recording, ever; kept OFF by default via the SDK's
+  `setAudioRecordEnabled(false)`, flipped on only for the guest device's own
+  `WhipPublisher` publish window. Demoted from "the" root cause once the
+  tombstone proved a hard process death, but kept as a real, independently
+  correct fix — a mic conflict is still a genuine defect even though it
+  isn't what killed this process.
+
+**Honest limits**: the R8/mapping.txt proof is the load-bearing one — direct,
+falsifiable, and specific to the actual crash frame. The resilience/race
+fixes above are real and defensible from source (RootEncoder's own
+documented main-thread contract; the suspending-`deleteResource()`-before-
+`dispose()` ordering is visible directly in the diff) but, per the owner's
+own note, could not be re-verified against a live two-device repro this
+session (no adb access beyond the one tombstone pull) — the watchdog in
+particular is untested against a real silent-death scenario since the only
+proven death mode (SIGTRAP) is now closed at the source. `#3`'s fix is
+traced and provable from a full `openExternal` call-site audit, but the
+EXACT sequence of screens the guest's device was on when the `.mov` prompt
+fired was not independently reconstructed — the fix closes every code path
+capable of producing that exact symptom app-wide, not just a single
+confirmed trigger.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, 69 tests, 0 failures/errors (57 baseline + 12 new:
+`VideoPlayerTest` for `isExternalVideoHost`, `shouldWatchdogTriggerDrop`
+cases in `LiveBroadcastInteractionsTest`). Additionally ran
+`./gradlew :app:assembleRelease` (release/R8 path, not part of the
+project's standard DoD but required here to falsifiably prove the actual
+fix) → BUILD SUCCESSFUL, mapping.txt inspected as documented above. Not
+pushed / no PR opened (isolated worktree `.worktrees/hostfix`, branch
+`fix/live-host-stability`, built on top of origin/main #73/#74/#76/#78/L6b/L6c).

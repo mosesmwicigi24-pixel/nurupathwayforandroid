@@ -204,19 +204,36 @@ internal fun RPrayer(text: String, pal: ReaderPalette) {
     }
 }
 
+/** [onPlay] now fires ONLY for a genuinely external host (YouTube/Vimeo —
+ *  see [org.nuruplace.member.ui.components.isExternalVideoHost]); a direct/
+ *  self-hosted video URL plays right here via InlineVideo instead of ever
+ *  reaching openExternal(). Real-device bug (2026-07-31): this card used to
+ *  hand ANY videoUrl straight to the caller's openExternal(), which for a
+ *  self-hosted `/media/<uuid>.mov` upload popped a bare "Download file
+ *  again?" Chrome prompt instead of playing the clip — see VideoPlayer.kt's
+ *  isExternalVideoHost doc for the full trace. */
 @Composable
 internal fun RMediaCard(imageUrl: String?, videoUrl: String?, portrait: Boolean, onPlay: (String) -> Unit) {
+    var playingInline by androidx.compose.runtime.remember(videoUrl) { mutableStateOf(false) }
+    val isExternal = videoUrl != null && org.nuruplace.member.ui.components.isExternalVideoHost(videoUrl)
     Box(
         Modifier.fillMaxWidth().aspectRatio(if (portrait) 9f / 15f else 16f / 9f)
             .clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF1A406B), Color(0xFF0B1F33), Color(0xFF00132F))))
-            .clickable(enabled = !videoUrl.isNullOrEmpty()) { videoUrl?.let(onPlay) },
+            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) {
+                val url = videoUrl ?: return@clickable
+                if (isExternal) onPlay(url) else playingInline = true
+            },
         contentAlignment = Alignment.Center,
     ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        }
-        Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFC89B3C)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.PlayArrow, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
+        if (playingInline && videoUrl != null) {
+            org.nuruplace.member.ui.components.InlineVideo(videoUrl, modifier = Modifier.fillMaxSize())
+        } else {
+            if (!imageUrl.isNullOrBlank()) {
+                AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+            Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFC89B3C)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.PlayArrow, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
+            }
         }
     }
 }

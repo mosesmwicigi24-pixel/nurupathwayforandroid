@@ -114,6 +114,19 @@ internal fun buildPublishUrl(rtmpUrl: String, streamId: String, streamKey: Strin
  *  change it. */
 internal fun cameraOrientationFor(rotation: Int): Int = if (rotation == 0) 270 else rotation - 90
 
+/** LiveBroadcastService's resilience-watchdog decision, pulled out as a pure
+ *  function so it's unit-testable without a Service/RootEncoder harness (same
+ *  reasoning as [cameraOrientationFor]/[buildPublishUrl] above). See
+ *  LiveBroadcastService.startWatchdog()'s doc for WHY this check exists:
+ *  ConnectChecker's onConnectionFailed/onDisconnect are network-level
+ *  signals only — they don't fire for every way the publish pipeline can go
+ *  silently wrong. `isStreaming == null` (no broadcaster at all — already
+ *  torn down, or never built) deliberately does NOT trigger a drop; only an
+ *  ACTUAL broadcaster reporting `isStreaming == false` while the app still
+ *  believes it's LIVE counts as the silent-death case this backstops. */
+internal fun shouldWatchdogTriggerDrop(phase: BroadcastPhase, isStreaming: Boolean?): Boolean =
+    phase == BroadcastPhase.LIVE && isStreaming == false
+
 /** Uniform wrapper over RootEncoder's two unrelated base classes
  *  (StreamBase for GenericStream/video, OnlyAudioBase for GenericOnlyAudio/
  *  audio-only) — they share no common supertype and differ in small ways
