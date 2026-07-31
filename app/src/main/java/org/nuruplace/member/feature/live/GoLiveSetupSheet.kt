@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -87,8 +88,10 @@ fun GoLiveSetupSheet(
     val scope = rememberCoroutineScope()
 
     val churchEligible = lockedScope == null && isChurchLiveEligible(me)
-    val cellEligible = (lockedScope == "cell") || (lockedScope == null && isCellLiveEligible(me))
-    val cellId = me?.profile?.cellGroupId
+    // The old binary gate — still exactly what decides whether the personal-
+    // cell fallback name (below) is worth fetching at all.
+    val personalCellFallbackEligible = (lockedScope == "cell") || (lockedScope == null && isCellLiveEligible(me))
+    val personalCellId = me?.profile?.cellGroupId
 
     var selectedScope by remember {
         mutableStateOf(lockedScope ?: if (churchEligible) "church" else "cell")
@@ -105,16 +108,49 @@ fun GoLiveSetupSheet(
     var permanentlyDenied by remember { mutableStateOf(false) }
     val activity = context as? Activity
 
-    // Audience picker (owner taste pass) — the cell row's subtitle names the
-    // broadcaster's own cell by reusing the exact same fetch CellInfoScreen
-    // already makes (GET /me/cell-summary); the wire contract itself is
-    // unchanged (scope "church"|"cell" + cell_id) — this is purely a nicer
-    // label than "My cell" for the cell they're actually about to go live to.
+    // Audience picker (owner taste pass) — the single-cell fallback row's
+    // label names the broadcaster's own cell by reusing the exact same fetch
+    // CellInfoScreen already makes (GET /me/cell-summary); the wire contract
+    // itself is unchanged (scope "church"|"cell" + cell_id) — this is purely
+    // a nicer label than "My cell" for the cell they're actually about to go
+    // live to.
     var cellName by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(cellEligible) {
-        if (cellEligible) {
+    LaunchedEffect(personalCellFallbackEligible) {
+        if (personalCellFallbackEligible) {
             cellName = runCatching { Net.client.api.cellSummary().cell?.name }.getOrNull()?.takeIf { it.isNotBlank() }
         }
+    }
+
+    // 2026-07-31 parity fix — a leader who oversees SEVERAL cells couldn't
+    // pick which one to broadcast to; this sheet only offered a binary
+    // "Everyone" vs a single "My cell". Reuses the existing discipler-roster
+    // fetch (GET /disciples, already scoped server-side to the caller's own
+    // `leader_assignments` — never a new endpoint) to discover every DISTINCT
+    // cell this member leads. Best-effort: a plain member's `/disciples` call
+    // 403s (Instructor+ only) and that's fine — `deriveCellOptions` falls
+    // back to the personal-membership single-cell option below when
+    // `myLedCells` stays empty. Skipped entirely when `lockedScope` is set
+    // (the Cell Info entry point forces scope=cell to the member's own cell
+    // and never shows a picker at all, same as iOS's `forcedCell` case).
+    var myLedCells by remember { mutableStateOf<List<LedCell>>(emptyList()) }
+    // Gates the "you have no eligible scope" message below so a leader with
+    // NO personal cell (only led cells, discovered async) doesn't see a
+    // false-negative flash before the roster fetch resolves.
+    var rosterLoaded by remember { mutableStateOf(lockedScope != null) }
+    LaunchedEffect(lockedScope) {
+        if (lockedScope == null) {
+            myLedCells = runCatching { Net.client.api.disciples() }.getOrNull()?.data
+                ?.let { ledCellsFromRoster(it) } ?: emptyList()
+        }
+        rosterLoaded = true
+    }
+
+    val cellOptions = deriveCellOptions(myLedCells, personalCellId, cellName)
+    val cellSectionAvailable = lockedScope == "cell" || cellOptions.isNotEmpty()
+
+    var selectedCellId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(cellOptions) {
+        selectedCellId = defaultSelectedCellId(cellOptions, selectedCellId)
     }
 
     // WebRTC warm-up (2026-07-31 host-process-death incident) — proactively
@@ -148,7 +184,7 @@ fun GoLiveSetupSheet(
         scope.launch {
             val body = CreateLiveStreamBody(
                 scope = selectedScope,
-                cellId = if (selectedScope == "cell") cellId else null,
+                cellId = resolveCellIdForBody(selectedScope, selectedCellId, cellOptions, personalCellId),
                 title = title.trim(),
                 kind = kind,
             )
@@ -217,7 +253,7 @@ fun GoLiveSetupSheet(
             // grant with no cellGroupId and no staff role. Rather than let
             // Start silently send scope=cell with a null cell_id (a
             // confusing 422 VALIDATION_FAILED), say so plainly.
-            if (lockedScope == null && !churchEligible && !cellEligible) {
+            if (lockedScope == null && !churchEligible && !cellSectionAvailable && rosterLoaded) {
                 Text(
                     "There's no cell or church-wide scope available for your account yet. Ask an admin to check your Go Live access.",
                     style = NuruType.body, color = Nuru.ink600,
@@ -274,13 +310,35 @@ fun GoLiveSetupSheet(
                             onClick = { selectedScope = "church" },
                         )
                     }
-                    if (cellEligible) {
+                    if (cellSectionAvailable) {
                         AudienceOption(
                             title = "A cell / class",
-                            subtitle = cellName?.let { "Only $it sees this" } ?: "Only your cell sees this",
+                            subtitle = cellAudienceSubtitle(cellOptions),
                             selected = selectedScope == "cell",
                             onClick = { selectedScope = "cell" },
                         )
+                    }
+                }
+
+                // The specific-cell picker — only surfaces once "A cell /
+                // class" is the active audience AND there's an actual choice
+                // to make (a leader of >1 cell). A single option keeps
+                // today's plain AudienceOption subtitle above; this never
+                // renders an empty or one-item picker (see deriveCellOptions
+                // for why zero cells can't reach this branch at all — it
+                // gates cellSectionAvailable itself). Makes the target
+                // unmistakable BEFORE Start is tappable — a real congregation
+                // is on the other end of "Everyone".
+                if (selectedScope == "cell" && cellOptions.size > 1) {
+                    Spacer(Modifier.height(Spacing.sm))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        cellOptions.forEach { cell ->
+                            CellChoiceRow(
+                                name = cell.name,
+                                selected = selectedCellId == cell.id,
+                                onClick = { selectedCellId = cell.id },
+                            )
+                        }
                     }
                 }
             }
@@ -346,6 +404,47 @@ private fun AudienceOption(title: String, subtitle: String, selected: Boolean, o
         ) {
             if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(13.dp))
         }
+    }
+}
+
+/** The "A cell / class" AudienceOption's subtitle — names the specific cell
+ *  when there's exactly one, points at the picker below when there's a real
+ *  choice to make, and falls back to the old generic copy only in the
+ *  (unreachable in practice — see [deriveCellOptions]) zero-cell case. */
+private fun cellAudienceSubtitle(cellOptions: List<LedCell>): String = when {
+    cellOptions.size > 1 -> "Choose which cell below"
+    cellOptions.size == 1 -> "Only ${cellOptions.first().name} sees this"
+    else -> "Only your cell sees this"
+}
+
+/** One row in the specific-cell picker, shown only once a leader of several
+ *  cells has chosen "A cell / class" as their audience — makes the exact
+ *  broadcast target unmistakable before Start is even tappable. Gold-chip
+ *  treatment (vs. AudienceOption's navy) on purpose: a visually distinct,
+ *  nested "second choice" under the audience row it belongs to, using the
+ *  same chip language already established elsewhere in this sheet. */
+@Composable
+private fun CellChoiceRow(name: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radii.control))
+            .background(if (selected) Nuru.goldChipBg else Nuru.surface)
+            .border(1.dp, if (selected) Nuru.gold.copy(alpha = 0.5f) else Nuru.border, RoundedCornerShape(Radii.control))
+            .clickable { onClick() }
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Filled.Groups, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+        Text(
+            name,
+            style = NuruType.cardCta,
+            color = Nuru.ink,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(15.dp))
     }
 }
 

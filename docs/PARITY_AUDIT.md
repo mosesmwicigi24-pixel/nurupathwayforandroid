@@ -3756,3 +3756,88 @@ signing secrets, immaterial to dex/mapping verification above). Committed,
 not pushed / no PR opened (isolated worktree `.worktrees/guestfix`, branch
 `fix/live-guest-auth-and-crash`, built on top of origin/main 3c98751 /
 rel/vc56).
+
+## 2026-07-31 — Nuru Live go-live cell targeting: leaders of several cells can now pick WHICH cell to broadcast to (branch feat/live-cell-targeting, this repo only, on top of #73/#74/#76/#78/L6b/L6c/host-stability/#85/#86/#87/#88)
+
+**The gap** (owner-confirmed, tonight's iOS↔Android parity audit): on iOS,
+`GoLiveSetupSheet.cellOptions` lists the *specific* cells a broadcaster
+leads (sourced from `GET /disciples`, already scoped server-side to the
+caller's own `leader_assignments`) and shows a radio-row picker once there's
+more than one. Android's `GoLiveSetupSheet.kt` only ever offered a binary
+"Everyone" vs a single generic "My cell" — a leader of 3 cells had no way to
+choose which one, and Start would silently send whatever `me.profile.
+cellGroupId` happened to be (their own personal cell membership, which may
+not even be one of the cells they lead).
+
+**Fix — mirrors iOS's semantics exactly, same endpoint, same request
+shape**: `GoLiveShared.kt` gains `LedCell(id, name)` plus four pure,
+non-Composable functions (unit-testable without Compose or network, same
+posture as `filterOutSelfStream`):
+- `ledCellsFromRoster` — dedupes `GET /disciples`' `RosterRow` list down to
+  the distinct `(cellGroupId, cellName)` pairs it names.
+- `deriveCellOptions` — the roster's led cells if any exist; else a single
+  fallback option built from the member's own `cellGroupId` (today's
+  behavior, unchanged for every non-leader this picker is new for); else an
+  empty list — **never a placeholder, never an empty picker**.
+- `defaultSelectedCellId` — keeps a still-valid selection, else defaults to
+  the first option, else null.
+- `resolveCellIdForBody` — the exact `cell_id` POST /live/streams sends: a
+  real Kotlin `null` for scope=church (kotlinx's `encodeDefaults = true`,
+  already configured in `ApiClient.kt`, serializes that as an EXPLICIT JSON
+  `"cell_id":null`, never an omitted key — the Android half of the backend's
+  `.nullish()` fix, c65c353), or the picker's selection (falling through the
+  same chain `defaultSelectedCellId` would, so a never-mounted picker or a
+  stale selection can't block Start) for scope=cell.
+
+`GoLiveSetupSheet.kt` reuses the EXISTING discipler-roster fetch
+(`Net.client.api.disciples()`, already used by the Discipleship Hub) —
+no new endpoint. Best-effort (`runCatching`): a plain member's `/disciples`
+call 403s (Instructor+ only) and `deriveCellOptions` just falls back to the
+personal-membership single option, exactly like before. A new
+`CellChoiceRow` composable — gold-chip styling (`Nuru.goldChipBg`/
+`goldChipText`/`gold`), matching the `Radii.control` corner radius and
+`Spacing` tokens already used throughout this sheet, visually distinct from
+(nested under) the navy-selected `AudienceOption` it belongs to — renders
+one row per led cell, **only** when "A cell / class" is the active audience
+**and** there's an actual choice (`cellOptions.size > 1`); a single cell
+keeps today's plain `AudienceOption` subtitle, and zero cells never renders
+the "A cell / class" option at all (`cellSectionAvailable` gates it). The
+target is unmistakable before Start is even tappable — no accidental
+church-wide broadcast to a real congregation.
+
+The `lockedScope="cell"` entry point (Cell Info screen's Go Live button)
+is untouched — it still forces the member's own personal cell with no
+picker shown, matching iOS's `forcedCell` case exactly (no change in scope
+for this task).
+
+**New tests** (`GoLiveCellPickerTest.kt`, 21 cases, plain JUnit): zero cells
+(no led cells + no personal cell → empty, never a placeholder; blank
+personal id treated as absent), exactly one cell (led-cell wins over a
+different personal fallback; personal fallback with a real name; personal
+fallback with the generic "My cell" label when no name is loaded yet),
+many cells (a 3-cell leader gets all 3, in roster order, roster wins over
+personal), roster dedup/blank-name/blank-id handling,
+`defaultSelectedCellId`'s keep-valid/reset-to-first/nothing-yet cases, and
+`resolveCellIdForBody`'s full fallback chain including two JSON-encoding
+tests (same `Json` config as `ApiClient`/`LiveDtoTest.kt`) proving
+`CreateLiveStreamBody` encodes a literal `"cell_id":null` for church-wide
+and the exact selected cell id for scope=cell — the wire-shape half of the
+`.nullish()` requirement, not just the Kotlin-level null.
+
+**Where exact iOS parity wasn't possible**: iOS's church-eligibility check
+(`LiveBroadcastEligibility.churchEligible`) treats `Instructor` as
+church-eligible too (its `staffRoles` set is `{Instructor, Admin,
+SuperAdmin}`); Android's `isChurchLiveEligible` only accepts `{Admin,
+SuperAdmin}`. This is a pre-existing discrepancy in `GoLiveShared.kt`
+unrelated to cell targeting — left untouched since the owner's brief scoped
+this session to the cell-picker gap specifically, not a general
+`GoLiveSetupSheet` eligibility re-audit. Flagged here for a future pass
+rather than folded into this change.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+:app:assembleRelease` → BUILD SUCCESSFUL, 107 tests total (86 baseline + 21
+new, all in `GoLiveCellPickerTest`), 0 failures. `assembleRelease`
+succeeded. Committed, not pushed / no PR opened (isolated worktree
+`.worktrees/celltarget`, branch `feat/live-cell-targeting`, built on top of
+origin/main 2b1522f / rel/vc57).
