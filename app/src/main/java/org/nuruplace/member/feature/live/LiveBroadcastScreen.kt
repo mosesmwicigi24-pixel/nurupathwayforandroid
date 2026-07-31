@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -50,9 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -62,11 +66,13 @@ import com.pedro.common.onMainThreadHandler
 import com.pedro.encoder.input.sources.audio.MicrophoneSource
 import com.pedro.encoder.input.sources.audio.NoAudioSource
 import com.pedro.encoder.input.sources.video.Camera2Source
+import com.pedro.encoder.input.video.CameraHelper
 import com.pedro.library.generic.GenericOnlyAudio
 import com.pedro.library.generic.GenericStream
 import com.pedro.library.util.streamclient.StreamBaseClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.LivePulsingDot
 import org.nuruplace.member.ui.components.PrimaryButton
@@ -101,7 +107,16 @@ private interface Broadcaster {
     fun switchCamera() {}
 }
 
-private class VideoBroadcaster(val stream: GenericStream) : Broadcaster {
+/** StreamBase.prepareVideo's own internal formula (verified against the
+ *  pinned 2.5.9 source, library/src/main/java/com/pedro/library/base/
+ *  StreamBase.kt: `glInterface.setCameraOrientation(if (rotation == 0) 270
+ *  else rotation - 90)`) for converting the `rotation` degrees passed to
+ *  prepareVideo into the `cameraOrientation` value setOrientation()/
+ *  setCameraOrientation() expect. Used ONLY to re-assert the SAME locked
+ *  orientation after a camera flip, never to change it. */
+internal fun cameraOrientationFor(rotation: Int): Int = if (rotation == 0) 270 else rotation - 90
+
+private class VideoBroadcaster(val stream: GenericStream, private val rotation: Int) : Broadcaster {
     override val isStreaming get() = stream.isStreaming
     override fun startStream(url: String) = stream.startStream(url)
     override fun stopStream() { stream.stopStream() }
@@ -116,7 +131,20 @@ private class VideoBroadcaster(val stream: GenericStream) : Broadcaster {
     override fun client() = stream.getStreamClient()
     override fun startPreview(view: SurfaceView) { if (!stream.isOnPreview) stream.startPreview(view) }
     override fun stopPreview() { if (stream.isOnPreview) stream.stopPreview() }
-    override fun switchCamera() { (stream.videoSource as? Camera2Source)?.switchCamera() }
+    override fun switchCamera() {
+        (stream.videoSource as? Camera2Source)?.switchCamera()
+        // Defensive re-assert of the locked orientation after a camera flip —
+        // mirrors the iOS port's BroadcastController.flipCamera() comment
+        // ("re-attach resets it — keep the locked orientation"). Verified
+        // against the pinned 2.5.9 Camera2Source.switchCamera() source that
+        // this is a no-op TODAY: it only stops/restarts capture on the SAME
+        // glInterface surface and never touches cameraOrientation itself
+        // (only StreamBase.changeVideoSource() — a call path this app never
+        // uses — does that, via glInterface.forceOrientation). Kept anyway:
+        // it's one cheap call, and it's exactly the guard that would matter
+        // if a future RootEncoder version changes that behavior.
+        stream.setOrientation(cameraOrientationFor(rotation))
+    }
 }
 
 private class AudioBroadcaster(val stream: GenericOnlyAudio) : Broadcaster {
@@ -140,6 +168,7 @@ fun LiveBroadcastScreen(
     title: String,
     kind: String, // "video" | "audio"
     onEnded: () -> Unit,
+    myUserId: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -281,18 +310,56 @@ fun LiveBroadcastScreen(
     val broadcaster = remember {
         if (isVideo) {
             val s = GenericStream(context, connectChecker)
+            // Live camera-TILT compensation only (verified against the pinned
+            // 2.5.9 GlStreamInterface source): this wires a SensorRotationManager
+            // that keeps re-asserting `cameraOrientation` from the live
+            // accelerometer for the rest of the broadcast, so footage stays
+            // upright if the phone tilts slightly — but `encoderWidth`/
+            // `encoderHeight` are set ONCE below by prepareVideo() and never
+            // touched again by that callback, so the encoded RESOLUTION (the
+            // thing that must never change mid-stream or every viewer's player
+            // breaks) is still genuinely locked for the session. Orthogonal to,
+            // and compatible with, the orientation-follow fix right below.
             s.getGlInterface().autoHandleOrientation = true
             s.setVideoCodec(VideoCodec.H264)
-            // rotation=90 on a 1920x1080 base yields a natural 1080x1920
-            // portrait broadcast (the RootEncoder "rotation" sample's
-            // documented vertical-orientation convention) — how people
-            // actually hold a phone to go live.
+            // ── Orientation-follow fix (port of iOS 80f4fdd) ──
+            // Was: hard-coded `rotation = 90`, so a broadcast was ALWAYS
+            // encoded portrait even when the phone was actually held
+            // landscape. Fix: read how the phone is held ONCE, right here at
+            // go-live, and bake it into prepareVideo's `rotation` param.
+            // StreamBase.prepareVideo (pinned 2.5.9 source, library/src/main/
+            // java/com/pedro/library/base/StreamBase.kt) computes the ACTUAL
+            // encoder width/height from that single value internally
+            // (`if (rotation == 90 || rotation == 270)
+            // glInterface.setEncoderSize(height, width) else
+            // setEncoderSize(width, height)`) — so VIDEO_WIDTH/VIDEO_HEIGHT
+            // below are deliberately left as the fixed "landscape-native" base
+            // (1920x1080) for BOTH cases; no manual width/height swap needed,
+            // the library already does it internally. This is the exact same
+            // fixed-base + rotation-flag pattern RootEncoder's own "rotation"
+            // sample app uses (app/src/main/java/com/pedro/streamer/rotation/
+            // CameraFragment.kt: `rotation = if (isVertical) 90 else 0`).
+            // `CameraHelper.getCameraOrientation(context)` (encoder/src/main/
+            // java/com/pedro/encoder/input/video/CameraHelper.java — the
+            // "encoder" module RootEncoder pulls in transitively, already on
+            // this app's classpath, same as Camera2Source/MicrophoneSource
+            // above) is the library's own canonical helper for exactly this:
+            // it reads `windowManager.getDefaultDisplay().getRotation()` and
+            // returns it ALREADY converted to the 0/90/180/270 convention
+            // prepareVideo's `rotation` param expects (ROTATION_0→90
+            // portrait, ROTATION_90→0 landscape, ROTATION_180→270 reverse
+            // portrait, ROTATION_270→180 reverse landscape) — the same helper
+            // RootEncoder's own ScreenOrientation.lockScreen() sample uses.
+            // Read once, here, and never touched again for the rest of the
+            // broadcast — re-orienting mid-publish would change the encoded
+            // frame size and break every viewer's player.
+            val rotation = CameraHelper.getCameraOrientation(context)
             val ok = runCatching {
-                s.prepareVideo(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_BITRATE, fps = 30, rotation = 90) &&
+                s.prepareVideo(VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_BITRATE, fps = 30, rotation = rotation) &&
                     s.prepareAudio(AUDIO_SAMPLE_RATE, true, AUDIO_BITRATE)
             }.getOrDefault(false)
             prepareOk = ok
-            VideoBroadcaster(s).also { broadcasterHolder.value = it }
+            VideoBroadcaster(s, rotation).also { broadcasterHolder.value = it }
         } else {
             val s = GenericOnlyAudio(connectChecker)
             val ok = runCatching { s.prepareAudio(AUDIO_BITRATE, AUDIO_SAMPLE_RATE, true) }.getOrDefault(false)
@@ -349,6 +416,47 @@ fun LiveBroadcastScreen(
         while (true) {
             elapsedSec = ((System.currentTimeMillis() - started) / 1000).toInt()
             delay(1_000)
+        }
+    }
+
+    // ── L5 interactions (docs/LIVE_INTERACTIVE.md) — broadcaster side ──────
+    // One GET .../pulse poll every 3s (the wire contract's broadcaster
+    // cadence, vs the viewer's 5s in LivePlayerScreen) folded into this same
+    // "only while actually LIVE" idiom as the viewer-count poll above. Drives
+    // the ✋ hand badge + hands/guests sheet and the floating reaction
+    // overlay; the 💬 chat sheet polls messages on its own while it's open.
+    var pulse by remember { mutableStateOf<LivePulse?>(null) }
+    // null = not yet seeded (first poll) — prevents the whole reaction
+    // history from bursting as particles the instant the broadcast connects.
+    var seenReactionKeys by remember { mutableStateOf<Set<String>?>(null) }
+    var reduceMotionReactionTotal by remember { mutableIntStateOf(0) }
+    val reactionParticles = rememberLiveParticleController()
+    var showHandsSheet by remember { mutableStateOf(false) }
+    var showChatSheet by remember { mutableStateOf(false) }
+    val reduceMotion = remember { isReduceMotionEnabled(context) }
+
+    suspend fun refreshPulseNow() {
+        val p = runCatching { Net.client.api.getLivePulse(streamId) }.getOrNull() ?: return
+        pulse = p
+    }
+
+    LaunchedEffect(streamId) {
+        while (true) {
+            delay(3_000)
+            if (phase == Phase.LIVE) {
+                val p = runCatching { Net.client.api.getLivePulse(streamId) }.getOrNull()
+                if (p != null) {
+                    pulse = p
+                    val keys = p.recentReactions.map { "${it.emoji}@${it.at}" }.toSet()
+                    val prevSeen = seenReactionKeys
+                    if (prevSeen != null) {
+                        val fresh = keys - prevSeen
+                        if (reduceMotion) reduceMotionReactionTotal += fresh.size
+                        else fresh.take(6).forEach { k -> reactionParticles.spawn(k.substringBefore('@')) }
+                    }
+                    seenReactionKeys = keys
+                }
+            }
         }
     }
 
@@ -440,11 +548,53 @@ fun LiveBroadcastScreen(
                     retryAttempt = retryAttempt,
                     muted = muted,
                     isVideo = isVideo,
+                    handCount = pulse?.hands?.size ?: 0,
                     onToggleMute = { muted = !muted; broadcaster.setMuted(muted) },
                     onFlipCamera = { broadcaster.switchCamera() },
                     onEndTapped = { showEndConfirm = true },
+                    onHandsTapped = { showHandsSheet = true },
+                    onChatTapped = { showChatSheet = true },
                 )
+
+                // Floating reaction particles from pulse.recent_reactions —
+                // everyone else's ❤️/👍/🔥 (reuses #73's LiveParticleController/
+                // LiveParticleLayer verbatim). Reduce Motion swaps to a static
+                // counter chip instead of suppressing the feature entirely,
+                // matching the viewer overlay's exact same fallback.
+                if (phase == Phase.LIVE || phase == Phase.RECONNECTING) {
+                    if (reduceMotion) {
+                        if (reduceMotionReactionTotal > 0) {
+                            ReactionCounterChip(
+                                reduceMotionReactionTotal,
+                                Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 16.dp),
+                            )
+                        }
+                    } else {
+                        LiveParticleLayer(
+                            reactionParticles,
+                            Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 24.dp)
+                                .width(70.dp).height(220.dp),
+                        )
+                    }
+                }
             }
+        }
+
+        if (showHandsSheet) {
+            LiveHandsGuestsSheet(
+                streamId = streamId,
+                pulse = pulse,
+                onRefreshPulse = ::refreshPulseNow,
+                onDismiss = { showHandsSheet = false },
+            )
+        }
+
+        if (showChatSheet) {
+            LiveBroadcastChatSheet(
+                streamId = streamId,
+                myUserId = myUserId,
+                onDismiss = { showChatSheet = false },
+            )
         }
 
         if (showEndConfirm) {
@@ -495,9 +645,12 @@ private fun LiveHudOverlay(
     retryAttempt: Int,
     muted: Boolean,
     isVideo: Boolean,
+    handCount: Int,
     onToggleMute: () -> Unit,
     onFlipCamera: () -> Unit,
     onEndTapped: () -> Unit,
+    onHandsTapped: () -> Unit,
+    onChatTapped: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -526,17 +679,23 @@ private fun LiveHudOverlay(
             Spacer(Modifier.weight(1f))
         }
         Spacer(Modifier.weight(1f))
+        // [mic, End, flip, ✋, 💬] — deliberately the SAME order as the iOS
+        // port's controlsRow (GoLiveBroadcastView.swift), not the old
+        // mic/flip-then-push-End-to-the-right layout: a fixed-spacing row,
+        // left-aligned, End sitting right after mic rather than pinned to
+        // the trailing edge.
         Row(
             Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
             HudIconButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", onToggleMute)
-            if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
-            Spacer(Modifier.weight(1f))
             Row(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.danger).clickable { onEndTapped() }
                     .padding(horizontal = 20.dp, vertical = 12.dp),
             ) { Text("End", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.Bold) }
+            if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
+            HudHandButton(count = handCount, onClick = onHandsTapped)
+            HudEmojiIconButton("💬", "Live chat", onChatTapped)
         }
         title.takeIf { it.isNotBlank() }?.let {
             Spacer(Modifier.height(Spacing.sm))
@@ -551,6 +710,51 @@ private fun HudIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
         Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(22.dp)) }
+}
+
+@Composable
+private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { Text(emoji, fontSize = 20.sp, modifier = Modifier.semantics { contentDescription = label }) }
+}
+
+/** ✋ raise-hand queue toggle — gold badge counts hands from the 3s pulse
+ *  poll, matching the iOS port's handButton exactly (badge only shown when
+ *  count > 0, capped display at 99). */
+@Composable
+private fun HudHandButton(count: Int, onClick: () -> Unit) {
+    Box(Modifier.size(48.dp)) {
+        Box(
+            Modifier.size(48.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { onClick() },
+            contentAlignment = Alignment.Center,
+        ) { Text("✋", fontSize = 20.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
+        if (count > 0) {
+            Box(
+                Modifier.size(20.dp).align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
+                    .clip(CircleShape).background(Nuru.gold),
+                contentAlignment = Alignment.Center,
+            ) { Text("${count.coerceAtMost(99)}", style = NuruType.micro, color = Nuru.homeNavy, fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+/** Reduce-Motion fallback for the floating reaction particles — a static
+ *  "❤ N" pill showing the running total seen this broadcast, mirroring the
+ *  viewer overlay's and the iOS port's ReactionBurstQueue.reduceMotionTotal
+ *  fallback (a value change, not a decorative animation). */
+@Composable
+private fun ReactionCounterChip(total: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text("❤️", fontSize = 12.sp)
+        Text("$total", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.SemiBold)
+    }
 }
 
 @Composable

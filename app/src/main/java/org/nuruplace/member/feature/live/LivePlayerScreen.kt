@@ -55,7 +55,6 @@
 // backend repo).
 package org.nuruplace.member.feature.live
 
-import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -136,16 +135,6 @@ import kotlin.math.sin
  *  certainly caught up to a just-started stream. See the flicker-fix header
  *  comment above. */
 private const val CDN_WARM_UP_MS = 8_000L
-
-/** System-wide "Remove animations" (Settings > Accessibility) reflected via
- *  the animator duration scale — 0 means the user asked for no motion.
- *  Reaction bursts are skipped in that case; the counter itself still pops
- *  (a value change, not a decorative animation), per the design spec. */
-private fun isReduceMotionEnabled(context: android.content.Context): Boolean = try {
-    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-} catch (_: Exception) {
-    false
-}
 
 @Composable
 fun LivePlayerScreen(

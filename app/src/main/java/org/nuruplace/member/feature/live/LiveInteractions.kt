@@ -6,6 +6,7 @@
 // reports taps back via callbacks).
 package org.nuruplace.member.feature.live
 
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -55,6 +56,18 @@ import org.nuruplace.member.ui.theme.NuruType
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
+
+/** System-wide "Remove animations" (Settings > Accessibility) reflected via
+ *  the animator duration scale — 0 means the user asked for no motion.
+ *  Reaction bursts are skipped in that case; the counter itself still pops
+ *  (a value change, not a decorative animation), per the design spec. Shared
+ *  by the viewer player and the broadcaster HUD — both fall back to a static
+ *  counter chip identically. */
+fun isReduceMotionEnabled(context: android.content.Context): Boolean = try {
+    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+} catch (_: Exception) {
+    false
+}
 
 /** TikTok-style abbreviation: 999 stays exact, 1_200 -> "1.2K", 10_000 -> "10K",
  *  1_500_000 -> "1.5M". Pure integer math — no locale-dependent float formatting. */

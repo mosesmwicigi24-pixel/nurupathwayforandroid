@@ -733,6 +733,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // Pop back to wherever the member came from (Home or
                     // CellInfoScreen) — never a fixed destination.
                     onEnded = { nav.popBackStack() },
+                    myUserId = me?.profile?.userId,
                 )
             }
             composable(
