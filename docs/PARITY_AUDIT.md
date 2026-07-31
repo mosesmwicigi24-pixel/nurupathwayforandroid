@@ -2115,3 +2115,113 @@ unread badge), Live tab only for live:go; Android alias-routes kept every
 FCM/shortcut/deep-link site byte-identical; iOS added nuru://you|live hosts.
 ON DEVICES: next builds (iOS 77+/Android vc48+). First-broadcast checklist in
 [[live-streaming-epic]] memory.
+
+## 2026-07-31 — Nuru Live L5 interactions (viewer) + flicker root-cause
+
+Android had shipped L2-L4 (viewer, broadcaster, tab restructure) but NONE of
+L5's interactions — iOS shipped reactions/hand/chat in build 91, Android's
+`LivePlayerScreen` was still the silent L2 player. Built the full contract
+(`pathway docs/LIVE_INTERACTIVE.md`, backend already live in prod):
+POST reactions (like/love/fire), POST hand, GET/POST messages (3s poll,
+since-cursor), GET pulse (5s poll — viewer_count/reactions/hands/guests),
+POST/DELETE guest invite+respond (L6 scaffolding, no video yet).
+
+**Design** (TikTok + Instagram Live + a classroom touch, per owner brief):
+- Full-bleed chrome: top-left ✕, top-right pulsing-dot LIVE pill + eye/viewer
+  count, a raised-hands "✋ N" chip stacked under it, broadcaster identity
+  chip (initials avatar + name + title, IG-style) below.
+- Right rail (TikTok): ❤️ 🔥 👍 stacked with abbreviated counts underneath
+  (`abbreviateCount`: 999 / 1.2K / 10K / 1.5M — unit-tested), then ✋
+  raise-hand (gold fill when raised) and 💬 chat toggle. Each tap fires a
+  particle that floats up the rail with jitter+fade (`LiveParticleController`
+  + `LiveParticleLayer`); `pulse.recent_reactions` also seeds a slow ambient
+  trickle from OTHER viewers' taps (first poll only seeds the "seen" set —
+  it never bursts a stream's whole reaction history on open). Double-tap
+  anywhere on the video fires ❤️ + a big IG-style heart pop at the tap point.
+  Both burst types are skipped when the system "Remove animations"
+  accessibility setting is on (`ANIMATOR_DURATION_SCALE == 0`) — only the
+  counter itself still updates, per the design spec's "counter pop only".
+- Floating chat (owner's exact spec — NOT a sheet): anchored bottom-left,
+  ~2/3 width, translucent dark rounded panel, last 6 messages with the
+  oldest fading toward the top, name in gold / body in white; 💬 reveals a
+  translucent input pill above it.
+- Guest invite (L6 scaffolding only — no WHIP/WHEP video, that is its own
+  later phase per the wire contract): a gold "You're invited on stage" card
+  with Accept/Decline when `pulse.guests` has me as `invited`; an
+  "On stage soon" chip once accepted.
+- Home header: reused the exact "church stream is live" boolean Home already
+  computes (`churchLive`, vc49 discovery), added a `LiveHeaderChip` between
+  the bell and radio icons — same 40dp circle language as
+  `CircleButton`, but a breathing red ring instead of a static gold border.
+- New files: `feature/live/LiveInteractions.kt` (rail, particles, chat
+  overlay, hand/guest chips, `abbreviateCount`, `myHandRaised`/
+  `myGuestStatus` — the pure matchers are unit-tested in
+  `LiveInteractionsTest`). `LivePlayerScreen.kt` rewritten to wire it all to
+  the new `MemberApi` endpoints + `LiveDtos.kt` additions (`LivePulse` with a
+  forward-tolerant `reactions: Map<String,Int>` — NOT a fixed {like,love}
+  shape — specifically so the backend's in-flight "fire" widening decodes
+  without a client change; covered in `LiveDtoTest`).
+
+**Flicker bug — root cause, not a patch.** Owner report: opening the viewer
+briefly shows the PREVIOUS test broadcast before snapping to the current one.
+Traced the whole chain per the reliability doctrine, not just the symptom:
+read `packages/backend/src/modules/live/service.ts` (`listNow`, read-only —
+pathway repo untouched) and confirmed the client never reuses a stale
+ExoPlayer instance across streams (each `LivePlayerScreen` mount builds a
+brand-new `ExoPlayer` via `remember(streamId)`, released in `onDispose`; no
+`CacheDataSource`/on-disk HTTP cache is configured, so there is no local
+response cache to serve stale segments either). The real cause is server/CDN:
+for church-scope streams with `LIVE_CDN_BASE` set, `hls_url` is always the
+literal string `"{cdnBase}/live-cdn/church/index.m3u8"` — **identical for
+every church broadcast, forever, with no stream_id in the path.** Cloudflare
+R2 mirrors that one path from the VPS origin on a lag; the first few seconds
+after a NEW stream starts, the edge can still be serving the PREVIOUS
+stream's manifest/segments at that same URL — exactly the reported symptom,
+and impossible to fully fix from the client because the URL genuinely is
+shared.
+
+Client mitigation shipped (`LivePlayerScreen.kt`, see its header comment):
+the service already computes a per-request `hls_fallback_url` (the direct
+origin path, no CDN in front of it, so it always reflects whatever is
+*actually* live right now) but Android was dropping it on the floor. Wired
+it through `LiveNowRow.hlsFallbackUrl` → `liveNowRoute()` → the nav args →
+the player: on open, a live church stream starts on the fallback/origin URL
+for an 8s warm-up window (`CDN_WARM_UP_MS`), then swaps the `MediaItem` to
+the CDN url once R2's mirror has almost certainly caught up — the viewer
+never touches the CDN's stale copy during the window where staleness is
+possible. Also hardened the player's `remember`/`DisposableEffect` key from
+`url` to `streamId ?: url`, so even though the CDN url text is identical
+across streams, a *new* stream can never accidentally inherit a *previous*
+stream's still-alive player instance.
+
+**The correct permanent fix is server-side** (recommended, NOT implemented —
+this session may not touch the pathway repo): scope the CDN mirror path by
+`stream_id`, e.g. `/live-cdn/church/{stream_id}/index.m3u8`, so a new
+broadcast can never alias a previous one's cached objects at all; or, if the
+path must stay stable, set a very short `Cache-Control`/TTL on the manifest
+object (segments are already uniquely named per-stream by MediaMTX, so the
+manifest is almost certainly the only object actually at risk) and/or purge
+the R2 object on stream start. Filed for the pathway repo owner, not
+actioned here.
+
+**Honest limits**: double-tap-to-heart only wires to the video surface
+(`AndroidView` branch) — audio-kind streams (`AudioBackdrop`) have no video
+to tap, so that gesture is unavailable there (the rail's ❤️ button still
+works). Reaction/hand optimistic updates are "self-healing" via the 5s pulse
+poll rather than fully reconciled with rollback-on-failure (the verse-
+reaction pattern elsewhere in this app does roll back; skipped here since a
+dropped POST is invisible for at most one 5s poll on a fire-and-forget
+gesture). The guest-invite card has no push-driven auto-open — it only
+appears once the 5s pulse poll picks up the invite, so a backgrounded app's
+system notification (existing `live_guest_invite` FCM template) is still the
+real-time path; foreground pickup can lag up to 5s. No Robolectric/instrumentation
+test exercises the actual Compose overlay (rail taps, particle lifecycle,
+chat scroll) — only the pure functions (`abbreviateCount`,
+`myHandRaised`/`myGuestStatus`) and DTO decoding are unit-tested, consistent
+with this codebase's existing test coverage posture for Live/Compose code.
+
+Verified: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest`
+→ BUILD SUCCESSFUL, all 8 test classes green (36 tests, 0 failures/errors;
+13 new: 7 `LiveInteractionsTest` + 6 `LiveDtoTest`). Not pushed / no PR
+opened (per task instruction — isolated worktree `feat/live-viewer-l5`).
