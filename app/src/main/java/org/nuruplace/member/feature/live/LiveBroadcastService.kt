@@ -238,14 +238,27 @@ class LiveBroadcastService : Service() {
         _state.update { it.copy(switchingSource = true) }
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(session), foregroundTypeFor(session, screenSharing = true))
         mediaProjection?.stop()
+        // API 36's platform stubs correctly annotate getMediaProjection() as
+        // @Nullable (it really does return null off-contract — e.g. a
+        // resultCode that isn't RESULT_OK — even though the launcher above
+        // already guards for that; keep the guard here too rather than
+        // asserting non-null, since a screen-share failure must degrade to
+        // "stay on camera", never crash the whole broadcast).
         val projection = mediaProjectionManager.getMediaProjection(resultCode, data)
         mediaProjection = projection
-        val switched = runCatching { broadcaster?.useScreenSource(projection) }.isSuccess
+        val switched = projection != null && runCatching { broadcaster?.useScreenSource(projection) }.isSuccess
         // L6c — task brief item 4: while sharing the screen (or Document,
         // which rides on the same SCREEN source), the shared content stays
         // large and every live guest drops to the rail — never promoted to
         // the speaker slot. See GuestStageCompositor.setScreenSource's doc.
-        if (switched) GuestStageCompositor.setScreenSource(true)
+        if (switched) {
+            GuestStageCompositor.setScreenSource(true)
+        } else {
+            // Didn't actually get a projection — revert the notification's
+            // foreground-service type back to camera so it doesn't keep
+            // claiming a mediaProjection type it never started.
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(session), foregroundTypeFor(session, screenSharing = false))
+        }
         _state.update {
             it.copy(source = if (switched) BroadcastSource.SCREEN else BroadcastSource.CAMERA, switchingSource = false)
         }

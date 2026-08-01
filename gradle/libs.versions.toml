@@ -1,5 +1,11 @@
 [versions]
-agp = "8.5.2"
+# AGP 8.13.2 — last GA release in the 8.x line (next is 9.0+, which forces
+# Gradle 9.x): the minimal jump off 8.5.2 that supports compileSdk 36
+# (AGP 8.10.0 was the first to add it; 8.13.2 carries every 8.x bugfix since
+# — verified against dl.google.com/android/maven2 .../gradle/maven-metadata.xml,
+# no 8.14+ exists, next is 9.0.0-alpha01). Required for the Aug 31 2026 Play
+# target-API deadline (see app/build.gradle.kts compileSdk/targetSdk comment).
+agp = "8.13.2"
 kotlin = "2.0.20"
 coreKtx = "1.13.1"
 coreSplashscreen = "1.0.1"

@@ -34,7 +34,11 @@ val signing = releaseSigning()
 
 android {
     namespace = "org.nuruplace.member"
-    compileSdk = 35
+    // Google Play target-API policy (support.google.com/googleplay/android-developer/answer/11926878):
+    // new apps/updates must target Android 16 (API 36) by 31 Aug 2026. Android 17
+    // (API 37, released 16 Jun 2026) exists but Play doesn't require targeting it
+    // until Aug 2027 — 36 is the correct, minimal-risk choice for this deadline.
+    compileSdk = 36
 
     // JVM unit tests: return defaults for android.* stubs (e.g. android.util.Log)
     // instead of throwing "not mocked".
@@ -43,7 +47,7 @@ android {
     defaultConfig {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 61                  // bump every release so devices take it as an update
         versionName = "2.36.0"
         vectorDrawables { useSupportLibrary = true }
