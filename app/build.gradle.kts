@@ -1,5 +1,6 @@
 import java.io.File
 import java.util.Properties
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,6 +11,11 @@ plugins {
     // Firebase (add-alongside): active — app/google-services.json present for
     // com.nuruplace in project pathway-63ca4 (777897756817). See FIREBASE_SETUP.md.
     alias(libs.plugins.google.services)
+    // Crashlytics (+ NDK) — turns a native libjingle/WebRTC crash (tonight's
+    // incident: stripped org.jni_zero.JniInit, invisible to a JVM-only
+    // reporter) into a symbolicated report instead of raw hex offsets. See
+    // the release buildType below for nativeSymbolUploadEnabled + debugSymbolLevel.
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 // Release signing — REUSES the existing "CN=Nuru Place" upload key so this app
@@ -79,6 +85,18 @@ android {
             // a real Play "shrinking" score. Requires minify, which is on.
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // FULL debug symbols on the release .so's — without this AGP strips
+            // native symbols before Crashlytics can upload them, and a native
+            // crash (tonight's libjingle/jni_zero incident) is back to
+            // unreadable hex offsets even with the SDK present.
+            ndk { debugSymbolLevel = "FULL" }
+            // Uploads those FULL symbols to Firebase so native (NDK/libjingle)
+            // crashes symbolicate in the Crashlytics dashboard instead of
+            // showing raw addresses. Off by default (build-speed tradeoff) —
+            // this is the setting that actually closes tonight's gap.
+            configure<CrashlyticsExtension> {
+                nativeSymbolUploadEnabled = true
+            }
         }
     }
     compileOptions {
@@ -156,6 +174,14 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.messaging)
+    // Crashlytics: JVM crash/ANR reporting (self-initializes via ContentProvider,
+    // same pattern as FCM — no app code changes needed for basic capture).
+    implementation(libs.firebase.crashlytics)
+    // Crashlytics NDK: captures native (Mach/Linux-signal-level) crashes —
+    // e.g. tonight's libjingle/WebRTC org.jni_zero.JniInit SIGTRAP, which a
+    // JVM-only crash reporter never sees at all. Still a distinct BOM-managed
+    // artifact at firebase-bom 33.7.0 (no -ktx variant exists for it).
+    implementation(libs.firebase.crashlytics.ndk)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
