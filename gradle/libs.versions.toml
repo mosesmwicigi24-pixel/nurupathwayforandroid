@@ -30,6 +30,15 @@ work = "2.9.1"
 ksp = "2.0.20-1.0.25"
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
+# Crashlytics Gradle plugin — 3.0.7 is the latest GA on Google's Maven
+# (dl.google.com/android/maven2/com/google/firebase/crashlytics/com.google.firebase.crashlytics.gradle.plugin/maven-metadata.xml,
+# checked 2026-08-10) and requires AGP 8.1+ (this project is on 8.13.2, so the
+# v3 line applies — v2.9.9 is only needed below AGP 8.1). Verified against the
+# firebase-bom 33.7.0 POM that firebase-crashlytics, firebase-crashlytics-ktx,
+# and firebase-crashlytics-ndk are all still separate BOM-managed artifacts at
+# 19.3.0 each — NDK support has NOT been folded into the base artifact yet, so
+# the -ndk dependency below is required, not redundant.
+firebaseCrashlyticsPlugin = "3.0.7"
 junit = "4.13.2"
 coroutinesTest = "1.8.1"
 # Nuru Live (L3) — RTMP publish (broadcaster side). The newest JitPack
@@ -92,6 +101,10 @@ play-location = { group = "com.google.android.gms", name = "play-services-locati
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
+firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics-ktx" }
+# No -ktx variant exists for the NDK artifact (verified: firebase-crashlytics-ndk-ktx
+# 404s on dl.google.com) — this is the correct, only name for native-crash support.
+firebase-crashlytics-ndk = { group = "com.google.firebase", name = "firebase-crashlytics-ndk" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
@@ -110,3 +123,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebaseCrashlyticsPlugin" }
