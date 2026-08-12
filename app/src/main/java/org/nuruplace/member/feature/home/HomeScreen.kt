@@ -400,6 +400,17 @@ fun HomeScreen(
                     }
                 }
                 // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
+                // Three states, where there used to be only "unread": the knock,
+                // a quiet way back in once read, and — when nothing has arrived
+                // — the ritual itself ("Sunday evening"). Showing nothing was
+                // the old behaviour and it made the letter feel accidental.
+                if (letter == null) LetterAwaitingCard()
+                letter?.takeIf { !it.isUnread }?.let { lt ->
+                    LetterReadRow(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = {})
+                    }
+                }
                 letter?.takeIf { it.isUnread }?.let { lt ->
                     LetterKnockCard(lt) { showLetter = true }
                     if (showLetter) {
