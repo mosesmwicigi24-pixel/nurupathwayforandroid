@@ -19,6 +19,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- Package-visibility (Android 11+, targetSdk 36): without this, binding
+         the system TextToSpeech engine for the spoken-liturgy control
+         silently fails to find any engine on-device (LiturgyVoice.kt). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".NuruApp"
         android:allowBackup="false"

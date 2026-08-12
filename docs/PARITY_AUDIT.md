@@ -4338,3 +4338,156 @@ and `AudioManager.isSpeakerphoneOn`, were switched to the AutoMirrored
 variant / explicitly suppressed respectively). Committed in this worktree
 (`.worktrees/livelayout`, branch `feat/live-screen-layout`, built on top of
 origin/main `40b2993`); not pushed, no PR opened.
+
+## 2026-08-12 — Spoken liturgy: on-device Listen control, final item of the four-part liturgy upgrade (branch feat/liturgy-audio, this repo only, worktree `.worktrees/liturgyaudio`, built on top of origin/main `5354bd9`)
+
+Gives the daily liturgy card a voice — the owner's explicit ask, matched in
+parallel by an iOS agent on the same-named branch/worktree in the
+`nuru-member-ios` repo for strict cross-platform parity. **On-device speech
+only, never a cloud TTS service** — there was no TTS anywhere in this stack
+before this session; the owner's reasoning (checked and agreed with): zero
+per-play cost for ~76 members, no new API key/secret, works fully offline,
+no latency, and no member audio ever leaves the device.
+
+- **`LiturgySpeech.kt`** (new, pure — no Android runtime object touched, so
+  it's covered by plain JVM unit tests with no Robolectric/device): builds
+  the spoken script in the liturgy card's OWN render order
+  (`LiturgyCards.kt`'s `LiturgyCard`) — the hour's `line`, then `charge` if
+  present, then the companion `verseLine` (its text, then its reference read
+  naturally) OR the bare `scriptureRef` when there's no companion verse
+  (mirrors the card's own either/or rule exactly, so the ear and the eye
+  never disagree about which reference is "the" reference).
+  `naturalizeScriptureReference` turns `"Psalm 23:1"` into
+  `"Psalm 23, verse 1"` and `"John 15:1-4"` into `"John 15, verses 1 to 4"` —
+  the synthesizer already expands digits into words on its own; this only
+  turns the chapter:verse PUNCTUATION into a natural spoken pause instead of
+  "colon" or a run-on number. A reference shape it doesn't recognize (a bare
+  `"Psalm 23"`, a cross-chapter range) passes through unchanged rather than
+  risk mangling it. Also holds the entire playback state machine
+  (`LiturgyVoiceStatus`/`LiturgyVoiceEvent`/`reduceLiturgyVoiceStatus`) and
+  the locale picker (`pickLiturgyVoiceLocale`) as pure functions —
+  `LiturgyVoice` calls these for every real transition/choice instead of
+  deciding inline, so what's unit-tested is exactly what runs in production.
+- **`LiturgyVoice.kt`** (new, the engine — an app-wide `object` in the
+  `RadioController`/`AppPrefs` shape): binds `android.speech.tts.TextToSpeech`
+  as soon as the card mounts (never auto-plays — binding is silent) so the
+  engine is warm before a member finishes reading and taps Listen.
+  - **Audio focus**: requests `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` with
+    `USAGE_MEDIA`/`CONTENT_TYPE_SPEECH`. `RadioService`'s `ExoPlayer` already
+    runs with `USAGE_MEDIA`/`CONTENT_TYPE_MUSIC` and `handleAudioFocus = true`
+    — media3's own `AudioFocusManager` reacts to a `MAY_DUCK` transient
+    request against a `CONTENT_TYPE_MUSIC` player by lowering ITS OWN volume
+    for the duration rather than pausing (pausing is media3's behaviour only
+    for `CONTENT_TYPE_SPEECH` losers, which Radio isn't) — so Radio keeps
+    playing, just quieter, and returns to full volume automatically once
+    `LiturgyVoice` abandons focus. This required NO new coupling to
+    `RadioController` at all; it's the platform's own audio-focus policy
+    doing the "duck, don't silently interrupt worship music" the brief asked
+    for. Nuru Live's own player (`LivePlayerScreen`) doesn't request audio
+    focus today and releases its player in `DisposableEffect.onDispose`, so
+    it isn't a background audio source the way Radio is — the two screens
+    aren't co-visible in the current navigation, so this wasn't a case that
+    needed handling here; flagged as a real gap if Live ever grows a
+    persistent mini-player.
+  - **Focus loss** (e.g. an incoming call): `TextToSpeech` has no
+    "pause/resume mid-sentence" API — `stop()` cleanly and return to `IDLE`,
+    honest rather than pretending to resume from wherever it left off.
+  - **Missing engine / language degrade**: `onInit` failure OR no usable
+    English language data (`TextToSpeech.isLanguageAvailable`/`setLanguage`
+    result codes) moves straight to `UNAVAILABLE` — the card hides the
+    control entirely rather than showing a button that does nothing, and
+    `reduceLiturgyVoiceStatus` pins `UNAVAILABLE` so no stray later callback
+    can flicker it back on within the same bind() cycle.
+  - **Locale**: prefers the device's own default when it's already English
+    (respect the member's own setting), then `en-KE` if the engine happens to
+    ship it, then British English (closer to Kenyan English convention than
+    US), then `en-ZA`, then US only as the last resort so the feature still
+    works on an engine that only ships US voice data — never forces US
+    outright.
+  - **Rate/pitch**: `setSpeechRate(0.88f)`/`setPitch(0.96f)` — unhurried and
+    a little warmer than the default clipped-robot cadence, reading like a
+    person praying rather than an announcement. Tuned by ear in review only —
+    **not verified against a real device speaker in this session; there is
+    no way to confirm this "sounds right" without hearing it on hardware.**
+  - **TalkBack**: `isSpokenFeedbackActive` checks
+    `AccessibilityManager.getEnabledAccessibilityServiceList(FEEDBACK_SPOKEN)`
+    — every word on the card is a plain visible `Text` already, so TalkBack
+    alone gives full access to the same content; the control hides itself
+    rather than laying a second voice on top of TalkBack's own. Re-checked on
+    `ON_RESUME` (the realistic way TalkBack's state changes mid-session is
+    leaving the app for Settings and back), not via a live
+    `AccessibilityStateChangeListener` — a deliberate scope simplification,
+    noted rather than silently skipped.
+  - **Lifecycle**: `stop()` on `Lifecycle.Event.ON_STOP` (backgrounding OR
+    navigating away — both fire ON_STOP for a Navigation-Compose
+    destination's own `LifecycleOwner`; same idiom `ChatThreadScreen.kt`
+    already uses for the pastoral-lock re-lock) halts speech without tearing
+    down the engine; `release()` from `DisposableEffect.onDispose` (the card
+    actually leaving the composition) does the full `tts.stop()` +
+    `tts.shutdown()` + focus-abandon — THIS is what prevents the "leaks the
+    engine" failure mode the brief specifically warned about.
+- **`LiturgyCards.kt`**: wires bind/state/lifecycle into `LiturgyCard`, adds
+  an icon-only Listen/Stop control to `LitKicker` (top-right of the existing
+  hour/brand row, both the tableau and classic-card branches) —
+  `contentDescription` carries the actual action label ("Listen to the
+  hour's liturgy" / "Stop listening to the hour's liturgy") so TalkBack
+  announces intent, not an icon name.
+- **`AndroidManifest.xml`**: added a `<queries>` entry for
+  `android.intent.action.TTS_SERVICE` — without it, Android 11+ package
+  visibility (this app targets SDK 36) means binding the system TTS engine
+  silently finds nothing, in BOTH debug and release (manifest-driven, not an
+  R8 effect).
+- **No new persisted preference.** The brief explicitly ruled out inventing
+  surprising default behaviour (no auto-play-at-sunrise); a manual,
+  tap-only, session-scoped control doesn't need one, so none was added.
+- **Phase 2 — explicitly NOT built, per owner instruction**: the pastor's own
+  recorded voice, preferred over synthesis when available. The backend
+  already has media storage (`MEDIA_STORAGE_DIR`/`/data/media`) and this app
+  already records member audio for prayer-wall voice notes
+  (`util/VoiceRecorder.kt`), so the pieces exist. `LiturgyVoice.speak()`
+  takes the WHOLE `HomeLiturgy` payload specifically so that, the day a
+  recorded-audio URL shows up on it, only that function's body needs to
+  change (try `RadioController`-style `MediaController` playback of the
+  recording first, fall back to synthesis) — no rewrite of the caller-facing
+  contract (`state`/`bind`/`toggle`/`stop`/`release`) or of `LiturgyCard`.
+
+**Honest limits:**
+- **Cannot verify by ear.** This session has no device/emulator with audio
+  output — the rate/pitch tuning, the chosen locale's actual pronunciation,
+  and the felt experience of "reads like a person praying" are reasoned
+  choices, not confirmed ones. Needs a real listen on hardware before
+  calling the voice itself "right."
+- Ducking-vs-Radio is verified by reading `RadioService.kt`'s ExoPlayer
+  audio-attributes configuration and media3's documented `AudioFocusManager`
+  behaviour for a `CONTENT_TYPE_MUSIC` player losing focus to a
+  `MAY_DUCK` transient request — not observed live (would need a device with
+  Radio actually playing while tapping Listen).
+- TalkBack coexistence is verified by code reading
+  (`isSpokenFeedbackActive` gate, hides the control) — not observed with
+  TalkBack actually turned on on a device.
+- No Compose UI-test harness exists in this repo (confirmed, matching every
+  prior session's note) — the new Listen/Stop control is verified by code
+  reading + the compile/assemble gate + the pure-logic unit tests behind the
+  state machine, not an instrumented screenshot test.
+- iOS parity: this Android branch was built independently in this session;
+  cross-checking against the iOS agent's simultaneous work on
+  `nuru-member-ios`'s `feat/liturgy-audio` was not done here (different repo,
+  different session) — the owner's stated requirement is strict behavioural
+  parity, so that comparison still needs to happen before either PR merges.
+
+**Verify**: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/
+Contents/Home" && ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest
+:app:assembleRelease` → BUILD SUCCESSFUL in 3m 1s. 226 tests total (193
+baseline + 33 new in `LiturgySpeechTest`), 0 failures. `assembleRelease`
+(R8-minified) succeeded, `app-release-unsigned.apk` produced — only
+pre-existing, unrelated deprecation warnings plus two new ones this session
+introduced and accepted (the deprecated two-arg `java.util.Locale(lang,
+country)` constructor in `LiturgySpeech.kt`, matching this codebase's
+existing tolerance for that class of warning elsewhere, e.g.
+`VoiceRecorder.kt`'s deprecated `MediaRecorder()` constructor). No new
+proguard rule needed — `TextToSpeech`/`AudioFocusRequest`/
+`AccessibilityManager` are all Android framework classes R8 never strips.
+Committed in this worktree (`.worktrees/liturgyaudio`, branch
+`feat/liturgy-audio`, built on top of origin/main `5354bd9`); not pushed, no
+PR opened yet by this session (the task brief says "PR opened, do NOT
+merge" — opening the PR is the next step after this report).
