@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Mail
@@ -53,8 +54,63 @@ import org.nuruplace.member.ui.theme.NuruType
 
 private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
-/** Letter body voice — the serif family at reading size (derived from rowTitle). */
-private val LetterBody = NuruType.rowTitle.copy(fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal)
+/** Letter body voice — the serif family at reading size. lineHeight is left
+ *  UNSET on purpose: NuruTheme rebuilds typography from AppPrefs.lineSpacing,
+ *  and hard-coding it here would silently ignore the member's own spacing
+ *  choice on the one screen most worth reading comfortably. Font size rides
+ *  AppPrefs.textScale through the theme's Density the same way. */
+private val LetterBody = NuruType.rowTitle.copy(fontWeight = FontWeight.Normal)
+
+/** Home, when no letter has arrived yet. The ritual IS the pull: telling a
+ *  member when their letter comes is honest anticipation, and it beats showing
+ *  nothing at all — which is what Home did before. Deliberately quiet: this is
+ *  a promise, not a call to action. */
+@Composable
+fun LetterAwaitingCard() {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF11253F).copy(alpha = 0.45f))
+            .border(1.dp, Color(0xFFC9A227).copy(alpha = 0.22f), RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(38.dp).clip(CircleShape).background(Color(0xFFC9A227).copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Mail, null, tint = Color(0xFFC9A227).copy(alpha = 0.8f), modifier = Modifier.size(17.dp)) }
+        Column(Modifier.weight(1f)) {
+            Text("Your letter arrives Sunday evening", style = NuruType.rowTitle, color = Color(0xFFDCE4EF))
+            Text("Written for your week", style = NuruType.caption, color = Color(0xFF8FA0B4))
+        }
+    }
+}
+
+/** Home, once the letter has been read — a quiet way back in. Without this the
+ *  letter became unreachable the moment it was opened, which is a poor fate for
+ *  the most personal thing the app produces. */
+@Composable
+fun LetterReadRow(letter: PastoralLetter, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF11253F).copy(alpha = 0.35f))
+            .clickable { onOpen() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(34.dp).clip(CircleShape).background(LetterTheme.resolve(letter.artKey).accentColor.copy(alpha = 0.20f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Mail, null, tint = LetterTheme.resolve(letter.artKey).accentColor, modifier = Modifier.size(15.dp)) }
+        Column(Modifier.weight(1f)) {
+            Text(letter.displayTitle ?: "Your Sunday Letter", style = NuruType.rowTitle, color = Color(0xFFDCE4EF), maxLines = 2)
+            Text("Read again", style = NuruType.caption, color = Color(0xFF8FA0B4))
+        }
+    }
+}
 
 /** Home knock — shows while this week's letter is unread. */
 @Composable
@@ -75,7 +131,12 @@ fun LetterKnockCard(letter: PastoralLetter, onOpen: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("THE SUNDAY LETTER", style = NuruType.micro, color = Color(0xFFE8CA6C), fontWeight = FontWeight.Bold)
             Text("A letter was written for you", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.SemiBold)
-            letter.scriptureRef?.let { Text(it, style = NuruType.caption, color = Color(0xFFB9C4D4)) }
+            // v2: the title is the hook — "A letter about the week you kept
+            // going" earns a tap where "Your Sunday Letter" does not. Falls
+            // back to the scripture for pre-v2 letters, never to a blank.
+            (letter.displayTitle ?: letter.displayScripture)?.let {
+                Text(it, style = NuruType.caption, color = Color(0xFFB9C4D4), maxLines = 2)
+            }
         }
         Box(
             Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFE8CA6C)).padding(horizontal = 14.dp, vertical = 8.dp),
@@ -85,7 +146,12 @@ fun LetterKnockCard(letter: PastoralLetter, onOpen: () -> Unit) {
 
 /** Full-screen stationery reader; marks the letter read on open. */
 @Composable
-fun LetterDialog(letter: PastoralLetter, onDismiss: () -> Unit, onRead: () -> Unit) {
+fun LetterDialog(
+    letter: PastoralLetter,
+    onDismiss: () -> Unit,
+    onRead: () -> Unit,
+    onNextStep: (route: String, moduleId: String?) -> Unit = { _, _ -> },
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     LaunchedEffect(letter.letterId) {
@@ -102,7 +168,24 @@ fun LetterDialog(letter: PastoralLetter, onDismiss: () -> Unit, onRead: () -> Un
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(56.dp))
+                // v2 hero — the themed illustration with the letter's own title
+                // overlaid. Pre-v2 letters have no theme; resolve() falls back
+                // rather than blanking, so this is safe for every row.
+                Box(Modifier.fillMaxWidth().padding(top = 44.dp)) {
+                    Box(Modifier.clip(RoundedCornerShape(22.dp))) {
+                        LetterHero(letter.artKey, height = 190.dp)
+                    }
+                    letter.displayTitle?.let { t ->
+                        Text(
+                            t,
+                            style = NuruType.cardTitle,
+                            color = Color(0xFFFFFDF6),
+                            modifier = Modifier.align(Alignment.BottomStart).padding(18.dp),
+                            maxLines = 3,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 // Gold wax seal, overlapping the paper.
                 Box(
                     Modifier.size(68.dp).clip(CircleShape).background(SealGrad).offset(y = 0.dp),
@@ -135,14 +218,66 @@ fun LetterDialog(letter: PastoralLetter, onDismiss: () -> Unit, onRead: () -> Un
                         }
                     }
                     Spacer(Modifier.height(16.dp))
+                    // Their actual name. Omitted entirely when absent — a
+                    // generic "Dear member" is worse than no salutation.
+                    letter.displaySalutation?.let { sal ->
+                        Text(sal, style = LetterBody, color = Color(0xFF2A3441), fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(10.dp))
+                    }
                     Text(letter.body, style = LetterBody, color = Color(0xFF2A3441))
+
+                    // "This week" — the true, concrete moments. This is the
+                    // part that makes the letter feel known rather than
+                    // written-at, so it is prominent but quiet. Omitted whole
+                    // when the model had nothing true to say.
+                    if (letter.moments.isNotEmpty()) {
+                        Spacer(Modifier.height(20.dp))
+                        Text("THIS WEEK", style = NuruType.micro, color = Color(0xFFA8861C), fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        letter.moments.forEach { m ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                            ) {
+                                Box(
+                                    Modifier.padding(top = 7.dp).size(5.dp)
+                                        .clip(CircleShape).background(Color(0xFFC9A227)),
+                                )
+                                Text(m, style = NuruType.body, color = Color(0xFF4A5563))
+                            }
+                        }
+                    }
+
+                    // ONE next step, never a menu. Server-computed, so it can
+                    // only point at something that actually exists.
+                    letter.nextStep?.let { step ->
+                        Spacer(Modifier.height(20.dp))
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF11253F))
+                                .clickable { onNextStep(step.route, step.params?.moduleId) }
+                                .padding(horizontal = 16.dp, vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(step.label, style = NuruType.cardCta, color = Color(0xFFF3E6C8), fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Filled.ArrowForward, null, tint = Color(0xFFC9A227), modifier = Modifier.size(16.dp))
+                        }
+                    }
                     Spacer(Modifier.height(18.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         Row(
                             Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFFDF5E5))
                                 .clickable {
                                     scope.launch {
-                                        val text = (letter.scriptureRef?.let { "📖 $it\n\n" } ?: "") + letter.body
+                                        // v2: share the ONE line the letter
+                                        // offers, not the whole private
+                                        // letter. Falls back to the old
+                                        // behaviour for pre-v2 letters, which
+                                        // carry no share_line.
+                                        val text = letter.shareLine
+                                            ?: ((letter.displayScripture?.let { "📖 $it\n\n" } ?: "") + letter.body)
                                         val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
                                         runCatching { context.startActivity(Intent.createChooser(send, "Share your letter")) }
                                     }
