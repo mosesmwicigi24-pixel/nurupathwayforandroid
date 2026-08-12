@@ -91,16 +91,21 @@ class NuruMessagingService : FirebaseMessagingService() {
          *  backend writes snake_case keys (e.g. reading-social's groups.ts:
          *  `{ group_id, invite_token, inviter_id, inviter_name }`), so THIS
          *  map's keys are snake_case on the wire — `invite_token`/`group_id`,
-         *  not `inviteToken`/`groupId`. Read with a Friend's lookup below is
-         *  keyed correctly; the pre-existing moduleId/announcementId/
-         *  levelNumber lookups above appear to have the SAME bug (the backend
-         *  payloads for those templates are also snake_case per
-         *  assessment/moduleReflection.ts's `{ module_id, feedback }`) — left
-         *  untouched here (out of scope for this feature; flagged separately). */
+         *  not `inviteToken`/`groupId`. Every specific lookup below is therefore
+         *  keyed in snake_case to match what the backend actually writes,
+         *  verified against each `.schedule({ payload })` call site:
+         *    `module_id`       — assessment/moduleReflection.ts (`reflection_*`)
+         *    `announcement_id` — announcements/service.ts (`announcement`)
+         *    `level_number`    — assessment/levelAdvancement.ts (`level_ushered`)
+         *                        and workers/handlers.ts (`level_completed`)
+         *    `invite_token`    — reading-social/{groups,invites}.ts (`plan_group_*`)
+         *  (Before 2026-07-20 the first three read camelCase keys that never
+         *  matched, so those taps silently fell through to the template branch
+         *  and lost their specific target.) */
         fun destFor(data: Map<String, String>): String? {
-            data["moduleId"]?.takeIf { it.isNotBlank() }?.let { return "module/$it" }
-            data["announcementId"]?.takeIf { it.isNotBlank() }?.let { return "announcement/$it" }
-            data["levelNumber"]?.takeIf { it.isNotBlank() }?.let { return "level/$it" }
+            data["module_id"]?.takeIf { it.isNotBlank() }?.let { return "module/$it" }
+            data["announcement_id"]?.takeIf { it.isNotBlank() }?.let { return "announcement/$it" }
+            data["level_number"]?.takeIf { it.isNotBlank() }?.let { return "level/$it" }
             // Read with a Friend (reading-social R1) — a targeted invite ping
             // carries invite_token, so the tap opens the SAME invite-preview
             // screen a nuru://join/{token} deep link opens.
