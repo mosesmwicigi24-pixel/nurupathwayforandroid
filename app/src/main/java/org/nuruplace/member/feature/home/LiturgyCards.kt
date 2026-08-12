@@ -24,9 +24,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +47,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.BlessBody
 import org.nuruplace.member.data.net.CommunityMoment
@@ -82,7 +93,32 @@ private fun tableauHeight(l: HomeLiturgy): Dp {
 fun LiturgyCard() {
     var lit by remember { mutableStateOf<HomeLiturgy?>(null) }
     LaunchedEffect(Unit) { lit = runCatching { Net.client.api.homeLiturgy() }.getOrNull() }
+
+    // Spoken liturgy (LiturgyVoice.kt) — bound as soon as the card mounts so
+    // the engine is already warm by the time a member reads the line and
+    // decides to tap Listen. Registered unconditionally, BEFORE the `lit`
+    // null-return below, so these hooks run on every composition regardless
+    // of whether the fetch has resolved yet.
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { LiturgyVoice.bind(context) }
+    val voiceState by LiturgyVoice.state.collectAsState()
+    var offerVoice by remember { mutableStateOf(false) }
+    LaunchedEffect(voiceState.status) { offerVoice = LiturgyVoice.controlOffered(context) }
+    // Re-check on resume: the realistic way TalkBack's on/off state changes
+    // mid-session is leaving the app for Settings and coming back.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { offerVoice = LiturgyVoice.controlOffered(context) }
+    // Stop speaking (not a full teardown) the moment this screen leaves the
+    // foreground — backgrounding the app or navigating to another
+    // destination both fire ON_STOP for this composable's lifecycle owner
+    // (same idiom as ChatThreadScreen.kt's pastoral re-lock).
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { LiturgyVoice.stop() }
+    // Full engine teardown once the card actually leaves the composition —
+    // THIS is what prevents leaking the TextToSpeech engine.
+    DisposableEffect(Unit) { onDispose { LiturgyVoice.release() } }
+
     val l = lit ?: return
+    val speaking = voiceState.status == LiturgyVoiceStatus.SPEAKING
+    val onToggleVoice: (() -> Unit)? = if (offerVoice) ({ LiturgyVoice.toggle(context, l) }) else null
     val partLabel = when (l.part) {
         "morning" -> "MORNING"; "midday" -> "MIDDAY"; "evening" -> "EVENING"; else -> "NIGHT"
     }
@@ -108,6 +144,7 @@ fun LiturgyCard() {
             LitKicker(
                 Modifier.align(Alignment.TopStart).padding(18.dp),
                 partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
+                speaking = speaking, onToggleVoice = onToggleVoice,
             )
             // ONE hierarchy: the hour's word LARGE, a gold rule (the selah),
             // then small golden lines closing on a SINGLE scripture — never two
@@ -167,7 +204,10 @@ fun LiturgyCard() {
                 .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
                 .padding(18.dp),
         ) {
-            LitKicker(Modifier, partEmoji, partLabel, l.isSunday, l.season, onArt = false, textShadow = textShadow)
+            LitKicker(
+                Modifier, partEmoji, partLabel, l.isSunday, l.season, onArt = false, textShadow = textShadow,
+                speaking = speaking, onToggleVoice = onToggleVoice,
+            )
             Spacer(Modifier.height(10.dp))
             Text(l.line, style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp), color = Color.White)
             Spacer(Modifier.height(8.dp))
@@ -213,7 +253,12 @@ fun LiturgyCard() {
     }
 }
 
-/** The hour + Nuru Pathway brand row — shared by the tableau and the classic card. */
+/** The hour + Nuru Pathway brand row — shared by the tableau and the classic
+ *  card. [onToggleVoice] null means the spoken-liturgy control isn't offered
+ *  right now (engine still warming up, unusable on this device, or a
+ *  spoken-feedback accessibility service is already active — see
+ *  LiturgyVoice.controlOffered) and nothing is rendered for it: hiding the
+ *  control beats showing a button that would do nothing. */
 @Composable
 private fun LitKicker(
     modifier: Modifier = Modifier,
@@ -223,6 +268,8 @@ private fun LitKicker(
     season: String,
     onArt: Boolean,
     textShadow: Shadow,
+    speaking: Boolean = false,
+    onToggleVoice: (() -> Unit)? = null,
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(partEmoji, style = NuruType.body)
@@ -246,6 +293,44 @@ private fun LitKicker(
         )
         Text("  ✔", style = NuruType.micro, color = Color(0xFFF2DDA0))
         Spacer(Modifier.weight(1f))
+        if (onToggleVoice != null) {
+            LiturgyListenButton(speaking = speaking, onArt = onArt, onToggle = onToggleVoice)
+        }
+    }
+}
+
+/** Tap to hear the hour's line + Scripture read aloud (LiturgyVoice.kt, an
+ *  on-device TextToSpeech voice — never auto-plays). Icon-only, matching the
+ *  kicker's compact row; contentDescription carries the actual label so
+ *  TalkBack announces a clear action ("Listen…" / "Stop…") rather than a
+ *  bare icon name. */
+@Composable
+private fun LiturgyListenButton(speaking: Boolean, onArt: Boolean, onToggle: () -> Unit) {
+    val view = LocalView.current
+    val bg = if (onArt) Color.White.copy(alpha = 0.18f) else LitGold.copy(alpha = 0.18f)
+    val tint = if (onArt) Color.White else LitRuleGold
+    Box(
+        Modifier
+            .size(26.dp)
+            .pressScale()
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .clickable { Haptics.tap(view); onToggle() }
+            .semantics {
+                contentDescription = if (speaking) {
+                    "Stop listening to the hour's liturgy"
+                } else {
+                    "Listen to the hour's liturgy"
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (speaking) Icons.Filled.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 
