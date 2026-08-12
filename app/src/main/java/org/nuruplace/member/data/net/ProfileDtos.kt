@@ -134,6 +134,34 @@ data class Certificate(
 )
 
 // --- Sunday Letters + AI consent (intelligence layer, Phase 1) ---
+/** One step the letter invites the member to take next. Server-COMPUTED from
+ *  real enrollment/progress — never written by the model — so it can't point
+ *  at something that doesn't exist. `route` is only "module" or "pathway"
+ *  today; unknown routes are tolerated and simply don't render a button. */
+@Serializable
+data class LetterNextStepParams(val moduleId: String? = null)
+
+@Serializable
+data class LetterNextStep(
+    val label: String = "",
+    val route: String = "",
+    val params: LetterNextStepParams? = null,
+)
+
+/** Sunday Letter v2 (backend migration 186). Every v2 field can arrive ABSENT
+ *  (pre-v2 rows predate the columns) or as an explicit JSON null — kotlinx
+ *  distinguishes those two, and treating them differently is exactly the bug
+ *  class that cost us guest video earlier (an explicit `"cell_id": null` was
+ *  rejected by a schema that only tolerated absence). So: every new field is
+ *  nullable WITH a default, and the accessors below normalise blank strings to
+ *  null too, because a whitespace title is as unrenderable as a missing one. */
+@Serializable
+data class PastoralLetterHighlights(
+    val moments: List<String> = emptyList(),
+    val nextStep: LetterNextStep? = null,
+    val shareLine: String? = null,
+)
+
 @Serializable
 data class PastoralLetter(
     val letterId: String = "",
@@ -142,8 +170,36 @@ data class PastoralLetter(
     val scriptureRef: String? = null,
     val createdAt: String = "",
     val readAt: String? = null,
+    // --- v2 (all null on letters written before migration 186) ---
+    val title: String? = null,
+    val salutation: String? = null,
+    val theme: String? = null,
+    val imageKey: String? = null,
+    val highlights: PastoralLetterHighlights? = null,
 ) {
     val isUnread: Boolean get() = readAt == null
+
+    /** Blank-safe accessors — a pre-v2 letter (or a model that returned an
+     *  empty string) must fall back honestly rather than render an empty
+     *  heading. Never invent a title; the caller decides what to show. */
+    val displayTitle: String? get() = title?.trim()?.takeIf { it.isNotEmpty() }
+    val displaySalutation: String? get() = salutation?.trim()?.takeIf { it.isNotEmpty() }
+    val displayScripture: String? get() = scriptureRef?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Which illustration to draw. Falls back through image_key → theme →
+     *  the resolver's own default, so this is never empty. */
+    val artKey: String
+        get() = imageKey?.trim()?.takeIf { it.isNotEmpty() }
+            ?: theme?.trim()?.takeIf { it.isNotEmpty() }
+            ?: ""
+
+    val moments: List<String>
+        get() = highlights?.moments.orEmpty().mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+
+    val nextStep: LetterNextStep?
+        get() = highlights?.nextStep?.takeIf { it.label.isNotBlank() && it.route.isNotBlank() }
+
+    val shareLine: String? get() = highlights?.shareLine?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 @Serializable
