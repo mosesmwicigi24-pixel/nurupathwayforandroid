@@ -44,7 +44,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -68,15 +68,26 @@ private val LitGold = Color(0xFFE8CA6C)
 private val LitRuleGold = Color(0xFFE0B85E)
 private val LitWhisper = Color(0xFFF2DDA0)
 
-/** Height model for the tableau card: base art height + room for the charge
- *  line + the companion verse block, so the bottom stack never crowds the
- *  kicker (iOS LiturgyCards.tableauHeight parity). */
-private fun tableauHeight(l: HomeLiturgy): Dp {
-    var h = 232.dp
-    if (!l.charge.isNullOrBlank()) h += 30.dp
-    if (l.verseLine?.text?.isNotBlank() == true) h += 50.dp
-    return h
-}
+/**
+ * The photograph's height is now FIXED.
+ *
+ * It used to grow — base art height plus room for the charge line plus the
+ * companion verse — because all three sat on the image and the stack had to be
+ * given somewhere to go. That model could only ever hold, though, if the hour's
+ * own line were short, and it is prose: a long morning reading pushed the block
+ * up through the middle of the photograph until the type was "all over the
+ * card" and the picture had become a texture behind a wall of words.
+ *
+ * The card is split instead (see LiturgyCard), so nothing on the art varies by
+ * more than a line or two and the frame can simply stay still. A constant also
+ * means every liturgy card in the feed is the same height, hour to hour, which
+ * the growing model never managed.
+ */
+private val TableauArtHeight = 236.dp
+
+/** The scripture is bottom-anchored, so capping it here is what keeps it inside
+ *  the lower third of the photograph rather than climbing toward the kicker. */
+private const val ScriptureMaxLines = 3
 
 @Composable
 fun LiturgyCard() {
@@ -96,66 +107,105 @@ fun LiturgyCard() {
     val art = l.art?.takeIf { it.url.isNotBlank() }
     val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
     if (art != null) {
-        // Taller tableau: the hour + brand at the top, the prayer line resting at
-        // the BOTTOM under the deep-navy block where the veil is deepest, so the
-        // type reads clearly (owner ask). matchParentSize behind, clipped.
-        Box(Modifier.fillMaxWidth().height(tableauHeight(l)).clip(RoundedCornerShape(20.dp))) {
-            AsyncImage(
-                model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
-            Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
-            LitKicker(
-                Modifier.align(Alignment.TopStart).padding(18.dp),
-                partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
-            )
-            // ONE hierarchy: the hour's word LARGE, a gold rule (the selah),
-            // then small golden lines closing on a SINGLE scripture — never two
-            // large lines, never two references (iOS build 79 parity).
-            Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
-                Text(
-                    l.line,
-                    style = NuruType.rowTitle.copy(fontSize = 20.sp, lineHeight = 26.sp, shadow = textShadow),
-                    color = Color.White,
+        // ── Two surfaces, one card — the verse-of-the-day anatomy ────────────
+        //
+        // Everything used to sit on the photograph: the hour's prose, the
+        // charge, the companion verse, all stacked upward from the bottom edge.
+        // With a real morning reading that stack filled the frame, and the
+        // picture stopped being a picture.
+        //
+        // The fix is not to shuffle the stack but to INVERT what lands where.
+        // The verse-of-the-day card has never had this problem, and the reason
+        // is a rule worth naming: **the photograph carries the short thing, the
+        // cream panel carries the long thing.** A verse is one or two lines by
+        // nature, so it can be laid over art and trusted to stay put; prose
+        // cannot, and belongs on a surface built for reading.
+        //
+        // So the scripture — the short thing — comes UP onto the art and rests
+        // in its lower third, and the hour's prose goes DOWN onto cream inside
+        // the same card, where no scrim is fighting it. The reading order the
+        // card always had (a word, a rest, a whisper) is untouched; only the
+        // surface under each part changes.
+        val shape = RoundedCornerShape(20.dp)
+        Column(
+            Modifier.fillMaxWidth().clip(shape)
+                .background(Nuru.verseBg)
+                .border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape),
+        ) {
+            // ── The hour's photograph ────────────────────────────────────────
+            Box(Modifier.fillMaxWidth().height(TableauArtHeight)) {
+                AsyncImage(
+                    model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
                 )
-                Spacer(Modifier.height(7.dp))
-                Box(Modifier.width(34.dp).height(1.5.dp).background(LitRuleGold.copy(alpha = 0.8f)))
-                Spacer(Modifier.height(7.dp))
-                l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
-                    Text(
-                        charge,
-                        style = NuruType.rowTitle.copy(
-                            fontSize = 13.5.sp, lineHeight = 18.sp,
-                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
-                        ),
-                        color = LitWhisper,
-                    )
-                    Spacer(Modifier.height(7.dp))
-                }
-                val vl = l.verseLine
-                if (vl != null && vl.text.isNotBlank()) {
-                    Text(
-                        "“${vl.text}”",
-                        style = NuruType.rowTitle.copy(
-                            fontSize = 13.sp, lineHeight = 18.sp,
-                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
-                        ),
-                        color = LitWhisper.copy(alpha = 0.85f),
-                    )
-                    Spacer(Modifier.height(1.dp))
-                    Text(
-                        vl.reference.uppercase(),
-                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
-                        color = LitRuleGold,
-                    )
-                } else {
-                    l.scriptureRef?.let { ref ->
+                Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
+                LitKicker(
+                    Modifier.align(Alignment.TopStart).padding(18.dp),
+                    partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
+                )
+
+                // The lower third: the scripture, and nothing else competing
+                // with it. Bottom-anchored so it sits where the veil is
+                // deepest, capped so it can never climb toward the kicker, and
+                // stepped down a size when the verse is a long one — the same
+                // three defences the verse tableau uses.
+                val vl = l.verseLine?.takeIf { it.text.isNotBlank() }
+                Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
+                    if (vl != null) {
                         Text(
-                            ref.uppercase(),
+                            "“${vl.text}”",
+                            style = NuruType.rowTitle.copy(
+                                fontSize = if (vl.text.length > 150) 15.sp else 17.5.sp,
+                                lineHeight = if (vl.text.length > 150) 21.sp else 24.sp,
+                                shadow = textShadow,
+                            ),
+                            color = Color.White,
+                            maxLines = ScriptureMaxLines,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            vl.reference.uppercase(),
                             style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
                             color = LitRuleGold,
                         )
+                    } else {
+                        // No companion verse on the wire: the reference alone
+                        // still closes the image, and the prose below is
+                        // unaffected. The art is never left carrying prose.
+                        l.scriptureRef?.let { ref ->
+                            Text(
+                                ref.uppercase(),
+                                style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
+                                color = LitRuleGold,
+                            )
+                        }
                     }
+                }
+            }
+
+            // ── The cream panel, inside the same card ────────────────────────
+            // The hour's word, at full length and full contrast. This is the
+            // part a member actually sits with, so it gets ink on cream rather
+            // than white on a photograph.
+            Column(Modifier.padding(18.dp)) {
+                Text(
+                    l.line,
+                    style = NuruType.rowTitle.copy(fontSize = 17.sp, lineHeight = 25.sp),
+                    color = Nuru.navy,
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.width(34.dp).height(1.5.dp).background(Nuru.gold.copy(alpha = 0.7f)))
+                l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        charge,
+                        style = NuruType.rowTitle.copy(
+                            fontSize = 13.5.sp, lineHeight = 19.sp,
+                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
+                        ),
+                        color = Nuru.metaGray,
+                    )
                 }
             }
         }
