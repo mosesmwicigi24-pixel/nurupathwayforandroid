@@ -417,8 +417,15 @@ fun HomeScreen(
                         LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
                     }
                 }
-                // 0c · The hour's prayer line (liturgy, Phase 4).
-                Entrance(entrance, 0) { LiturgyCard() }
+                // 0c · The hour's prayer line (liturgy, Phase 4). The recorder
+                // door (LiturgyRecorderSheet) is Admin/SuperAdmin only —
+                // backend requireRole("Admin") on admin/liturgy/recordings/*,
+                // narrower than the Instructor+ gate ProfileScreen.kt/
+                // GoLiveShared.kt use elsewhere — Instructor is deliberately
+                // excluded here.
+                Entrance(entrance, 0) {
+                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
+                }
                 // 0d · Today's echo — the app remembers you (Wave 1).
                 Entrance(entrance, 1) { HomeEchoCard() }
                 if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }

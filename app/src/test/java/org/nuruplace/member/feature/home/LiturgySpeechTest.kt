@@ -243,4 +243,58 @@ class LiturgySpeechTest {
             )
         }
     }
+
+    // ---- recordedLiturgyUrlIfPlayable (Phase 2 — the pastor's own recorded
+    // voice, offered as a SEPARATE control from Listen; design correction
+    // 2026-08-12 — this decides only whether that second control should be
+    // offered at all, never whether to substitute synthesis for it) ----
+
+    @Test fun `a present, valid https URL is returned as playable`() {
+        assertEquals(
+            "https://cdn.example.com/liturgy/sunrise.m4a",
+            recordedLiturgyUrlIfPlayable("https://cdn.example.com/liturgy/sunrise.m4a"),
+        )
+    }
+
+    @Test fun `a present, valid http URL is also returned as playable`() {
+        assertEquals(
+            "http://cdn.example.com/liturgy/evening.m4a",
+            recordedLiturgyUrlIfPlayable("http://cdn.example.com/liturgy/evening.m4a"),
+        )
+    }
+
+    @Test fun `surrounding whitespace around an otherwise-valid URL is trimmed, not treated as malformed`() {
+        assertEquals(
+            "https://cdn.example.com/liturgy/midday.m4a",
+            recordedLiturgyUrlIfPlayable("  https://cdn.example.com/liturgy/midday.m4a  "),
+        )
+    }
+
+    @Test fun `a null recorded URL is not playable — the control is omitted, not disabled`() {
+        assertNull(recordedLiturgyUrlIfPlayable(null))
+    }
+
+    @Test fun `an empty recorded URL is not playable`() {
+        assertNull(recordedLiturgyUrlIfPlayable(""))
+    }
+
+    @Test fun `a blank (whitespace-only) recorded URL is not playable`() {
+        assertNull(recordedLiturgyUrlIfPlayable("   "))
+    }
+
+    @Test fun `a URL string containing raw internal whitespace is not playable`() {
+        assertNull(recordedLiturgyUrlIfPlayable("https://cdn.example.com/liturgy /evening.m4a"))
+    }
+
+    @Test fun `text that is not a URL at all is not playable`() {
+        assertNull(recordedLiturgyUrlIfPlayable("not-a-url-at-all"))
+    }
+
+    @Test fun `a non-http(s) scheme is not playable`() {
+        assertNull(recordedLiturgyUrlIfPlayable("ftp://cdn.example.com/liturgy/morning.m4a"))
+    }
+
+    @Test fun `a URL missing a host is not playable`() {
+        assertNull(recordedLiturgyUrlIfPlayable("https:///liturgy/night.m4a"))
+    }
 }

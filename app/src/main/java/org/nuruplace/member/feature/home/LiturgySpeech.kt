@@ -64,6 +64,68 @@ fun naturalizeScriptureReference(reference: String): String {
     }
 }
 
+/**
+ * Phase 2 — the pastor's own recorded voice, offered as a SEPARATE control
+ * from Listen, never a silent substitute for it. Design correction (owner,
+ * 2026-08-12): the recording is keyed per (congregation, band) — a STANDING
+ * asset, deliberately not regenerated per day, because 49 recordings a week
+ * is unsustainable. The liturgy TEXT, meanwhile, is recomposed every day
+ * (new Scripture spine, new words each morning). If a recording simply
+ * replaced synthesis behind one "Listen" button, a member reading today's
+ * actual line on the card would hear the pastor saying something else
+ * entirely — it would read as broken. So the two are kept as genuinely
+ * separate affordances on the card (LiturgyCards.kt): Listen ALWAYS reads
+ * today's actual text via synthesis; a second control, offered only when a
+ * playable recording exists, is the pastor's standing word for that hour —
+ * never presented as a reading of today's specific line. Both still share
+ * the SAME playback engine below (audio focus, Radio ducking,
+ * decline-while-broadcasting, silence under TalkBack) — only the labelling
+ * and the two entry points differ. [LiturgyPlaybackSource] is ORTHOGONAL to
+ * [LiturgyVoiceStatus] on purpose (that enum is the PLAYBACK STATE machine —
+ * preparing/idle/speaking/unavailable — and stays true regardless of which
+ * source is sounding; this enum only tracks WHICH one is currently active,
+ * so each control can show its own Play/Stop state and the other can hide
+ * itself while its sibling is speaking).
+ */
+enum class LiturgyPlaybackSource { SYNTHESIS, RECORDED }
+
+/**
+ * Whether the pastor's-own-word control should be offered at all right now:
+ * true only when [recordedUrl] is present, non-blank once trimmed, and a
+ * syntactically valid http(s) URL. Absent, blank, and malformed all mean the
+ * SAME thing here — omit the control entirely (never a disabled/empty state:
+ * mixed per-band coverage is the PERMANENT normal state, not a gap to fill).
+ * A malformed value is deliberately NOT a trigger to fall back to playing
+ * synthesis under this control's label — that would misrepresent the source
+ * exactly the way this whole design exists to prevent (see the header
+ * above); the member always has the independent, always-available Listen
+ * control for today's text regardless of this function's result. Returns
+ * the trimmed, validated URL itself (not just a Boolean) so callers never
+ * have to re-derive it.
+ */
+fun recordedLiturgyUrlIfPlayable(recordedUrl: String?): String? {
+    val trimmed = recordedUrl?.trim().orEmpty()
+    return trimmed.takeIf { it.isNotEmpty() && isPlayableRecordingUrl(it) }
+}
+
+/** `java.net.URI` (plain JDK), not `android.net.Uri` — same reasoning as
+ *  ui/components/VideoPlayer.kt's `isExternalVideoHost`: this file's house
+ *  rule is plain-JUnit testability with no Robolectric/device, and
+ *  `android.net.Uri` is a stub under this project's unit-test config
+ *  (`unitTests.isReturnDefaultValues = true`) that silently returns null
+ *  instead of throwing — a test using it could pass while validating
+ *  nothing. Raw whitespace inside the string (a common "malformed URL that
+ *  came through a text field" shape) is rejected explicitly, on top of
+ *  whatever `URI`'s own parser already rejects, and only http/https with a
+ *  non-blank host counts as playable. */
+private fun isPlayableRecordingUrl(url: String): Boolean {
+    if (url.any { it.isWhitespace() }) return false
+    val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase(Locale.ROOT)
+    if (scheme != "http" && scheme != "https") return false
+    return !uri.host.isNullOrBlank()
+}
+
 /** Mirrors LiturgyVoice's UI-facing states: PREPARING while the engine is
  *  still warming up (control hidden — never show a button that might do
  *  nothing), IDLE/SPEAKING while it's confirmed usable, UNAVAILABLE once
@@ -81,7 +143,9 @@ sealed interface LiturgyVoiceEvent {
     /** onInit failed, or no usable language/voice data was found. */
     data object EngineUnavailable : LiturgyVoiceEvent
 
-    /** The member tapped the Listen/Stop control. */
+    /** The member tapped Listen or the pastor's-own-word control while it
+     *  was idle — starts speaking. Which of the two is now active is tracked
+     *  separately (see [LiturgyPlaybackSource]), not by this event. */
     data object TapToggle : LiturgyVoiceEvent
 
     /** The utterance finished on its own, errored, or was stopped. */
