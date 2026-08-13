@@ -632,6 +632,28 @@ interface MemberApi {
     @GET("home/liturgy")
     suspend fun homeLiturgy(): HomeLiturgy
 
+    // Phase 2 — admin-only, the pastor's own recorded liturgy per band.
+    // Backend requireRole("Admin") — Admin or SuperAdmin, narrower than the
+    // Instructor+ gate used for module discipler voice notes above. This ONE
+    // request both uploads the bytes AND attaches them to `band` (unlike the
+    // two-step me/media/audio -> modules/{id}/voice-note pattern) — an
+    // upsert; calling it again for the same band replaces the recording.
+    @retrofit2.http.Multipart
+    @POST("admin/liturgy/recordings/{band}")
+    suspend fun uploadLiturgyRecording(
+        @Path("band") band: String,
+        @retrofit2.http.Part file: okhttp3.MultipartBody.Part,
+        @retrofit2.http.Part("duration_sec") durationSec: okhttp3.RequestBody,
+    ): LiturgyRecordingUploadRes
+
+    // ALWAYS 7 rows, clock order (sunrise..midnight) — a band with nothing
+    // recorded still gets a row, with null audioUrl/durationSec/recordedAt.
+    @GET("admin/liturgy/recordings")
+    suspend fun liturgyRecordings(): Envelope<LiturgyRecordingStatus>
+
+    @DELETE("admin/liturgy/recordings/{band}")
+    suspend fun deleteLiturgyRecording(@Path("band") band: String): DeleteLiturgyRecordingRes
+
     @GET("home/echo")
     suspend fun homeEcho(): HomeEchoEnvelope
 

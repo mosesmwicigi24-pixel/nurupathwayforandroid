@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -69,6 +70,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.feature.community.Avatar
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 
@@ -90,7 +92,7 @@ private fun tableauHeight(l: HomeLiturgy): Dp {
 }
 
 @Composable
-fun LiturgyCard() {
+fun LiturgyCard(canManageRecordings: Boolean = false) {
     var lit by remember { mutableStateOf<HomeLiturgy?>(null) }
     LaunchedEffect(Unit) { lit = runCatching { Net.client.api.homeLiturgy() }.getOrNull() }
 
@@ -102,8 +104,15 @@ fun LiturgyCard() {
     val context = LocalContext.current
     LaunchedEffect(Unit) { LiturgyVoice.bind(context) }
     val voiceState by LiturgyVoice.state.collectAsState()
+    // Nuru Live's own "what's watchable right now" state (LiveDiscoveryCenter,
+    // fed by Home's own /live/now poll) — re-checking controlOffered whenever
+    // it changes is what makes the "decline while broadcasting live" guard
+    // (LiturgyVoice.isChurchBroadcastingLive) actually take effect promptly
+    // while the member is already sitting on Home, not just on the next
+    // ON_RESUME (see LiturgyVoice.kt's controlOffered doc).
+    val discoveryStreams by org.nuruplace.member.feature.live.LiveDiscoveryCenter.streams.collectAsState()
     var offerVoice by remember { mutableStateOf(false) }
-    LaunchedEffect(voiceState.status) { offerVoice = LiturgyVoice.controlOffered(context) }
+    LaunchedEffect(voiceState.status, discoveryStreams) { offerVoice = LiturgyVoice.controlOffered(context) }
     // Re-check on resume: the realistic way TalkBack's on/off state changes
     // mid-session is leaving the app for Settings and coming back.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { offerVoice = LiturgyVoice.controlOffered(context) }
@@ -116,9 +125,38 @@ fun LiturgyCard() {
     // THIS is what prevents leaking the TextToSpeech engine.
     DisposableEffect(Unit) { onDispose { LiturgyVoice.release() } }
 
+    // Admin-only entry point into "his voice" per-band recorder (see
+    // LiturgyRecorderSheet.kt). Role gate lives at the call site
+    // (HomeScreen.kt threads `me?.profile?.role == Admin/SuperAdmin` in as
+    // [canManageRecordings]) — this composable just decides whether to show
+    // the door and hold the sheet's open/closed state.
+    var showRecorder by remember { mutableStateOf(false) }
+
     val l = lit ?: return
-    val speaking = voiceState.status == LiturgyVoiceStatus.SPEAKING
-    val onToggleVoice: (() -> Unit)? = if (offerVoice) ({ LiturgyVoice.toggle(context, l) }) else null
+    // Two genuinely separate controls (design correction 2026-08-12 — see
+    // LiturgySpeech.kt's LiturgyPlaybackSource doc): Listen always reads
+    // TODAY'S text via synthesis; the pastor's-own-word control, offered
+    // only when a playable recording exists for THIS band, plays his
+    // standing recording — never presented as a reading of today's line.
+    // Each control hides its SIBLING while it is the one actively speaking
+    // (voiceState.activeSource), rather than trying to "switch" mid-tap —
+    // simpler, and matches this file's existing "hide, don't disable"
+    // posture for a control that can't do anything useful right now.
+    val recordedUrl = recordedLiturgyUrlIfPlayable(l.recordedAudioUrl)
+    val listenSpeaking = voiceState.status == LiturgyVoiceStatus.SPEAKING &&
+        voiceState.activeSource == LiturgyPlaybackSource.SYNTHESIS
+    val recordedSpeaking = voiceState.status == LiturgyVoiceStatus.SPEAKING &&
+        voiceState.activeSource == LiturgyPlaybackSource.RECORDED
+    val listenOffered = offerVoice &&
+        (voiceState.activeSource == null || voiceState.activeSource == LiturgyPlaybackSource.SYNTHESIS)
+    val recordedOffered = offerVoice && recordedUrl != null &&
+        (voiceState.activeSource == null || voiceState.activeSource == LiturgyPlaybackSource.RECORDED)
+    val onToggleListen: (() -> Unit)? = if (listenOffered) ({ LiturgyVoice.toggleListen(context, l) }) else null
+    val onToggleRecorded: (() -> Unit)? =
+        if (recordedOffered) ({ LiturgyVoice.toggleRecorded(context, recordedUrl!!) }) else null
+    if (showRecorder) {
+        LiturgyRecorderSheet(onDismiss = { showRecorder = false })
+    }
     val partLabel = when (l.part) {
         "morning" -> "MORNING"; "midday" -> "MIDDAY"; "evening" -> "EVENING"; else -> "NIGHT"
     }
@@ -141,11 +179,21 @@ fun LiturgyCard() {
                 modifier = Modifier.matchParentSize(),
             )
             Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
-            LitKicker(
-                Modifier.align(Alignment.TopStart).padding(18.dp),
-                partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
-                speaking = speaking, onToggleVoice = onToggleVoice,
-            )
+            Column(Modifier.align(Alignment.TopStart).padding(18.dp)) {
+                LitKicker(
+                    Modifier,
+                    partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
+                    speaking = listenSpeaking, onToggleVoice = onToggleListen,
+                    canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
+                )
+                if (onToggleRecorded != null) {
+                    Spacer(Modifier.height(8.dp))
+                    RecordedWordChip(
+                        speaking = recordedSpeaking, onArt = true,
+                        durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
+                    )
+                }
+            }
             // ONE hierarchy: the hour's word LARGE, a gold rule (the selah),
             // then small golden lines closing on a SINGLE scripture — never two
             // large lines, never two references (iOS build 79 parity).
@@ -206,8 +254,16 @@ fun LiturgyCard() {
         ) {
             LitKicker(
                 Modifier, partEmoji, partLabel, l.isSunday, l.season, onArt = false, textShadow = textShadow,
-                speaking = speaking, onToggleVoice = onToggleVoice,
+                speaking = listenSpeaking, onToggleVoice = onToggleListen,
+                canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
             )
+            if (onToggleRecorded != null) {
+                Spacer(Modifier.height(8.dp))
+                RecordedWordChip(
+                    speaking = recordedSpeaking, onArt = false,
+                    durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
+                )
+            }
             Spacer(Modifier.height(10.dp))
             Text(l.line, style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp), color = Color.White)
             Spacer(Modifier.height(8.dp))
@@ -270,6 +326,8 @@ private fun LitKicker(
     textShadow: Shadow,
     speaking: Boolean = false,
     onToggleVoice: (() -> Unit)? = null,
+    canManageRecordings: Boolean = false,
+    onOpenRecorder: (() -> Unit)? = null,
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(partEmoji, style = NuruType.body)
@@ -293,9 +351,46 @@ private fun LitKicker(
         )
         Text("  ✔", style = NuruType.micro, color = Color(0xFFF2DDA0))
         Spacer(Modifier.weight(1f))
+        // "His voice" recorder door — Admin/SuperAdmin only (see LiturgyCard's
+        // canManageRecordings/HomeScreen.kt's role check), small and
+        // unobtrusive next to the member-facing Listen control. Never shown
+        // to anyone else; opens LiturgyRecorderSheet's plain per-band list.
+        if (canManageRecordings && onOpenRecorder != null) {
+            LiturgyRecorderEntryButton(onArt = onArt, onOpen = onOpenRecorder)
+            Spacer(Modifier.width(6.dp))
+        }
         if (onToggleVoice != null) {
             LiturgyListenButton(speaking = speaking, onArt = onArt, onToggle = onToggleVoice)
         }
+    }
+}
+
+/** The admin-only door into [LiturgyRecorderSheet] — same compact icon-only
+ *  shape as [LiturgyListenButton] so it reads as a sibling control, not a
+ *  louder call to action; contentDescription carries the real label since
+ *  the glyph alone (a mic) would otherwise read ambiguously next to Listen's
+ *  own speaker icon. */
+@Composable
+private fun LiturgyRecorderEntryButton(onArt: Boolean, onOpen: () -> Unit) {
+    val view = LocalView.current
+    val bg = if (onArt) Color.White.copy(alpha = 0.18f) else LitGold.copy(alpha = 0.18f)
+    val tint = if (onArt) Color.White else LitRuleGold
+    Box(
+        Modifier
+            .size(26.dp)
+            .pressScale()
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .clickable { Haptics.tap(view); onOpen() }
+            .semantics { contentDescription = "Record the liturgy in your own voice" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.Mic,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 
@@ -331,6 +426,56 @@ private fun LiturgyListenButton(speaking: Boolean, onArt: Boolean, onToggle: () 
             tint = tint,
             modifier = Modifier.size(14.dp),
         )
+    }
+}
+
+/** The pastor's own recording for THIS band — a control genuinely SEPARATE
+ *  from Listen (design correction 2026-08-12, see LiturgySpeech.kt's
+ *  [LiturgyPlaybackSource] doc for the full "why"): the recording is a
+ *  STANDING per-band asset, not a reading of today's specific liturgy text,
+ *  so it carries its own label ("A word for this hour") and its own
+ *  duration rather than living behind the Listen icon. Rendered ONLY when
+ *  [onToggle] is non-null at the call site (LiturgyCard already resolves
+ *  that from `recordedLiturgyUrlIfPlayable` — absent/malformed both mean
+ *  "omit entirely," never a disabled/empty state, since mixed per-band
+ *  coverage is the permanent normal case). Deliberately carries no member
+ *  name or other identity — the backend never sends who recorded it, and
+ *  nothing member-facing here should imply it does. */
+@Composable
+private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int?, onToggle: () -> Unit) {
+    val view = LocalView.current
+    val bg = if (onArt) Color.White.copy(alpha = 0.16f) else LitGold.copy(alpha = 0.14f)
+    val tint = if (onArt) Color.White else LitRuleGold
+    val label = if (speaking) {
+        "Playing his word for this hour…"
+    } else {
+        "A word for this hour" + (durationSec?.takeIf { it > 0 }?.let { " · ${voiceClock(it)}" } ?: "")
+    }
+    Row(
+        Modifier
+            .pressScale()
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .border(1.dp, tint.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+            .clickable { Haptics.tap(view); onToggle() }
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .semantics {
+                contentDescription = if (speaking) {
+                    "Stop his own word for this hour"
+                } else {
+                    "Hear his own word for this hour" + (durationSec?.takeIf { it > 0 }?.let { ", ${voiceClock(it)}" } ?: "")
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (speaking) Icons.Filled.Stop else Icons.Filled.Mic,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = NuruType.micro.copy(fontWeight = FontWeight.Bold), color = tint, maxLines = 1)
     }
 }
 
