@@ -8,6 +8,10 @@
 /captures
 .externalNativeBuild
 .cxx
+# Kotlin Gradle plugin scratch: compiler session markers and error logs, written
+# on every build. One was committed by accident (removed alongside this line) —
+# they are per-machine build noise and carry nothing a reader or a build needs.
+.kotlin/
 
 # signing secrets
 /keystore.properties
