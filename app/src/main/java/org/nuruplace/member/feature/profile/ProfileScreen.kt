@@ -175,7 +175,11 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     val p = profile ?: me?.profile
     val fullName = p?.fullName ?: "Member"
     val email = p?.email ?: ""
-    val level = me?.enrollment?.currentLevel ?: 1
+    // Nullable on purpose. This was `?: 1`, so a member with no enrollment was
+    // shown "Level 1" — false for twenty-eight real members for up to 42 days
+    // while they waited to be placed (backend #420 / migration 193). A missing
+    // standing must look missing.
+    val level = me?.enrollment?.currentLevel
 
     Column(
         Modifier
@@ -247,17 +251,19 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(fullName, style = pSerif(22, FontWeight.Medium, -0.44f), color = PROF.navy)
                         Text(email, style = pInter(13), color = PROF.ink600)
-                        Row(
-                            Modifier
-                                .clip(Capsule)
-                                .background(PROF.white)
-                                .border(1.dp, PROF.gold.copy(alpha = 0.5f), Capsule)
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(11.dp))
-                            Text("Level $level", style = pInter(11, FontWeight.SemiBold), color = PROF.eyebrow)
+                        if (level != null) {
+                            Row(
+                                Modifier
+                                    .clip(Capsule)
+                                    .background(PROF.white)
+                                    .border(1.dp, PROF.gold.copy(alpha = 0.5f), Capsule)
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(11.dp))
+                                Text("Level $level", style = pInter(11, FontWeight.SemiBold), color = PROF.eyebrow)
+                            }
                         }
                     }
                 }
@@ -975,14 +981,22 @@ private data class MilestoneItem(val title: String, val subtitle: String, val st
 @Composable
 private fun MilestonesCard(me: MeResponse?) {
     val isBaptized = me?.profile?.isBaptized == true
-    val level = me?.enrollment?.currentLevel ?: 1
+    val level = me?.enrollment?.currentLevel
     val items = listOf(
         MilestoneItem(
             "Baptism",
             if (isBaptized) "Recorded — welcome to the family" else "Not yet recorded",
             if (isBaptized) MilestoneState.DONE else MilestoneState.FUTURE,
         ),
-        MilestoneItem("Level $level · in progress", "Keep going", MilestoneState.ACTIVE),
+        // Without an enrollment there is no level in progress. The old `?: 1`
+        // printed "Level 1 · in progress · Keep going" to members who had never
+        // been placed on the pathway — encouragement to keep doing something
+        // they had never been able to start.
+        if (level != null) {
+            MilestoneItem("Level $level · in progress", "Keep going", MilestoneState.ACTIVE)
+        } else {
+            MilestoneItem("Your pathway", "Starting soon — your leader is setting you up", MilestoneState.FUTURE)
+        },
         MilestoneItem("Pathway completion", "Your journey continues", MilestoneState.FUTURE),
     )
     SectionCard {
