@@ -112,6 +112,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.delay
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -604,7 +609,20 @@ private fun HairlineDivider() {
 @Composable
 private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit) {
     val userId = p?.userId ?: ""
-    val memberId = "NRU-" + userId.filter { it.isLetterOrDigit() }.takeLast(8).uppercase() + "-2026"
+    // The member's user_id, in full. This used to render "NRU-" + the LAST eight
+    // characters + a hardcoded "2026" — while iOS built its own variant from the
+    // FIRST eight plus the real join year, so one member saw two different
+    // "member IDs" depending on which phone they opened. Neither string existed
+    // anywhere in the system: unpasteable, unsearchable, and useless to quote.
+    // A UUID is not pretty, but it is the one thing about a member that cannot
+    // change, which is what a padlocked row labelled MEMBER ID should hold.
+    val memberId = userId.ifBlank { "—" }
+    val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    var justCopied by remember { mutableStateOf(false) }
+    LaunchedEffect(justCopied) {
+        if (justCopied) { delay(1600); justCopied = false }
+    }
     SectionCard {
         SectionTitle(Icons.Filled.Person, "PERSONAL INFORMATION")
 
@@ -616,6 +634,12 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
                 .clip(RoundedCornerShape(16.dp))
                 .background(Brush.linearGradient(listOf(PROF.gold.copy(alpha = 0.08f), PROF.surface)))
                 .border(1.dp, PROF.gold.copy(alpha = 0.23f), RoundedCornerShape(16.dp))
+                .clickable(enabled = userId.isNotBlank()) {
+                    clipboard.setText(AnnotatedString(userId))
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    justCopied = true
+                }
+                .semantics { contentDescription = "Member ID, permanent. Double tap to copy." }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -635,9 +659,18 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
                     Text("MEMBER ID", style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
                     Icon(Icons.Filled.Lock, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(10.dp))
                 }
-                Text(memberId, style = pSerif(13, FontWeight.SemiBold), color = PROF.navy)
+                Text(
+                    memberId,
+                    style = pInter(11, FontWeight.Medium).copy(fontFamily = FontFamily.Monospace),
+                    color = PROF.navy,
+                    maxLines = 2,
+                )
             }
-            Text("PERMANENT", style = pInter(9, FontWeight.SemiBold, 0.9f), color = PROF.rowLabel)
+            Text(
+                if (justCopied) "COPIED" else "PERMANENT",
+                style = pInter(9, FontWeight.SemiBold, 0.9f),
+                color = if (justCopied) PROF.kicker else PROF.rowLabel,
+            )
         }
 
         InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—")
