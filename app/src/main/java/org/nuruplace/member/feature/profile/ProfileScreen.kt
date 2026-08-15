@@ -417,6 +417,12 @@ private enum class EditField(
     val keyboardType: KeyboardType = KeyboardType.Text,
     val capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
 ) {
+    // Email joined the editable set on 2026-08-15 (owner ruling: user_id is the
+    // assigned identifier, everything else may change). No capitalisation and an
+    // email keyboard — an address the phone has helpfully capitalised is a login
+    // that silently fails. The server trims, lowercases, refuses one another
+    // live account holds, and records the change.
+    EMAIL("Email", "email", keyboardType = KeyboardType.Email),
     NAME("Full name", "full_name", capitalization = KeyboardCapitalization.Words),
     PHONE("Phone", "phone_number", keyboardType = KeyboardType.Phone),
     DOB("Date of birth", "date_of_birth", helper = "YYYY-MM-DD"),
@@ -426,6 +432,7 @@ private enum class EditField(
 }
 
 private val DOB_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
+private val EMAIL_SHAPE = Regex("""^[^@\s]+@[^@\s]+\.[^@\s]+$""")
 private val GENDER_OPTIONS = listOf(
     "Male" to "male",
     "Female" to "female",
@@ -444,6 +451,7 @@ private fun EditFieldSheet(
     var value by remember(field) {
         mutableStateOf(
             when (field) {
+                EditField.EMAIL -> profile?.email ?: ""
                 EditField.NAME -> profile?.fullName ?: ""
                 EditField.PHONE -> profile?.phoneNumber ?: ""
                 EditField.DOB -> profile?.dateOfBirth ?: ""
@@ -459,10 +467,17 @@ private fun EditFieldSheet(
     // The value that goes on the wire — trimmed; country code uppercased.
     val wireValue = when (field) {
         EditField.COUNTRY -> value.trim().uppercase()
+        // Lowercased here as well as server-side, so the member sees the value
+        // that will actually be saved rather than being silently corrected.
+        EditField.EMAIL -> value.trim().lowercase()
         else -> value.trim()
     }
     val valid = when (field) {
         EditField.NAME, EditField.PHONE, EditField.CITY -> wireValue.isNotBlank()
+        // Deliberately loose — just enough to catch a missing @ before a round
+        // trip. The server is the authority on what a valid address is, and on
+        // whether it is already taken (409).
+        EditField.EMAIL -> EMAIL_SHAPE.matches(wireValue)
         EditField.DOB -> DOB_REGEX.matches(wireValue)
         EditField.COUNTRY -> wireValue.length == 2 && wireValue.all { it.isLetter() }
         EditField.GENDER -> GENDER_OPTIONS.any { it.second == wireValue }
@@ -679,7 +694,7 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
             )
         }
 
-        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—")
+        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—", onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
         InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", onEdit = { onEdit(EditField.NAME) })
         InfoRow(Icons.Filled.Call, "PHONE", p?.phoneNumber ?: "—", onEdit = { onEdit(EditField.PHONE) })
