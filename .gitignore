@@ -13,3 +13,6 @@
 /keystore.properties
 *.keystore
 app/google-services.json
+
+# Kotlin compiler scratch output
+.kotlin/
