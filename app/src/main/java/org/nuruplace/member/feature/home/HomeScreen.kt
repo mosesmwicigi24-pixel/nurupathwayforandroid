@@ -35,6 +35,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -263,6 +266,7 @@ fun HomeScreen(
                 trend = scores?.trend,
                 personalWord = personalWord,
                 onBell = onOpenNotifications,
+                onScan = { onNavigate("service-checkin") },
                 onRadio = { onNavigate("radio") },
                 churchLive = churchLive,
                 onLive = { churchLive?.let { onNavigate(liveNowRoute(it)) } },
@@ -516,6 +520,7 @@ private fun HomeHeader(
     trend: org.nuruplace.member.data.net.ScoreTrend? = null,
     personalWord: String? = null,
     onBell: () -> Unit,
+    onScan: () -> Unit,
     onRadio: () -> Unit,
     churchLive: LiveNowRow? = null,
     onLive: () -> Unit = {},
@@ -543,6 +548,13 @@ private fun HomeHeader(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(kicker, style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
+            // Church check-in. First in the row because it is the most
+            // time-critical thing a member does from this screen: they are
+            // walking through the door and the QR is already on the wall.
+            // Alibaba-style — one tap from the landing screen, no hunting
+            // through tabs.
+            ScanHeaderButton(onClick = onScan)
+            Spacer(Modifier.width(Spacing.sm))
             CircleButton("🔔", Nuru.goldChipBg, onBell)
             Spacer(Modifier.width(Spacing.sm))
             // Nuru Live (L2) — a church stream is live right now. Same 40dp
@@ -602,6 +614,27 @@ private fun CircleButton(glyph: String, bg: Color, onClick: () -> Unit) {
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, style = NuruType.body) }
+}
+
+/** Church check-in from the header — same 40dp circle as [CircleButton], but a
+ *  real vector glyph because no emoji reads as "scan". Sits first in the row:
+ *  a member using this is standing in the doorway with the QR already in front
+ *  of them, so it must not cost a trip through the You tab to reach. */
+@Composable
+private fun ScanHeaderButton(onClick: () -> Unit) {
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg)
+            .border(1.dp, Nuru.gold.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+            .clickable(onClickLabel = "Scan to check in") { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.QrCodeScanner,
+            contentDescription = "Scan to check in",
+            tint = Nuru.goldChipText,
+            modifier = Modifier.size(20.dp),
+        )
+    }
 }
 
 /** The header's LIVE entry point (owner ask: "re-imagine this part" of the
