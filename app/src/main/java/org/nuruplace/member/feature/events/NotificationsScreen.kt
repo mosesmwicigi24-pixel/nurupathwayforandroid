@@ -65,7 +65,7 @@ private fun routeFor(n: NotificationRow): String? {
     // Level notifications land on the EXACT level (was the bare hub).
     n.payload?.levelNumber?.let { return "level/$it" }
     return when {
-        "prayer" in t -> "prayer-wall"
+        "prayer" in t -> "prayer-room?tab=corporate"
         "verse" in t || "memory" in t -> "memory-verses"
         "devotional" in t -> "devotional"
         "give" in t || "giving" in t || "payment" in t -> "give"

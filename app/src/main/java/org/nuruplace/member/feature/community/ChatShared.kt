@@ -75,6 +75,10 @@ object CHAT {
     val activeBg = Color(0x1716A34A)    // #16A34A @ 9%
     val online = Color(0xFF25D366)
     val doubleCheck = Color(0xFFBCC4CE)
+    // The broadcast tick rule, everywhere (iOS build 84 parity): ONE blue tick
+    // = delivered, TWO blue ticks = seen. WhatsApp-blue on every surface — no
+    // gold, no gray states — DM, discipler, and pastoral bubbles alike.
+    val tickBlue = Color(0xFF2F80ED)
     val tintBlue = Color(0xFFE8EEF7)
     val navyMid = Color(0xFF315F8C)
 
@@ -248,3 +252,73 @@ fun chatDayDivider(iso: String?): String {
 
 /** Day key for grouping consecutive messages under one divider. */
 fun chatDayKey(iso: String?): String = chatZdt(iso)?.toLocalDate()?.toString() ?: ""
+
+// ── Connections (Chat Redesign C3a — "no unsolicited DMs") ──
+
+/** True for the specific 403 POST /chat/dms throws for a brand-new thread
+ *  between two ordinary members with no accepted connection yet — distinct
+ *  from an ordinary 403 FORBIDDEN_SCOPE refusal. Mirrors [isPasswordRequired]
+ *  in BroadcastStepUp.kt. */
+fun isConsentRequired(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 403) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "CONSENT_REQUIRED" in body
+}
+
+// ── My Discipler / Talk with My Pastor (Chat Redesign C3b) ──
+
+/** True for GET /chat/discipler/conversation's specific 404 — no CURRENT
+ *  discipler assignment exists (details.no_discipler) — distinct from an
+ *  ordinary not-found. Drives the tab's empty state. */
+fun isNoDiscipler(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 404) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "no_discipler" in body
+}
+
+/** True for POST /chat/pastoral's rare 404 — nothing resolves to a pastor at
+ *  all (no assignment, no congregation default, no SuperAdmin to fall back
+ *  to; details.no_pastor). */
+fun isNoPastor(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 404) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "no_pastor" in body
+}
+
+/** True for the 403 FORBIDDEN_SCOPE every DM-flavoured route (discipler,
+ *  pastoral, ordinary DM) throws for a minor — "Direct messages are
+ *  unavailable for minors" (D-M6). Distinguishes the minor-safe note from an
+ *  ordinary refusal. */
+fun isMinorBlocked(e: Throwable): Boolean {
+    val http = e as? retrofit2.HttpException ?: return false
+    if (http.code() != 403) return false
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+    return "FORBIDDEN_SCOPE" in body && "minor" in body.lowercase()
+}
+
+/** Where the caller stands with one other member right now — derived
+ *  client-side from `GET /chat/connections` + `GET /chat/connections/
+ *  requests?direction=...`, never sent by the server as a single field. */
+sealed interface ConnectionState {
+    data object NotConnected : ConnectionState
+    data class RequestSent(val requestId: String) : ConnectionState
+    data class RequestReceived(val requestId: String) : ConnectionState
+    data object Connected : ConnectionState
+    data object Blocked : ConnectionState
+}
+
+fun connectionStateFor(
+    userId: String,
+    connections: List<org.nuruplace.member.data.net.ConnectionRow>,
+    incoming: List<org.nuruplace.member.data.net.ConnectionRequestRow>,
+    outgoing: List<org.nuruplace.member.data.net.ConnectionRequestRow>,
+): ConnectionState {
+    if (connections.any { it.userId == userId && it.status == "accepted" }) return ConnectionState.Connected
+    if (connections.any { it.userId == userId && it.status == "blocked" }) return ConnectionState.Blocked
+    outgoing.firstOrNull { it.userId == userId }?.let { return ConnectionState.RequestSent(it.requestId) }
+    incoming.firstOrNull { it.userId == userId }?.let { return ConnectionState.RequestReceived(it.requestId) }
+    return ConnectionState.NotConnected
+}

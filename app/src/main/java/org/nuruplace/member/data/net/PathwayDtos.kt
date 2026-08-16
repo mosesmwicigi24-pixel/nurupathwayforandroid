@@ -109,6 +109,25 @@ data class LevelModule(
     val isExam: Boolean get() = evaluationKind == "exit_exam"
 }
 
+/** GET /levels/{n}/encouragements → { data: [...] } rows from level_encouragements
+ *  (iOS MemberAPI+Exam.LevelEncouragement parity). Everything textual is nullable —
+ *  content is authored gradually in the Content Studio, so the client renders
+ *  whatever exists and weaves cards in trail order (afterModuleSequence, sortOrder). */
+@Serializable
+data class LevelEncouragement(
+    val encouragementId: String,
+    val levelNumber: Int = 0,
+    val afterModuleSequence: Int = 0,
+    val kind: String? = null,   // splash | cheer | sticker | note | celebration | nudge | verse
+    val title: String? = null,
+    val body: String? = null,
+    val imageUrl: String? = null,
+    val scriptureRef: String? = null,
+    val emoji: String? = null,
+    val isActive: Boolean? = null,
+    val sortOrder: Int? = null,
+)
+
 @Serializable
 data class ModuleDetail(
     val moduleId: String,

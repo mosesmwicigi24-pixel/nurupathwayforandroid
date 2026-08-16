@@ -50,8 +50,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
+import org.nuruplace.member.data.net.PlanDayUnlockAck
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
+import org.nuruplace.member.ui.theme.scaledLineHeight
 
 // ── Type helpers (exact-size brand faces) ──
 internal fun rInter(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
@@ -61,7 +64,7 @@ internal fun rSerif(size: Int, weight: FontWeight = FontWeight.Normal, lineHeigh
     TextStyle(
         fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp,
         fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
-        lineHeight = if (lineHeight > 0) lineHeight.sp else (size * 1.35).sp,
+        lineHeight = scaledLineHeight(if (lineHeight > 0) lineHeight else size * 1.35),
     )
 
 // ── Reader palette — warm day, sepia night (iOS ReaderPalette parity) ──
@@ -87,6 +90,18 @@ internal object ReaderMode {
  *  row on return (mirrors the iOS `.nuruPlanPartDone` NotificationCenter signal). */
 internal object PlanProgressBus {
     val finished = MutableSharedFlow<String>(extraBufferCapacity = 16)
+
+    /**
+     * The LAST segment of a day's authoritative ack — the offline-sync race:
+     * the day unlocks server-side the instant that completion lands, but a
+     * screen re-fetching the plan can still lose the race against its own
+     * write. `replay = 1` so a screen that was off the back stack when this
+     * fired (Compose Navigation disposes destinations under a pushed route)
+     * still sees it the moment it's recomposed on return — mirrors how the
+     * iOS NavigationStack keeps a pushed screen's `.onReceive` subscription
+     * alive underneath.
+     */
+    val dayUnlocked = MutableSharedFlow<PlanDayUnlockAck>(replay = 1, extraBufferCapacity = 4)
 }
 
 // ── Reading instruments ──
@@ -147,7 +162,7 @@ internal fun RPassage(text: String, pal: ReaderPalette) {
                 }
                 withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = pal.ink)) { append(line.text) }
             }
-            Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = 25.sp))
+            Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = scaledLineHeight(25)))
         }
     }
 }
@@ -189,19 +204,36 @@ internal fun RPrayer(text: String, pal: ReaderPalette) {
     }
 }
 
+/** [onPlay] now fires ONLY for a genuinely external host (YouTube/Vimeo —
+ *  see [org.nuruplace.member.ui.components.isExternalVideoHost]); a direct/
+ *  self-hosted video URL plays right here via InlineVideo instead of ever
+ *  reaching openExternal(). Real-device bug (2026-07-31): this card used to
+ *  hand ANY videoUrl straight to the caller's openExternal(), which for a
+ *  self-hosted `/media/<uuid>.mov` upload popped a bare "Download file
+ *  again?" Chrome prompt instead of playing the clip — see VideoPlayer.kt's
+ *  isExternalVideoHost doc for the full trace. */
 @Composable
 internal fun RMediaCard(imageUrl: String?, videoUrl: String?, portrait: Boolean, onPlay: (String) -> Unit) {
+    var playingInline by androidx.compose.runtime.remember(videoUrl) { mutableStateOf(false) }
+    val isExternal = videoUrl != null && org.nuruplace.member.ui.components.isExternalVideoHost(videoUrl)
     Box(
         Modifier.fillMaxWidth().aspectRatio(if (portrait) 9f / 15f else 16f / 9f)
             .clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF1A406B), Color(0xFF0B1F33), Color(0xFF00132F))))
-            .clickable(enabled = !videoUrl.isNullOrEmpty()) { videoUrl?.let(onPlay) },
+            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) {
+                val url = videoUrl ?: return@clickable
+                if (isExternal) onPlay(url) else playingInline = true
+            },
         contentAlignment = Alignment.Center,
     ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        }
-        Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFC89B3C)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.PlayArrow, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
+        if (playingInline && videoUrl != null) {
+            org.nuruplace.member.ui.components.InlineVideo(videoUrl, modifier = Modifier.fillMaxSize())
+        } else {
+            if (!imageUrl.isNullOrBlank()) {
+                AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+            Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFC89B3C)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.PlayArrow, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
+            }
         }
     }
 }
@@ -214,7 +246,7 @@ internal fun RKeynotes(content: String, pal: ReaderPalette) {
         points.forEach { pt ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.padding(top = 7.dp).size(5.dp).clip(CircleShape).background(pal.gold))
-                Text(pt, style = rInter(14, FontWeight.Medium).copy(lineHeight = 20.sp), color = pal.ink)
+                Text(pt, style = rInter(14, FontWeight.Medium).copy(lineHeight = scaledLineHeight(20)), color = pal.ink)
             }
         }
     }

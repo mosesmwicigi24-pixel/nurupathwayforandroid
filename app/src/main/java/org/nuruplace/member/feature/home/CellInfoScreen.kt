@@ -28,9 +28,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import org.nuruplace.member.data.net.CellSummary
 import org.nuruplace.member.data.net.FeaturedCell
+import org.nuruplace.member.data.net.LiveNowRow
+import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.feature.live.GoLiveButton
+import org.nuruplace.member.feature.live.GoLiveSetupSheet
+import org.nuruplace.member.feature.live.canGoLive
+import org.nuruplace.member.feature.live.liveBroadcastRoute
+import org.nuruplace.member.feature.live.liveNowRoute
 import org.nuruplace.member.feature.profile.AvatarCircle
 import org.nuruplace.member.ui.components.Kicker
+import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.NuruCard
 import org.nuruplace.member.ui.components.ScreenHeader
 import org.nuruplace.member.ui.theme.Nuru
@@ -39,18 +47,39 @@ import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.fmtEventTime
 
 @Composable
-fun CellInfoScreen(onBack: () -> Unit) {
+fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     var featured by remember { mutableStateOf<FeaturedCell?>(null) }
     var cell by remember { mutableStateOf<CellSummary.Cell?>(null) }
+    // Nuru Live (L2) — ONE call to the same GET /live/now Home uses; the
+    // server already scopes cell-scope rows to the caller's own cell, so no
+    // extra client-side cellId matching (or a second endpoint) is needed here.
+    var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
     LaunchedEffect(Unit) {
         featured = runCatching { Net.client.api.featuredCell().data }.getOrNull()
         cell = runCatching { Net.client.api.cellSummary().cell }.getOrNull()
+        liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
     }
+    val cellLive = liveNow.firstOrNull { it.scope == "cell" }
+    // Nuru Live (L3) — the cell entry point is forced to scope=cell (this
+    // member's own cellGroupId); only meaningful once we actually have a
+    // cell, so it's hidden entirely rather than shown disabled when we
+    // don't (there's nothing useful to broadcast INTO without one yet).
+    var showGoLiveSheet by remember { mutableStateOf(false) }
 
     val name = featured?.name ?: cell?.name ?: "Your cell"
     Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
         ScreenHeader(name, kicker = "Your cell", onBack = onBack)
         Column(Modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
+            if (canGoLive(me) && me?.profile?.cellGroupId != null && cellLive == null) {
+                GoLiveButton(onClick = { showGoLiveSheet = true })
+            }
+            cellLive?.let { row ->
+                LiveStreamBanner(
+                    row = row,
+                    onOpen = { onNavigate(liveNowRoute(row)) },
+                    onReplays = { onNavigate("live-replays") },
+                )
+            }
             if (featured == null && cell == null) {
                 NuruCard {
                     Text("No cell yet", style = NuruType.cardTitle, color = Nuru.ink)
@@ -103,6 +132,18 @@ fun CellInfoScreen(onBack: () -> Unit) {
                 featured?.focus?.let { StatRow("Focus", it) }
             }
         }
+    }
+
+    if (showGoLiveSheet) {
+        GoLiveSetupSheet(
+            me = me,
+            lockedScope = "cell",
+            onDismiss = { showGoLiveSheet = false },
+            onStarted = { created, streamTitle, kind, _ ->
+                showGoLiveSheet = false
+                onNavigate(liveBroadcastRoute(created, streamTitle, kind))
+            },
+        )
     }
 }
 

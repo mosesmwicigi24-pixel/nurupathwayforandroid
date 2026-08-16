@@ -112,6 +112,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.delay
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -170,7 +175,11 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     val p = profile ?: me?.profile
     val fullName = p?.fullName ?: "Member"
     val email = p?.email ?: ""
-    val level = me?.enrollment?.currentLevel ?: 1
+    // Nullable on purpose. This was `?: 1`, so a member with no enrollment was
+    // shown "Level 1" — false for twenty-eight real members for up to 42 days
+    // while they waited to be placed (backend #420 / migration 193). A missing
+    // standing must look missing.
+    val level = me?.enrollment?.currentLevel
 
     Column(
         Modifier
@@ -242,17 +251,19 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(fullName, style = pSerif(22, FontWeight.Medium, -0.44f), color = PROF.navy)
                         Text(email, style = pInter(13), color = PROF.ink600)
-                        Row(
-                            Modifier
-                                .clip(Capsule)
-                                .background(PROF.white)
-                                .border(1.dp, PROF.gold.copy(alpha = 0.5f), Capsule)
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(11.dp))
-                            Text("Level $level", style = pInter(11, FontWeight.SemiBold), color = PROF.eyebrow)
+                        if (level != null) {
+                            Row(
+                                Modifier
+                                    .clip(Capsule)
+                                    .background(PROF.white)
+                                    .border(1.dp, PROF.gold.copy(alpha = 0.5f), Capsule)
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(11.dp))
+                                Text("Level $level", style = pInter(11, FontWeight.SemiBold), color = PROF.eyebrow)
+                            }
                         }
                     }
                 }
@@ -406,6 +417,12 @@ private enum class EditField(
     val keyboardType: KeyboardType = KeyboardType.Text,
     val capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
 ) {
+    // Email joined the editable set on 2026-08-15 (owner ruling: user_id is the
+    // assigned identifier, everything else may change). No capitalisation and an
+    // email keyboard — an address the phone has helpfully capitalised is a login
+    // that silently fails. The server trims, lowercases, refuses one another
+    // live account holds, and records the change.
+    EMAIL("Email", "email", keyboardType = KeyboardType.Email),
     NAME("Full name", "full_name", capitalization = KeyboardCapitalization.Words),
     PHONE("Phone", "phone_number", keyboardType = KeyboardType.Phone),
     DOB("Date of birth", "date_of_birth", helper = "YYYY-MM-DD"),
@@ -415,6 +432,7 @@ private enum class EditField(
 }
 
 private val DOB_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
+private val EMAIL_SHAPE = Regex("""^[^@\s]+@[^@\s]+\.[^@\s]+$""")
 private val GENDER_OPTIONS = listOf(
     "Male" to "male",
     "Female" to "female",
@@ -433,6 +451,7 @@ private fun EditFieldSheet(
     var value by remember(field) {
         mutableStateOf(
             when (field) {
+                EditField.EMAIL -> profile?.email ?: ""
                 EditField.NAME -> profile?.fullName ?: ""
                 EditField.PHONE -> profile?.phoneNumber ?: ""
                 EditField.DOB -> profile?.dateOfBirth ?: ""
@@ -448,10 +467,17 @@ private fun EditFieldSheet(
     // The value that goes on the wire — trimmed; country code uppercased.
     val wireValue = when (field) {
         EditField.COUNTRY -> value.trim().uppercase()
+        // Lowercased here as well as server-side, so the member sees the value
+        // that will actually be saved rather than being silently corrected.
+        EditField.EMAIL -> value.trim().lowercase()
         else -> value.trim()
     }
     val valid = when (field) {
         EditField.NAME, EditField.PHONE, EditField.CITY -> wireValue.isNotBlank()
+        // Deliberately loose — just enough to catch a missing @ before a round
+        // trip. The server is the authority on what a valid address is, and on
+        // whether it is already taken (409).
+        EditField.EMAIL -> EMAIL_SHAPE.matches(wireValue)
         EditField.DOB -> DOB_REGEX.matches(wireValue)
         EditField.COUNTRY -> wireValue.length == 2 && wireValue.all { it.isLetter() }
         EditField.GENDER -> GENDER_OPTIONS.any { it.second == wireValue }
@@ -604,7 +630,20 @@ private fun HairlineDivider() {
 @Composable
 private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit) {
     val userId = p?.userId ?: ""
-    val memberId = "NRU-" + userId.filter { it.isLetterOrDigit() }.takeLast(8).uppercase() + "-2026"
+    // The member's user_id, in full. This used to render "NRU-" + the LAST eight
+    // characters + a hardcoded "2026" — while iOS built its own variant from the
+    // FIRST eight plus the real join year, so one member saw two different
+    // "member IDs" depending on which phone they opened. Neither string existed
+    // anywhere in the system: unpasteable, unsearchable, and useless to quote.
+    // A UUID is not pretty, but it is the one thing about a member that cannot
+    // change, which is what a padlocked row labelled MEMBER ID should hold.
+    val memberId = userId.ifBlank { "—" }
+    val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    var justCopied by remember { mutableStateOf(false) }
+    LaunchedEffect(justCopied) {
+        if (justCopied) { delay(1600); justCopied = false }
+    }
     SectionCard {
         SectionTitle(Icons.Filled.Person, "PERSONAL INFORMATION")
 
@@ -616,6 +655,12 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
                 .clip(RoundedCornerShape(16.dp))
                 .background(Brush.linearGradient(listOf(PROF.gold.copy(alpha = 0.08f), PROF.surface)))
                 .border(1.dp, PROF.gold.copy(alpha = 0.23f), RoundedCornerShape(16.dp))
+                .clickable(enabled = userId.isNotBlank()) {
+                    clipboard.setText(AnnotatedString(userId))
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    justCopied = true
+                }
+                .semantics { contentDescription = "Member ID, permanent. Double tap to copy." }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -635,12 +680,21 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
                     Text("MEMBER ID", style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
                     Icon(Icons.Filled.Lock, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(10.dp))
                 }
-                Text(memberId, style = pSerif(13, FontWeight.SemiBold), color = PROF.navy)
+                Text(
+                    memberId,
+                    style = pInter(11, FontWeight.Medium).copy(fontFamily = FontFamily.Monospace),
+                    color = PROF.navy,
+                    maxLines = 2,
+                )
             }
-            Text("PERMANENT", style = pInter(9, FontWeight.SemiBold, 0.9f), color = PROF.rowLabel)
+            Text(
+                if (justCopied) "COPIED" else "PERMANENT",
+                style = pInter(9, FontWeight.SemiBold, 0.9f),
+                color = if (justCopied) PROF.kicker else PROF.rowLabel,
+            )
         }
 
-        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—")
+        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—", onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
         InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", onEdit = { onEdit(EditField.NAME) })
         InfoRow(Icons.Filled.Call, "PHONE", p?.phoneNumber ?: "—", onEdit = { onEdit(EditField.PHONE) })
@@ -942,14 +996,22 @@ private data class MilestoneItem(val title: String, val subtitle: String, val st
 @Composable
 private fun MilestonesCard(me: MeResponse?) {
     val isBaptized = me?.profile?.isBaptized == true
-    val level = me?.enrollment?.currentLevel ?: 1
+    val level = me?.enrollment?.currentLevel
     val items = listOf(
         MilestoneItem(
             "Baptism",
             if (isBaptized) "Recorded — welcome to the family" else "Not yet recorded",
             if (isBaptized) MilestoneState.DONE else MilestoneState.FUTURE,
         ),
-        MilestoneItem("Level $level · in progress", "Keep going", MilestoneState.ACTIVE),
+        // Without an enrollment there is no level in progress. The old `?: 1`
+        // printed "Level 1 · in progress · Keep going" to members who had never
+        // been placed on the pathway — encouragement to keep doing something
+        // they had never been able to start.
+        if (level != null) {
+            MilestoneItem("Level $level · in progress", "Keep going", MilestoneState.ACTIVE)
+        } else {
+            MilestoneItem("Your pathway", "Starting soon — your leader is setting you up", MilestoneState.FUTURE)
+        },
         MilestoneItem("Pathway completion", "Your journey continues", MilestoneState.FUTURE),
     )
     SectionCard {
@@ -1201,6 +1263,7 @@ private fun certDate(iso: String?): String {
 @androidx.compose.runtime.Composable
 private fun AiConsentCard() {
     var optOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var consentSaveFailed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     var loaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -1230,18 +1293,33 @@ private fun AiConsentCard() {
                 checked = !optOut,
                 enabled = loaded,
                 onCheckedChange = { on ->
+                    val previous = optOut
                     optOut = !on
+                    consentSaveFailed = false
                     scope.launch {
+                        // Consent must never lie: if the server didn't record
+                        // it, don't display it.
                         runCatching {
                             org.nuruplace.member.data.net.Net.client.api.setAiConsent(
                                 org.nuruplace.member.data.net.AiConsentBody(optOut = !on),
                             )
+                        }.onFailure {
+                            optOut = previous
+                            consentSaveFailed = true
                         }
                     }
                 },
                 colors = androidx.compose.material3.SwitchDefaults.colors(
                     checkedTrackColor = org.nuruplace.member.ui.theme.Nuru.gold,
                 ),
+            )
+        }
+        if (consentSaveFailed) {
+            androidx.compose.material3.Text(
+                "Couldn't save that — check your connection and try again.",
+                style = org.nuruplace.member.ui.theme.NuruType.micro,
+                color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }

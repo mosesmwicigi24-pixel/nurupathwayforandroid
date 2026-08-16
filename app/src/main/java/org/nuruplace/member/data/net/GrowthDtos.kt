@@ -73,6 +73,11 @@ data class ReadingPlanDay(
     val content: String? = null,
     val segments: List<PlanSegment>? = null,
     val completed: Boolean? = null,
+    /** Server-decided: true while an earlier day is still unfinished. A locked
+     *  day arrives with its shape (title, reference, the kinds of its parts) but
+     *  its content and videoUrl withheld — there is nothing to render past the
+     *  gate even if a client tried. Absent on an older server → nothing locked. */
+    val locked: Boolean = false,
 )
 
 @Serializable
@@ -88,6 +93,9 @@ data class ReadingPlanDetail(
     val completedDays: List<Int>? = null,
     val enrolled: Boolean = false,
     val days: List<ReadingPlanDay> = emptyList(),
+    /** The first day not yet finished — the one day to point someone back to.
+     *  Null once the whole plan is done. */
+    val nextDay: Int? = null,
 )
 
 // --- Prayer journal ---
@@ -144,12 +152,38 @@ data class PlanDayReflectionEnv(val data: PlanDayReflection? = null)
 @Serializable
 data class SaveReflectionBody(val body: String, val clientMutationId: String)
 
-/** POST growth/segments/{id}/complete → tells us if finishing this segment completed the day. */
+/**
+ * POST growth/segments/{id}/complete → tells us if finishing this segment
+ * completed the day. Additive (backend fix/plan-day-unlock-race): dayComplete
+ * / nextDayNumber / nextDayUnlocked are computed server-side in the SAME
+ * transaction as the completion write, so the client can act on the LAST
+ * segment's ack directly instead of racing a plan re-fetch against a
+ * completion that might still be landing (the offline-sync race). Missing
+ * keys fall back to their defaults, so an older server still decodes fine —
+ * dayComplete falls back to dayCompleted specifically for that reason.
+ */
 @Serializable
 data class SegmentCompleteResult(
     val segmentId: String = "",
     val dayNumber: Int = 0,
     val dayCompleted: Boolean = false,
+    val dayComplete: Boolean = dayCompleted,
+    val nextDayNumber: Int? = null,
+    val nextDayUnlocked: Boolean = false,
+)
+
+/**
+ * Broadcast (via [org.nuruplace.member.feature.grow.PlanProgressBus.dayUnlocked])
+ * when a segment's ack confirms its day sealed — the authoritative,
+ * same-transaction verdict from the server (§1.1: the server decides gating,
+ * never the client). Lets the day hub trust it directly and the plan overview
+ * tell a genuine lock apart from a completion still catching up to its fetch.
+ */
+data class PlanDayUnlockAck(
+    val planId: String?,
+    val dayNumber: Int,
+    val nextDayNumber: Int?,
+    val nextDayUnlocked: Boolean,
 )
 
 @Serializable
@@ -175,6 +209,55 @@ data class VerseUpsertBody(
 /** POST /me/prayers/{id}/share-to-wall — 201 with the wall post id (idempotent). */
 @Serializable
 data class ShareToWallRes(val postId: String = "")
+
+// --- Selah — My Thoughts (private rich-text + pen journal, §5.4) ---
+// Wire shape mirrors packages/backend/src/modules/thoughts/service.ts exactly:
+// `body` is plain text, `bodySpans` is the portable formatting overlay (start/
+// end char offsets + which of bold/italic/color/font apply over that range).
+@Serializable
+data class ThoughtSpan(
+    val start: Int,
+    val end: Int,
+    val bold: Boolean? = null,
+    val italic: Boolean? = null,
+    val color: String? = null,
+    val font: String? = null,
+    // Per-span line-height multiplier (1.0 = default, 0.8..2.5 — backend
+    // packages/backend/src/modules/thoughts/service.ts ThoughtSpan.spacing).
+    // Global JsonNamingStrategy.SnakeCase handles the wire key.
+    val spacing: Float? = null,
+)
+
+@Serializable
+data class Thought(
+    val thoughtId: String,
+    val title: String? = null,
+    val body: String = "",
+    val bodySpans: List<ThoughtSpan>? = null,
+    val drawingUrls: List<String> = emptyList(),
+    val createdAt: String = "",
+    val updatedAt: String = "",
+)
+
+@Serializable
+data class ThoughtUpsertBody(
+    val thoughtId: String,
+    val title: String? = null,
+    val body: String,
+    val bodySpans: List<ThoughtSpan>? = null,
+    val drawingUrls: List<String> = emptyList(),
+    val clientMutationId: String,
+)
+
+// --- AI Prayer Points (Prayer Room tab 4) ---
+@Serializable
+data class PrayerAssistBody(val seed: String? = null)
+
+@Serializable
+data class PrayerAssistRes(val suggestion: String = "")
+
+@Serializable
+data class PrayerPointsRes(val points: List<String> = emptyList())
 
 // --- Talk it Over (the shared plan-day conversation) ---
 @Serializable

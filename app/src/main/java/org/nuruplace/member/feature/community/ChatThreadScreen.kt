@@ -13,9 +13,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,16 +43,34 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +87,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,8 +106,11 @@ import kotlinx.serialization.json.putJsonArray
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.PastoralLock
 import org.nuruplace.member.data.net.ChatMessage
 import org.nuruplace.member.data.net.ChatThreadDetail
+import org.nuruplace.member.data.net.EditMessageBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.data.net.SendMessageBody
@@ -104,23 +128,143 @@ import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
+/**
+ * [threadContext] — "discipler" | "pastoral" | null. Set by the caller when
+ * navigation already resolved the thread via `GET /chat/discipler/conversation`
+ * or `POST /chat/pastoral` (Chat Redesign C3b): those routes already know
+ * which flavour of 1:1 this is, so it's passed explicitly through the nav
+ * route args (`"chat/{id}?ctx=discipler|pastoral"`) rather than re-derived.
+ * The biometric gate below has to decide BEFORE the thread ever loads, so it
+ * always uses this pre-load value (falling back to the cached pastoral id,
+ * same as before). Once the thread loads, `GET /chat/conversations/{id}` DOES
+ * carry `type` now (Chat Redesign C4) — the render below (privacy label, ⋮
+ * menu) upgrades to that server-authoritative value when threadContext was
+ * never passed, rather than trusting only the pre-load guess.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
+fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: String? = null) {
+    // A pastoral thread reached through an ordinary route (a stale DM row, a
+    // deep link) still gets its privacy dressing and the local gate when this
+    // device has already learned the thread's id — otherwise the gate would be
+    // one un-annotated navigation away from useless.
+    val preloadCtx = threadContext ?: if (conversationId.isNotBlank() && conversationId == AppPrefs.pastoralConversationId) "pastoral" else null
+    val gateActive = preloadCtx == "pastoral" && PastoralLock.enabled
+
+    // Re-lock whenever the app leaves the foreground while this screen is up —
+    // "re-auth on timeout/restart/logout/device-lock" (owner brief). Restart is
+    // covered for free: PastoralLock.unlocked lives only in process memory, so
+    // a fresh process always starts locked.
+    if (gateActive) {
+        androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+            PastoralLock.lock()
+        }
+    }
+
+    // Gate the RENDER itself, not just an opaque cover: nothing below this —
+    // not the mark-read call, not the thread fetch, not a single message — runs
+    // until the gate opens.
+    if (gateActive && !PastoralLock.unlocked) {
+        PastoralLockScreen(onBack = onBack)
+        return
+    }
+
     LaunchedEffect(conversationId) { runCatching { Net.client.api.markChatRead(conversationId) } }
+    // First successful open of this tab caches the id locally so a later Chat
+    // hub load can cross-reference GET /chat/conversations for an unread
+    // badge, without the hub ever eagerly calling POST /chat/pastoral itself
+    // (that route creates a thread as a side effect — see PARITY_AUDIT.md).
+    if (threadContext == "pastoral") {
+        LaunchedEffect(conversationId) { AppPrefs.pastoralConversationId = conversationId }
+    }
     var myName by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { myName = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("") }
+    // The other participant, for the ⋮ connection menu (Chat Redesign C3a).
+    // GET /chat/conversations/{id} doesn't carry peer_user_id (only the list
+    // endpoint does) — cross-reference it from the inbox rather than touch
+    // the read-only backend. Best-effort: absent just hides the menu.
+    var peerUserId by remember(conversationId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(conversationId) {
+        peerUserId = runCatching {
+            Net.client.api.chatInbox().conversations.firstOrNull { it.conversationId == conversationId }?.peerUserId
+        }.getOrNull()
+    }
 
     AsyncContent(key = conversationId, load = { Net.client.api.chatConversation(conversationId) }) { thread: ChatThreadDetail, reload ->
         val scope = rememberCoroutineScope()
         val context = LocalContext.current
         val view = LocalView.current
+        // Server-authoritative once loaded: `type` (Chat Redesign C4) wins over
+        // the pre-load guess when the caller never passed threadContext — the
+        // cached-id fallback only decides anything when `type` is absent too.
+        val ctx = threadContext ?: when (thread.type) {
+            "PASTORAL" -> "pastoral"
+            "DISCIPLER" -> "discipler"
+            else -> preloadCtx
+        }
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         val listState = rememberLazyListState()
+        // Edit/Delete (own messages only) — optimistic local overrides on top of
+        // whatever the server last returned, rolled back if the PATCH/DELETE fails.
+        var editOverrides by remember(conversationId) { mutableStateOf(mapOf<String, String>()) }
+        var locallyDeleted by remember(conversationId) { mutableStateOf(setOf<String>()) }
+        var actionsForMessage by remember { mutableStateOf<ChatMessage?>(null) }
+        var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+        var editDraft by remember { mutableStateOf("") }
+        var editSaving by remember { mutableStateOf(false) }
+        var editError by remember { mutableStateOf<String?>(null) }
+        var deleteConfirmFor by remember { mutableStateOf<ChatMessage?>(null) }
+        var actionError by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(actionError) {
+            if (actionError != null) {
+                kotlinx.coroutines.delay(3500)
+                actionError = null
+            }
+        }
         val messages = thread.messages
+            .filter { it.messageId !in locallyDeleted }
+            .map { m -> editOverrides[m.messageId]?.let { m.copy(body = it, isEdited = true) } ?: m }
+        fun editMessage(m: ChatMessage, newBody: String) {
+            val trimmed = newBody.trim()
+            if (trimmed.isBlank()) return
+            if (trimmed == m.body) { editingMessage = null; return }
+            val previous = editOverrides[m.messageId]
+            editSaving = true
+            editError = null
+            editOverrides = editOverrides + (m.messageId to trimmed)
+            scope.launch {
+                try {
+                    Net.client.api.editChatMessage(m.messageId, EditMessageBody(trimmed))
+                    editOverrides = editOverrides - m.messageId
+                    editingMessage = null
+                    Haptics.confirm(view)
+                    reload()
+                } catch (_: Exception) {
+                    editOverrides = if (previous != null) editOverrides + (m.messageId to previous) else editOverrides - m.messageId
+                    Haptics.reject(view)
+                    editError = "Couldn't save — please try again."
+                } finally {
+                    editSaving = false
+                }
+            }
+        }
+        fun deleteMessage(m: ChatMessage) {
+            locallyDeleted = locallyDeleted + m.messageId
+            scope.launch {
+                try {
+                    Net.client.api.deleteChatMessage(m.messageId)
+                    reload()
+                } catch (_: Exception) {
+                    locallyDeleted = locallyDeleted - m.messageId
+                    Haptics.reject(view)
+                    actionError = "Couldn't delete this message — try again."
+                }
+            }
+        }
         val recorder = remember { VoiceRecorder() }
         val player = remember { VoicePlayer() }
-        DisposableEffect(Unit) { onDispose { recorder.cancel(); player.release() } }
+        DisposableEffect(Unit) { onDispose { recorder.release(); player.release() } }
         val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) recorder.start(context)
         }
@@ -182,10 +326,109 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
         }
         fun join() { scope.launch { try { Net.client.api.joinChatSpace(conversationId); reload() } catch (_: Exception) {} } }
 
+        // ── Connection controls (Chat Redesign C3a — thread ⋮ menu) ──
+        var connectionBusy by remember { mutableStateOf(false) }
+        fun removeConnection() {
+            val peer = peerUserId ?: return
+            if (connectionBusy) return
+            connectionBusy = true
+            scope.launch {
+                runCatching { Net.client.api.removeConnection(peer) }
+                    .onSuccess { actionError = "Connection removed. This chat's history is kept." }
+                    .onFailure { actionError = "Couldn't remove this connection — try again." }
+                connectionBusy = false
+            }
+        }
+        fun blockPeer() {
+            val peer = peerUserId ?: return
+            if (connectionBusy) return
+            connectionBusy = true
+            scope.launch {
+                runCatching { Net.client.api.blockConnection(peer) }
+                    .onSuccess { actionError = "Blocked. They can no longer message you." }
+                    .onFailure { actionError = "Couldn't block — try again." }
+                connectionBusy = false
+            }
+        }
+        fun unblockPeer() {
+            val peer = peerUserId ?: return
+            if (connectionBusy) return
+            connectionBusy = true
+            scope.launch {
+                runCatching { Net.client.api.unblockConnection(peer) }
+                    .onSuccess { actionError = "Unblocked." }
+                    // The menu offers Unblock unconditionally (no per-pair status
+                    // read exists client-side) — a 404 "wasn't blocked" is the
+                    // expected, harmless outcome when it wasn't needed.
+                    .onFailure { actionError = "This person wasn't blocked." }
+                connectionBusy = false
+            }
+        }
+
         LaunchedEffect(messages.size) { if (messages.isNotEmpty()) runCatching { listState.animateScrollToItem(messages.lastIndex) } }
 
+        // A DM carrying a message stamped with a broadcast_id is the pastor's own
+        // word to this member — dress it as "Talk with Pastor", not a plain DM.
+        // Unrelated to threadContext == "pastoral": that's the NEW dedicated
+        // PASTORAL conversation type; this is the OLD "reply to a broadcast"
+        // heuristic (a thread is never both in practice).
+        val isPastorMail = thread.kind != "space" && messages.any { it.broadcastId != null && !it.mine }
+
+        // ── Pastoral ⋮ menu state (Chat Redesign C3b: Lock/Enable-biometric/
+        // Archive/Privacy info are still client-side-only. Mute is now
+        // server-backed — Chat Redesign C4, PUT/DELETE
+        // /chat/conversations/{id}/mute — synced from the thread's own
+        // `muted` field on every load/reload and mirrored into AppPrefs so
+        // the Chat tab's badge suppression (which only fetches the list
+        // endpoint) sees the same state without a second round trip.) ──
+        var biometricOn by remember { mutableStateOf(PastoralLock.enabled) }
+        var muted by remember(conversationId) { mutableStateOf(thread.muted) }
+        LaunchedEffect(thread.muted) { muted = thread.muted; AppPrefs.pastoralMuted = thread.muted }
+        var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
+        var showPrivacyInfo by remember { mutableStateOf(false) }
+
         Column(Modifier.fillMaxSize().background(CHAT.threadBg).imePadding()) {
-            ThreadHeader(thread, onBack)
+            ThreadHeader(
+                thread, isPastorMail, onBack,
+                peerUserId = peerUserId, connectionBusy = connectionBusy,
+                onRemoveConnection = { removeConnection() },
+                onBlock = { blockPeer() },
+                onUnblock = { unblockPeer() },
+                threadContext = ctx,
+                biometricOn = biometricOn,
+                muted = muted,
+                archived = archived,
+                onLockNow = { PastoralLock.lock() },
+                onToggleBiometric = { PastoralLock.enabled = !biometricOn; biometricOn = PastoralLock.enabled },
+                onToggleMute = {
+                    // Optimistic — the menu label and the Chat tab badge
+                    // (AppPrefs.pastoralMuted) flip instantly.
+                    val target = !muted
+                    muted = target
+                    AppPrefs.pastoralMuted = target
+                    scope.launch {
+                        val ok = runCatching {
+                            if (target) Net.client.api.muteChatConversation(conversationId) else Net.client.api.unmuteChatConversation(conversationId)
+                        }.isSuccess
+                        if (!ok) {
+                            // Revert + inline error — same house idiom as the
+                            // edit/delete rollback above (actionError banner).
+                            muted = !target
+                            AppPrefs.pastoralMuted = !target
+                            Haptics.reject(view)
+                            actionError = if (target) "Couldn't mute — try again." else "Couldn't unmute — try again."
+                        }
+                    }
+                },
+                onArchive = { archived = !archived; AppPrefs.pastoralArchived = archived; if (archived) onBack() },
+                onShowPrivacyInfo = { showPrivacyInfo = true },
+            )
+            // Pastoral speaks with the broadcast's voice (iOS build 82 parity):
+            // the personal gold ribbon below replaces this generic sentence —
+            // only discipler threads keep the plain privacy banner here.
+            if (ctx == "discipler") {
+                PrivacyLabelBanner("Private between you and your assigned discipler.")
+            }
             if (thread.kind == "space" && !thread.joined) {
                 Row(Modifier.fillMaxWidth().background(CHAT.canvas).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
                     Box(
@@ -204,7 +447,30 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                     val thisDay = chatDayKey(m.createdAt)
                     if (thisDay != prevDay) DaySeparator(m.createdAt)
                     val runHead = i == 0 || messages[i - 1].authorUserId != m.authorUserId || chatDayKey(messages[i - 1].createdAt) != thisDay
-                    MessageRow(m, thread.kind, runHead, player) { emoji -> react(m, emoji) }
+                    MessageRow(
+                        m, thread.kind, runHead, player,
+                        onReact = { emoji -> react(m, emoji) },
+                        onLongPress = { if (m.mine) { Haptics.tap(view); actionsForMessage = m } },
+                    )
+                }
+            }
+
+            // The privacy promise, right where the member types: a reply to the
+            // pastor's broadcast — or any Talk with My Pastor thread — goes to
+            // the pastor alone (iOS build 82: pastoral wears the broadcast's
+            // dressing everywhere, not just on broadcast-originated mail).
+            if (isPastorMail || ctx == "pastoral") {
+                Row(
+                    Modifier.fillMaxWidth().background(CHAT.goldTint).padding(horizontal = 16.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+                    Text(
+                        "Only ${thread.title ?: "the pastor"} sees your reply",
+                        style = cInter(11, FontWeight.SemiBold),
+                        color = CHAT.goldDeep,
+                    )
                 }
             }
 
@@ -219,6 +485,14 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                             .clickable { send(q) }.padding(horizontal = 14.dp, vertical = 8.dp),
                     ) { Text(q, style = cInter(13, FontWeight.Medium), color = CHAT.navy) }
                 }
+            }
+
+            // A failed edit/delete already rolled its optimistic change back —
+            // this just tells the member why, briefly, above the composer.
+            actionError?.let { msg ->
+                Row(
+                    Modifier.fillMaxWidth().background(Color(0xFFFDECEA)).padding(horizontal = 16.dp, vertical = 7.dp),
+                ) { Text(msg, style = cInter(11, FontWeight.Medium), color = Color(0xFFB3261E)) }
             }
 
             // Composer — swaps to the live recording strip while a voice note is
@@ -305,11 +579,223 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit) {
                 }
             }
         }
+
+        // ---- Long-press action sheet — own messages only: Edit (text only), Delete ----
+        actionsForMessage?.let { m ->
+            ModalBottomSheet(onDismissRequest = { actionsForMessage = null }) {
+                Column(Modifier.padding(bottom = 24.dp)) {
+                    if (m.msgType != "voice" && m.msgType != "image") {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable {
+                                    editDraft = m.body
+                                    editError = null
+                                    editingMessage = m
+                                    actionsForMessage = null
+                                }
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Icon(Icons.Filled.Edit, null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
+                            Text("Edit", style = cInter(14, FontWeight.SemiBold), color = CHAT.navy)
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                                deleteConfirmFor = m
+                                actionsForMessage = null
+                            }
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Filled.Delete, null, tint = Color(0xFFB3261E), modifier = Modifier.size(18.dp))
+                        Text("Delete", style = cInter(14, FontWeight.SemiBold), color = Color(0xFFB3261E))
+                    }
+                }
+            }
+        }
+
+        // ---- Edit sheet — prefilled with the current body; PATCH on save ----
+        editingMessage?.let { m ->
+            ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                    Text("Edit message", style = cSerif(19, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(CHAT.paper)
+                            .border(1.dp, CHAT.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        BasicTextField(
+                            value = editDraft,
+                            onValueChange = { editDraft = it },
+                            textStyle = cInter(14).copy(color = CHAT.navy),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(CHAT.gold),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    editError?.let { err ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(err, style = cInter(12), color = Color(0xFFB3261E))
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Box(
+                        Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
+                            .background(if (editDraft.isBlank()) CHAT.gold.copy(alpha = 0.4f) else CHAT.gold)
+                            .clickable(enabled = !editSaving && editDraft.isNotBlank()) { editMessage(m, editDraft) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(if (editSaving) "Saving…" else "Save", style = cInter(14, FontWeight.Bold), color = CHAT.navy)
+                    }
+                }
+            }
+        }
+
+        // ---- Delete confirm — irreversible, so always ask first ----
+        deleteConfirmFor?.let { m ->
+            AlertDialog(
+                onDismissRequest = { deleteConfirmFor = null },
+                title = { Text("Delete this message?", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+                text = { Text("This can't be undone.", style = cInter(13), color = CHAT.ink600) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deleteConfirmFor = null
+                        deleteMessage(m)
+                    }) { Text("Delete", style = cInter(13, FontWeight.Bold), color = Color(0xFFB3261E)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteConfirmFor = null }) {
+                        Text("Cancel", style = cInter(13, FontWeight.SemiBold), color = CHAT.ink600)
+                    }
+                },
+            )
+        }
+
+        // ---- Privacy info (pastoral ⋮ menu) — honest, no false E2EE claim ----
+        if (showPrivacyInfo) {
+            AlertDialog(
+                onDismissRequest = { showPrivacyInfo = false },
+                containerColor = CHAT.white,
+                title = { Text("About this conversation's privacy", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
+                text = {
+                    Text(
+                        "Messages here are encrypted in transit and at rest, and only " +
+                            "you and your pastor are members of this thread — a SuperAdmin " +
+                            "or a permission-holding pastoral admin can reach it only through " +
+                            "an audited, exceptional-access path, never by default. This is " +
+                            "not end-to-end encrypted: the server can read message content, " +
+                            "the same as any other conversation in the app. The lock you just " +
+                            "opened is a LOCAL setting on this device only — it doesn't change " +
+                            "who can read the conversation, only who can open it on this phone.",
+                        style = cInter(13).copy(lineHeight = 19.sp),
+                        color = CHAT.ink600,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPrivacyInfo = false }) {
+                        Text("Got it", style = cInter(13, FontWeight.Bold), color = CHAT.goldDeep)
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** Shared privacy-label strip for the My Discipler / Talk with My Pastor
+ *  threads (Chat Redesign C3b) — distinct wording per thread flavour, same
+ *  chrome the existing "Only X sees your reply" broadcast-reply banner uses. */
+@Composable
+private fun PrivacyLabelBanner(label: String) {
+    Row(
+        Modifier.fillMaxWidth().background(CHAT.goldTint).padding(horizontal = 16.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Text(label, style = cInter(11, FontWeight.SemiBold), color = CHAT.goldDeep)
+    }
+}
+
+/** Full-screen local gate for a locked "Talk with My Pastor" thread —
+ *  nothing behind it renders until this resolves (see the early return in
+ *  ChatThreadScreen). Auto-prompts once on entry so the member doesn't have
+ *  to tap twice; "Try again" re-prompts on a cancel/failure, "Back" bails out
+ *  without ever fetching the thread. */
+@Composable
+private fun PastoralLockScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val activity = remember { context.findFragmentActivity() }
+    val scope = rememberCoroutineScope()
+    var unlocking by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun attempt() {
+        val act = activity ?: run { error = "Unlock isn't available here."; return }
+        if (unlocking) return
+        unlocking = true
+        error = null
+        scope.launch {
+            val ok = PastoralLock.unlock(act)
+            unlocking = false
+            if (!ok) error = "Couldn't verify it's you."
+        }
+    }
+
+    LaunchedEffect(Unit) { attempt() }
+
+    Column(
+        Modifier.fillMaxSize().background(CHAT.threadBg).padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            Modifier.size(64.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.selectedSeg),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
+        Spacer(Modifier.height(16.dp))
+        Text("Talk with My Pastor is locked", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy, textAlign = TextAlign.Center)
+        Text(
+            "Confirm it's you to open this private conversation.",
+            style = cInter(13).copy(lineHeight = 19.sp),
+            color = CHAT.ink600,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        error?.let { Text(it, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318), modifier = Modifier.padding(top = 10.dp)) }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(CHAT.surface).clickable { onBack() }.padding(horizontal = 20.dp, vertical = 12.dp),
+            ) { Text("Back", style = cInter(13, FontWeight.SemiBold), color = CHAT.ink600) }
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(CHAT.storyRing).clickable(enabled = !unlocking) { attempt() }.padding(horizontal = 20.dp, vertical = 12.dp),
+            ) { Text(if (unlocking) "Confirming…" else "Unlock", style = cInter(13, FontWeight.Bold), color = Color.White) }
+        }
     }
 }
 
 @Composable
-private fun ThreadHeader(thread: ChatThreadDetail, onBack: () -> Unit) {
+private fun ThreadHeader(
+    thread: ChatThreadDetail,
+    isPastorMail: Boolean,
+    onBack: () -> Unit,
+    peerUserId: String? = null,
+    connectionBusy: Boolean = false,
+    onRemoveConnection: () -> Unit = {},
+    onBlock: () -> Unit = {},
+    onUnblock: () -> Unit = {},
+    threadContext: String? = null,
+    biometricOn: Boolean = false,
+    muted: Boolean = false,
+    archived: Boolean = false,
+    onLockNow: () -> Unit = {},
+    onToggleBiometric: () -> Unit = {},
+    onToggleMute: () -> Unit = {},
+    onArchive: () -> Unit = {},
+    onShowPrivacyInfo: () -> Unit = {},
+) {
     Column {
         ChatCreamHeaderBox {
             Row(
@@ -337,7 +823,16 @@ private fun ThreadHeader(thread: ChatThreadDetail, onBack: () -> Unit) {
                     if (thread.kind == "dm") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("🕊️", fontSize = 10.sp)
-                            Text("Walking together in faith", style = cSerif(12, FontWeight.Medium).copy(fontStyle = FontStyle.Italic), color = CHAT.eyebrow, maxLines = 1)
+                            Text(
+                                when {
+                                    threadContext == "discipler" -> "My Discipler"
+                                    threadContext == "pastoral" -> "Talk with My Pastor"
+                                    isPastorMail -> "Talk with Pastor"
+                                    else -> "Walking together in faith"
+                                },
+                                style = cSerif(12, FontWeight.Medium).copy(fontStyle = FontStyle.Italic),
+                                color = CHAT.eyebrow, maxLines = 1,
+                            )
                         }
                     } else {
                         Text(
@@ -347,10 +842,20 @@ private fun ThreadHeader(thread: ChatThreadDetail, onBack: () -> Unit) {
                     }
                 }
 
-                Box(
-                    Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.gold.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
+                if (thread.kind == "dm" && threadContext == "pastoral") {
+                    PastoralMenuButton(
+                        biometricOn = biometricOn, muted = muted, archived = archived,
+                        onLockNow = onLockNow, onToggleBiometric = onToggleBiometric,
+                        onToggleMute = onToggleMute, onArchive = onArchive, onPrivacyInfo = onShowPrivacyInfo,
+                    )
+                } else if (thread.kind == "dm" && peerUserId != null) {
+                    ConnectionMenuButton(connectionBusy, onRemoveConnection, onBlock, onUnblock)
+                } else {
+                    Box(
+                        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.gold.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
+                }
             }
         }
         if (thread.kind == "space" && !thread.topic.isNullOrBlank()) {
@@ -366,6 +871,103 @@ private fun ThreadHeader(thread: ChatThreadDetail, onBack: () -> Unit) {
     }
 }
 
+/**
+ * Per-connection controls (Chat Redesign C3a): Remove connection, Block,
+ * Unblock. No "Report" — this app has no member-facing report/moderation
+ * affordance to reuse (the flag/remove/restore actions on a message are
+ * Admin-console-only, gated by `requireRole("Admin")` server-side), so it's
+ * intentionally omitted rather than half-built.
+ */
+@Composable
+private fun ConnectionMenuButton(busy: Boolean, onRemove: () -> Unit, onBlock: () -> Unit, onUnblock: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(
+        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.border, RoundedCornerShape(12.dp))
+            .clickable(enabled = !busy) { expanded = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = CHAT.navy, strokeWidth = 2.dp)
+        } else {
+            Icon(Icons.Filled.MoreVert, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Remove connection") },
+                leadingIcon = { Icon(Icons.Filled.PersonRemove, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onRemove() },
+            )
+            DropdownMenuItem(
+                text = { Text("Block") },
+                leadingIcon = { Icon(Icons.Filled.Block, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onBlock() },
+            )
+            DropdownMenuItem(
+                text = { Text("Unblock") },
+                leadingIcon = { Icon(Icons.Filled.LockOpen, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onUnblock() },
+            )
+        }
+    }
+}
+
+/**
+ * "Talk with My Pastor" ⋮ menu (Chat Redesign C3b — the biometric lock's new
+ * home, moved from Broadcast per the owner brief). Lock now / Enable-Disable
+ * biometric / Mute / Archive are all pure client-side state — no server route
+ * backs any of the four (documented in PARITY_AUDIT.md). Privacy info opens
+ * an honest explainer dialog (no false E2EE claim).
+ */
+@Composable
+private fun PastoralMenuButton(
+    biometricOn: Boolean,
+    muted: Boolean,
+    archived: Boolean,
+    onLockNow: () -> Unit,
+    onToggleBiometric: () -> Unit,
+    onToggleMute: () -> Unit,
+    onArchive: () -> Unit,
+    onPrivacyInfo: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(
+        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.border, RoundedCornerShape(12.dp))
+            .clickable { expanded = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.MoreVert, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (biometricOn) {
+                DropdownMenuItem(
+                    text = { Text("Lock now") },
+                    leadingIcon = { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(20.dp)) },
+                    onClick = { expanded = false; onLockNow() },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(if (biometricOn) "Disable biometric lock" else "Enable biometric lock") },
+                leadingIcon = { Icon(Icons.Filled.Fingerprint, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onToggleBiometric() },
+            )
+            DropdownMenuItem(
+                text = { Text(if (muted) "Unmute" else "Mute") },
+                leadingIcon = { Icon(Icons.Filled.NotificationsOff, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onToggleMute() },
+            )
+            DropdownMenuItem(
+                text = { Text(if (archived) "Unarchive" else "Archive") },
+                leadingIcon = { Icon(if (archived) Icons.Filled.Unarchive else Icons.Filled.Archive, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onArchive() },
+            )
+            DropdownMenuItem(
+                text = { Text("Privacy info") },
+                leadingIcon = { Icon(Icons.Filled.Info, null, modifier = Modifier.size(20.dp)) },
+                onClick = { expanded = false; onPrivacyInfo() },
+            )
+        }
+    }
+}
+
 @Composable
 private fun DaySeparator(iso: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -375,8 +977,16 @@ private fun DaySeparator(iso: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(m: ChatMessage, kind: String, runHead: Boolean, player: VoicePlayer, onReact: (String) -> Unit) {
+private fun MessageRow(
+    m: ChatMessage,
+    kind: String,
+    runHead: Boolean,
+    player: VoicePlayer,
+    onReact: (String) -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = if (m.mine) Arrangement.End else Arrangement.Start,
@@ -410,6 +1020,15 @@ private fun MessageRow(m: ChatMessage, kind: String, runHead: Boolean, player: V
                 Modifier.clip(shape)
                     .then(if (m.mine) Modifier.background(CHAT.bubbleInk) else Modifier.background(CHAT.bubbleLight))
                     .border(1.dp, if (m.mine) Color.White.copy(alpha = 0.08f) else CHAT.hairline, shape)
+                    // Edit/Delete affordance — own messages only, never on a
+                    // system row or someone else's copy of a broadcast.
+                    .then(
+                        if (m.mine) {
+                            Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress)
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -530,7 +1149,11 @@ private fun MessageRow(m: ChatMessage, kind: String, runHead: Boolean, player: V
                     Text(chatMsgTime(m.createdAt), style = cInter(10), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
                     if (m.mine) {
                         Spacer(Modifier.width(4.dp))
-                        Text("✓✓", style = cInter(9, FontWeight.SemiBold, -1f), color = if ((m.readCount ?: 0) > 0) CHAT.gold else Color.White.copy(alpha = 0.55f))
+                        // The broadcast rule, everywhere: ONE blue tick = delivered
+                        // (the copy is in their thread), TWO blue ticks = seen
+                        // (their last_read_at covers it). Always WhatsApp-blue.
+                        val seen = (m.readCount ?: 0) > 0
+                        Text(if (seen) "✓✓" else "✓", style = cInter(9, FontWeight.SemiBold, -1f), color = CHAT.tickBlue)
                     }
                 }
             }

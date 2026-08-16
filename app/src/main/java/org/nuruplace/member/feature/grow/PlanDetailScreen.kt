@@ -34,12 +34,15 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -75,26 +79,54 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
     var loading by remember { mutableStateOf(true) }
     var detail by remember { mutableStateOf<ReadingPlanDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // A segment ack told us this day number should already be open. Kept
+    // until a fetch actually shows it unlocked, so a day that still comes
+    // back locked (a completion still catching up through the sync path)
+    // reads as "finishing sync" rather than "you're not there yet".
+    var awaitingUnlock by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
         loading = true
         runCatching { Net.client.api.plan(planId) }
-            .onSuccess { detail = it; error = null }
+            .onSuccess {
+                detail = it; error = null
+                val waiting = awaitingUnlock
+                if (waiting != null && it.days.firstOrNull { d -> d.dayNumber == waiting }?.locked == false) {
+                    awaitingUnlock = null
+                }
+            }
             .onFailure { error = "Couldn't load this plan." }
         loading = false
     }
 
+    // This screen decides which days are tappable, so it never trusts a
+    // cached "locked" answer from before the member walked off to finish the
+    // previous day — LaunchedEffect(planId) re-fetches every time Navigation
+    // recomposes this destination (including popping back from the day hub).
     LaunchedEffect(planId) { reload() }
+
+    // A segment's ack (relayed from the day hub) said this plan's next day is
+    // already open server-side — `replay = 1` on the bus means this still
+    // arrives even though this screen was off the back stack when it fired.
+    LaunchedEffect(planId) {
+        PlanProgressBus.dayUnlocked.collect { ack ->
+            if ((ack.planId == null || ack.planId == planId) && ack.nextDayUnlocked && ack.nextDayNumber != null) {
+                awaitingUnlock = ack.nextDayNumber
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(PL.cream)) {
         val d = detail
         when {
             d != null -> PlanDetailContent(
                 d = d,
+                awaitingUnlock = awaitingUnlock,
                 onBack = onBack,
                 onOpenDay = onOpenDay,
                 onStart = { scope.launch { runCatching { Net.client.api.startPlan(planId) }; reload() } },
+                onRetrySync = { scope.launch { reload() } },
             )
             loading -> CircularProgressIndicator(
                 color = PL.gold,
@@ -113,15 +145,44 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
 @Composable
 private fun PlanDetailContent(
     d: ReadingPlanDetail,
+    awaitingUnlock: Int?,
     onBack: () -> Unit,
     onOpenDay: (Int) -> Unit,
     onStart: () -> Unit,
+    onRetrySync: () -> Unit,
 ) {
     // Real completion state, derived from the day rows the server returns.
     val done = d.days.count { it.completed == true }
     val allDone = d.days.isNotEmpty() && done >= d.days.size
     val firstIncomplete = d.days.firstOrNull { it.completed != true } ?: d.days.firstOrNull()
-    val nextDay = firstIncomplete?.dayNumber
+    // The server names the day you're on; fall back to our own reckoning if an
+    // older server didn't send it.
+    val nextDay = d.nextDay ?: firstIncomplete?.dayNumber
+
+    // Which locked day the member just reached for — drives the nudge back.
+    var lockedNudgeFor by remember { mutableStateOf<Int?>(null) }
+    lockedNudgeFor?.let { reached ->
+        val n = nextDay ?: 1
+        val title = d.days.firstOrNull { it.dayNumber == n }?.title
+        val named = if (title != null) "Day $n — $title" else "Day $n"
+        AlertDialog(
+            onDismissRequest = { lockedNudgeFor = null },
+            confirmButton = {
+                TextButton(onClick = { lockedNudgeFor = null }) {
+                    Text("Stay on Day $n", style = plInter(13, FontWeight.Bold), color = PL.goldDeep)
+                }
+            },
+            title = { Text("Day $reached is still ahead", style = plSerif(18, FontWeight.SemiBold), color = PL.navy) },
+            text = {
+                Text(
+                    "Finish $named first, and this one opens.\n\nThese days build on each other, so the plan waits for you rather than running ahead. One day at a time is the whole point.",
+                    style = plInter(13),
+                    color = PL.ink2,
+                )
+            },
+            containerColor = Color.White,
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         Column(
@@ -133,7 +194,13 @@ private fun PlanDetailContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 AboutCard(d)
-                WhatYoullRead(d = d, done = done, allDone = allDone, nextDay = nextDay, onOpenDay = onOpenDay)
+                WhatYoullRead(
+                    d = d, done = done, allDone = allDone, nextDay = nextDay,
+                    awaitingUnlock = awaitingUnlock,
+                    onOpenDay = onOpenDay,
+                    onLockedDay = { lockedNudgeFor = it },
+                    onRetrySync = onRetrySync,
+                )
                 PLFinishEarnCard(category = d.category, dayCount = d.dayCount)
                 Nudge()
             }
@@ -258,7 +325,10 @@ private fun WhatYoullRead(
     done: Int,
     allDone: Boolean,
     nextDay: Int?,
+    awaitingUnlock: Int?,
     onOpenDay: (Int) -> Unit,
+    onLockedDay: (Int) -> Unit,
+    onRetrySync: () -> Unit,
 ) {
     var showAll by remember { mutableStateOf(false) }
     val visible = if (showAll) d.days else d.days.take(4)
@@ -274,10 +344,22 @@ private fun WhatYoullRead(
         }
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             visible.forEach { day ->
+                val syncing = day.locked && awaitingUnlock == day.dayNumber
                 PLDetailDayRow(
                     day = day,
                     isNext = !allDone && day.dayNumber == nextDay,
-                    onTap = { onOpenDay(day.dayNumber) },
+                    syncing = syncing,
+                    // A segment ack already told us this day should be open —
+                    // this fetch just hasn't caught up yet (still landing
+                    // through the sync path). An honest brief state, not a
+                    // dead "you're not there yet" tap: retry the fetch.
+                    // Otherwise, the plan is walked, not skimmed: a locked
+                    // day turns you back to the day you're on — kindly.
+                    onTap = when {
+                        syncing -> onRetrySync
+                        day.locked -> { { onLockedDay(day.dayNumber) } }
+                        else -> { { onOpenDay(day.dayNumber) } }
+                    },
                 )
             }
             if (!showAll && d.days.size > 4) {
@@ -351,6 +433,52 @@ private fun CtaBar(
         "Start plan"
     }
 
+    // Read with a Friend (spec §6): create-or-get MY shared group for this
+    // plan, mint a fresh open-link invite, and hand the public
+    // /join/{token} URL + a rich message to the system share sheet —
+    // replaces the old no-op button (docs/READING_SOCIAL_PLAN.md §3).
+    var inviting by remember { mutableStateOf(false) }
+    var inviteError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    fun startInvite() {
+        if (inviting) return
+        inviting = true
+        scope.launch {
+            runCatching {
+                val group = org.nuruplace.member.data.net.Net.client.api.createOrGetReadingGroup(
+                    org.nuruplace.member.data.net.CreateReadingGroupBody(planId = d.planId),
+                )
+                org.nuruplace.member.data.net.Net.client.api.createReadingInvite(
+                    group.groupId,
+                    org.nuruplace.member.data.net.CreateReadingInviteBody(clientMutationId = java.util.UUID.randomUUID().toString()),
+                )
+            }.onSuccess { invite ->
+                val message = readingInviteMessage(d.title, d.dayCount, invite.token)
+                runCatching {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, message)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, null))
+                }
+            }.onFailure { e ->
+                inviteError = org.nuruplace.member.data.net.ApiException.message(e, context)
+            }
+            inviting = false
+        }
+    }
+
+    inviteError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { inviteError = null },
+            confirmButton = { TextButton(onClick = { inviteError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
+            title = { Text("Couldn't send that invite", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
+            text = { Text(msg, style = plInter(13), color = PL.ink2) },
+            containerColor = Color.White,
+        )
+    }
+
     Column(Modifier.fillMaxWidth().background(Color.White)) {
         // Top hairline (iOS: 1px PL.border across the top of the white CTA bar).
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
@@ -377,18 +505,23 @@ private fun CtaBar(
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = plInter(14, FontWeight.Bold), color = PL.navy)
             }
-            // White "Invite" button (no-op)
+            // "Invite" — Read with a Friend (was a no-op; now creates-or-gets a
+            // shared group, mints an invite, and opens the share sheet).
             Row(
                 Modifier.heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, PL.border, RoundedCornerShape(16.dp))
-                    .clickable { }
+                    .clickable(enabled = !inviting) { startInvite() }
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                if (inviting) {
+                    CircularProgressIndicator(color = PL.navy, modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                }
                 Text("Invite", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
             }
         }
@@ -443,14 +576,20 @@ private fun PLFinishEarnCard(category: String?, dayCount: Int) {
 // --- PLDetailDayRow (ReadingPlanCards.swift 381–419) ----------------------
 
 @Composable
-private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, onTap: () -> Unit) {
+private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolean = false, onTap: () -> Unit) {
     val done = day.completed == true
+    // Not yet opened: an earlier day is still unfinished. Shown quietly — the
+    // road ahead is visible, it just isn't walkable yet. `syncing` is the
+    // honest in-between: a segment ack already said this day should be open,
+    // but the fetch hasn't caught up — different from an ordinary lock.
+    val locked = day.locked
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(if (isNext) PL.highlight else PL.surface)
             .border(1.dp, if (isNext) PL.gold.copy(alpha = 0.27f) else Color.Transparent, RoundedCornerShape(16.dp))
             .clickable(onClick = onTap)
+            .alpha(if (locked && !syncing) 0.55f else 1f)   // present, but plainly not yours yet
             .padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -481,9 +620,13 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, onTap: () -> Un
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${day.reference} · ~5 min read",
+                when {
+                    syncing -> "Finishing your sync… tap to check"
+                    locked -> "${day.reference} · opens when today is done"
+                    else -> "${day.reference} · ~5 min read"
+                },
                 style = plInter(11),
-                color = PL.ink3,
+                color = if (syncing) PL.goldDeep else PL.ink3,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -495,6 +638,10 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, onTap: () -> Un
                 color = PL.navy,
                 modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
             )
+        } else if (syncing) {
+            Icon(Icons.Filled.Schedule, null, tint = PL.goldDeep, modifier = Modifier.size(13.dp))
+        } else if (locked) {
+            Icon(Icons.Filled.Lock, null, tint = PL.chev, modifier = Modifier.size(13.dp))
         } else {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         }

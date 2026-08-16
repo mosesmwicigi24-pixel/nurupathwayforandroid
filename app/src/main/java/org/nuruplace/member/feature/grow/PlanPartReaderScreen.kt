@@ -56,7 +56,9 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.components.openExternal
+import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
 
 private fun rankOf(s: PlanSegment): Int = when (s.kind.lowercase()) {
@@ -108,9 +110,26 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
         if (done) { onBack(); return }
         saving = true
         scope.launch {
+            var lastAck: org.nuruplace.member.data.net.SegmentCompleteResult? = null
             group.filterNot { it.completed }.forEach { seg ->
-                runCatching { Net.client.api.completeSegment(seg.segmentId) }
+                runCatching { Net.client.api.completeSegment(seg.segmentId) }.onSuccess { lastAck = it }
                 PlanProgressBus.finished.tryEmit(seg.segmentId)
+            }
+            // The LAST segment's ack is the server's authoritative word on
+            // whether this day just sealed and the next one opened — computed
+            // in the same transaction as the write. Broadcasting it lets the
+            // day hub skip waiting on an extra "Seal the day" tap, and the
+            // plan overview tell a genuine lock apart from a completion still
+            // landing through the sync path.
+            lastAck?.let { ack ->
+                if (ack.dayComplete) {
+                    PlanProgressBus.dayUnlocked.tryEmit(
+                        org.nuruplace.member.data.net.PlanDayUnlockAck(
+                            planId = planId, dayNumber = ack.dayNumber,
+                            nextDayNumber = ack.nextDayNumber, nextDayUnlocked = ack.nextDayUnlocked,
+                        ),
+                    )
+                }
             }
             done = true; saving = false
             onBack()
@@ -191,14 +210,16 @@ private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalet
     when (part) {
         "word" -> group.forEach { seg ->
             when (seg.kind.lowercase()) {
-                "scripture" -> RPullQuote(
-                    text = seg.content?.takeIf { it.isNotEmpty() } ?: (seg.reference ?: seg.title),
-                    caption = seg.reference ?: "Scripture", quoted = !seg.content.isNullOrEmpty(), pal = pal,
+                // The day's passage — the shared cream card (parity with the
+                // Pathway lesson's scripture blockquotes).
+                "scripture" -> VerseQuoteCard(
+                    verse = seg.content?.takeIf { it.isNotEmpty() } ?: (seg.reference ?: seg.title),
+                    reference = seg.reference ?: "Scripture",
                 )
                 "reading" -> seg.content?.takeIf { it.isNotEmpty() }?.let {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("GO DEEPER", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-                        Text(it, style = rInter(13, FontWeight.Medium).copy(lineHeight = androidx.compose.ui.unit.TextUnit(19f, androidx.compose.ui.unit.TextUnitType.Sp)), color = pal.inkDim)
+                        Text(it, style = rInter(13, FontWeight.Medium).copy(lineHeight = scaledLineHeight(19)), color = pal.inkDim)
                     }
                 }
                 else -> seg.content?.takeIf { it.isNotEmpty() }?.let { RPassage(it, pal) }

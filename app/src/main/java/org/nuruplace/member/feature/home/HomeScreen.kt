@@ -7,7 +7,11 @@
 package org.nuruplace.member.feature.home
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -67,6 +71,8 @@ import org.nuruplace.member.data.net.Discipler
 import org.nuruplace.member.data.net.FeaturedAnnouncement
 import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
+import org.nuruplace.member.data.net.HomeEventRow
+import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NextAction
@@ -85,15 +91,23 @@ import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideo
 import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.feature.live.GoLiveButton
+import org.nuruplace.member.feature.live.GoLiveSetupSheet
+import org.nuruplace.member.feature.live.canGoLive
+import org.nuruplace.member.feature.live.liveBroadcastRoute
+import org.nuruplace.member.feature.live.liveNowRoute
+import org.nuruplace.member.feature.events.EV
+import org.nuruplace.member.feature.events.evCountdown
+import org.nuruplace.member.feature.events.evTime
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -121,6 +135,7 @@ fun HomeScreen(
     var announcement by remember { mutableStateOf<FeaturedAnnouncement?>(null) }
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
     var upcoming by remember { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
+    var homeEvents by remember { mutableStateOf<List<HomeEventRow>>(emptyList()) }
     var cohort by remember { mutableStateOf<CellSummary?>(null) }
     var plan by remember { mutableStateOf<ReadingPlanRow?>(null) }
     var prayers by remember { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
@@ -132,6 +147,15 @@ fun HomeScreen(
     var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
+    // Nuru Live (L2, viewer-only) — GET /live/now returns church streams
+    // always plus cell streams scoped to the caller's own cell; Home only
+    // ever renders the church-scope one (CellInfoScreen renders the cell one
+    // off this SAME shape from its own fetch).
+    var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
+    // Nuru Live (L3) — the "Go Live" setup sheet; Home offers whichever of
+    // church/my-cell the member is eligible for (see GoLiveShared.kt for the
+    // exact eligibility rule and its reasoning).
+    var showGoLiveSheet by remember { mutableStateOf(false) }
 
     // One tick per full load — pull-to-refresh bumps it to re-run the batch;
     // `loadedOnce` keeps the skeleton from ever returning after first paint.
@@ -156,12 +180,18 @@ fun HomeScreen(
         disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
         cohort = runCatching { Net.client.api.cellSummary() }.getOrNull()
         plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled } ?: Net.client.api.plans().data.firstOrNull() }.getOrNull()
-        prayers = runCatching { Net.client.api.prayerWall("latest").data }.getOrDefault(emptyList())
+        // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
+        // parity) — distinct from the community/prayer-wall feed's sort query.
+        prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
+        liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
+        org.nuruplace.member.feature.live.LiveDiscoveryCenter.ingest(liveNow)
         val today = LocalDate.now()
         val from = today.toString()
         val to = today.plusDays(45).toString()
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
+        // Curated Home rows — server-capped at 5, soonest-first; never re-sort/cap client-side.
+        homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrDefault(emptyList())
         refreshing = false
         loadedOnce = true
 
@@ -173,6 +203,48 @@ fun HomeScreen(
             .forEach { CelebrationCenter.fire(Moment("badge-${it.code}", "${it.name} earned!", "Badges celebrate your growth — keep walking.")) }
     }
 
+    // Defensive guard, on top of LiveDiscoveryCenter.ingest()'s own filter
+    // below (this file's `liveNow` is fetched directly, not read from
+    // LiveDiscoveryCenter.streams, so it needs its own exclusion too) — a
+    // broadcaster must never see their OWN stream offered back to them as
+    // "LIVE NOW · tap to watch" (2026-07-31 device report; see
+    // LiveDiscoveryCenter.kt's header for the root cause and iOS parity).
+    val churchLive = liveNow.firstOrNull {
+        it.scope == "church" && it.streamId != org.nuruplace.member.feature.live.BroadcastController.activeSelfStreamId()
+    }
+
+    // Home-screen Radio/Live widgets (Glance) — Home is the first screen every
+    // session lands on, so it's the earliest point a fresh snapshot can reach
+    // the widget even if the member never opens Radio/Pathway this session.
+    // LiveRadioScreen overwrites the radio half with richer data (listeners,
+    // host, next program) once/if the member opens the player.
+    LaunchedEffect(radio?.id, radio?.live, churchLive?.streamId) {
+        org.nuruplace.member.widget.WidgetSnapshotStore.writeRadio(
+            context = context,
+            onAir = radio?.live == true,
+            programTitle = radio?.title,
+            host = radio?.speaker,
+            listeners = radio?.peakListeners,
+            nextProgramTitle = null,
+        )
+        org.nuruplace.member.widget.WidgetSnapshotStore.writeChurchLive(context, churchLive != null)
+    }
+    // An UNCONDITIONAL 60s re-check while Home is composed (this used to gate
+    // on `churchLive != null` and only poll once a church stream was already
+    // known live, but discovering a BRAND NEW stream is the whole point of
+    // the mini-window pop-up, so it can't wait for one to already be known).
+    // Every result is folded into the shared LiveDiscoveryCenter, which
+    // decides whether to pop the mini-window (a stream_id this session
+    // hasn't surfaced yet). Still a plain LaunchedEffect(Unit) — Compose
+    // cancels it outright the moment Home leaves composition.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(liveNow)
+            org.nuruplace.member.feature.live.LiveDiscoveryCenter.ingest(liveNow)
+        }
+    }
+
     val pendingSync by Net.client.offline.pending.collectAsState()
     val level = me?.enrollment?.currentLevel ?: 1
     val reflectionDue = rhythm?.reflection == false
@@ -180,7 +252,8 @@ fun HomeScreen(
     // flag flips, so a later return to Home composes instantly.
     val entrance = remember { (!homeEntrancePlayed).also { homeEntrancePlayed = true } }
 
-    NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
+    Box(Modifier.fillMaxSize()) {
+        NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             HomeHeader(
                 firstName = me?.profile?.fullName?.substringBefore(' ') ?: "friend",
@@ -191,6 +264,8 @@ fun HomeScreen(
                 personalWord = personalWord,
                 onBell = onOpenNotifications,
                 onRadio = { onNavigate("radio") },
+                churchLive = churchLive,
+                onLive = { churchLive?.let { onNavigate(liveNowRoute(it)) } },
             )
 
             Column(
@@ -199,6 +274,22 @@ fun HomeScreen(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
+                // Nuru Live (L3) — the broadcaster entry point, gold and gated
+                // on the live:go RBAC grant, sitting right above the L2 LIVE
+                // banner slot so a broadcaster sees both "go live" and
+                // "who's live now" together.
+                if (canGoLive(me)) {
+                    Box(Modifier.fillMaxWidth()) { GoLiveButton(onClick = { showGoLiveSheet = true }) }
+                }
+                // Nuru Live — the very top of Home, above everything else,
+                // whenever the church is live right now.
+                churchLive?.let { row ->
+                    LiveStreamBanner(
+                        row = row,
+                        onOpen = { onNavigate(liveNowRoute(row)) },
+                        onReplays = { onNavigate("live-replays") },
+                    )
+                }
                 if (pendingSync > 0) {
                     Text(
                         "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
@@ -213,27 +304,8 @@ fun HomeScreen(
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-                // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
-                letter?.takeIf { it.isUnread }?.let { lt ->
-                    LetterKnockCard(lt) { showLetter = true }
-                    if (showLetter) {
-                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
-                    }
-                }
-                // 0c · The hour's prayer line (liturgy, Phase 4).
-                Entrance(entrance, 0) { LiturgyCard() }
-                // 0d · Today's echo — the app remembers you (Wave 1).
-                Entrance(entrance, 1) { HomeEchoCard() }
-                if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
-                next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
-                rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
-                welcomeVideo?.let { w ->
-                    Entrance(entrance, 5) {
-                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
-                            if (w.isExternal) Unit else videoPlaying = true
-                        }, onExternal = { url -> })
-                    }
-                }
+                // 0 · Today's verse leads the feed — right under the header (owner ask):
+                // the daily Word first, then the featured welcome video. ON AIR pinned above.
                 verse?.let { v ->
                     Entrance(entrance, 6) {
                         VerseCard(
@@ -241,9 +313,29 @@ fun HomeScreen(
                             reactions = verseReactions,
                             saved = verseSaved,
                             onReact = { emoji ->
+                                // Optimistic: reflect the tap at once (one per member/
+                                // day — tapping my own removes it, a different one
+                                // moves it), then reconcile; roll back on failure so a
+                                // dropped request never blanks the counts (iOS parity).
+                                val previous = verseReactions
+                                val cur = verseReactions ?: VerseReactions()
+                                val counts = cur.counts.toMutableMap()
+                                fun drop(e: String) {
+                                    val n = (counts[e] ?: 0) - 1
+                                    if (n > 0) counts[e] = n else counts.remove(e)
+                                }
+                                val newMine: String?
+                                if (cur.mine == emoji) {
+                                    drop(emoji); newMine = null
+                                } else {
+                                    cur.mine?.let { drop(it) }
+                                    counts[emoji] = (counts[emoji] ?: 0) + 1; newMine = emoji
+                                }
+                                verseReactions = VerseReactions(counts, newMine, counts.values.sum())
                                 scope.launch {
                                     runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
                                         .onSuccess { verseReactions = it }
+                                        .onFailure { verseReactions = previous }
                                 }
                             },
                             onSave = {
@@ -263,32 +355,153 @@ fun HomeScreen(
                             },
                             onShare = {
                                 val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
-                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                    type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                fun shareText() {
+                                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
                                 }
-                                context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                                val art = v.art?.takeIf { it.url.isNotBlank() }
+                                if (art != null) {
+                                    // Render the tableau to a real photograph; fall back to
+                                    // the words if the render can't happen (offline, CDN hiccup).
+                                    scope.launch {
+                                        val ok = VerseImageShare.share(
+                                            context, art,
+                                            v.text ?: "Your word is a lamp to my feet, and a light for my path.",
+                                            v.reference, v.version,
+                                        )
+                                        if (!ok) shareText()
+                                    }
+                                } else {
+                                    shareText()
+                                }
                             },
                         )
                     }
                 }
-                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers.first(), prayers.size, onOpenWall = { onNavigate("prayer-wall") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                // 0 · Featured welcome video — right under the header (owner ask); it
+                // IS the "start here" moment, so it leads the feed. The thin ON AIR
+                // bar stays pinned above it while a broadcast is live.
+                welcomeVideo?.let { w ->
+                    Entrance(entrance, 0) {
+                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
+                            if (w.isExternal) Unit else videoPlaying = true
+                        }, onExternal = { url -> })
+                    }
+                }
+                // 0b · Live now — a worship-ish gathering happening right now or
+                // starting within the hour (iOS HomeView.liveNowInfo/liveNowCard
+                // parity). Driven by the same calendar occurrences as Upcoming;
+                // no invented live-stream data, just a route to the real event.
+                liveNowInfo(upcoming)?.let { info ->
+                    Entrance(entrance, 1) {
+                        LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
+                    }
+                }
+                // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
+                // Three states, where there used to be only "unread": the knock,
+                // a quiet way back in once read, and — when nothing has arrived
+                // — the ritual itself ("Sunday evening"). Showing nothing was
+                // the old behaviour and it made the letter feel accidental.
+                if (letter == null) LetterAwaitingCard()
+                letter?.takeIf { !it.isUnread }?.let { lt ->
+                    LetterReadRow(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = {})
+                    }
+                }
+                letter?.takeIf { it.isUnread }?.let { lt ->
+                    LetterKnockCard(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+                    }
+                }
+                // 0c · The hour's prayer line (liturgy, Phase 4). The recorder
+                // door (LiturgyRecorderSheet) is Admin/SuperAdmin only —
+                // backend requireRole("Admin") on admin/liturgy/recordings/*,
+                // narrower than the Instructor+ gate ProfileScreen.kt/
+                // GoLiveShared.kt use elsewhere — Instructor is deliberately
+                // excluded here.
+                Entrance(entrance, 0) {
+                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
+                }
+                // 0d · Today's echo — the app remembers you (Wave 1).
+                Entrance(entrance, 1) { HomeEchoCard() }
+                if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
+                next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
+                rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
+                if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
+                // 2c · Continue your plan (resume nudge) — the member's in-progress
+                // plan (enrolled, not yet finished), iOS HomeView planResumeBanner parity.
+                plan?.takeIf { it.enrolled && it.completedAt == null }?.let { rp ->
+                    Entrance(entrance, 5) { PlanResumeBanner(rp) { onNavigate("plan/${rp.planId}") } }
+                }
+                // Both open My Prayer Room — the wall preview on its Corporate
+                // tab, the post itself pushed directly (deep-link parity).
+                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-room?tab=corporate") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
-                MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayers") })
+                MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayer-room") })
                 featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
                 if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }
                 announcement?.let { a -> FeaturedAnnouncementCard(a, onAll = { onNavigate("announcements") }, onOpen = { onNavigate("announcement/${a.announcementId}") }) }
                 ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
                 scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
+                if (scores != null) SelahDivider()   // — selah: a rest before Grow
                 GrowSection(onNavigate)
                 featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
-                UpcomingSection(upcoming, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode(it.endAt)}") })
+                UpcomingSection(homeEvents, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode("")}") })
                 EncouragementCard(prayers.size)
                 CohortSection(cohort) { onNavigate("cell-info") }
                 GiveCard { onSelectTab("give") }
                 Spacer(Modifier.height(Spacing.tabBarSpace))
             }
         }
+        }
+
+        // Nuru Live discovery — the mini-window pop-up: a MUTED autoplaying
+        // preview docked above the tab bar (Scaffold already reserves that
+        // space via its bottomBar content padding, so an aligned-bottom
+        // overlay here floats right above it) for the first stream this
+        // session hasn't seen yet. "Join live" opens the SAME full player the
+        // banner's "Watch live" does (unmuted); ✕ collapses it to the
+        // ordinary LIVE banner card above and never re-pops for this
+        // stream_id again.
+        val discoveryStreams by org.nuruplace.member.feature.live.LiveDiscoveryCenter.streams.collectAsState()
+        val popupStreamId by org.nuruplace.member.feature.live.LiveDiscoveryCenter.popupStreamId.collectAsState()
+        // Defensive guard on top of LiveDiscoveryCenter.ingest()'s own filter
+        // — this is the exact site of the 2026-07-31 device report (Home's
+        // "● LIVE test 2 [Join live]" mini-window offering the broadcaster
+        // their own stream); belt-and-braces against `discoveryStreams` ever
+        // carrying a self-stream row again, from here or a future caller.
+        discoveryStreams.firstOrNull {
+            it.streamId == popupStreamId && it.streamId != org.nuruplace.member.feature.live.BroadcastController.activeSelfStreamId()
+        }?.let { popupStream ->
+            org.nuruplace.member.feature.live.LiveMiniPopup(
+                stream = popupStream,
+                onJoin = {
+                    org.nuruplace.member.feature.live.LiveDiscoveryCenter.markSeen(popupStream.streamId)
+                    onNavigate(liveNowRoute(popupStream))
+                },
+                onDismiss = { org.nuruplace.member.feature.live.LiveDiscoveryCenter.dismissPopup(popupStream.streamId) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = Spacing.base, vertical = Spacing.sm),
+            )
+        }
+    }
+
+    if (showGoLiveSheet) {
+        GoLiveSetupSheet(
+            me = me,
+            lockedScope = null, // let the member pick between church/my cell
+            onDismiss = { showGoLiveSheet = false },
+            onStarted = { created, streamTitle, kind, _ ->
+                showGoLiveSheet = false
+                onNavigate(liveBroadcastRoute(created, streamTitle, kind))
+            },
+        )
     }
 }
 
@@ -304,6 +517,8 @@ private fun HomeHeader(
     personalWord: String? = null,
     onBell: () -> Unit,
     onRadio: () -> Unit,
+    churchLive: LiveNowRow? = null,
+    onLive: () -> Unit = {},
 ) {
     val now = LocalDate.now()
     val kicker = buildString {
@@ -330,6 +545,14 @@ private fun HomeHeader(
             Text(kicker, style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
             CircleButton("🔔", Nuru.goldChipBg, onBell)
             Spacer(Modifier.width(Spacing.sm))
+            // Nuru Live (L2) — a church stream is live right now. Same 40dp
+            // circle language as the bell/radio buttons either side of it, so
+            // the row reads as one family; the pulsing red ring (not a static
+            // border) is what says "this one is happening right now".
+            if (churchLive != null) {
+                LiveHeaderChip(onClick = onLive)
+                Spacer(Modifier.width(Spacing.sm))
+            }
             CircleButton("📻", Nuru.dangerBg, onRadio)
             Spacer(Modifier.width(Spacing.sm))
             Box {
@@ -379,6 +602,26 @@ private fun CircleButton(glyph: String, bg: Color, onClick: () -> Unit) {
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, style = NuruType.body) }
+}
+
+/** The header's LIVE entry point (owner ask: "re-imagine this part" of the
+ *  bell/radio row) — same 40dp circle as [CircleButton], a dark navy fill
+ *  (echoing [LiveStreamBanner]'s navy card) with a breathing red ring instead
+ *  of a static border, so it visually says "live" before you even read it. */
+@Composable
+private fun LiveHeaderChip(onClick: () -> Unit) {
+    val t = rememberInfiniteTransition(label = "liveHeaderPulse")
+    val ringAlpha by t.animateFloat(
+        initialValue = 0.9f, targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "liveHeaderRingAlpha",
+    )
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy)
+            .border(2.dp, Nuru.liveRed.copy(alpha = ringAlpha), RoundedCornerShape(999.dp))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { Text("📺", style = NuruType.body) }
 }
 
 // ─────────────────────────── Primitives ───────────────────────────
@@ -509,6 +752,62 @@ private fun OnAirCard(r: RadioProgram, onOpen: () -> Unit) {
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) {
             Text("▶", color = Nuru.homeNavy, style = NuruType.body)
         }
+    }
+}
+
+// ─────────────────────────── Live now ───────────────────────────
+
+/** A worship-ish calendar occurrence that is live right now, or that starts
+ *  within the hour. [startsInMin] is null while live (iOS HomeView parity). */
+private data class LiveNowInfo(val occ: CalendarOccurrence, val startsInMin: Int?)
+
+private fun liveNowInfo(events: List<CalendarOccurrence>): LiveNowInfo? {
+    val now = ZonedDateTime.now()
+    for (occ in events) {
+        if (!isWorshipish(occ)) continue
+        val start = parseZdt(occ.startAt) ?: continue
+        val end = parseZdt(occ.endAt) ?: start.plusHours(2)
+        if (!start.isAfter(now) && !now.isAfter(end)) return LiveNowInfo(occ, null)
+        val mins = java.time.Duration.between(now, start).toMinutes().toInt()
+        if (mins in 1..60) return LiveNowInfo(occ, mins)
+    }
+    return null
+}
+
+private fun isWorshipish(occ: CalendarOccurrence): Boolean {
+    val hay = "${occ.category.orEmpty()} ${occ.title}".lowercase()
+    return listOf("worship", "service", "praise", "church").any { hay.contains(it) }
+}
+
+@Composable
+private fun LiveNowCard(info: LiveNowInfo, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(20.dp)
+    Row(
+        Modifier.fillMaxWidth().pressScale().clip(shape).background(Nuru.homeNavyGradient)
+            .border(1.dp, Nuru.liveRed.copy(alpha = 0.4f), shape).clickable { onOpen() }.padding(Spacing.base),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.homeNavyDark), contentAlignment = Alignment.Center) {
+            if (info.occ.primaryImageUrl != null) {
+                AsyncImage(model = info.occ.primaryImageUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
+            } else {
+                Text("⛪", style = NuruType.title)
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (info.startsInMin == null) "● HAPPENING NOW" else "STARTING SOON · ${info.startsInMin}m",
+                style = NuruType.kicker,
+                color = if (info.startsInMin == null) Nuru.liveRed else Nuru.gold,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(info.occ.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            info.occ.location?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = NuruType.caption, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text("›", style = NuruType.title, color = Nuru.gold)
     }
 }
 
@@ -646,24 +945,54 @@ private fun VerseCard(
     onShare: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(20.dp)
+    val art = v.art?.takeIf { it.url.isNotBlank() }
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg).border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape).padding(Spacing.base),
+        Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg).border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                Text(v.version, style = NuruType.micro, color = Nuru.ink600)
+        if (art != null) {
+            // The tableau: the day's photograph carries the verse (owner ask —
+            // "something beautiful to behold" breaking the wall of text).
+            VerseTableauHeader(art = art, text = v.text, refLine = "${v.reference} · ${v.version}", version = v.version)
+        } else {
+            // No art (offline first paint / older backend): the classic cream reading.
+            Column(Modifier.padding(horizontal = Spacing.base).padding(top = Spacing.base)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
+                        Text(v.version, style = NuruType.micro, color = Nuru.ink600)
+                    }
+                }
+                Spacer(Modifier.height(Spacing.md))
+                v.text?.let { Text(it, style = NuruType.featureTitle, color = Nuru.navy) }
+                Spacer(Modifier.height(Spacing.sm))
+                Text("${v.reference} · ${v.version}", style = NuruType.caption, color = Nuru.metaGray, fontWeight = FontWeight.SemiBold)
             }
         }
-        Spacer(Modifier.height(Spacing.md))
-        v.text?.let { Text(it, style = NuruType.featureTitle, color = Nuru.navy) }
-        Spacer(Modifier.height(Spacing.sm))
-        Text("${v.reference} · ${v.version}", style = NuruType.caption, color = Nuru.metaGray, fontWeight = FontWeight.SemiBold)
-        v.reason?.takeIf { it.isNotBlank() }?.let {
+      Column(Modifier.padding(Spacing.base)) {
+        // Seven-bands: an `encouragement` quote from the server replaces the
+        // "Chosen for your season" ribbon when present; absent (older backend
+        // or no encouragement chosen today) falls back to the ribbon unchanged.
+        val encouragement = v.encouragement
+        if (encouragement != null) {
             Spacer(Modifier.height(Spacing.sm))
-            Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                Text("✦ Chosen for your season — $it", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            Text(
+                "“${encouragement.text}”",
+                style = NuruType.rowTitle.copy(fontSize = 14.sp, lineHeight = 20.sp, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal),
+                color = Nuru.ink,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "— ${encouragement.author}",
+                style = NuruType.micro,
+                color = Nuru.gold, fontWeight = FontWeight.SemiBold,
+            )
+        } else {
+            v.reason?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(Spacing.sm))
+                Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text("✦ Chosen for your season — $it", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         // One row (iOS parity): reaction chips left, Save + Share pushed right.
@@ -715,37 +1044,94 @@ private fun VerseCard(
                 Text("Share", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
             }
         }
+      }
     }
 }
 
+/** "Pray for one another" — a small carousel of Home's own prayer-wall preview
+ *  posts (iOS HomeView.prayerWallCard parity): a single post hugs its content,
+ *  multiple posts page through a HorizontalPager with gold dots below (not the
+ *  system indicator — invisible on cream, per the iOS comment this mirrors). */
 @Composable
-private fun PrayerWallCard(post: PrayerWallPost, count: Int, onOpenWall: () -> Unit, onOpenPost: (String) -> Unit) {
-    HomeCard(modifier = Modifier.clickable { onOpenPost(post.postId) }) {
+private fun PrayerWallCard(posts: List<PrayerWallPost>, onOpenWall: () -> Unit, onOpenPost: (String) -> Unit) {
+    HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CardKicker("Pray for one another")
             Spacer(Modifier.weight(1f))
             RowScopeLink("Open wall ›", onOpenWall)
         }
         Spacer(Modifier.height(Spacing.md))
+        if (posts.size == 1) {
+            PrayerPostRow(posts[0], modifier = Modifier.clickable { onOpenPost(posts[0].postId) })
+        } else {
+            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { posts.size })
+            androidx.compose.foundation.pager.HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { i ->
+                val post = posts[i]
+                PrayerPostRow(post, modifier = Modifier.clickable { onOpenPost(post.postId) })
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                repeat(posts.size) { i ->
+                    val active = i == pagerState.currentPage
+                    Box(
+                        Modifier.padding(2.dp).height(6.dp).width(if (active) 16.dp else 6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (active) Nuru.gold else Nuru.gold.copy(alpha = 0.22f)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(post.authorAvatar, 40.dp)
+            Avatar(post.authorAvatar, 32.dp)
             Spacer(Modifier.width(Spacing.sm))
             Text(post.authorName, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
         }
-        Spacer(Modifier.height(Spacing.sm))
-        post.title?.let { Text(it, style = NuruType.rowTitle, color = Nuru.ink) }
+        post.title?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(Spacing.sm))
+            Text(it, style = NuruType.rowTitle, color = Nuru.ink)
+        }
+        Spacer(Modifier.height(6.dp))
         Text(post.body, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(Spacing.sm))
         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
-            Text("🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""), style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            Text(
+                "🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""),
+                style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold,
+            )
         }
-        if (count > 1) {
-            Spacer(Modifier.height(Spacing.sm))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                repeat(count.coerceAtMost(5)) { i ->
-                    Box(Modifier.padding(2.dp).size(if (i == 0) 8.dp else 6.dp).clip(RoundedCornerShape(999.dp)).background(if (i == 0) Nuru.gold else Nuru.ink300))
-                }
+    }
+}
+
+/** 2c — "Continue your plan" resume banner (iOS HomeView.planResumeBanner
+ *  parity): a navy card with a gold circular progress ring, "Day N of M" +
+ *  plan title, tapping opens that plan on the Plans tab. */
+@Composable
+private fun PlanResumeBanner(p: ReadingPlanRow, onClick: () -> Unit) {
+    val day = p.currentDay ?: 1
+    val done = p.completedDays?.size ?: (day - 1).coerceAtLeast(0)
+    val pct = if (p.dayCount > 0) (done * 100 / p.dayCount).coerceIn(0, 100) else 0
+    NavyCard(modifier = Modifier.pressScale().clickable { onClick() }, pad = Spacing.base) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ProgressRing(pct = pct, size = 48.dp, stroke = 4.dp, track = Color.White.copy(alpha = 0.22f), arc = Nuru.gold) {
+                Text("📖", style = NuruType.body)
             }
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                CardKicker("Continue your plan", Nuru.goldSoft)
+                Text(p.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "Day $day of ${p.dayCount} · pick up where you left off",
+                    style = NuruType.micro, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(Spacing.sm))
+            Text("›", style = NuruType.title, color = Nuru.gold)
         }
     }
 }
@@ -776,7 +1162,7 @@ private fun MinisRow(plan: ReadingPlanRow?, journal: PrayerWallPost?, onReading:
                 Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp)) { Text("journal", style = NuruType.micro, color = Nuru.answeredText, fontWeight = FontWeight.SemiBold) }
             }
             Spacer(Modifier.height(Spacing.sm))
-            CardKicker("Prayer journal", Nuru.danger)
+            CardKicker("My Prayer Room", Nuru.danger)
             Text(journal?.title ?: "Your prayers", style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(journal?.body ?: "Keep a record of what you're praying for.", style = NuruType.micro, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -976,7 +1362,7 @@ private fun GrowSection(onNavigate: (String) -> Unit) {
                 GrowTile("Your Calling", "Discover your gifts", "✨", Nuru.callingBg, Nuru.callingFg, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             Spacer(Modifier.height(Spacing.sm))
-            GrowTile("Prayer Wall", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.fillMaxWidth()) { onNavigate("prayer-wall") }
+            GrowTile("My Prayer Room", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.fillMaxWidth()) { onNavigate("prayer-room?tab=corporate") }
         }
     }
 }
@@ -1026,77 +1412,70 @@ private fun FeaturedGatheringCard(ev: FeaturedEvent, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun UpcomingSection(events: List<CalendarOccurrence>, onSeeAll: () -> Unit, onEvent: (CalendarOccurrence) -> Unit) {
+private fun UpcomingSection(events: List<HomeEventRow>, onSeeAll: () -> Unit, onEvent: (HomeEventRow) -> Unit) {
+    // Whole section (header included) hides when there's nothing curated to show.
+    if (events.isEmpty()) return
     Column {
         SectionLabel("Upcoming")
         HomeCard {
-            val ym = YearMonth.now()
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CardKicker(ym.month.getDisplayName(JTextStyle.FULL, Locale.getDefault()))
                 Spacer(Modifier.weight(1f))
                 RowScopeLink("See all", onSeeAll)
             }
             Spacer(Modifier.height(Spacing.sm))
-            MiniMonth(ym, events)
-            events.firstOrNull()?.let { e ->
-                Spacer(Modifier.height(Spacing.md))
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.surface).clickable { onEvent(e) }.padding(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
-                        e.primaryImageUrl?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) } ?: Text("📅", style = NuruType.title)
-                    }
-                    Spacer(Modifier.width(Spacing.md))
-                    Column(Modifier.weight(1f)) {
-                        Text("● ${fmtEvent(e.startAt)}", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
-                        Text(e.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(if (e.going > 0) "${e.going} going" else (e.location ?: ""), style = NuruType.micro, color = Nuru.ink600)
-                    }
-                    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 14.dp, vertical = 8.dp)) { Text("RSVP", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                // Render exactly what the server sent, in that order — no client
+                // sort/cap. The server already caps this list at 5.
+                events.forEach { e -> UpcomingEventRow(e, onClick = { onEvent(e) }) }
             }
         }
     }
 }
 
 @Composable
-private fun MiniMonth(ym: YearMonth, events: List<CalendarOccurrence>) {
-    val today = LocalDate.now()
-    val eventDays = remember(events) {
-        events.mapNotNull { parseZdt(it.startAt) }.filter { it.year == ym.year && it.monthValue == ym.monthValue }.map { it.dayOfMonth }.toSet()
-    }
-    val first = ym.atDay(1)
-    val lead = (first.dayOfWeek.value + 6) % 7 // Monday-first offset
-    val days = ym.lengthOfMonth()
-    val weekdays = listOf("M", "T", "W", "T", "F", "S", "S")
-    Column {
-        Row(Modifier.fillMaxWidth()) {
-            weekdays.forEach { Text(it, style = NuruType.micro, color = Nuru.ink400, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)) }
+private fun UpcomingEventRow(e: HomeEventRow, onClick: () -> Unit) {
+    val kickerTime = evCountdown(e.startsAt).let { rel ->
+        val time = evTime(e.startsAt)
+        when {
+            rel.isNotBlank() && time.isNotBlank() -> "$rel · $time"
+            rel.isNotBlank() -> rel
+            time.isNotBlank() -> time
+            else -> fmtEvent(e.startsAt)
         }
-        Spacer(Modifier.height(Spacing.xs))
-        var day = 1
-        val rows = ((lead + days + 6) / 7)
-        for (r in 0 until rows) {
-            Row(Modifier.fillMaxWidth()) {
-                for (c in 0 until 7) {
-                    val cell = r * 7 + c
-                    if (cell < lead || day > days) {
-                        Box(Modifier.weight(1f).height(40.dp))
-                    } else {
-                        val d = day
-                        val isToday = today.year == ym.year && today.monthValue == ym.monthValue && today.dayOfMonth == d
-                        Column(Modifier.weight(1f).height(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                Modifier.size(30.dp).clip(RoundedCornerShape(999.dp)).background(if (isToday) Nuru.homeNavy else Color.Transparent),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("$d", style = NuruType.caption, color = if (isToday) Nuru.onNavy else Nuru.ink) }
-                            if (eventDays.contains(d)) Box(Modifier.size(4.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold))
-                        }
-                        day++
-                    }
-                }
-            }
+    }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.surface).clickable { onClick() }.padding(Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
+            e.primaryImageUrl?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) } ?: Text("📅", style = NuruType.title)
+        }
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text("● $kickerTime", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
+            Text(e.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(e.venue ?: "", style = NuruType.micro, color = Nuru.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        RsvpPill(e.myRsvp)
+    }
+}
+
+/** Trailing pill: gold "RSVP" call-to-action when the member hasn't responded,
+ *  otherwise a status pill reflecting their `my_rsvp` (EV palette, iOS parity). */
+@Composable
+private fun RsvpPill(myRsvp: String?) {
+    when (myRsvp) {
+        "going" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.going.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("Going", style = NuruType.micro, color = EV.goingText, fontWeight = FontWeight.SemiBold)
+        }
+        "maybe" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.maybe.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("Maybe", style = NuruType.micro, color = EV.maybe, fontWeight = FontWeight.SemiBold)
+        }
+        "declined" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.declined.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("Can't go", style = NuruType.micro, color = EV.declined, fontWeight = FontWeight.SemiBold)
+        }
+        else -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            Text("RSVP", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -1207,7 +1586,7 @@ private fun routeFor(a: NextAction): String = when (a.route) {
     "level", "pathway" -> "pathway"
     "devotional" -> "devotional"
     "memory_verse", "verse" -> "memory-verses"
-    "prayer", "reflection" -> "prayers"
+    "prayer", "reflection" -> "prayer-room"
     "give" -> "give"
     else -> "pathway"
 }

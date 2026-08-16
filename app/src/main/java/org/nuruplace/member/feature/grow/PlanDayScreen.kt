@@ -1,12 +1,13 @@
 // Plan-day screen — the FRESH Figma DayReader ported from iOS `PlanDayView`
-// (ReadingPlansView.swift 743–1024) + `PLSegmentRow`/`PLConfettiBurst`
-// (ReadingPlanCards.swift 423–516). Navy-gradient header (back · "DAY N" · day
-// title · gold progress), a scripture-style content card, the day's real
-// segments as highlighted rows (tap → onOpenSegment), a server-backed
-// reflection textarea (GET pre-fills; POST upserts; button flips to "Update"),
-// and a sticky gold "Mark day complete" bar that celebrates with a confetti
-// burst. Server-authoritative gating/scoring (§1.1) — this screen only reflects
-// what the API records.
+// (ReadingPlansView.swift 743–1024) + `PLSegmentRow` (ReadingPlanCards.swift
+// 423–516). Navy-gradient header (back · "DAY N" · day title · gold
+// progress), a scripture-style content card, the day's real segments as
+// highlighted rows (tap → onOpenSegment), a server-backed reflection
+// textarea (GET pre-fills; POST upserts; button flips to "Update"), and a
+// sticky gold "Mark day complete" bar that celebrates with a real
+// rocket-and-burst fireworks show (`PLFireworksBurst`, iOS
+// `FireworksCelebration` parity). Server-authoritative gating/scoring
+// (§1.1) — this screen only reflects what the API records.
 package org.nuruplace.member.feature.grow
 
 import androidx.compose.animation.AnimatedVisibility
@@ -15,6 +16,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +39,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Check
@@ -52,6 +55,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,10 +68,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight.Companion.Bold
 import androidx.compose.ui.text.font.FontWeight.Companion.Medium
 import androidx.compose.ui.text.font.FontWeight.Companion.Normal
@@ -74,8 +84,12 @@ import androidx.compose.ui.text.font.FontWeight.Companion.SemiBold
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.SoundPool
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.R
 import org.nuruplace.member.data.net.CompleteDayBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
@@ -84,6 +98,10 @@ import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
@@ -138,6 +156,18 @@ fun PlanDayScreen(
     LaunchedEffect(Unit) {
         PlanProgressBus.finished.collect { if (it !in completedSegments) completedSegments.add(it) }
     }
+    // The offline-sync race: the day unlocks server-side the instant its LAST
+    // segment's completion lands, but this screen would otherwise still wait
+    // on an explicit "Seal the day" tap. Trust that segment's own
+    // authoritative ack directly — "Continue the plan" works immediately,
+    // with no extra tap and no race against a re-fetch.
+    LaunchedEffect(planId, dayNumber) {
+        PlanProgressBus.dayUnlocked.collect { ack ->
+            if (ack.dayNumber == dayNumber && (ack.planId == null || ack.planId == planId)) {
+                dayCompleted = true
+            }
+        }
+    }
 
     val reference = day?.reference ?: ""
     val title = day?.title ?: "Day $dayNumber"
@@ -151,6 +181,12 @@ fun PlanDayScreen(
         if (dayCompleted) null
         else segments.firstOrNull { it.segmentId !in completedSegments }?.segmentId
 
+    // The day's parts + the one still to do — shared by the hub rows AND the
+    // footer CTA, so the gold button can only carry you into the work.
+    val parts = hubParts(segments)
+    val doneOf: (HubPart) -> Boolean = { p -> p.segs.all { it.segmentId in completedSegments || it.completed == true } }
+    val nextPart = parts.firstOrNull { !doneOf(it) }
+
     Box(Modifier.fillMaxSize().background(PL.cream)) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -162,9 +198,6 @@ fun PlanDayScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    val parts = hubParts(segments)
-                    val doneOf: (HubPart) -> Boolean = { p -> p.segs.all { it.segmentId in completedSegments || it.completed == true } }
-                    val nextPart = parts.firstOrNull { !doneOf(it) }
                     Text(
                         "TODAY'S JOURNEY · ${parts.size} PART${if (parts.size == 1) "" else "S"}",
                         style = plInter(11, Bold, 1.8f), color = PL.catText,
@@ -181,6 +214,10 @@ fun PlanDayScreen(
             FooterBar(
                 complete = dayCompleted || justDone,
                 busy = busy,
+                nextPartLabel = nextPart?.label,
+                onOpenNext = {
+                    nextPart?.let { p -> if (p.tag == "talk") onTalkItOver() else onOpenPart(p.tag, p.firstIndex) }
+                },
                 onComplete = {
                     if (!busy) {
                         busy = true
@@ -193,6 +230,10 @@ fun PlanDayScreen(
                                 // If this sealed the WHOLE plan, open the keepsake.
                                 val allDone = runCatching { Net.client.api.plan(planId).days.all { it.completed == true } }.getOrDefault(false)
                                 if (allDone) { delay(900); onPlanComplete() }
+                                // The fireworks run ~5s, then retire (the completed
+                                // button stays via dayCompleted — iOS parity).
+                                delay(5300)
+                                justDone = false
                             }
                         }
                     }
@@ -201,7 +242,7 @@ fun PlanDayScreen(
             )
         }
 
-        if (justDone) PLConfettiBurst()
+        if (justDone) PLFireworksBurst()
     }
 }
 
@@ -302,7 +343,7 @@ private fun VerseBlock(reference: String, content: String?) {
             Text(
                 content,
                 style = plSerif(17, Normal, -0.17f, italic = true)
-                    .copy(lineHeight = 25.sp),
+                    .copy(lineHeight = org.nuruplace.member.ui.theme.scaledLineHeight(25)),
                 color = PL.navy,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -508,6 +549,12 @@ private fun ReflectionCard(
 private fun FooterBar(
     complete: Boolean,
     busy: Boolean,
+    /** The part still to do, if any — while one remains, the gold button is the
+     *  way INTO it. A day is finished by DOING it, not by declaring it, so the
+     *  button no longer offers to seal a day nobody has walked. (The server
+     *  refuses that too: 409 CONTENT_INCOMPLETE.) */
+    nextPartLabel: String?,
+    onOpenNext: () -> Unit,
     onComplete: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -526,93 +573,301 @@ private fun FooterBar(
                 .clip(RoundedCornerShape(16.dp))
                 .background(PL.goldCtaGrad)
                 .height(48.dp)
-                .clickable(enabled = !busy) { if (complete) onBack() else onComplete() },
+                .clickable(enabled = !busy) {
+                    when {
+                        complete -> onBack()
+                        nextPartLabel != null -> onOpenNext()
+                        else -> onComplete()
+                    }
+                },
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (complete) {
-                Text("Day complete 🎉", style = plInter(14, Bold), color = PL.navy)
-            } else {
-                Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Mark day complete", style = plInter(14, Bold), color = PL.navy)
+            when {
+                complete -> Text("Day complete 🎉", style = plInter(14, Bold), color = PL.navy)
+                nextPartLabel != null -> {
+                    Text("Continue · $nextPartLabel", style = plInter(14, Bold), color = PL.navy)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                }
+                else -> {
+                    Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Seal the day", style = plInter(14, Bold), color = PL.navy)
+                }
             }
         }
     }
 }
 
-// MARK: lightweight confetti burst — ReadingPlanCards.swift 463-516
+// MARK: fireworks burst — iOS FireworksCelebration parity (ReadingPlansView.swift)
 
-private data class ConfettiPiece(
-    val dx: Float,
-    val dy: Float,
-    val w: Float,
-    val h: Float,
-    val spin: Float,
+/** Golds the brand leans on + white + one warm accent — the same palette as
+ *  iOS `FireworksCelebration`, legible on the navy day header and cream body alike. */
+private object FireworkColors {
+    val gold = Color(0xFFC89B3C)
+    val goldLight = Color(0xFFE0B85E)
+    val cream = Color(0xFFFFF4C7)
+    val accent = Color(0xFFFB7185) // one accent spark color, used sparingly
+    val palette = listOf(gold, gold, goldLight, goldLight, cream, Color.White, accent)
+}
+
+private const val SPARK_LIFE = 1.25f // seconds a spark stays visible once it bursts
+
+/** A spark's fixed flight plan, resolved against its parent rocket's burst
+ *  time + center each frame. */
+private data class SparkSeed(
+    val angle: Float,
+    val reach: Float,      // radial travel, as a fraction of min(width, height)
+    val size: Float,       // point diameter at the glowing head (dp)
     val color: Color,
+    val lifeScale: Float,  // slight per-spark variance so the burst doesn't die all at once
 )
 
+private data class Rocket(
+    val id: Int,
+    val x: Float,          // 0..1, launch/burst x (kept fixed — real rockets fly straight up)
+    val burstY: Float,     // 0..1 from the top — where the streak ends and the burst begins
+    val t0: Float,         // launch time, seconds from celebration start
+    val riseDuration: Float,
+    val color: Color,
+    val sparks: List<SparkSeed>,
+)
+
+/** 3–4 staggered rockets with 24–40 sparks apiece. */
+private fun buildFireworks(): List<Rocket> {
+    val count = Random.nextInt(3, 5) // 3..4
+    var t0 = 0f
+    val rockets = mutableListOf<Rocket>()
+    repeat(count) { i ->
+        val riseDuration = 0.45f + Random.nextFloat() * 0.17f
+        val color = FireworkColors.palette.random()
+        val sparkCount = Random.nextInt(24, 41)
+        val sparks = (0 until sparkCount).map { s ->
+            val angle = (s / sparkCount.toFloat()) * (2f * PI.toFloat()) + (Random.nextFloat() * 0.12f - 0.06f)
+            SparkSeed(
+                angle = angle,
+                reach = 0.16f + Random.nextFloat() * 0.14f,
+                size = 3f + Random.nextFloat() * 3.5f,
+                color = FireworkColors.palette.random(),
+                lifeScale = 0.85f + Random.nextFloat() * 0.3f,
+            )
+        }
+        rockets.add(
+            Rocket(
+                id = i,
+                x = 0.2f + Random.nextFloat() * 0.6f,       // middle 60% of the width
+                burstY = 0.16f + Random.nextFloat() * 0.26f, // upper part of the screen
+                t0 = t0, riseDuration = riseDuration, color = color, sparks = sparks,
+            ),
+        )
+        // Stagger the next launch so its burst still has room to fade out
+        // before the ~5s ceremony retires (justDone flips back after 5.3s).
+        t0 += 0.8f + Random.nextFloat() * 0.25f
+    }
+    return rockets
+}
+
+/** True when the user has turned system animations off ("Remove animations"). */
+@Composable
+private fun rememberFireworksReduceMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    return remember(resolver) {
+        val scale = android.provider.Settings.Global.getFloat(
+            resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+        )
+        scale == 0f
+    }
+}
+
 /**
- * A few gold/navy rects "falling" from near the top — a lightweight take on the
- * iOS `PLConfettiBurst`. Kicks its flight on the next frame (like iOS) so the
- * animation actually plays instead of snapping to its end state, then fades.
+ * The day-seal ceremony: 3–4 staggered rockets rise from the bottom on a
+ * fading streak, then burst into two-dozen-plus radial sparks that arc
+ * under a light gravity pull and leave their own fading trail behind — one
+ * soft "pop" timed to each burst. A single Canvas + withFrameNanos loop
+ * draws every rocket and spark (no per-particle composables) so this stays
+ * 60fps-friendly. Reduce Motion swaps the whole thing for a static golden
+ * glow and skips sound entirely.
  */
 @Composable
-private fun PLConfettiBurst() {
-    val palette = listOf(PL.gold, PL.goldLight, PL.navy, Color.White)
-    val pieces = remember {
-        List(28) { i ->
-            ConfettiPiece(
-                dx = Random.nextFloat() * 340f - 170f,
-                dy = 180f + Random.nextFloat() * 380f,
-                w = 5f + Random.nextFloat() * 2f,
-                h = 9f + Random.nextFloat() * 4f,
-                spin = Random.nextFloat() * 1080f - 540f,
-                color = palette[i % palette.size],
-            )
-        }
+private fun PLFireworksBurst() {
+    val reduceMotion = rememberFireworksReduceMotion()
+
+    if (reduceMotion) {
+        // No rise, no burst, no sound — just a gentle golden presence that
+        // confirms "something good just happened".
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.radialGradient(
+                    listOf(FireworkColors.cream.copy(alpha = 0.5f), FireworkColors.gold.copy(alpha = 0.18f), Color.Transparent),
+                ),
+            ),
+        )
+        return
     }
-    // 0 → 1 flight progress (kicked next-frame), plus a late fade.
-    var t by remember { mutableStateOf(0f) }
-    var fade by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        // Kick on the next frame so the animation isn't coalesced to its end.
-        withFrameNanos { }
-        val start = withFrameNanos { it }
-        val durationNanos = 1_600_000_000f
+
+    val context = LocalContext.current
+    val rockets = remember { buildFireworks() }
+    val totalLife = remember(rockets) { (rockets.maxOfOrNull { it.t0 + it.riseDuration } ?: 0f) + SPARK_LIFE * 1.3f }
+    var startNanos by remember { mutableLongStateOf(0L) }
+    var tick by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(rockets) {
+        FireworksSound.prepareIfNeeded(context)
+        startNanos = withFrameNanos { it }
+        // One pop per burst, timed to the moment its sparks appear — sleeping
+        // only the delta between bursts (not the absolute time).
+        launch {
+            var elapsed = 0f
+            for (r in rockets) {
+                val target = r.t0 + r.riseDuration
+                val waitMs = ((target - elapsed) * 1000).toLong()
+                if (waitMs > 0) delay(waitMs)
+                elapsed = maxOf(elapsed, target)
+                FireworksSound.pop(r.id)
+            }
+        }
         while (true) {
             val now = withFrameNanos { it }
-            val elapsed = (now - start).toFloat()
-            t = (elapsed / durationNanos).coerceIn(0f, 1f)
-            if (elapsed >= 1_150_000_000f) fade = true
-            if (t >= 1f) break
+            tick = (now - startNanos) / 1_000_000_000f
+            if (tick > totalLife) break
         }
     }
-    val fadeAlpha by animateFloatAsState(
-        targetValue = if (fade) 0f else 1f,
-        animationSpec = tween(durationMillis = 450, easing = LinearEasing),
-        label = "confettiFade",
+
+    Canvas(Modifier.fillMaxSize()) {
+        val t = tick
+        val minDim = minOf(size.width, size.height)
+        for (r in rockets) drawRocket(this, r, t, size.width, size.height, minDim)
+    }
+}
+
+/** Draws one rocket: its rising streak, then (once burst) an ignition flash
+ *  and its full spark field. */
+private fun drawRocket(scope: androidx.compose.ui.graphics.drawscope.DrawScope, r: Rocket, t: Float, w: Float, h: Float, minDim: Float) {
+    if (t < r.t0) return
+    val burstTime = r.t0 + r.riseDuration
+
+    if (t < burstTime) {
+        drawRisingStreak(scope, r, t, burstTime, w, h)
+        return
+    }
+
+    val bt = t - burstTime
+    if (bt > SPARK_LIFE * 1.3f) return
+
+    val center = Offset(r.x * w, r.burstY * h)
+
+    // A quick bright flash at the moment of ignition — the "boom".
+    if (bt < 0.12f) {
+        val flashAlpha = 1f - bt / 0.12f
+        scope.drawCircle(
+            brush = Brush.radialGradient(
+                listOf(Color.White.copy(alpha = 0.85f * flashAlpha), r.color.copy(alpha = 0f)),
+                center = center, radius = 46f,
+            ),
+            radius = 46f, center = center, blendMode = BlendMode.Plus,
+        )
+    }
+
+    for (seed in r.sparks) drawSpark(scope, seed, center, minDim, bt)
+}
+
+/** The rising rocket: a short gradient streak fading to nothing at its
+ *  tail, climbing from just under the screen to the burst point. */
+private fun drawRisingStreak(scope: androidx.compose.ui.graphics.drawscope.DrawScope, r: Rocket, t: Float, burstTime: Float, w: Float, h: Float) {
+    val p = ((t - r.t0) / r.riseDuration).coerceIn(0f, 1f)
+    val launchY = 1.06f
+    val headY = launchY + (r.burstY - launchY) * p
+    val tailP = (p - 0.11f).coerceAtLeast(0f)
+    val tailY = launchY + (r.burstY - launchY) * tailP
+    val x = r.x * w
+
+    val head = Offset(x, headY * h)
+    val tail = Offset(x, tailY * h)
+    scope.drawLine(
+        brush = Brush.linearGradient(listOf(r.color.copy(alpha = 0f), r.color.copy(alpha = 0.95f)), start = tail, end = head),
+        start = tail, end = head, strokeWidth = 3f, cap = StrokeCap.Round, blendMode = BlendMode.Plus,
     )
-    // easeOut on the flight fraction.
-    val eased = 1f - (1f - t) * (1f - t)
-    Box(Modifier.fillMaxSize()) {
-        pieces.forEach { p ->
-            Box(
-                Modifier
-                    .graphicsLayer {
-                        // dx/dy are dp-magnitude (from the iOS points); px inside graphicsLayer.
-                        val startY = size.height * 0.18f
-                        val endY = p.dy.dp.toPx()
-                        translationX = size.width / 2f + p.dx.dp.toPx() * eased - (p.w.dp.toPx() / 2f)
-                        translationY = startY + (endY - startY) * eased
-                        rotationZ = p.spin * eased
-                        alpha = fadeAlpha
-                    }
-                    .size(width = p.w.dp, height = p.h.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(p.color),
-            )
-        }
+    // A small bright ember at the very tip.
+    scope.drawCircle(color = Color.White.copy(alpha = 0.9f), radius = 2.5f, center = head, blendMode = BlendMode.Plus)
+}
+
+/** One radial spark: outward travel that decelerates, a slight downward
+ *  gravity pull that grows with time (so late in life it visibly arcs), and
+ *  a short fading trail (gradient line) behind the glowing head. */
+private fun drawSpark(scope: androidx.compose.ui.graphics.drawscope.DrawScope, seed: SparkSeed, center: Offset, minDim: Float, bt: Float) {
+    val life = SPARK_LIFE * seed.lifeScale
+    if (bt < 0f || bt > life) return
+    val lifeT = bt / life
+
+    fun position(lt: Float): Offset {
+        val clamped = lt.coerceIn(0f, 1f)
+        val outEase = 1f - (1f - clamped).pow(2)      // fast start, decelerating outward push
+        val radial = seed.reach * outEase
+        val gravity = 0.16f * clamped * clamped         // slight pull, compounding late in life
+        val dx = cos(seed.angle) * radial
+        val dy = sin(seed.angle) * radial + gravity
+        return Offset(center.x + dx * minDim, center.y + dy * minDim)
+    }
+
+    val fadeOut = if (lifeT > 0.7f) (1f - (lifeT - 0.7f) / 0.3f).coerceAtLeast(0f) else 1f
+    if (fadeOut < 0.02f) return
+
+    val head = position(lifeT)
+    val tail = position(lifeT - 0.09f / life)
+
+    scope.drawLine(
+        brush = Brush.linearGradient(listOf(seed.color.copy(alpha = 0f), seed.color.copy(alpha = 0.8f * fadeOut)), start = tail, end = head),
+        start = tail, end = head, strokeWidth = seed.size * 0.5f, cap = StrokeCap.Round, blendMode = BlendMode.Plus,
+    )
+    // Glowing head — a soft radial fade reads as an additive spark rather
+    // than a flat dot.
+    val glowSize = seed.size * 2.2f
+    scope.drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White.copy(alpha = 0.9f * fadeOut), seed.color.copy(alpha = 0.55f * fadeOut), seed.color.copy(alpha = 0f)),
+            center = head, radius = glowSize / 2f,
+        ),
+        radius = glowSize / 2f, center = head, blendMode = BlendMode.Plus,
+    )
+}
+
+// MARK: firework "pop" sound (device-media-volume aware)
+
+/**
+ * Three short pop WAVs (res/raw), played one per burst via [SoundPool] —
+ * loading decodes off the main thread, so a burst is never the first place
+ * we touch disk I/O. `play()`'s left/right volumes are relative to the
+ * current stream volume, so this always respects the device's media volume
+ * rather than fighting it.
+ */
+private object FireworksSound {
+    private var pool: SoundPool? = null
+    private val soundIds = mutableListOf<Int>()
+    private val loadedIds = mutableSetOf<Int>()
+    @Volatile private var preparing = false
+
+    fun prepareIfNeeded(context: Context) {
+        if (preparing || pool != null) return
+        preparing = true
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val built = SoundPool.Builder().setMaxStreams(3).setAudioAttributes(attrs).build()
+        built.setOnLoadCompleteListener { _, sampleId, status -> if (status == 0) loadedIds.add(sampleId) }
+        val appContext = context.applicationContext
+        listOf(R.raw.pop1, R.raw.pop2, R.raw.pop3).forEach { res -> soundIds.add(built.load(appContext, res, 1)) }
+        pool = built
+    }
+
+    /** Fire the pop for burst [index] (rotates through the three sounds so
+     *  back-to-back bursts don't cut each other's tail off). */
+    fun pop(index: Int) {
+        val p = pool ?: return
+        if (soundIds.isEmpty()) return
+        val id = soundIds[index % soundIds.size]
+        if (id in loadedIds) p.play(id, 0.5f, 0.5f, 1, 0, 1f)
     }
 }
 

@@ -366,6 +366,30 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             },
         ) { (nowPlaying, programs), _ ->
             val now = nowPlaying ?: programs.firstOrNull { it.live } ?: programs.firstOrNull()
+            // The next scheduled program (soonest scheduledAt) — drives both the
+            // off-air "Remind me" CTA and the header bell (iOS vm.nextScheduled).
+            val nextScheduled = programs.filter { it.status == "scheduled" }.minByOrNull { it.scheduledAt ?: "" }
+            var reminderOn by remember(nextScheduled?.id) {
+                mutableStateOf(nextScheduled?.let { RadioReminder.isSet(it.id) } ?: false)
+            }
+            fun toggleReminder() {
+                val next = nextScheduled ?: return
+                reminderOn = RadioReminder.toggle(context, next)
+            }
+
+            // Radio home-screen widget (Glance) — this screen has the richest
+            // on-air state (listeners, host, next program), so it overwrites
+            // whatever lighter snapshot Home's own radioNowPlaying poll wrote.
+            LaunchedEffect(now?.id, now?.live, now?.peakListeners, nextScheduled?.id) {
+                org.nuruplace.member.widget.WidgetSnapshotStore.writeRadio(
+                    context = context,
+                    onAir = now?.live == true,
+                    programTitle = now?.title,
+                    host = now?.speaker,
+                    listeners = now?.peakListeners,
+                    nextProgramTitle = nextScheduled?.title,
+                )
+            }
 
             // Live-listener presence — while we're actually playing a LIVE program,
             // heartbeat every 20s so the studio roster shows this member by name.
@@ -408,7 +432,13 @@ fun LiveRadioScreen(onBack: () -> Unit) {
 
             // ── Foreground ────────────────────────────────────────────────────
             Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
-                Header(live = now?.live == true, onBack = onBack)
+                Header(
+                    live = now?.live == true,
+                    onBack = onBack,
+                    reminderAvailable = now?.live != true && nextScheduled != null,
+                    reminderOn = reminderOn,
+                    onToggleReminder = ::toggleReminder,
+                )
 
                 Column(
                     Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp),
@@ -422,7 +452,15 @@ fun LiveRadioScreen(onBack: () -> Unit) {
                     Centerpiece(now, Modifier.padding(top = 12.dp))
                     Titles(now)
                     ProgressLine(now, programs, elapsed, Modifier.padding(top = 20.dp))
-                    TransportRow(now, playing, muted, onMute = { RadioController.toggleMute() }, onPlay = { now?.streamUrl?.let(::toggle) }, Modifier.padding(top = 20.dp))
+                    TransportRow(
+                        now, playing, muted,
+                        onMute = { RadioController.toggleMute() },
+                        onPlay = { now?.streamUrl?.let(::toggle) },
+                        nextScheduled = nextScheduled,
+                        reminderOn = reminderOn,
+                        onToggleReminder = ::toggleReminder,
+                        modifier = Modifier.padding(top = 20.dp),
+                    )
                     if (now?.live == true) StatChips(now, Modifier.padding(top = 20.dp))
                     SegmentedTabs(tab, onSelect = { tab = it }, Modifier.padding(top = 24.dp))
                     Box(Modifier.padding(top = 16.dp).fillMaxWidth()) {
@@ -443,7 +481,13 @@ fun LiveRadioScreen(onBack: () -> Unit) {
 
 // ── Header ──────────────────────────────────────────────────────────────────
 @Composable
-private fun Header(live: Boolean, onBack: () -> Unit) {
+private fun Header(
+    live: Boolean,
+    onBack: () -> Unit,
+    reminderAvailable: Boolean,
+    reminderOn: Boolean,
+    onToggleReminder: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -455,17 +499,24 @@ private fun Header(live: Boolean, onBack: () -> Unit) {
             Text("NURU RADIO", style = gInter(11, FontWeight.Bold, 3.1f), color = RADIO.gold)
         }
         Spacer(Modifier.weight(1f))
-        GlassSquare(Icons.Filled.Notifications, 18.dp) { }
+        // The bell toggles the SAME "remind me when we're live" reminder as the
+        // off-air CTA below (iOS parity) — a no-op while a show is live or when
+        // nothing is scheduled next.
+        GlassSquare(Icons.Filled.Notifications, 18.dp, active = reminderOn) {
+            if (reminderAvailable) onToggleReminder()
+        }
     }
 }
 
 @Composable
-private fun GlassSquare(icon: ImageVector, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+private fun GlassSquare(icon: ImageVector, size: androidx.compose.ui.unit.Dp, active: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(RADIO.glass)
-            .border(1.dp, RADIO.glassBorder, RoundedCornerShape(16.dp)).clickable { onClick() },
+        Modifier.size(40.dp).clip(RoundedCornerShape(16.dp))
+            .background(if (active) RADIO.gold.copy(alpha = 0.165f) else RADIO.glass)
+            .border(1.dp, if (active) RADIO.gold.copy(alpha = 0.4f) else RADIO.glassBorder, RoundedCornerShape(16.dp))
+            .clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(size)) }
+    ) { Icon(icon, contentDescription = null, tint = if (active) RADIO.goldLight else Color.White, modifier = Modifier.size(size)) }
 }
 
 // ── Centerpiece ─────────────────────────────────────────────────────────────
@@ -573,6 +624,9 @@ private fun TransportRow(
     muted: Boolean,
     onMute: () -> Unit,
     onPlay: () -> Unit,
+    nextScheduled: RadioProgram?,
+    reminderOn: Boolean,
+    onToggleReminder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (now?.live == true || now?.streamUrl != null) {
@@ -581,14 +635,27 @@ private fun TransportRow(
             PlayButton(playing, enabled = now?.streamUrl != null, onClick = onPlay)
             GlassCircle(Icons.Filled.Bedtime, active = false) { }
         }
-    } else {
+    } else if (nextScheduled != null) {
+        // Off-air CTA — schedules a local notification for the next scheduled
+        // program (iOS RemindMeCTA parity): gold when off, a quiet glass pill
+        // once the reminder is set.
         Box(
-            modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RADIO.goldGrad).clickable { }.padding(vertical = 14.dp),
+            modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                .background(if (reminderOn) SolidColor(RADIO.glass) else RADIO.goldGrad)
+                .then(if (reminderOn) Modifier.border(1.dp, RADIO.glassBorder, RoundedCornerShape(16.dp)) else Modifier)
+                .clickable { onToggleReminder() }.padding(vertical = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Notifications, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(15.dp))
-                Text("Remind me", style = gInter(14, FontWeight.Bold), color = RADIO.textOnGold)
+                Icon(
+                    Icons.Filled.Notifications, contentDescription = null,
+                    tint = if (reminderOn) Color.White else RADIO.textOnGold, modifier = Modifier.size(15.dp),
+                )
+                Text(
+                    if (reminderOn) "We'll notify you 🔔" else "Remind me when we're live",
+                    style = gInter(14, FontWeight.Bold),
+                    color = if (reminderOn) Color.White else RADIO.textOnGold,
+                )
             }
         }
     }

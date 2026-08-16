@@ -53,6 +53,11 @@ data class UserProfile(
     @kotlinx.serialization.SerialName("require_2fa") val require2fa: Boolean? = null,
     val createdAt: String? = null,
     val roleKeys: List<String> = emptyList(),
+    // Nuru Live (L3) — RBAC grants as flat strings (e.g. "live:go", "live:manage").
+    // "permissions" has no internal camelCase hump for SnakeCase to rewrite, so
+    // (like roleKeys → role_keys) no explicit @SerialName is needed — it maps
+    // to the wire's "permissions" key automatically.
+    val permissions: List<String> = emptyList(),
     val rowVersion: Int = 0,
 )
 

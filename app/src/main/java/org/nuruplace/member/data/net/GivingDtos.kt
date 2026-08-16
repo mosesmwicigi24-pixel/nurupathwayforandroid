@@ -15,6 +15,9 @@ data class GivingRecord(
     val method: String? = null,
     val providerRef: String? = null,
     val receiptCode: String? = null,
+    // "Named giving" (custom sheet, optional): the member's own label for this
+    // gift (e.g. "Tithe", "Building Fund"), as entered. Null when not used.
+    val accountName: String? = null,
     val createdAt: String = "",
     val settledAt: String? = null,
 )
@@ -48,6 +51,9 @@ data class GivingDetail(
     val method: String? = null,
     val providerRef: String? = null,
     val receiptCode: String? = null,
+    // "Named giving" (custom sheet, optional): the member's own label for this
+    // gift, as entered. Null when not used.
+    val accountName: String? = null,
     val createdAt: String = "",
     val settledAt: String? = null,
     val scheduleId: String? = null,
@@ -61,6 +67,10 @@ data class GiveBody(
     val currency: String,
     val method: String,
     val phoneNumber: String? = null,
+    // "Named giving" (custom sheet, optional): rides the M-Pesa STK push
+    // AccountReference (sanitized server-side) and persists on the transaction
+    // for receipts/statements/portal Finance.
+    val accountName: String? = null,
     val idempotencyKey: String,
 )
 

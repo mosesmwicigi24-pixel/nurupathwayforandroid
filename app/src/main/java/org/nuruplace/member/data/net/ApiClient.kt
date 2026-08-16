@@ -160,6 +160,23 @@ class ApiClient(context: Context) {
 
     private fun base(path: String) = baseUrl() + path
 
+    /** The API's origin (scheme+host[+port]) with any trailing versioned
+     *  `/v1` suffix stripped. Nuru Live hands back RELATIVE media paths
+     *  (`hls_url` / `recording_url`) rooted at the origin, not at `/v1` —
+     *  callers resolve them via [resolveMediaUrl] rather than concatenating
+     *  onto [baseUrl] directly. */
+    fun mediaOrigin(): String {
+        val trimmed = BuildConfig.API_BASE_URL.trimEnd('/')
+        return trimmed.removeSuffix("/v1")
+    }
+
+    /** Resolve a possibly-relative media path against [mediaOrigin]. Already
+     *  absolute (http/https) urls pass through unchanged. */
+    fun resolveMediaUrl(path: String): String {
+        if (path.startsWith("http://") || path.startsWith("https://")) return path
+        return mediaOrigin() + (if (path.startsWith("/")) path else "/$path")
+    }
+
     private fun responseCount(r: Response): Int {
         var n = 1
         var p = r.priorResponse

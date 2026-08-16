@@ -11,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
@@ -61,8 +59,10 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
+import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.theme.scaledLineHeight
 
 @Composable
 fun DevotionalScreen(onBack: () -> Unit) {
@@ -172,52 +172,14 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         d.scriptureText?.let { verse ->
-                            Row(
-                                Modifier
-                                    .height(IntrinsicSize.Min)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(GrowPal.surface),
-                            ) {
-                                Box(
-                                    Modifier
-                                        .width(3.dp)
-                                        .fillMaxHeight()
-                                        .background(GrowPal.gold),
-                                )
-                                Column(
-                                    Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.FormatQuote,
-                                            contentDescription = null,
-                                            tint = GrowPal.overline,
-                                            modifier = Modifier.size(12.dp),
-                                        )
-                                        Text(
-                                            (d.scriptureRef ?: "").uppercase(),
-                                            style = gInter(11, FontWeight.Bold, 1.4f),
-                                            color = GrowPal.overline,
-                                        )
-                                    }
-                                    Text(
-                                        "“" + verse + "”",
-                                        style = gSerif(16, FontWeight.Normal).copy(lineHeight = 24.sp),
-                                        color = GrowPal.navy,
-                                    )
-                                }
-                            }
+                            VerseQuoteCard(verse = verse, reference = d.scriptureRef ?: "")
                         }
                         if (d.body.isNotBlank()) {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 d.body.split("\n\n").forEach { para ->
                                     Text(
                                         para,
-                                        style = gInter(14).copy(lineHeight = 21.sp),
+                                        style = gInter(14).copy(lineHeight = scaledLineHeight(21)),
                                         color = GrowPal.ink,
                                     )
                                 }
@@ -266,7 +228,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     d.reflectionPrompt?.let {
                         Text(
                             it,
-                            style = gInter(13).copy(lineHeight = 16.sp),
+                            style = gInter(13).copy(lineHeight = scaledLineHeight(16)),
                             color = GrowPal.ink600,
                         )
                     }
@@ -410,7 +372,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     )
                     Text(
                         "Every faithful day adds up. There's no rush — just presence.",
-                        style = gInter(13).copy(lineHeight = 18.sp),
+                        style = gInter(13).copy(lineHeight = scaledLineHeight(18)),
                         color = GrowPal.navy,
                     )
                 }

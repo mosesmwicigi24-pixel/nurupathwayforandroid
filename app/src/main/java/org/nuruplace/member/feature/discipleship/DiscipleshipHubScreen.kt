@@ -46,7 +46,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Discipleship
-import org.nuruplace.member.data.net.DmBody
 import org.nuruplace.member.data.net.HubDiscipler
 import org.nuruplace.member.data.net.HubNote
 import org.nuruplace.member.data.net.HubProgression
@@ -129,14 +128,21 @@ fun DiscipleshipHubScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                                 firstName = firstName(d.fullName),
                                 busy = startingDm,
                             ) {
-                                val existing = h.dmConversationId
-                                if (existing != null) {
-                                    onOpenChat(existing)
-                                } else if (!startingDm) {
+                                // GET /chat/discipler/conversation — resolves (lazily
+                                // creating) the DISCIPLER thread with my CURRENT
+                                // assignment, same call the Chat tab's My Discipler
+                                // tab makes (ChatScreen.kt#MyDisciplerTab). NOT the
+                                // legacy dmConversationId / POST /chat/dms path: that
+                                // minted (or reused) a plain DIRECT dm, so it never
+                                // carried the DISCIPLER privacy banner or
+                                // admin-invisibility — onOpenChat below always
+                                // navigates with `?ctx=discipler` (MainShell) so this
+                                // hero gets the same rendering as the tab does.
+                                if (!startingDm) {
                                     startingDm = true
                                     scope.launch {
-                                        runCatching { Net.client.api.createDm(DmBody(d.userId)) }
-                                            .onSuccess { onOpenChat(it.conversationId) }
+                                        runCatching { Net.client.api.disciplerConversation().conversationId }
+                                            .onSuccess { id -> if (id.isNotBlank()) onOpenChat(id) }
                                         startingDm = false
                                     }
                                 }

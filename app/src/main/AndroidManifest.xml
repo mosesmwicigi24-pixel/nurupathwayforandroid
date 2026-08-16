@@ -11,7 +11,22 @@
     <!-- Nuru Radio keeps playing when the screen closes / phone locks. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Broadcast Studio (Nuru Live) — the broadcast must survive
+         navigation/backgrounding/lock, so LiveBroadcastService runs as a
+         typed foreground service for the whole life of a broadcast. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <!-- Package-visibility (Android 11+, targetSdk 36): without this, binding
+         the system TextToSpeech engine for the spoken-liturgy control
+         silently fails to find any engine on-device (LiturgyVoice.kt). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:name=".NuruApp"
@@ -35,6 +50,19 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
+            <!-- Read with a Friend (docs/READING_SOCIAL_PLAN.md §5 tier 2/3):
+                 the public /join/{token} landing page's inline script attempts
+                 nuru://join/{token} before falling back to the Play Store.
+                 Custom-scheme only — no autoVerify App Link yet (no
+                 assetlinks.json hosted at pathway.nuruplace.org yet; that's
+                 backend/infra work, tracked separately, honestly noted rather
+                 than silently skipped). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nuru" android:host="join" />
+            </intent-filter>
         </activity>
 
         <!-- FCM push (§D-M9) — token → POST /me/devices; local notification on receive. -->
@@ -58,6 +86,44 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- Broadcast Studio — owns the RootEncoder engine for the whole
+             life of a broadcast so it survives navigation/backgrounding/
+             lock (see LiveBroadcastService.kt's header comment). Declares
+             the superset of types it may need across a session (plain
+             camera broadcast, or a mid-broadcast switch to screen/document
+             share); the actual runtime type passed to startForeground()
+             narrows to whichever of these is genuinely active. -->
+        <service
+            android:name=".feature.live.LiveBroadcastService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|mediaProjection" />
+
+        <!-- Home-screen widgets (Pathway + Radio, Jetpack Glance). Both are
+             pure read-only renderers of WidgetSnapshotStore — no network,
+             no exported surface. -->
+        <receiver
+            android:name=".widget.PathwayWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_pathway_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pathway_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.RadioWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_radio_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/radio_widget_info" />
+        </receiver>
 
         <!-- Shares authed-downloaded files (certificate PDFs) with viewer apps. -->
         <provider

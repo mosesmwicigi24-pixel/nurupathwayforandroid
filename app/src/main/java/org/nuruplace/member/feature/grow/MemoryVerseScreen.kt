@@ -62,6 +62,7 @@ import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.theme.scaledLineHeight
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -288,7 +289,7 @@ private fun ThisWeekCard(verses: List<MemoryVerseRow>, onPractice: (MemoryVerseR
         }
         Text(
             "“" + cur.verseText + "”",
-            style = gSerif(20, FontWeight.Medium).copy(lineHeight = 28.sp),
+            style = gSerif(20, FontWeight.Medium).copy(lineHeight = scaledLineHeight(28)),
             color = GrowPal.navy,
         )
         Text(cur.reference, style = gInter(12, FontWeight.Bold), color = GrowPal.gold)
@@ -324,7 +325,7 @@ private fun LibraryVerse(v: MemoryVerseRow, onClick: () -> Unit) {
         }
         Text(
             "“" + v.verseText + "”",
-            style = gInter(13).copy(lineHeight = 18.sp),
+            style = gInter(13).copy(lineHeight = scaledLineHeight(18)),
             color = GrowPal.navy,
         )
     }

@@ -32,6 +32,11 @@ interface MemberApi {
     @POST("auth/password/reset")
     suspend fun resetPassword(@Body body: ResetBody): Unit
 
+    // Step-up for the broadcast routes: same lockout as login; the returned
+    // access token carries pwd_at (and any MFA stamp, carried across).
+    @POST("auth/confirm-password")
+    suspend fun confirmPassword(@Body body: ConfirmPasswordBody): ConfirmPasswordRes
+
     @GET("me")
     suspend fun me(): MeResponse
 
@@ -49,6 +54,11 @@ interface MemberApi {
 
     @GET("levels/{n}/modules")
     suspend fun levelModules(@Path("n") levelNumber: Int): Envelope<LevelModule>
+
+    // A level's active encouragements in trail order (after_module_sequence,
+    // sort_order) — empty until content is authored (iOS LevelDetailView parity).
+    @GET("levels/{n}/encouragements")
+    suspend fun levelEncouragements(@Path("n") levelNumber: Int): Envelope<LevelEncouragement>
 
     @GET("modules/{id}")
     suspend fun module(@Path("id") moduleId: String): ModuleDetail
@@ -143,6 +153,26 @@ interface MemberApi {
     @DELETE("me/prayers/{id}")
     suspend fun deletePrayer(@Path("id") entryId: String): Unit
 
+    // --- Selah — My Thoughts (private, §5.4 — no leader/admin read path exists) ---
+    @GET("me/thoughts")
+    suspend fun thoughts(): Envelope<Thought>
+
+    @GET("me/thoughts/{id}")
+    suspend fun thought(@Path("id") thoughtId: String): Thought
+
+    @PUT("me/thoughts")
+    suspend fun upsertThought(@Body body: ThoughtUpsertBody): Unit
+
+    @DELETE("me/thoughts/{id}")
+    suspend fun deleteThought(@Path("id") thoughtId: String): Unit
+
+    // --- AI Prayer Points (consent-gated, §1.1 — words only, never gates/scores) ---
+    @POST("me/prayer/assist")
+    suspend fun prayerAssist(@Body body: PrayerAssistBody): PrayerAssistRes
+
+    @POST("me/prayer/points")
+    suspend fun prayerPoints(): PrayerPointsRes
+
     // --- Verse library ---
     @GET("me/verses")
     suspend fun verses(): Envelope<SavedVerse>
@@ -193,11 +223,90 @@ interface MemberApi {
     @POST("chat/conversations/{id}/read")
     suspend fun markChatRead(@Path("id") conversationId: String): Unit
 
+    // PUT/DELETE chat/conversations/{id}/mute — per-member mute (Chat Redesign
+    // C4). Wired from the pastoral ⋮ menu's Mute/Unmute; `muted` then rides
+    // back on chatInbox()/chatConversation() rows.
+    @PUT("chat/conversations/{id}/mute")
+    suspend fun muteChatConversation(@Path("id") conversationId: String, @Body body: MuteConversationBody = MuteConversationBody()): Unit
+
+    @DELETE("chat/conversations/{id}/mute")
+    suspend fun unmuteChatConversation(@Path("id") conversationId: String): Unit
+
     @GET("chat/people")
     suspend fun chatPeople(@retrofit2.http.Query("q") query: String? = null): PeopleRes
 
     @POST("chat/dms")
     suspend fun createDm(@Body body: DmBody): DmRes
+
+    // --- Chat connections (Chat Redesign C1/C2 backend, C3a client) ---
+    // "No unsolicited DMs": createDm above now 403s CONSENT_REQUIRED for a
+    // brand-new thread between two ordinary members unless one of these
+    // requests was accepted first. Existing threads are unaffected.
+    @POST("chat/connections/requests")
+    suspend fun requestConnection(@Body body: RequestConnectionBody): RequestConnectionRes
+
+    @GET("chat/connections/requests")
+    suspend fun listConnectionRequests(@Query("direction") direction: String): ConnectionRequestsRes
+
+    @POST("chat/connections/requests/{id}/accept")
+    suspend fun acceptConnectionRequest(@Path("id") requestId: String): ConnectionRequestDecision
+
+    @POST("chat/connections/requests/{id}/decline")
+    suspend fun declineConnectionRequest(@Path("id") requestId: String): ConnectionRequestDecision
+
+    @DELETE("chat/connections/requests/{id}")
+    suspend fun cancelConnectionRequest(@Path("id") requestId: String): ConnectionRequestDecision
+
+    @GET("chat/connections")
+    suspend fun listConnections(): ConnectionsRes
+
+    @POST("chat/connections/{user_id}/remove")
+    suspend fun removeConnection(@Path("user_id") userId: String): ConnectionActionRes
+
+    @POST("chat/connections/{user_id}/block")
+    suspend fun blockConnection(@Path("user_id") userId: String): ConnectionActionRes
+
+    @POST("chat/connections/{user_id}/unblock")
+    suspend fun unblockConnection(@Path("user_id") userId: String): ConnectionActionRes
+
+    // --- Reading & Social R1 — "Read with a Friend" (spec §3/§6) ---
+    // Wire shapes: packages/backend/src/modules/reading-social/{groups,invites}.ts.
+    // The public https://pathway.nuruplace.org/join/{token} landing page is
+    // server-rendered (publicPage.ts) — the app never fetches it; it only
+    // mints the token and hands the URL to the system share sheet.
+
+    @POST("reading/groups")
+    suspend fun createOrGetReadingGroup(@Body body: CreateReadingGroupBody): ReadingGroupRow
+
+    @GET("reading/groups")
+    suspend fun myReadingGroups(): ReadingGroupsRes
+
+    @GET("reading/groups/{id}")
+    suspend fun readingGroup(@Path("id") groupId: String): ReadingGroupRow
+
+    @POST("reading/groups/{id}/archive")
+    suspend fun archiveReadingGroup(@Path("id") groupId: String): Unit
+
+    @POST("reading/groups/{id}/leave")
+    suspend fun leaveReadingGroup(@Path("id") groupId: String): Unit
+
+    @POST("reading/groups/{id}/invites")
+    suspend fun createReadingInvite(@Path("id") groupId: String, @Body body: CreateReadingInviteBody): ReadingInviteRow
+
+    @GET("reading/groups/{id}/invites")
+    suspend fun listReadingInvites(@Path("id") groupId: String): ReadingInvitesRes
+
+    @POST("reading/groups/{id}/invites/{invite_id}/revoke")
+    suspend fun revokeReadingInvite(@Path("id") groupId: String, @Path("invite_id") inviteId: String): Unit
+
+    @GET("reading/invites/{token}")
+    suspend fun readingInvitePreview(@Path("token") token: String): ReadingInvitePreview
+
+    @POST("reading/invites/{token}/accept")
+    suspend fun acceptReadingInvite(@Path("token") token: String): ReadingInviteAcceptResult
+
+    @POST("reading/invites/{token}/decline")
+    suspend fun declineReadingInvite(@Path("token") token: String): Unit
 
     // Staff-only (Instructor+ — Students get 403): one message delivered to every
     // active member as an individual DM from the sender. Idempotent on
@@ -205,15 +314,61 @@ interface MemberApi {
     @POST("chat/broadcast")
     suspend fun broadcast(@Body body: BroadcastBody): BroadcastRes
 
+    // Same step-up gate as the send (§5.3) — a fresh pwd_at is required to read
+    // what was sent, not only to send it.
+    @GET("chat/broadcasts")
+    suspend fun broadcasts(@Query("limit") limit: Int = 4): BroadcastListRes
+
+    @GET("chat/broadcasts/{id}")
+    suspend fun broadcastDetail(@Path("id") broadcastId: String): BroadcastDetailRes
+
     @POST("chat/spaces/{id}/join")
     suspend fun joinChatSpace(@Path("id") conversationId: String): Unit
+
+    // Review-gated join (Chat Redesign C1/C2, already live) — the "My Space"
+    // discover flow now goes through this instead of the immediate join above,
+    // so a space that requires leader review gets a pending state rather than
+    // silent immediate membership.
+    @POST("chat/spaces/{id}/join-requests")
+    suspend fun requestJoinSpace(@Path("id") conversationId: String, @Body body: RequestJoinSpaceBody): JoinSpaceRequestRes
+
+    // --- My Discipler / Talk with My Pastor (Chat Redesign C3b) ---
+    @GET("chat/discipler/conversation")
+    suspend fun disciplerConversation(): DisclerConversationRes
+
+    @POST("chat/pastoral")
+    suspend fun openPastoralThread(): PastoralOpenRes
+
+    // Pastor/SuperAdmin-facing — password step-up gated (§5.3), same posture
+    // as the broadcast routes below.
+    @GET("chat/pastoral/inbox")
+    suspend fun pastoralInbox(): PastoralInboxRes
+
+    // Side-effect-free "have I ever been assigned as a pastor" probe (Chat
+    // Redesign C4). No step-up — lets the Chat tab show the Pastoral Inbox
+    // segment to an assigned non-SuperAdmin pastor.
+    @GET("chat/pastoral/eligibility")
+    suspend fun pastoralEligibility(): PastoralEligibilityRes
 
     @POST("chat/messages/{id}/reactions")
     suspend fun toggleChatReaction(@Path("id") messageId: String, @Body body: ReactBody): ReactOn
 
+    // Author-only (server 404s otherwise). PATCH sets is_edited = true; DELETE
+    // soft-deletes — the message stops coming back on the next chatConversation().
+    @PATCH("chat/messages/{id}")
+    suspend fun editChatMessage(@Path("id") messageId: String, @Body body: EditMessageBody): EditMessageRes
+
+    @DELETE("chat/messages/{id}")
+    suspend fun deleteChatMessage(@Path("id") messageId: String): DeleteMessageRes
+
     // --- Events / calendar ---
     @GET("calendar")
     suspend fun calendar(@retrofit2.http.Query("from") from: String, @retrofit2.http.Query("to") to: String): Envelope<CalendarOccurrence>
+
+    // Up to 5 soonest curated occurrences for Home — server-capped, sorted; the
+    // client must render exactly what arrives (no re-sort/re-cap).
+    @GET("home/events")
+    suspend fun homeEvents(): Envelope<HomeEventRow>
 
     @GET("events/{id}")
     suspend fun event(@Path("id") eventId: String): EventDetail
@@ -230,6 +385,10 @@ interface MemberApi {
 
     @POST("me/notifications/read")
     suspend fun markNotificationsRead(@Body body: MarkReadBody): Unit
+
+    // Screen-view dwell telemetry batch — best-effort, silent (iOS ScreenTracker parity).
+    @POST("me/activity/screens")
+    suspend fun screenActivity(@Body body: ScreenActivityBody): Unit
 
     // --- Giving (online-only, §5.6 — money is never queued) ---
     @GET("giving/history")
@@ -386,6 +545,11 @@ interface MemberApi {
     @GET("home/disciplers")
     suspend fun disciplers(): Envelope<Discipler>
 
+    // Home's own prayer-wall preview (distinct from the community/prayer-wall
+    // feed's general `sort` query) — iOS HomeView.prayerWallHome parity.
+    @GET("home/prayer-wall")
+    suspend fun prayerWallHome(): Envelope<PrayerWallPost>
+
     @GET("moments")
     suspend fun moments(): Envelope<Moment>
 
@@ -468,6 +632,28 @@ interface MemberApi {
     @GET("home/liturgy")
     suspend fun homeLiturgy(): HomeLiturgy
 
+    // Phase 2 — admin-only, the pastor's own recorded liturgy per band.
+    // Backend requireRole("Admin") — Admin or SuperAdmin, narrower than the
+    // Instructor+ gate used for module discipler voice notes above. This ONE
+    // request both uploads the bytes AND attaches them to `band` (unlike the
+    // two-step me/media/audio -> modules/{id}/voice-note pattern) — an
+    // upsert; calling it again for the same band replaces the recording.
+    @retrofit2.http.Multipart
+    @POST("admin/liturgy/recordings/{band}")
+    suspend fun uploadLiturgyRecording(
+        @Path("band") band: String,
+        @retrofit2.http.Part file: okhttp3.MultipartBody.Part,
+        @retrofit2.http.Part("duration_sec") durationSec: okhttp3.RequestBody,
+    ): LiturgyRecordingUploadRes
+
+    // ALWAYS 7 rows, clock order (sunrise..midnight) — a band with nothing
+    // recorded still gets a row, with null audioUrl/durationSec/recordedAt.
+    @GET("admin/liturgy/recordings")
+    suspend fun liturgyRecordings(): Envelope<LiturgyRecordingStatus>
+
+    @DELETE("admin/liturgy/recordings/{band}")
+    suspend fun deleteLiturgyRecording(@Path("band") band: String): DeleteLiturgyRecordingRes
+
     @GET("home/echo")
     suspend fun homeEcho(): HomeEchoEnvelope
 
@@ -540,6 +726,80 @@ interface MemberApi {
     // is actually playing a live program, so the studio roster shows real names.
     @POST("radio/programs/{id}/listening")
     suspend fun radioListening(@Path("id") programId: String): retrofit2.Response<Unit>
+
+    // --- Nuru Live — viewer surfaces (L2). ---
+    @GET("live/now")
+    suspend fun getLiveNow(): Envelope<LiveNowRow>
+
+    // Empty body; server just bumps the stream's last-seen-viewer clock.
+    @POST("live/streams/{id}/heartbeat")
+    suspend fun postLiveHeartbeat(@Path("id") streamId: String): Unit
+
+    @GET("live/recordings")
+    suspend fun getLiveRecordings(
+        @Query("scope") scope: String? = null,
+        @Query("cell_id") cellId: String? = null,
+    ): Envelope<LiveRecordingRow>
+
+    // "My Broadcasts" (Live hub taste pass) — recordings the caller started,
+    // regardless of scope. Same row shape as GET /live/recordings; recording_id
+    // == stream_id (see deleteLiveRecording below).
+    @GET("live/recordings/mine")
+    suspend fun getMyLiveRecordings(): Envelope<LiveRecordingRow>
+
+    // Broadcaster-only server-side. Idempotent — a repeat delete of an
+    // already-gone recording is a no-op, never surfaced as an error to the UI.
+    @DELETE("live/recordings/{id}")
+    suspend fun deleteLiveRecording(@Path("id") recordingId: String): Unit
+
+    // --- Nuru Live — broadcaster routes (L3). RBAC-gated server-side
+    // (live:go — 403 FORBIDDEN_SCOPE if missing); the client only mirrors the
+    // gate to hide the UI (permissions.contains("live:go")), never trusts it.
+    // 409 CONFLICT means another stream is already running for that scope.
+    @POST("live/streams")
+    suspend fun postLiveStreams(@Body body: CreateLiveStreamBody): CreatedLiveStream
+
+    // Idempotent — allowed for the starter or a live:manage holder.
+    @POST("live/streams/{id}/end")
+    suspend fun postLiveStreamEnd(@Path("id") streamId: String): EndedLiveStream
+
+    // --- Nuru Live — L5 interactions (docs/LIVE_INTERACTIVE.md) ---
+    // Append-only, server rate-limited to >=1s/user (any emoji) — 204 on
+    // success, RATE_LIMITED (429-shaped ApiError) if the caller is too fast.
+    @POST("live/streams/{id}/reactions")
+    suspend fun postLiveReaction(@Path("id") streamId: String, @Body body: LiveReactionBody): Unit
+
+    // One hand state per (stream, user); idempotent upsert.
+    @POST("live/streams/{id}/hand")
+    suspend fun postLiveHand(@Path("id") streamId: String, @Body body: LiveHandBody): Unit
+
+    @GET("live/streams/{id}/messages")
+    suspend fun getLiveMessages(@Path("id") streamId: String, @Query("since") since: String? = null): LiveMessagesRes
+
+    @POST("live/streams/{id}/messages")
+    suspend fun postLiveMessage(@Path("id") streamId: String, @Body body: LiveSendMessageBody): LiveMessageRow
+
+    // One poll for the whole overlay — viewer_count, reactions, recent
+    // reactions (ambient particles), raised hands, active guest invites.
+    @GET("live/streams/{id}/pulse")
+    suspend fun getLivePulse(@Path("id") streamId: String): LivePulse
+
+    // Broadcaster-only server-side (403 FORBIDDEN_SCOPE otherwise); cap 6 active.
+    @POST("live/streams/{id}/guests/{userId}")
+    suspend fun postLiveGuestInvite(@Path("id") streamId: String, @Path("userId") userId: String): Unit
+
+    // Invitee only — accept/decline a pending invite.
+    @POST("live/streams/{id}/guests/respond")
+    suspend fun postLiveGuestRespond(@Path("id") streamId: String, @Body body: LiveGuestRespondBody): Unit
+
+    // Broadcaster (remove) or the guest themselves (leave) — idempotent.
+    @DELETE("live/streams/{id}/guests/{userId}")
+    suspend fun deleteLiveGuest(@Path("id") streamId: String, @Path("userId") userId: String): Unit
+
+    // L6b (docs/LIVE_INTERACTIVE.md) — accepted-guest-only server-side; mints
+    // a fresh WHIP publish credential for MY OWN guest slot on this stream.
+    @GET("live/streams/{id}/guests/me/ingest")
+    suspend fun getLiveGuestIngest(@Path("id") streamId: String): LiveGuestIngest
 
     // --- Offline sync: ordered mutation replay (§1.7, §3.6) ---
     @POST("sync/push")

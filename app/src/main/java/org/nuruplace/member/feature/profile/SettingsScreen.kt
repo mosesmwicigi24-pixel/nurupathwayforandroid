@@ -87,11 +87,19 @@ import org.nuruplace.member.data.net.NotificationPreferences
 fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
+    var saveFailed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { prefs = runCatching { Net.client.api.notificationPreferences() }.getOrNull() }
 
     fun save(p: NotificationPreferences) {
+        val previous = prefs
         prefs = p
-        scope.launch { runCatching { Net.client.api.updateNotificationPreferences(p) } }
+        saveFailed = false
+        scope.launch {
+            // A toggle that shows a state the server never recorded is a lie —
+            // revert and say so instead.
+            runCatching { Net.client.api.updateNotificationPreferences(p) }
+                .onFailure { prefs = previous; saveFailed = true }
+        }
     }
 
     Column(
@@ -127,6 +135,13 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
         ) {
             SecurityCard(onOpenFirebase = { onOpen("firebase-account") })
             NotificationsCard(prefs = prefs, onSave = ::save)
+        if (saveFailed) {
+            Text(
+                "Couldn't save your preferences — check your connection and try again.",
+                style = pInter(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
             DisplayCard()
             LanguageCard()
             PrivacyCard()
@@ -238,6 +253,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
 }
 
 private val TEXT_SIZES = listOf("Small" to 0.85f, "Default" to 1.0f, "Large" to 1.15f)
+private val LINE_SPACINGS = listOf("Compact" to 0.85f, "Default" to 1.0f, "Relaxed" to 1.35f)
 
 @Composable
 private fun DisplayCard() {
@@ -274,6 +290,39 @@ private fun DisplayCard() {
         }
         Spacer(Modifier.height(8.dp))
         Text("Adjusts text size across the whole app.", style = pInter(11), color = PROF.sub)
+
+        Spacer(Modifier.height(16.dp))
+        Text("Line spacing", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LINE_SPACINGS.forEach { (label, spacing) ->
+                val selected = kotlin.math.abs(AppPrefs.lineSpacing - spacing) < 0.01f
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) PROF.goldChipBg else PROF.surface)
+                        .border(
+                            if (selected) 1.5.dp else 1.dp,
+                            if (selected) PROF.gold else PROF.border,
+                            RoundedCornerShape(14.dp),
+                        )
+                        .clickable { AppPrefs.updateLineSpacing(spacing) }
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label,
+                        style = pInter(14, if (selected) FontWeight.Bold else FontWeight.Medium),
+                        color = if (selected) PROF.navy else PROF.sub,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Adjusts line spacing across the whole app.", style = pInter(11), color = PROF.sub)
     }
 }
 
