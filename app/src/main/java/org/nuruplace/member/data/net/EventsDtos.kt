@@ -108,3 +108,89 @@ data class MyRsvp(
     val title: String = "",
     val occursAt: String? = null,
 )
+
+// --- Church service attendance (§3.3) ---
+// Distinct from the event check-in above: church services are the weekly cadence
+// the attendance streak is measured in, and a check-in registers the member's
+// contact details alongside the time they attended.
+
+/** One church service — the cadence slot members scan into. */
+@Serializable
+data class ChurchService(
+    val serviceId: String = "",
+    val title: String = "",
+    val serviceDate: String = "",
+    val startsAt: String = "",
+    val endsAt: String? = null,
+    val checkinOpensAt: String? = null,
+    val checkinClosesAt: String? = null,
+    val qrEnabled: Boolean = true,
+    val countsForStreak: Boolean = true,
+    /** Whether a member could scan into it right now. */
+    val checkinOpen: Boolean = false,
+    /** Whether this member is already checked in. */
+    val attended: Boolean = false,
+    val attendedAt: String? = null,
+)
+
+/**
+ * POST /services/{id}/attendance. Contact fields are optional on the wire — the
+ * server falls back to the member's profile for anything omitted.
+ */
+@Serializable
+data class ServiceCheckInBody(
+    val clientScanId: String,
+    val scanToken: String,
+    val fullName: String? = null,
+    val phoneNumber: String? = null,
+    val email: String? = null,
+    /** The real arrival time when the offline queue replays a queued scan. */
+    val attendedAt: String? = null,
+)
+
+/**
+ * Attendance measured in SERVICES, not days. The window is anchored at the
+ * member's first-ever check-in, so services held before they joined are not
+ * counted against them.
+ */
+@Serializable
+data class AttendanceStreak(
+    /** Consecutive services attended, counting back from the most recent. */
+    val currentStreak: Int = 0,
+    val longestStreak: Int = 0,
+    val totalAttended: Int = 0,
+    /** "Failures" — eligible services missed since the first check-in. */
+    val totalMissed: Int = 0,
+    /** "Breaks" — one per interruption, so two misses in a row is 1 break, 2 failures. */
+    val breaks: Int = 0,
+    /** Consecutive services missed right now; 0 while the streak is alive. */
+    val currentMissRun: Int = 0,
+    val lastAttendedAt: String? = null,
+    val lastServiceDate: String? = null,
+    /** new | active | at_risk | broken */
+    val status: String = "new",
+)
+
+@Serializable
+data class ServiceCheckInResult(
+    val attendanceId: String = "",
+    val duplicate: Boolean = false,
+    val serviceId: String = "",
+    val serviceTitle: String = "",
+    val attendedAt: String = "",
+    val fullName: String = "",
+    val phoneNumber: String = "",
+    val email: String? = null,
+    val streak: AttendanceStreak = AttendanceStreak(),
+)
+
+/** One service in the member's history — attended, or a visible miss. */
+@Serializable
+data class AttendanceHistoryEntry(
+    val serviceId: String = "",
+    val title: String = "",
+    val serviceDate: String = "",
+    val startsAt: String = "",
+    val attended: Boolean = false,
+    val attendedAt: String? = null,
+)

@@ -669,6 +669,27 @@ interface MemberApi {
     @POST("events/{id}/attendance")
     suspend fun checkInEvent(@Path("id") eventId: String, @Body body: CheckInBody): EventCheckInResult
 
+    // --- Church service attendance (§3.3) ---
+
+    /** Services open for check-in right now — what the scanner screen introduces. */
+    @GET("services/open")
+    suspend fun openServices(): Envelope<ChurchService>
+
+    /** Register attendance at a church service. Idempotent on clientScanId. */
+    @POST("services/{id}/attendance")
+    suspend fun checkInService(
+        @Path("id") serviceId: String,
+        @Body body: ServiceCheckInBody,
+    ): ServiceCheckInResult
+
+    /** The member's streak — current run, longest, breaks and failures. */
+    @GET("me/attendance/streak")
+    suspend fun attendanceStreak(): AttendanceStreak
+
+    /** Service-by-service history since the first check-in; misses included. */
+    @GET("me/attendance")
+    suspend fun attendanceHistory(@Query("limit") limit: Int = 30): Envelope<AttendanceHistoryEntry>
+
     // --- Approximate location sharing (opt-in) ---
     @POST("me/location")
     suspend fun shareLocation(@Body body: LocationBody): Unit

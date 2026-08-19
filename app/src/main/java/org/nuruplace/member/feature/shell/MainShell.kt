@@ -606,6 +606,27 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 org.nuruplace.member.feature.events.CheckInScannerScreen(eventId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
+            // --- Church service attendance (§3.3) ---
+            // The scanner needs no service id: the QR carries it, so a member
+            // arriving at church opens one screen and points the camera.
+            composable("service-checkin") {
+                org.nuruplace.member.feature.attendance.ServiceCheckInScreen(
+                    memberName = me?.profile?.fullName.orEmpty(),
+                    memberPhone = me?.profile?.phoneNumber.orEmpty(),
+                    memberEmail = me?.profile?.email,
+                    onBack = { nav.popBackStack() },
+                    onSeeStreak = {
+                        nav.popBackStack()
+                        nav.navigate("attendance")
+                    },
+                )
+            }
+            composable("attendance") {
+                org.nuruplace.member.feature.attendance.AttendanceScreen(
+                    onBack = { nav.popBackStack() },
+                    onCheckIn = { nav.navigate("service-checkin") },
+                )
+            }
             composable("notifications") {
                 NotificationsScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })
             }

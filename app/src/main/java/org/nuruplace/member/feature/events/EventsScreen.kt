@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Icon
@@ -84,6 +85,7 @@ fun EventsScreen(
     onOpenAnnouncement: (String) -> Unit,
     onOpenAnnouncements: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenAttendance: () -> Unit,
 ) {
     AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, load = {
         val cal = runCatching { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }.getOrDefault(emptyList())
@@ -225,6 +227,37 @@ fun EventsScreen(
                             Text("All events & calendar", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
                             Text(
                                 "See the whole month at a glance · $upcoming upcoming",
+                                style = evInter(11), color = Color.White.copy(alpha = 0.55f),
+                            )
+                        }
+                        Box(
+                            Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                    }
+                }
+
+                // CHURCH ATTENDANCE dark card — scan into today's service, and the
+                // streak that comes out of showing up. Same visual weight as
+                // CALENDAR: on a Sunday morning this is the reason to open the app.
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
+                        .clickable { onOpenAttendance() },
+                ) {
+                    Row(
+                        Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.QrCodeScanner, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text("CHURCH ATTENDANCE", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
+                            Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
+                            Text(
+                                "Scan the QR at church · see your streak",
                                 style = evInter(11), color = Color.White.copy(alpha = 0.55f),
                             )
                         }

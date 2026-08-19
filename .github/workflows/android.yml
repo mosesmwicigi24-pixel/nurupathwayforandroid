@@ -1,0 +1,108 @@
+# Android build + unit tests.
+#
+# This repo had no CI at all, which is how code could reach `main` having never
+# been compiled. The iOS repo had the identical hole and it was not theoretical:
+# the first CI run there failed immediately on a call that had drifted out of
+# sync with `main` while a branch was open. This closes the same hole here.
+#
+# Scope is debug compile + JVM unit tests. Release is deliberately NOT covered:
+# it signs with a keystore that lives outside this repo and uploads native
+# symbols to Crashlytics, neither of which CI has credentials for. Those stay a
+# local task — see app/build.gradle.kts.
+name: Android
+
+# One run per push, not two. A push to a branch with an open PR matches both
+# `push` and `pull_request`; restricting push to the default branch means
+# feature work is covered by its PR and main is covered directly, no overlap.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+# The build reads the repo and nothing else. No packages, no deployments.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 17, matching sourceCompatibility/targetCompatibility/jvmTarget in
+      # app/build.gradle.kts and the setup documented in CLAUDE.md. Pinning the
+      # version the project actually targets means a CI failure reproduces on a
+      # developer machine instead of being a CI-only mystery.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Handles the Gradle user-home cache (dependencies, wrapper, build cache)
+      # and reads the wrapper checksum before executing it.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ubuntu-latest ships an Android SDK, but which platforms are in the image
+      # drifts between runner releases. Install what the build actually needs
+      # rather than trusting the image: this is a fast no-op when already
+      # present, and a clear failure rather than a confusing one when it is not.
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          # Licence acceptance is fed from a FILE, not `yes | sdkmanager`.
+          # That idiom is subtly wrong under `pipefail`: sdkmanager exits as
+          # soon as it has read the prompts it needs, `yes` then fails to write
+          # to a closed pipe, and pipefail reports the step as failed even
+          # though every licence was accepted. A plain redirect has no second
+          # process whose death can be mistaken for the step's outcome.
+          printf 'y\n%.0s' $(seq 50) > /tmp/sdk-licences
+          "$SDKMANAGER" --licenses < /tmp/sdk-licences > /dev/null
+
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;35.0.0"
+
+          # Verify rather than trust the exit code: a package that silently
+          # failed to land would otherwise surface much later as an obscure
+          # Gradle error about a missing platform.
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
+
+      # app/google-services.json is git-ignored, so a fresh checkout cannot
+      # compile: the Google Services plugin is applied unconditionally and fails
+      # the build when the file is absent. The script writes a structurally
+      # valid placeholder — see its header for why a fake config is the right
+      # answer here rather than a secret.
+      - name: Write placeholder google-services.json
+        run: ./.github/scripts/stub-google-services.sh
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      # The Gradle console prints which test class failed but not the assertion.
+      # Keep the HTML report and the JUnit XML so a red run can be diagnosed
+      # from the run page instead of by re-running it locally.
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
+          retention-days: 14
+          if-no-files-found: ignore

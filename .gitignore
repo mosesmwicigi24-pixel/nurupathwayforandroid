@@ -18,3 +18,6 @@ app/google-services.json
 OVERNIGHT_PROMPT.md
 run-overnight.sh
 .overnight/
+
+# Kotlin compiler scratch output
+.kotlin/

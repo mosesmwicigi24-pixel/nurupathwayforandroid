@@ -125,6 +125,7 @@ fun YouScreen(
                     onOpenAnnouncement = { onNavigate("announcement/$it") },
                     onOpenAnnouncements = { onNavigate("announcements") },
                     onOpenNotifications = { onNavigate("notifications") },
+                    onOpenAttendance = { onNavigate("attendance") },
                 )
                 YouSegment.Give -> GivingScreen(
                     onBack = {}, // embedded segment, not a pushed screen — no back affordance (unused by GivingScreen today anyway)
