@@ -61,8 +61,23 @@ jobs:
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses > /dev/null
+
+          # Licence acceptance is fed from a FILE, not `yes | sdkmanager`.
+          # That idiom is subtly wrong under `pipefail`: sdkmanager exits as
+          # soon as it has read the prompts it needs, `yes` then fails to write
+          # to a closed pipe, and pipefail reports the step as failed even
+          # though every licence was accepted. A plain redirect has no second
+          # process whose death can be mistaken for the step's outcome.
+          printf 'y\n%.0s' $(seq 50) > /tmp/sdk-licences
+          "$SDKMANAGER" --licenses < /tmp/sdk-licences > /dev/null
+
           "$SDKMANAGER" --install "platforms;android-36" "build-tools;35.0.0"
+
+          # Verify rather than trust the exit code: a package that silently
+          # failed to land would otherwise surface much later as an obscure
+          # Gradle error about a missing platform.
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
 
       # app/google-services.json is git-ignored, so a fresh checkout cannot
       # compile: the Google Services plugin is applied unconditionally and fails
