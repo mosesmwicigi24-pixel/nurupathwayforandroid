@@ -267,7 +267,6 @@ fun HomeScreen(
                 personalWord = personalWord,
                 onBell = onOpenNotifications,
                 onScan = { onNavigate("service-checkin") },
-                onRadio = { onNavigate("radio") },
                 churchLive = churchLive,
                 onLive = { churchLive?.let { onNavigate(liveNowRoute(it)) } },
             )
@@ -521,7 +520,6 @@ private fun HomeHeader(
     personalWord: String? = null,
     onBell: () -> Unit,
     onScan: () -> Unit,
-    onRadio: () -> Unit,
     churchLive: LiveNowRow? = null,
     onLive: () -> Unit = {},
 ) {
@@ -558,15 +556,14 @@ private fun HomeHeader(
             CircleButton("🔔", Nuru.goldChipBg, onBell)
             Spacer(Modifier.width(Spacing.sm))
             // Nuru Live (L2) — a church stream is live right now. Same 40dp
-            // circle language as the bell/radio buttons either side of it, so
-            // the row reads as one family; the pulsing red ring (not a static
-            // border) is what says "this one is happening right now".
+            // circle language as the buttons either side of it, so the row reads
+            // as one family; the pulsing red ring (not a static border) is what
+            // says "this one is happening right now". Conditional, so the resting
+            // header stays at three.
             if (churchLive != null) {
                 LiveHeaderChip(onClick = onLive)
                 Spacer(Modifier.width(Spacing.sm))
             }
-            CircleButton("📻", Nuru.dangerBg, onRadio)
-            Spacer(Modifier.width(Spacing.sm))
             Box {
                 ProgressRing(pct = overallPct, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
                     Text("$overallPct", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold)
