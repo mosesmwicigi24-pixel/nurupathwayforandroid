@@ -25,6 +25,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -79,17 +80,59 @@ import java.util.concurrent.Executors
 data class ServiceScan(val serviceId: String, val scanToken: String)
 
 /**
- * Parse `nuru-service:<service_id>:<token>`. Returns null for any other QR so
- * the scanner ignores unrelated codes instead of posting junk to the server.
- * Mirrors `parseServiceQrPayload` in the backend attendance module.
+ * What the scanner recognized. The projected sanctuary code and a per-service
+ * link identify a service directly; the standing door poster (`/jc/<code>`,
+ * one code forever per congregation) names only the congregation — the SERVER
+ * decides which service it means at scan time (GET /join/congregation/{code}).
  */
-fun parseServiceQr(raw: String): ServiceScan? {
-    val parts = raw.trim().split(":")
-    if (parts.size != 3 || parts[0] != "nuru-service") return null
-    val (_, serviceId, token) = parts
-    if (serviceId.isBlank() || token.isBlank()) return null
-    return ServiceScan(serviceId, token)
+sealed interface ScannedServiceCode {
+    data class Service(val scan: ServiceScan) : ScannedServiceCode
+    data class StandingCode(val code: String) : ScannedServiceCode
 }
+
+/**
+ * Parse every form a Nuru service QR ships in. Returns null for any other QR
+ * so the scanner ignores unrelated codes instead of posting junk to the
+ * server. Mirrors `parseServiceQrPayload` in the backend attendance module —
+ * the legacy `nuru-service:` form MUST keep working: it is what the portal
+ * still projects on the sanctuary screen.
+ */
+fun parseServiceQr(raw: String): ScannedServiceCode? {
+    val text = raw.trim()
+
+    // Legacy projected form: nuru-service:<service_id>:<token>
+    val parts = text.split(":")
+    if (parts.size == 3 && parts[0] == "nuru-service" && parts[1].isNotBlank() && parts[2].isNotBlank()) {
+        return ScannedServiceCode.Service(ServiceScan(parts[1], parts[2]))
+    }
+
+    // URL forms — accepted from any host so a staging poster scans in a dev
+    // build; the payload alone carries everything the flow needs. java.net.URI
+    // rather than android.net.Uri so the grammar is testable on the plain JVM
+    // and identical on every platform.
+    val uri = runCatching { java.net.URI(text) }.getOrNull() ?: return null
+    val scheme = uri.scheme?.lowercase()
+    if (scheme != "http" && scheme != "https") return null
+    val seg = uri.path?.split("/")?.filter { it.isNotEmpty() } ?: return null
+
+    // Per-service link: /j/<service_id>/<token>
+    if (seg.size == 3 && seg[0] == "j" && seg[1].isNotBlank() && seg[2].isNotBlank()) {
+        return ScannedServiceCode.Service(ServiceScan(seg[1], seg[2]))
+    }
+    // Standing poster: /jc/<code> (codes are 64 hex; 16 is the server's floor)
+    if (seg.size == 2 && seg[0] == "jc" && seg[1].length >= 16) {
+        return ScannedServiceCode.StandingCode(seg[1])
+    }
+    return null
+}
+
+/** "Sunday, 9:00 AM" from the API's ISO stamp — null if it doesn't parse,
+ *  and the caller falls back to wording with no time in it. */
+fun friendlyServiceTime(iso: String): String? = runCatching {
+    java.time.Instant.parse(iso)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("EEEE, h:mm a"))
+}.getOrNull()
 
 private enum class Phase { SCANNING, REGISTERING, SUBMITTING, DONE }
 
@@ -126,12 +169,59 @@ fun ServiceCheckInScreen(
     // SAME scan to the server — a replay, not a second attendance row (§3.6).
     var scanId by remember { mutableStateOf(UUID.randomUUID().toString().lowercase()) }
 
+    // The standing poster's "not yet" answer (or a resolve failure), shown in
+    // place of the scan caption for a few seconds; the scanner stays live.
+    var standingNote by remember { mutableStateOf<String?>(null) }
+    var resolving by remember { mutableStateOf(false) }
+
+    fun showStandingNote(text: String) {
+        standingNote = text
+        scope.launch {
+            kotlinx.coroutines.delay(6_000)
+            if (standingNote == text) standingNote = null
+        }
+    }
+
     fun onCode(raw: String) {
-        if (phase != Phase.SCANNING) return
-        val parsed = parseServiceQr(raw) ?: return   // not our code — keep scanning
-        scan = parsed
-        scanId = UUID.randomUUID().toString().lowercase()
-        phase = Phase.REGISTERING
+        if (phase != Phase.SCANNING || resolving || standingNote != null) return
+        when (val parsed = parseServiceQr(raw)) {
+            null -> return                            // not our code — keep scanning
+            is ScannedServiceCode.Service -> {
+                scan = parsed.scan
+                scanId = UUID.randomUUID().toString().lowercase()
+                phase = Phase.REGISTERING
+            }
+            is ScannedServiceCode.StandingCode -> {
+                // The printed door poster: one code forever, resolved to
+                // whatever service is open RIGHT NOW. Outside a window the
+                // honest answer is "not yet", said kindly, with when to return.
+                resolving = true
+                scope.launch {
+                    try {
+                        val r = Net.client.api.resolveStandingCode(parsed.code)
+                        val svc = r.service
+                        if (r.open && svc != null) {
+                            scan = ServiceScan(svc.serviceId, svc.scanToken)
+                            scanId = UUID.randomUUID().toString().lowercase()
+                            phase = Phase.REGISTERING
+                        } else {
+                            val next = r.next
+                            showStandingNote(
+                                if (next != null && friendlyServiceTime(next.startsAt) != null) {
+                                    "Check-in isn't open right now. Join us for ${next.title}, ${friendlyServiceTime(next.startsAt)}."
+                                } else {
+                                    "Check-in isn't open right now — scan again when you arrive for a service."
+                                },
+                            )
+                        }
+                    } catch (ex: Exception) {
+                        showStandingNote(ApiException.message(ex))
+                    } finally {
+                        resolving = false
+                    }
+                }
+            }
+        }
     }
 
     fun submit() {
@@ -189,7 +279,7 @@ fun ServiceCheckInScreen(
                         onRescan = { scan = null; error = null; phase = Phase.SCANNING },
                     )
 
-                granted -> CameraPreview(onCode = ::onCode)
+                granted -> CameraPreview(onCode = ::onCode, note = standingNote)
 
                 else -> Column(
                     Modifier.fillMaxSize().padding(Spacing.screen),
@@ -359,7 +449,7 @@ fun shortTime(iso: String): String {
 // ---------------- Camera ----------------
 
 @Composable
-private fun CameraPreview(onCode: (String) -> Unit) {
+private fun CameraPreview(onCode: (String) -> Unit, note: String? = null) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -400,10 +490,11 @@ private fun CameraPreview(onCode: (String) -> Unit) {
                 .border(3.dp, Nuru.gold, RoundedCornerShape(28.dp)),
         )
         Text(
-            "Point at the check-in code on the screen",
+            note ?: "Point at the check-in code on the screen",
             style = NuruType.caption,
-            color = Nuru.onNavyDim,
-            modifier = Modifier.padding(top = 360.dp),
+            color = if (note == null) Nuru.onNavyDim else Nuru.gold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(top = 360.dp).widthIn(max = 300.dp),
         )
     }
 }
