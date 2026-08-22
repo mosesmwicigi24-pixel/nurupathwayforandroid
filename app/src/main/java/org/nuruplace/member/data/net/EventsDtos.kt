@@ -171,6 +171,29 @@ data class AttendanceStreak(
     val status: String = "new",
 )
 
+/** GET /join/congregation/{code} — the standing poster resolved at scan time. */
+@Serializable
+data class StandingResolution(
+    val congregation: String = "",
+    val open: Boolean = false,
+    val service: StandingOpenService? = null,
+    val next: StandingNextService? = null,
+)
+
+@Serializable
+data class StandingOpenService(
+    val serviceId: String = "",
+    val title: String = "",
+    val startsAt: String = "",
+    val scanToken: String = "",
+)
+
+@Serializable
+data class StandingNextService(
+    val title: String = "",
+    val startsAt: String = "",
+)
+
 @Serializable
 data class ServiceCheckInResult(
     val attendanceId: String = "",

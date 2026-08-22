@@ -21,3 +21,4 @@ run-overnight.sh
 
 # Kotlin compiler scratch output
 .kotlin/
+.worktrees/

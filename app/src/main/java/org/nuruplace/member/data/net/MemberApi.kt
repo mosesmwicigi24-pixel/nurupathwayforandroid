@@ -675,6 +675,14 @@ interface MemberApi {
     @GET("services/open")
     suspend fun openServices(): Envelope<ChurchService>
 
+    /**
+     * What the standing door poster (/jc/<code>) means right now. Public —
+     * one printed code forever per congregation; the server answers with the
+     * day's open service and its scan token, or with when to come back.
+     */
+    @GET("join/congregation/{code}")
+    suspend fun resolveStandingCode(@Path("code") code: String): StandingResolution
+
     /** Register attendance at a church service. Idempotent on clientScanId. */
     @POST("services/{id}/attendance")
     suspend fun checkInService(
