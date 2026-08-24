@@ -92,10 +92,14 @@ fun LetterAwaitingCard() {
  *  the most personal thing the app produces. */
 @Composable
 fun LetterReadRow(letter: PastoralLetter, onOpen: () -> Unit) {
+    // Ink on a white card, not pale-on-translucent-navy (owner, 2026-08-24 —
+    // iOS parity): this quiet row sits on the bright page, where the old
+    // colors simply vanished.
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF11253F).copy(alpha = 0.35f))
+            .background(Color.White)
+            .border(1.dp, Color(0xFF0A2540).copy(alpha = 0.08f), RoundedCornerShape(18.dp))
             .clickable { onOpen() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -106,8 +110,8 @@ fun LetterReadRow(letter: PastoralLetter, onOpen: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Filled.Mail, null, tint = LetterTheme.resolve(letter.artKey).accentColor, modifier = Modifier.size(15.dp)) }
         Column(Modifier.weight(1f)) {
-            Text(letter.displayTitle ?: "Your Sunday Letter", style = NuruType.rowTitle, color = Color(0xFFDCE4EF), maxLines = 2)
-            Text("Read again", style = NuruType.caption, color = Color(0xFF8FA0B4))
+            Text(letter.displayTitle ?: "Your Sunday Letter", style = NuruType.rowTitle, color = Nuru.homeNavy, maxLines = 2)
+            Text("Read again", style = NuruType.caption, color = Color(0xFFA8861C))
         }
     }
 }
