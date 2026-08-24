@@ -468,25 +468,31 @@ private fun GiveTab(
             error?.let {
                 Text(it, style = giInter(12), color = GIVE.danger, modifier = Modifier.padding(bottom = 8.dp))
             }
+            // A BLOCK, not an outline (owner, 2026-08-24 — iOS parity): solid
+            // gold with navy text, the same voice as every primary CTA.
             Row(
-                Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.white)
-                    .border(1.dp, GIVE.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
+                    .background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(GIVE.gold, Color(0xFFB6862F)),
+                        ),
+                    )
                     .clickable(enabled = amountMajor > 0 && !busy) { submit() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
                 if (busy) {
-                    CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.gold, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.navy, strokeWidth = 2.dp)
                     Spacer(Modifier.width(6.dp))
-                    Text("Processing…", style = giInter(14, FontWeight.SemiBold), color = GIVE.gold)
+                    Text("Processing…", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                 } else if (freq != 0) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Schedule ${kshMajor(amountMajor)} / ${if (freq == 1) "week" else "month"}", style = giInter(14, FontWeight.SemiBold), color = GIVE.gold)
+                    Text("Schedule ${kshMajor(amountMajor)} / ${if (freq == 1) "week" else "month"}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                 } else {
-                    Text("Give ${kshMajor(amountMajor)}", style = giInter(14, FontWeight.SemiBold), color = GIVE.gold)
+                    Text("Give ${kshMajor(amountMajor)}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                     Spacer(Modifier.width(6.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
             }
         }
