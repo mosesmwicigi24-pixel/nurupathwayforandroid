@@ -448,7 +448,14 @@ fun HomeScreen(
                 MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayer-room") })
                 featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
                 if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }
-                announcement?.let { a -> FeaturedAnnouncementCard(a, onAll = { onNavigate("announcements") }, onOpen = { onNavigate("announcement/${a.announcementId}") }) }
+                FeaturedCarousel(
+                    announcement = announcement,
+                    featuredEvent = featuredEvent,
+                    events = homeEvents,
+                    onAll = { onNavigate("events-calendar") },
+                    onOpenAnnouncement = { id -> onNavigate("announcement/$id") },
+                    onOpenEvent = { id -> onNavigate("event/$id?end=") },
+                )
                 ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
                 scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
@@ -1274,26 +1281,136 @@ private fun DisciplersCard(list: List<Discipler>, onView: () -> Unit) {
     }
 }
 
+// Featured carousel (owner's revision, 2026-08-24 — iOS parity): one sliding
+// rail for everything the portal has marked or scheduled — the featured
+// announcement, the featured gathering, and the next few events. Auto-advances
+// gently; a swipe is always respected. "View all" opens the full events list.
+private sealed interface FeaturedPage {
+    data class Ann(val a: FeaturedAnnouncement) : FeaturedPage
+    data class Fev(val e: FeaturedEvent) : FeaturedPage
+    data class Occ(val o: HomeEventRow) : FeaturedPage
+}
+
 @Composable
-private fun FeaturedAnnouncementCard(a: FeaturedAnnouncement, onAll: () -> Unit, onOpen: () -> Unit) {
+private fun FeaturedCarousel(
+    announcement: FeaturedAnnouncement?,
+    featuredEvent: FeaturedEvent?,
+    events: List<HomeEventRow>,
+    onAll: () -> Unit,
+    onOpenAnnouncement: (String) -> Unit,
+    onOpenEvent: (String) -> Unit,
+) {
+    val pages = remember(announcement, featuredEvent, events) {
+        buildList {
+            announcement?.let { add(FeaturedPage.Ann(it)) }
+            featuredEvent?.let { add(FeaturedPage.Fev(it)) }
+            events.filter { it.seriesId != featuredEvent?.seriesId }.take(3).forEach { add(FeaturedPage.Occ(it)) }
+        }
+    }
+    if (pages.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = Spacing.xs, bottom = Spacing.xs)) {
-            SectionLabel("Featured announcement")
+            SectionLabel("Featured")
             Spacer(Modifier.weight(1f))
             RowScopeLink("View all", onAll)
         }
-        HomeCard(modifier = Modifier.clickable { onOpen() }, pad = 0.dp) {
-            FitImage(a.primaryImageUrl, modifier = Modifier.clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)))
-            Column(Modifier.padding(Spacing.base)) {
-                Text(a.title, style = NuruType.featureTitle, color = Nuru.ink)
-                Spacer(Modifier.height(Spacing.xs))
-                Text(a.body, style = NuruType.caption, color = Nuru.ink600, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(Spacing.sm))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(a.sentAt?.let { fmtDate(it) } ?: "", style = NuruType.micro, color = Nuru.ink400)
-                    Spacer(Modifier.weight(1f))
-                    Text("Read more ›", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold)
+        val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pages.size })
+        // Gentle auto-advance every 6s; pauses whenever a finger is on the rail.
+        LaunchedEffect(pages.size) {
+            if (pages.size < 2) return@LaunchedEffect
+            while (true) {
+                kotlinx.coroutines.delay(6_000)
+                if (!pagerState.isScrollInProgress) {
+                    pagerState.animateScrollToPage((pagerState.currentPage + 1) % pages.size)
                 }
+            }
+        }
+        androidx.compose.foundation.pager.HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { i ->
+            when (val page = pages[i]) {
+                is FeaturedPage.Ann -> FeaturedPageCard(
+                    kicker = "ANNOUNCEMENT", imageUrl = page.a.primaryImageUrl,
+                    title = page.a.title, body = page.a.body,
+                    meta = page.a.sentAt?.let { fmtDate(it) }, cta = "Read more ›",
+                ) { onOpenAnnouncement(page.a.announcementId) }
+                is FeaturedPage.Fev -> FeaturedPageCard(
+                    kicker = "FEATURED GATHERING", imageUrl = page.e.primaryImageUrl,
+                    title = page.e.title, body = page.e.description ?: page.e.location.orEmpty(),
+                    meta = page.e.dtstartLocal.takeIf { it.isNotBlank() }, cta = "See details ›",
+                ) { onAll() }
+                is FeaturedPage.Occ -> FeaturedPageCard(
+                    kicker = "UPCOMING EVENT", imageUrl = page.o.primaryImageUrl,
+                    title = page.o.title, body = page.o.venue.orEmpty(),
+                    meta = fmtDate(page.o.startsAt), cta = "See details ›",
+                ) { onOpenEvent(page.o.occurrenceId) }
+            }
+        }
+        if (pages.size > 1) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = Spacing.xs),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                pages.indices.forEach { i ->
+                    val on = i == pagerState.currentPage
+                    Box(
+                        Modifier.padding(horizontal = 2.5.dp)
+                            .size(width = if (on) 16.dp else 5.dp, height = 5.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (on) Nuru.gold else Nuru.gold.copy(alpha = 0.25f)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// One shared page frame so every slide sits at the same height — image on top
+/// (16:9, navy-gradient fallback) with a kicker chip, then title, two body
+/// lines, and a footer.
+@Composable
+private fun FeaturedPageCard(
+    kicker: String,
+    imageUrl: String?,
+    title: String,
+    body: String,
+    meta: String?,
+    cta: String,
+    onOpen: () -> Unit,
+) {
+    HomeCard(modifier = Modifier.clickable { onOpen() }, pad = 0.dp) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .background(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(Color(0xFF16273F), Color(0xFF0A1C33)),
+                    ),
+                ),
+        ) {
+            if (!imageUrl.isNullOrBlank()) {
+                coil.compose.AsyncImage(
+                    model = imageUrl, contentDescription = title,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
+            Text(
+                kicker, style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp),
+                color = Color.White,
+                modifier = Modifier.padding(10.dp)
+                    .clip(RoundedCornerShape(999.dp)).background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        Column(Modifier.padding(Spacing.base)) {
+            Text(title, style = NuruType.featureTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(Spacing.xs))
+            Text(body, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(Spacing.sm))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(meta.orEmpty(), style = NuruType.micro, color = Nuru.ink400)
+                Spacer(Modifier.weight(1f))
+                Text(cta, style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold)
             }
         }
     }

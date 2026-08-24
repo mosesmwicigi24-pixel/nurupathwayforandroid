@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -282,15 +283,23 @@ private fun GiveTab(
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
-                        Text(
-                            "Custom",
-                            style = giInter(13, FontWeight.Bold),
-                            color = GIVE.gold,
-                            modifier = Modifier.clip(Capsule).background(GIVE.white)
-                                .border(1.dp, GIVE.gold, Capsule)
-                                .clickable { customOpen = true }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
+                    }
+                    // The custom choice, BELOW the suggested amounts on its own
+                    // row (owner's revision, 2026-08-24 — iOS parity): inside
+                    // the scrolling chip row it slid out of sight, and a giver
+                    // who wants their own number should never have to hunt.
+                    Row(
+                        Modifier.padding(top = 8.dp).fillMaxWidth().clip(Capsule)
+                            .background(GIVE.white)
+                            .border(1.dp, GIVE.gold.copy(alpha = 0.55f), Capsule)
+                            .clickable { customOpen = true }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Enter a custom amount", style = giInter(13, FontWeight.Bold), color = GIVE.gold)
                     }
                 }
 

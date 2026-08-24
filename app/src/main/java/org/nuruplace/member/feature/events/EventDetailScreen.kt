@@ -678,8 +678,24 @@ private fun BuzzCard(eventId: String) {
                 }
             }
 
-            // Composer — a roomy card: "You" header, a big text area, an optional
-            // photo preview, then the attach (+) · flame · Post action row.
+            // Chat order (owner's revision, 2026-08-24 — iOS parity): the
+            // room's voices come FIRST; your line to add sits BELOW them as a
+            // compact chat bar — attach, the field, flame, send — the same
+            // grammar as the message composer in Chat.
+            if (posts.isEmpty()) {
+                Text(
+                    "Be the first to share a moment.",
+                    style = evInter(13),
+                    color = EV.tertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                )
+            } else {
+                Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    posts.forEach { p -> PostRow(p) { kind -> react(p.postId, kind) } }
+                }
+            }
+
             Column(
                 Modifier
                     .padding(top = 12.dp)
@@ -687,36 +703,9 @@ private fun BuzzCard(eventId: String) {
                     .clip(RoundedCornerShape(18.dp))
                     .background(Brush.linearGradient(listOf(EV.composerTop, EV.tile)))
                     .border(1.dp, EV.gold.copy(alpha = 0.28f), RoundedCornerShape(18.dp))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        Modifier.size(30.dp).clip(RoundedCornerShape(999.dp))
-                            .background(Brush.linearGradient(listOf(EV.navyInk, Color(0xFF163655)))),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(15.dp)) }
-                    Text("You", style = evInter(11, FontWeight.Bold), color = EV.ink.copy(alpha = 0.8f))
-                }
-
-                Box(
-                    Modifier.fillMaxWidth().heightIn(min = 76.dp)
-                        .clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.7f))
-                        .border(1.dp, EV.gold.copy(alpha = 0.20f), RoundedCornerShape(12.dp))
-                        .padding(10.dp),
-                ) {
-                    if (draft.isBlank()) {
-                        Text("Hype the room — say you're coming 🔥", style = evInter(14), color = EV.placeholder)
-                    }
-                    BasicTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        textStyle = evInter(14).copy(color = EV.ink),
-                        maxLines = 9,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
                 pickedPreview?.let { bmp ->
                     Box(Modifier.fillMaxWidth()) {
                         Image(
@@ -732,7 +721,7 @@ private fun BuzzCard(eventId: String) {
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box {
                         Box(
                             Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Color.White)
@@ -762,39 +751,40 @@ private fun BuzzCard(eventId: String) {
                         }
                     }
                     Box(
+                        Modifier.weight(1f)
+                            .clip(RoundedCornerShape(19.dp)).background(Color.White.copy(alpha = 0.85f))
+                            .border(1.dp, EV.gold.copy(alpha = 0.20f), RoundedCornerShape(19.dp))
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                    ) {
+                        if (draft.isBlank()) {
+                            Text("Hype the room — say you're coming 🔥", style = evInter(14), color = EV.placeholder, maxLines = 1)
+                        }
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            textStyle = evInter(14).copy(color = EV.ink),
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Box(
                         Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Color.White)
                             .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
                             .clickable { draft += "🔥" },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Filled.LocalFireDepartment, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(17.dp)) }
-
-                    Spacer(Modifier.weight(1f))
-
                     val faded = (draft.isBlank() && pickedBytes == null) || busy
-                    Row(
-                        Modifier.clip(Capsule).background(EV.goldCta).height(40.dp)
-                            .then(if (faded) Modifier else Modifier.clickable { post() })
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Box(
+                        Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(EV.goldCta)
+                            .then(if (faded) Modifier else Modifier.clickable { post() }),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(if (busy) "Posting" else "Post", style = evInter(12, FontWeight.Bold), color = EV.ink.copy(alpha = if (faded) 0.55f else 1f))
-                        if (!busy) Icon(Icons.AutoMirrored.Filled.Send, "Post", tint = EV.ink.copy(alpha = if (faded) 0.55f else 1f), modifier = Modifier.size(15.dp))
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send, "Post",
+                            tint = EV.ink.copy(alpha = if (faded) 0.55f else 1f),
+                            modifier = Modifier.size(16.dp),
+                        )
                     }
-                }
-            }
-
-            if (posts.isEmpty()) {
-                Text(
-                    "Be the first to share a moment.",
-                    style = evInter(13),
-                    color = EV.tertiary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                )
-            } else {
-                Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    posts.forEach { p -> PostRow(p) { kind -> react(p.postId, kind) } }
                 }
             }
         }
