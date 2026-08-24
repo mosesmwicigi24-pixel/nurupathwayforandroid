@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -162,16 +163,24 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
     val art = l.art?.takeIf { it.url.isNotBlank() }
     val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
     if (art != null) {
-        // A captioned photograph (owner's revision, 2026-08-24 — iOS parity):
-        // the image OWNS the top of the card and the words sit BELOW it, like
-        // a caption. The old tableau floated the prayer line over the photo
-        // under a navy veil — and on a long day (line + charge + companion
-        // verse) the words swallowed the photograph entirely. Text now grows
-        // the card DOWNWARD; the photo is never hidden, whatever the server sends.
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))) {
-            Box(Modifier.fillMaxWidth().height(176.dp)) {
+        // The photograph WHOLE, the words on the page (owner's revisions,
+        // 2026-08-24 — iOS parity): the image shows at its own aspect — never
+        // height-cropped by the caption — and the caption sits directly on the
+        // app's paper background in ink, not on a navy panel. The kicker rides
+        // the photo's top under a soft scrim.
+        var artAspect by remember(art.url) { mutableStateOf<Float?>(null) }
+        Column(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier.fillMaxWidth()
+                    .aspectRatio(artAspect ?: (16f / 9f))
+                    .clip(RoundedCornerShape(20.dp)),
+            ) {
                 AsyncImage(
-                    model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
+                    model = art.url, contentDescription = art.alt, contentScale = ContentScale.Fit,
+                    onSuccess = { state ->
+                        val size = state.painter.intrinsicSize
+                        if (size.width > 0f && size.height > 0f) artAspect = size.width / size.height
+                    },
                     modifier = Modifier.matchParentSize(),
                 )
                 // A soft top scrim so the kicker reads on any photograph.
@@ -199,21 +208,17 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     }
                 }
             }
-            // The caption: ONE hierarchy — the hour's word LARGE, a gold rule
-            // (the selah), then small golden lines closing on a SINGLE
-            // scripture — never two large lines, never two references.
-            Column(
-                Modifier.fillMaxWidth()
-                    .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
-                    .padding(18.dp),
-            ) {
+            // The caption, on the page itself: ONE hierarchy — the hour's word
+            // LARGE in ink, a gold rule (the selah), then quiet lines closing
+            // on a SINGLE scripture.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(top = 12.dp)) {
                 Text(
                     l.line,
                     style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp),
-                    color = Color.White,
+                    color = Nuru.homeNavy,
                 )
                 Spacer(Modifier.height(7.dp))
-                Box(Modifier.width(34.dp).height(1.5.dp).background(LitRuleGold.copy(alpha = 0.8f)))
+                Box(Modifier.width(34.dp).height(1.5.dp).background(Color(0xFFC9A227).copy(alpha = 0.8f)))
                 Spacer(Modifier.height(7.dp))
                 l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
                     Text(
@@ -222,7 +227,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                             fontSize = 13.5.sp, lineHeight = 18.sp,
                             fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                         ),
-                        color = LitWhisper,
+                        color = Color(0xFFA8861C),
                     )
                     Spacer(Modifier.height(7.dp))
                 }
@@ -234,13 +239,13 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                             fontSize = 13.sp, lineHeight = 18.sp,
                             fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                         ),
-                        color = LitWhisper.copy(alpha = 0.85f),
+                        color = Nuru.ink600,
                     )
                     Spacer(Modifier.height(1.dp))
                     Text(
                         vl.reference.uppercase(),
                         style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
-                        color = LitRuleGold,
+                        color = Color(0xFFA8861C),
                     )
                 } else {
                     l.scriptureRef?.let { ref ->
