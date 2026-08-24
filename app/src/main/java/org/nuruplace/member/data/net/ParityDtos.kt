@@ -139,9 +139,6 @@ data class FeaturedCell(
 )
 
 @Serializable
-data class FeaturedCellEnv(val data: FeaturedCell? = null)
-
-@Serializable
 data class Discipler(
     val userId: String,
     val fullName: String = "",
@@ -213,6 +210,21 @@ data class CellSummary(val cell: Cell? = null) {
         val leader: Leader? = null,
         val attendance: Attendance = Attendance(),
         val next: Next? = null,
+        // cell-truth (pathway#453) — own-cell identity + rhythm. All nullable
+        // with defaults so responses from older servers still decode.
+        val focus: String? = null,
+        val levelLabel: String? = null,
+        val room: String? = null,
+        val tone: String? = null,
+        val imageUrl: String? = null,
+        // Server-derived "Sundays · 2:00 PM" when a real series exists, else
+        // the admin-typed fallback; rhythmSource says which ("series"|"static").
+        val meets: String? = null,
+        val rhythmSource: String? = null,
+        val roster: Roster? = null,
+        val turnout: Turnout? = null,
+        // Only present for the cell's leader when ≥2 recent meetings exist.
+        val leaderView: LeaderView? = null,
     )
 
     @Serializable
@@ -222,7 +234,24 @@ data class CellSummary(val cell: Cell? = null) {
     data class Attendance(val attended: Int = 0, val expected: Int = 0)
 
     @Serializable
-    data class Next(val startAt: String = "", val location: String? = null)
+    data class Next(
+        val startAt: String = "",
+        val location: String? = null,
+        val endAt: String? = null,
+        val occurrenceId: String? = null,
+    )
+
+    @Serializable
+    data class Roster(val count: Int = 0, val faces: List<Face> = emptyList())
+
+    @Serializable
+    data class Face(val firstName: String = "", val avatarUrl: String? = null)
+
+    @Serializable
+    data class Turnout(val rate: Double = 0.0, val meetings: Int = 0, val trend: String? = null)
+
+    @Serializable
+    data class LeaderView(val count: Int = 0, val names: List<String> = emptyList())
 }
 
 @Serializable
@@ -258,9 +287,6 @@ data class WelcomeVideo(
     /** True when playback should hand off to the browser (YouTube/Vimeo/external). */
     val isExternal: Boolean get() = externalUrl != null || videoSource == "youtube" || videoSource == "vimeo"
 }
-
-@Serializable
-data class WelcomeVideoEnv(val data: WelcomeVideo? = null)
 
 @Serializable
 data class ReactionToggleResult(

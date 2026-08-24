@@ -179,7 +179,7 @@ fun HomeScreen(
         scores = runCatching { Net.client.api.scores() }.getOrNull()
         letter = runCatching { Net.client.api.latestLetter().letter }.getOrNull()
         announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrNull()
-        featuredCell = runCatching { Net.client.api.featuredCell().data }.getOrNull()
+        featuredCell = runCatching { Net.client.api.featuredCell() }.getOrNull()
         disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
         cohort = runCatching { Net.client.api.cellSummary() }.getOrNull()
         plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled } ?: Net.client.api.plans().data.firstOrNull() }.getOrNull()
