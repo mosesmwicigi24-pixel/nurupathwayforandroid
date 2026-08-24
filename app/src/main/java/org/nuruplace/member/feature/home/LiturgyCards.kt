@@ -230,17 +230,6 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 Spacer(Modifier.height(7.dp))
                 Box(Modifier.width(34.dp).height(1.5.dp).background(Nuru.gold.copy(alpha = 0.9f)))
                 Spacer(Modifier.height(7.dp))
-                l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
-                    Text(
-                        charge,
-                        style = NuruType.rowTitle.copy(
-                            fontSize = 12.5.sp, lineHeight = 17.sp,
-                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
-                        ),
-                        color = LitDeepGold,
-                    )
-                    Spacer(Modifier.height(7.dp))
-                }
                 val vl = l.verseLine
                 if (vl != null && vl.text.isNotBlank()) {
                     Text(
@@ -265,6 +254,17 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                             color = LitDeepGold,
                         )
                     }
+                }
+                l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        charge,
+                        style = NuruType.rowTitle.copy(
+                            fontSize = 12.5.sp, lineHeight = 17.sp,
+                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
+                        ),
+                        color = LitDeepGold,
+                    )
                 }
             }
         }
@@ -296,17 +296,6 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
             Spacer(Modifier.height(8.dp))
             Box(Modifier.width(34.dp).height(1.5.dp).background(Nuru.gold.copy(alpha = 0.9f)))
             Spacer(Modifier.height(8.dp))
-            l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
-                Text(
-                    charge,
-                    style = NuruType.rowTitle.copy(
-                        fontSize = 12.5.sp, lineHeight = 17.sp,
-                        fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
-                    ),
-                    color = LitDeepGold,
-                )
-                Spacer(Modifier.height(8.dp))
-            }
             val vl = l.verseLine
             if (vl != null && vl.text.isNotBlank()) {
                 Text(
@@ -331,6 +320,17 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                         color = LitDeepGold,
                     )
                 }
+            }
+            l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    charge,
+                    style = NuruType.rowTitle.copy(
+                        fontSize = 12.5.sp, lineHeight = 17.sp,
+                        fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
+                    ),
+                    color = LitDeepGold,
+                )
             }
         }
     }
