@@ -539,8 +539,11 @@ interface MemberApi {
     suspend fun reactToEventPost(@Path("id") eventId: String, @Path("postId") postId: String, @Body body: EventReactBody): EventPostReactionResult
 
     // --- Home extras ---
+    // The backend sends the cell BARE (or null) — no { data } envelope, same
+    // shape as welcomeVideo()/radioNowPlaying(). The old FeaturedCellEnv
+    // wrapper made this decode null forever (latent since day one).
     @GET("home/featured-cell")
-    suspend fun featuredCell(): FeaturedCellEnv
+    suspend fun featuredCell(): FeaturedCell?
 
     @GET("home/disciplers")
     suspend fun disciplers(): Envelope<Discipler>
