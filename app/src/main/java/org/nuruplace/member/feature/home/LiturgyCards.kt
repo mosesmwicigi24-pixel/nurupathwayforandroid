@@ -81,15 +81,7 @@ private val LitGold = Color(0xFFE8CA6C)
 private val LitRuleGold = Color(0xFFE0B85E)
 private val LitWhisper = Color(0xFFF2DDA0)
 
-/** Height model for the tableau card: base art height + room for the charge
- *  line + the companion verse block, so the bottom stack never crowds the
- *  kicker (iOS LiturgyCards.tableauHeight parity). */
-private fun tableauHeight(l: HomeLiturgy): Dp {
-    var h = 232.dp
-    if (!l.charge.isNullOrBlank()) h += 30.dp
-    if (l.verseLine?.text?.isNotBlank() == true) h += 50.dp
-    return h
-}
+
 
 @Composable
 fun LiturgyCard(canManageRecordings: Boolean = false) {
@@ -170,37 +162,54 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
     val art = l.art?.takeIf { it.url.isNotBlank() }
     val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
     if (art != null) {
-        // Taller tableau: the hour + brand at the top, the prayer line resting at
-        // the BOTTOM under the deep-navy block where the veil is deepest, so the
-        // type reads clearly (owner ask). matchParentSize behind, clipped.
-        Box(Modifier.fillMaxWidth().height(tableauHeight(l)).clip(RoundedCornerShape(20.dp))) {
-            AsyncImage(
-                model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
-            Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
-            Column(Modifier.align(Alignment.TopStart).padding(18.dp)) {
-                LitKicker(
-                    Modifier,
-                    partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
-                    speaking = listenSpeaking, onToggleVoice = onToggleListen,
-                    canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
+        // A captioned photograph (owner's revision, 2026-08-24 — iOS parity):
+        // the image OWNS the top of the card and the words sit BELOW it, like
+        // a caption. The old tableau floated the prayer line over the photo
+        // under a navy veil — and on a long day (line + charge + companion
+        // verse) the words swallowed the photograph entirely. Text now grows
+        // the card DOWNWARD; the photo is never hidden, whatever the server sends.
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))) {
+            Box(Modifier.fillMaxWidth().height(176.dp)) {
+                AsyncImage(
+                    model = art.url, contentDescription = art.alt, contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
                 )
-                if (onToggleRecorded != null) {
-                    Spacer(Modifier.height(8.dp))
-                    RecordedWordChip(
-                        speaking = recordedSpeaking, onArt = true,
-                        durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
+                // A soft top scrim so the kicker reads on any photograph.
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.45f),
+                            0.55f to Color.Transparent,
+                        ),
+                    ),
+                )
+                Column(Modifier.align(Alignment.TopStart).padding(16.dp)) {
+                    LitKicker(
+                        Modifier,
+                        partEmoji, partLabel, l.isSunday, l.season, onArt = true, textShadow = textShadow,
+                        speaking = listenSpeaking, onToggleVoice = onToggleListen,
+                        canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
                     )
+                    if (onToggleRecorded != null) {
+                        Spacer(Modifier.height(8.dp))
+                        RecordedWordChip(
+                            speaking = recordedSpeaking, onArt = true,
+                            durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
+                        )
+                    }
                 }
             }
-            // ONE hierarchy: the hour's word LARGE, a gold rule (the selah),
-            // then small golden lines closing on a SINGLE scripture — never two
-            // large lines, never two references (iOS build 79 parity).
-            Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
+            // The caption: ONE hierarchy — the hour's word LARGE, a gold rule
+            // (the selah), then small golden lines closing on a SINGLE
+            // scripture — never two large lines, never two references.
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
+                    .padding(18.dp),
+            ) {
                 Text(
                     l.line,
-                    style = NuruType.rowTitle.copy(fontSize = 20.sp, lineHeight = 26.sp, shadow = textShadow),
+                    style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp),
                     color = Color.White,
                 )
                 Spacer(Modifier.height(7.dp))
@@ -211,7 +220,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                         charge,
                         style = NuruType.rowTitle.copy(
                             fontSize = 13.5.sp, lineHeight = 18.sp,
-                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
+                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                         ),
                         color = LitWhisper,
                     )
@@ -220,17 +229,17 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 val vl = l.verseLine
                 if (vl != null && vl.text.isNotBlank()) {
                     Text(
-                        "“${vl.text}”",
+                        "\u201c${vl.text}\u201d",
                         style = NuruType.rowTitle.copy(
                             fontSize = 13.sp, lineHeight = 18.sp,
-                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal, shadow = textShadow,
+                            fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                         ),
                         color = LitWhisper.copy(alpha = 0.85f),
                     )
                     Spacer(Modifier.height(1.dp))
                     Text(
                         vl.reference.uppercase(),
-                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
+                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
                         color = LitRuleGold,
                     )
                 } else {

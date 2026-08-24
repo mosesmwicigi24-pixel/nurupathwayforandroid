@@ -216,7 +216,14 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
     // the intrinsic aspect, capped at 60% of the screen for very tall posters
     // (letterboxed on the navy gradient, never cropped). While loading / no image
     // we keep the original 16:11 placeholder frame.
-    var imageAspect by remember(e.primaryImageUrl) { mutableStateOf<Float?>(null) }
+    // First NON-BLANK of the primary image and the gallery's first shot. A
+    // bare null-check let primaryImageUrl = "" through — Coil rendered
+    // nothing and the head fell back to plain navy even when the list row
+    // was showing this event's photo (owner's screenshot, 2026-08-24; same
+    // fix as iOS EventDetailView.imageUrl).
+    val heroUrl = listOf(e.primaryImageUrl, e.images.firstOrNull())
+        .firstOrNull { !it.isNullOrBlank() }
+    var imageAspect by remember(heroUrl) { mutableStateOf<Float?>(null) }
     val maxHeroHeight = LocalConfiguration.current.screenHeightDp.dp * 0.6f
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val heroHeight = imageAspect?.let { ar -> (maxWidth / ar).coerceAtMost(maxHeroHeight) }
@@ -227,9 +234,9 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                 .then(if (heroHeight != null) Modifier.height(heroHeight) else Modifier.aspectRatio(16f / 11f))
                 .background(Brush.linearGradient(listOf(EV.navy700, EV.navy, evCategory(e.category)))),
         ) {
-            if (e.primaryImageUrl != null) {
+            if (heroUrl != null) {
                 AsyncImage(
-                    model = e.primaryImageUrl,
+                    model = heroUrl,
                     contentDescription = e.title,
                     contentScale = ContentScale.Fit,
                     onSuccess = { state ->
