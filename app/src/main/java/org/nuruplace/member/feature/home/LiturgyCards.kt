@@ -76,11 +76,12 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 
 private val LitGold = Color(0xFFE8CA6C)
-// One-hierarchy palette (iOS build 79 parity): the "selah" rule + closing
-// scripture reference read in this gold; the charge/companion-verse whisper
-// sits one shade paler so the large white line stays the only shout.
-private val LitRuleGold = Color(0xFFE0B85E)
-private val LitWhisper = Color(0xFFF2DDA0)
+// Paper-card palette (iOS nurupathwayforios#129 parity): the card body sits on
+// the app's PAPER (Nuru.surface) with the words in ink; this deep gold carries
+// the charge, the closing scripture reference, and the kicker/controls on the
+// cream ground. Pale gold (0xFFF2DDA0) survives only where text overlays a
+// photograph under the top scrim.
+private val LitDeepGold = Color(0xFFA8861C)
 
 
 
@@ -163,17 +164,23 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
     val art = l.art?.takeIf { it.url.isNotBlank() }
     val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
     if (art != null) {
-        // The photograph WHOLE, the words on the page (owner's revisions,
-        // 2026-08-24 — iOS parity): the image shows at its own aspect — never
-        // height-cropped by the caption — and the caption sits directly on the
-        // app's paper background in ink, not on a navy panel. The kicker rides
-        // the photo's top under a soft scrim.
+        // The photograph WHOLE, the words on paper (owner's revisions,
+        // 2026-08-24 — iOS nurupathwayforios#129 parity): the image shows at
+        // its own aspect — never height-cropped by the caption — and the
+        // caption panel sits on the app's PAPER (Nuru.surface, like the verse
+        // quote cards) in ink, not on a navy panel. One rounded card, a gold
+        // hairline around it; the kicker rides the photo's top under a soft
+        // scrim.
         var artAspect by remember(art.url) { mutableStateOf<Float?>(null) }
-        Column(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Nuru.surface)
+                .border(1.dp, Nuru.gold.copy(alpha = 0.25f), RoundedCornerShape(20.dp)),
+        ) {
             Box(
                 Modifier.fillMaxWidth()
-                    .aspectRatio(artAspect ?: (16f / 9f))
-                    .clip(RoundedCornerShape(20.dp)),
+                    .aspectRatio(artAspect ?: (16f / 9f)),
             ) {
                 AsyncImage(
                     model = art.url, contentDescription = art.alt, contentScale = ContentScale.Fit,
@@ -208,26 +215,29 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     }
                 }
             }
-            // The caption, on the page itself: ONE hierarchy — the hour's word
-            // LARGE in ink, a gold rule (the selah), then quiet lines closing
-            // on a SINGLE scripture.
-            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).padding(top = 12.dp)) {
+            // The caption panel, on paper (Nuru.surface): ONE hierarchy — the
+            // hour's word in ink, a gold rule (the selah), then quiet lines
+            // closing on a SINGLE scripture. Quieter type than the navy era.
+            Column(
+                Modifier.fillMaxWidth().background(Nuru.surface)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
                 Text(
                     l.line,
-                    style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp),
-                    color = Nuru.homeNavy,
+                    style = NuruType.rowTitle.copy(fontSize = 16.5.sp, lineHeight = 22.sp),
+                    color = Nuru.navyDeep,
                 )
                 Spacer(Modifier.height(7.dp))
-                Box(Modifier.width(34.dp).height(1.5.dp).background(Color(0xFFC9A227).copy(alpha = 0.8f)))
+                Box(Modifier.width(34.dp).height(1.5.dp).background(Nuru.gold.copy(alpha = 0.9f)))
                 Spacer(Modifier.height(7.dp))
                 l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
                     Text(
                         charge,
                         style = NuruType.rowTitle.copy(
-                            fontSize = 13.5.sp, lineHeight = 18.sp,
+                            fontSize = 12.5.sp, lineHeight = 17.sp,
                             fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                         ),
-                        color = Color(0xFFA8861C),
+                        color = LitDeepGold,
                     )
                     Spacer(Modifier.height(7.dp))
                 }
@@ -236,7 +246,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     Text(
                         "\u201c${vl.text}\u201d",
                         style = NuruType.rowTitle.copy(
-                            fontSize = 13.sp, lineHeight = 18.sp,
+                            fontSize = 12.sp, lineHeight = 16.5.sp,
                             fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                         ),
                         color = Nuru.ink600,
@@ -244,26 +254,29 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     Spacer(Modifier.height(1.dp))
                     Text(
                         vl.reference.uppercase(),
-                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
-                        color = Color(0xFFA8861C),
+                        style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                        color = LitDeepGold,
                     )
                 } else {
                     l.scriptureRef?.let { ref ->
                         Text(
                             ref.uppercase(),
-                            style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, shadow = textShadow),
-                            color = LitRuleGold,
+                            style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                            color = LitDeepGold,
                         )
                     }
                 }
             }
         }
     } else {
-        // Offline / older backend: the classic navy card, content-sized. Same
-        // one-hierarchy tree as the tableau branch, no shadow (no art behind it).
+        // Offline / older backend: the same paper card without the photograph
+        // (owner's revision 2026-08-24 — iOS nurupathwayforios#129 parity).
+        // Same one-hierarchy tree as the art branch, no shadow (no art behind
+        // it), deep-gold kicker + navy wordmark on the cream ground.
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF0F2A47), Color(0xFF0A1C33))))
+                .background(Nuru.surface)
+                .border(1.dp, Nuru.gold.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
                 .padding(18.dp),
         ) {
             LitKicker(
@@ -279,18 +292,18 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Text(l.line, style = NuruType.rowTitle.copy(fontSize = 19.sp, lineHeight = 25.sp), color = Color.White)
+            Text(l.line, style = NuruType.rowTitle.copy(fontSize = 16.5.sp, lineHeight = 22.sp), color = Nuru.navyDeep)
             Spacer(Modifier.height(8.dp))
-            Box(Modifier.width(34.dp).height(1.5.dp).background(LitRuleGold.copy(alpha = 0.8f)))
+            Box(Modifier.width(34.dp).height(1.5.dp).background(Nuru.gold.copy(alpha = 0.9f)))
             Spacer(Modifier.height(8.dp))
             l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
                 Text(
                     charge,
                     style = NuruType.rowTitle.copy(
-                        fontSize = 13.5.sp, lineHeight = 18.sp,
+                        fontSize = 12.5.sp, lineHeight = 17.sp,
                         fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                     ),
-                    color = LitWhisper,
+                    color = LitDeepGold,
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -299,23 +312,23 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 Text(
                     "“${vl.text}”",
                     style = NuruType.rowTitle.copy(
-                        fontSize = 13.sp, lineHeight = 18.sp,
+                        fontSize = 12.sp, lineHeight = 16.5.sp,
                         fontStyle = FontStyle.Italic, fontWeight = FontWeight.Normal,
                     ),
-                    color = LitWhisper.copy(alpha = 0.85f),
+                    color = Nuru.ink600,
                 )
                 Spacer(Modifier.height(1.dp))
                 Text(
                     vl.reference.uppercase(),
-                    style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
-                    color = LitRuleGold,
+                    style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                    color = LitDeepGold,
                 )
             } else {
                 l.scriptureRef?.let { ref ->
                     Text(
                         ref.uppercase(),
-                        style = NuruType.micro.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
-                        color = LitRuleGold,
+                        style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                        color = LitDeepGold,
                     )
                 }
             }
@@ -349,7 +362,7 @@ private fun LitKicker(
         Text(
             if (isSunday) "SUNDAY · $partLabel" else "$partLabel · ${season.uppercase()}",
             style = NuruType.micro.copy(shadow = if (onArt) textShadow else null),
-            color = if (onArt) Color(0xFFF2DDA0) else LitGold,
+            color = if (onArt) Color(0xFFF2DDA0) else LitDeepGold,
             fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, maxLines = 1,
         )
         Spacer(Modifier.width(8.dp))
@@ -361,9 +374,10 @@ private fun LitKicker(
         Text(
             "Nuru Pathway",
             style = NuruType.micro.copy(shadow = if (onArt) textShadow else null),
-            color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            color = if (onArt) Color.White else Nuru.navy,
+            fontWeight = FontWeight.SemiBold, maxLines = 1,
         )
-        Text("  ✔", style = NuruType.micro, color = Color(0xFFF2DDA0))
+        Text("  ✔", style = NuruType.micro, color = if (onArt) Color(0xFFF2DDA0) else LitDeepGold)
         Spacer(Modifier.weight(1f))
         // "His voice" recorder door — Admin/SuperAdmin only (see LiturgyCard's
         // canManageRecordings/HomeScreen.kt's role check), small and
@@ -388,7 +402,7 @@ private fun LitKicker(
 private fun LiturgyRecorderEntryButton(onArt: Boolean, onOpen: () -> Unit) {
     val view = LocalView.current
     val bg = if (onArt) Color.White.copy(alpha = 0.18f) else LitGold.copy(alpha = 0.18f)
-    val tint = if (onArt) Color.White else LitRuleGold
+    val tint = if (onArt) Color.White else LitDeepGold
     Box(
         Modifier
             .size(26.dp)
@@ -417,7 +431,7 @@ private fun LiturgyRecorderEntryButton(onArt: Boolean, onOpen: () -> Unit) {
 private fun LiturgyListenButton(speaking: Boolean, onArt: Boolean, onToggle: () -> Unit) {
     val view = LocalView.current
     val bg = if (onArt) Color.White.copy(alpha = 0.18f) else LitGold.copy(alpha = 0.18f)
-    val tint = if (onArt) Color.White else LitRuleGold
+    val tint = if (onArt) Color.White else LitDeepGold
     Box(
         Modifier
             .size(26.dp)
@@ -459,7 +473,7 @@ private fun LiturgyListenButton(speaking: Boolean, onArt: Boolean, onToggle: () 
 private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int?, onToggle: () -> Unit) {
     val view = LocalView.current
     val bg = if (onArt) Color.White.copy(alpha = 0.16f) else LitGold.copy(alpha = 0.14f)
-    val tint = if (onArt) Color.White else LitRuleGold
+    val tint = if (onArt) Color.White else LitDeepGold
     val label = if (speaking) {
         "Playing his word for this hour…"
     } else {
