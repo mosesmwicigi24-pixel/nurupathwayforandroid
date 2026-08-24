@@ -319,14 +319,23 @@ private val TIME_FMT = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 
 fun evTime(iso: String?): String = evZdt(iso)?.format(TIME_FMT).orEmpty()
 
+/** An end we actually BELIEVE, or null: absent, unparsable, not after the
+ *  start, or an implausible span (> 12h — even a kesha ends) are untrusted.
+ *  A wrong time on a church invitation costs real attendance (owner,
+ *  2026-08-24; iOS parity — Ev.trustedEnd). */
+fun evTrustedEnd(start: String?, end: String?): java.time.ZonedDateTime? {
+    val s = evZdt(start) ?: return null
+    val e = evZdt(end) ?: return null
+    if (!e.isAfter(s)) return null
+    if (java.time.Duration.between(s, e).toHours() > 12) return null
+    return e
+}
+
 fun evTimeRange(start: String?, end: String?): String {
     val s = evTime(start)
-    val e = evTime(end)
-    return when {
-        s.isBlank() -> ""
-        e.isBlank() || e == s -> s
-        else -> "$s – $e"
-    }
+    if (s.isBlank()) return ""
+    val e = evTrustedEnd(start, end)?.format(TIME_FMT) ?: return s
+    return if (e == s) s else "$s – $e"
 }
 
 /** "Sunday, July 5" */

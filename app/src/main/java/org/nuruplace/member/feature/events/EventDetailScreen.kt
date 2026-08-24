@@ -343,7 +343,23 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
                 MetaTile(Modifier.weight(1f), Icons.Filled.Schedule, "TIME", if (endAt != null) evTimeRange(e.occursAt, endAt) else evTime(e.occursAt), accent)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetaTile(Modifier.weight(1f), Icons.Filled.Place, "WHERE", e.location ?: "—", accent)
+                // The venue is a DOOR, not a caption (owner, 2026-08-24):
+                // tapping it opens Maps so a newcomer gets directions.
+                val mapsContext = LocalContext.current
+                MetaTile(
+                    Modifier.weight(1f).then(
+                        e.location?.takeIf { it.isNotBlank() }?.let { loc ->
+                            Modifier.clickable {
+                                runCatching {
+                                    mapsContext.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(loc))),
+                                    )
+                                }
+                            }
+                        } ?: Modifier,
+                    ),
+                    Icons.Filled.Place, "WHERE", e.location ?: "—", accent,
+                )
                 MetaTile(Modifier.weight(1f), Icons.Filled.Person, "GOING", peopleLabel, accent)
             }
         }
