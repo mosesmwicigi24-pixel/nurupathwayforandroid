@@ -174,7 +174,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 .fillMaxSize()
                 .background(EV.paper)
                 .imePadding()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState()).imePadding(),
         ) {
             EventHero(e, onBack, shareIntent)
 
@@ -572,14 +572,10 @@ private fun RsvpOption(
 
 @Composable
 private fun BuzzCard(eventId: String) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(EV.white)
-            .border(1.dp, EV.borderSoft, RoundedCornerShape(22.dp))
-            .padding(16.dp),
-    ) {
+    // The section header (and its Buzzing pill) sits on the PAGE, not on the
+    // card (owner, 2026-08-24) — matching how every other section announces
+    // itself. The card holds only the voices and the chat bar.
+    Column(Modifier.fillMaxWidth()) {
         AsyncContent(
             key = "buzz-$eventId",
             load = { Net.client.api.eventPosts(eventId).data },
@@ -678,6 +674,15 @@ private fun BuzzCard(eventId: String) {
                 }
             }
 
+            Column(
+                Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(EV.white)
+                    .border(1.dp, EV.borderSoft, RoundedCornerShape(22.dp))
+                    .padding(16.dp),
+            ) {
             // Chat order (owner's revision, 2026-08-24 — iOS parity): the
             // room's voices come FIRST; your line to add sits BELOW them as a
             // compact chat bar — attach, the field, flame, send — the same
@@ -763,7 +768,7 @@ private fun BuzzCard(eventId: String) {
                             value = draft,
                             onValueChange = { draft = it },
                             textStyle = evInter(14).copy(color = EV.ink),
-                            maxLines = 4,
+                            maxLines = 6,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -786,6 +791,7 @@ private fun BuzzCard(eventId: String) {
                         )
                     }
                 }
+            }
             }
         }
     }
