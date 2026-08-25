@@ -307,15 +307,11 @@ fun HomeScreen(
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-                // 0 · The hour's word LEADS the feed (owner, 2026-08-25: it was
-                // rendering in a slot the member only reached after "reflection
-                // due" — the liturgy is the day's word and opens the day). The
-                // recorder door stays Admin/SuperAdmin only (backend
-                // requireRole("Admin") on admin/liturgy/recordings/*).
-                Entrance(entrance, 0) {
-                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
-                }
-                // 0a1 · Today's verse — right under the liturgy. ON AIR pinned above.
+                // Owner's order (2026-08-25, stated exactly): verse for today →
+                // featured video → the Sunday Letter → reflection due → the
+                // liturgy. Everything else stays where it always was — the ONLY
+                // move relative to the original feed is the liturgy stepping
+                // BELOW the reflection strip (iOS HomeView parity).
                 verse?.let { v ->
                     Entrance(entrance, 6) {
                         VerseCard(
@@ -409,11 +405,7 @@ fun HomeScreen(
                         LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
                     }
                 }
-                // 0b · The Sunday Letter knock (unread only) — opens the stationery reader.
-                // Three states, where there used to be only "unread": the knock,
-                // a quiet way back in once read, and — when nothing has arrived
-                // — the ritual itself ("Sunday evening"). Showing nothing was
-                // the old behaviour and it made the letter feel accidental.
+                // The Sunday Letter knock — three states (knock / quiet row / awaiting).
                 if (letter == null) LetterAwaitingCard()
                 letter?.takeIf { !it.isUnread }?.let { lt ->
                     LetterReadRow(lt) { showLetter = true }
@@ -427,9 +419,15 @@ fun HomeScreen(
                         LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
                     }
                 }
+                // Reflection due — deep-links to the devotional's reflection
+                // composer, the one act that ticks the rhythm and clears this.
+                if (reflectionDue) Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
+                // The hour's word — BELOW the reflection strip (owner's order).
+                Entrance(entrance, 0) {
+                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
+                }
                 // 0d · Today's echo — the app remembers you (Wave 1).
                 Entrance(entrance, 1) { HomeEchoCard() }
-                if (reflectionDue) next?.let { a -> Entrance(entrance, 2) { ReflectionStrip(a) { onNavigate(routeFor(a)) } } }
                 next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
                 if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
@@ -847,7 +845,7 @@ private fun LiveNowCard(info: LiveNowInfo, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun ReflectionStrip(a: NextAction, onClick: () -> Unit) {
+private fun ReflectionStrip(onClick: () -> Unit) {
     val shape = RoundedCornerShape(18.dp)
     Row(
         Modifier.fillMaxWidth().clip(shape).background(Nuru.priorityBg)
@@ -860,7 +858,7 @@ private fun ReflectionStrip(a: NextAction, onClick: () -> Unit) {
         }
         Column(Modifier.weight(1f)) {
             Text("Reflection due today", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(a.title, style = NuruType.micro, color = Nuru.faintGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Write today's devotional reflection", style = NuruType.micro, color = Nuru.faintGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 14.dp, vertical = 8.dp)) {
             Text("Start reflection", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold)
