@@ -307,8 +307,15 @@ fun HomeScreen(
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-                // 0 · Today's verse leads the feed — right under the header (owner ask):
-                // the daily Word first, then the featured welcome video. ON AIR pinned above.
+                // 0 · The hour's word LEADS the feed (owner, 2026-08-25: it was
+                // rendering in a slot the member only reached after "reflection
+                // due" — the liturgy is the day's word and opens the day). The
+                // recorder door stays Admin/SuperAdmin only (backend
+                // requireRole("Admin") on admin/liturgy/recordings/*).
+                Entrance(entrance, 0) {
+                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
+                }
+                // 0a1 · Today's verse — right under the liturgy. ON AIR pinned above.
                 verse?.let { v ->
                     Entrance(entrance, 6) {
                         VerseCard(
@@ -419,15 +426,6 @@ fun HomeScreen(
                     if (showLetter) {
                         LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
                     }
-                }
-                // 0c · The hour's prayer line (liturgy, Phase 4). The recorder
-                // door (LiturgyRecorderSheet) is Admin/SuperAdmin only —
-                // backend requireRole("Admin") on admin/liturgy/recordings/*,
-                // narrower than the Instructor+ gate ProfileScreen.kt/
-                // GoLiveShared.kt use elsewhere — Instructor is deliberately
-                // excluded here.
-                Entrance(entrance, 0) {
-                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
                 }
                 // 0d · Today's echo — the app remembers you (Wave 1).
                 Entrance(entrance, 1) { HomeEchoCard() }
