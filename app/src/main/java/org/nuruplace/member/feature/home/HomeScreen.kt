@@ -307,33 +307,11 @@ fun HomeScreen(
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-                // The day's DOORS come first, then the day's WORD (owner order,
-                // 2026-08-25): the Sunday Letter knock, then the reflection-due
-                // strip, then the liturgy — actions a member must not miss above
-                // the word they sit with (iOS HomeView parity).
-                if (letter == null) LetterAwaitingCard()
-                letter?.takeIf { !it.isUnread }?.let { lt ->
-                    LetterReadRow(lt) { showLetter = true }
-                    if (showLetter) {
-                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = {})
-                    }
-                }
-                letter?.takeIf { it.isUnread }?.let { lt ->
-                    LetterKnockCard(lt) { showLetter = true }
-                    if (showLetter) {
-                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
-                    }
-                }
-                // The reflection this strip tracks is the daily rhythm's, and
-                // exactly one act clears it: saving today's devotional
-                // reflection — so that is where it goes. (It used to require a
-                // nextAction and open the next MODULE, which may have no
-                // reflection at all — the strip nagged forever and the CTA lied.)
-                if (reflectionDue) Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
-                Entrance(entrance, 0) {
-                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
-                }
-                // Today's verse — right under the liturgy. ON AIR pinned above.
+                // Owner's order (2026-08-25, stated exactly): verse for today →
+                // featured video → the Sunday Letter → reflection due → the
+                // liturgy. Everything else stays where it always was — the ONLY
+                // move relative to the original feed is the liturgy stepping
+                // BELOW the reflection strip (iOS HomeView parity).
                 verse?.let { v ->
                     Entrance(entrance, 6) {
                         VerseCard(
@@ -426,6 +404,27 @@ fun HomeScreen(
                     Entrance(entrance, 1) {
                         LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
                     }
+                }
+                // The Sunday Letter knock — three states (knock / quiet row / awaiting).
+                if (letter == null) LetterAwaitingCard()
+                letter?.takeIf { !it.isUnread }?.let { lt ->
+                    LetterReadRow(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = {})
+                    }
+                }
+                letter?.takeIf { it.isUnread }?.let { lt ->
+                    LetterKnockCard(lt) { showLetter = true }
+                    if (showLetter) {
+                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+                    }
+                }
+                // Reflection due — deep-links to the devotional's reflection
+                // composer, the one act that ticks the rhythm and clears this.
+                if (reflectionDue) Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
+                // The hour's word — BELOW the reflection strip (owner's order).
+                Entrance(entrance, 0) {
+                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
                 }
                 // 0d · Today's echo — the app remembers you (Wave 1).
                 Entrance(entrance, 1) { HomeEchoCard() }
