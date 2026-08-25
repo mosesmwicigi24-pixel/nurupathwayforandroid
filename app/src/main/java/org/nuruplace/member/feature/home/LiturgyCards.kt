@@ -1,8 +1,8 @@
 // The liturgy Home + celebrations rail (intelligence Phase 4) — port of iOS
 // LiturgyCards.swift.
 //   • LiturgyCard — the current part's prayer line (morning/midday/evening/
-//     night), coloured by the church season. Self-loading; renders nothing
-//     until the line arrives.
+//     night): the hour's photograph above, Scripture First caption below.
+//     Self-loading; renders nothing until the line arrives.
 //   • CelebrationsRail — the congregation's recent milestones with one-tap
 //     blessings (🙌 ❤️ 🔥), optimistic updates.
 package org.nuruplace.member.feature.home
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -45,22 +46,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.BlessBody
 import org.nuruplace.member.data.net.CommunityMoment
@@ -80,8 +81,8 @@ private val LitGold = Color(0xFFE8CA6C)
 // Paper-card palette (iOS parity): the card body sits on the app's PAPER
 // (Nuru.surface) with the verse in ink; this deep gold carries the lead line,
 // the scripture reference, and the kicker/controls on the cream ground.
-// (LitKicker/RecordedWordChip keep their onArt branches for any future
-// photographic surface, but the Scripture First card never passes onArt.)
+// (LitKicker/RecordedWordChip take onArt = true when they ride the hour's
+// photograph, where pale gold + white with a text shadow read on the scrim.)
 private val LitDeepGold = Color(0xFFA8861C)
 
 
@@ -158,105 +159,137 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
     val partEmoji = when (l.part) {
         "morning" -> "🌅"; "midday" -> "☀️"; "evening" -> "🌆"; else -> "🌙"
     }
-    // Scripture First (owner's pick, 2026-08-25 — option 4 of the five-way
-    // design board; iOS feat/liturgy-scripture-first parity): the Word is the
-    // headline, set large in Fraunces under a hanging gold quotation mark.
-    // The composed statement becomes the small golden line that frames it,
-    // and the explanation lands the verse beneath a hairline. The hour's
-    // photograph retired from this card — the verse carries it (`l.art` is
-    // deliberately ignored). One layout for every state; `scriptureRef ==
-    // null` marks a PERSONAL composition (the server nulls it then), which
-    // earns the "Why this word today" preface.
+    // Scripture First under the hour's photograph (owner's pick, 2026-08-25,
+    // then refined same day; iOS feat/liturgy-scripture-first parity): the
+    // photograph returns ABOVE the words at its own aspect, the slimmed
+    // kicker riding its scrim, and the whole Scripture-First block reads
+    // below it as the caption — the composed statement small and golden
+    // framing the verse, the verse large in Fraunces under a hanging gold
+    // quotation mark, the explanation plain beneath a hairline (no preface).
+    val art = l.art?.takeIf { it.url.isNotBlank() }
     val textShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), offset = Offset(0f, 2f), blurRadius = 6f)
     Column(
         Modifier.fillMaxWidth()
             .shadow(6.dp, RoundedCornerShape(20.dp), spotColor = Color(0x140A2540))
             .clip(RoundedCornerShape(20.dp))
             .background(Nuru.surface)
-            .border(1.dp, Nuru.border, RoundedCornerShape(20.dp))
-            .padding(20.dp),
+            .border(1.dp, Nuru.border, RoundedCornerShape(20.dp)),
     ) {
-        LitKicker(
-            Modifier, partEmoji, partLabel, l.isSunday, l.season, onArt = false, textShadow = textShadow,
-            speaking = listenSpeaking, onToggleVoice = onToggleListen,
-            canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
-        )
-        if (onToggleRecorded != null) {
-            Spacer(Modifier.height(8.dp))
-            RecordedWordChip(
-                speaking = recordedSpeaking, onArt = false,
-                durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        // The lead: the composed statement, small and golden — it frames the verse.
-        Text(
-            l.line,
-            style = NuruType.micro.copy(fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
-            color = LitDeepGold,
-        )
-        val vl = l.verseLine?.takeIf { it.text.isNotBlank() }
-        if (vl != null) {
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.Top) {
-                // The hanging quotation mark — ornament only, so TalkBack
-                // skips straight to the verse itself.
-                Text(
-                    "“",
-                    style = NuruType.display.copy(fontSize = 44.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
-                    color = Nuru.gold,
-                    modifier = Modifier.offset(y = 2.dp).clearAndSetSemantics { },
+        if (art != null) {
+            // The photograph WHOLE, at its own aspect — never height-cropped
+            // by the caption (the pre-Scripture-First artAspect idiom).
+            var artAspect by remember(art.url) { mutableStateOf<Float?>(null) }
+            Box(Modifier.fillMaxWidth().aspectRatio(artAspect ?: (16f / 9f))) {
+                AsyncImage(
+                    model = art.url, contentDescription = art.alt, contentScale = ContentScale.Fit,
+                    onSuccess = { state ->
+                        val size = state.painter.intrinsicSize
+                        if (size.width > 0f && size.height > 0f) artAspect = size.width / size.height
+                    },
+                    modifier = Modifier.matchParentSize(),
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    vl.text,
-                    style = NuruType.display.copy(fontSize = 19.5.sp, lineHeight = 26.5.sp),
-                    color = Nuru.navyDeep,
-                    modifier = Modifier.padding(top = 7.dp),
+                // A soft top scrim so the kicker reads on any photograph.
+                Box(
+                    Modifier.matchParentSize().background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.45f),
+                            0.55f to Color.Transparent,
+                        ),
+                    ),
                 )
+                Column(Modifier.align(Alignment.TopStart).padding(16.dp)) {
+                    LitKicker(
+                        Modifier, partEmoji, partLabel, l.isSunday, onArt = true, textShadow = textShadow,
+                        speaking = listenSpeaking, onToggleVoice = onToggleListen,
+                        canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
+                    )
+                    if (onToggleRecorded != null) {
+                        Spacer(Modifier.height(8.dp))
+                        RecordedWordChip(
+                            speaking = recordedSpeaking, onArt = true,
+                            durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.height(10.dp))
+        }
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            if (art == null) {
+                LitKicker(
+                    Modifier, partEmoji, partLabel, l.isSunday, onArt = false, textShadow = textShadow,
+                    speaking = listenSpeaking, onToggleVoice = onToggleListen,
+                    canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
+                )
+                if (onToggleRecorded != null) {
+                    Spacer(Modifier.height(8.dp))
+                    RecordedWordChip(
+                        speaking = recordedSpeaking, onArt = false,
+                        durationSec = l.recordedAudioDurationSec, onToggle = onToggleRecorded,
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+            }
+            // The lead: the composed statement, small and golden — it frames the verse.
             Text(
-                vl.reference.uppercase(),
-                style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                l.line,
+                style = NuruType.micro.copy(fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
                 color = LitDeepGold,
             )
-        } else {
-            l.scriptureRef?.let { ref ->
+            val vl = l.verseLine?.takeIf { it.text.isNotBlank() }
+            if (vl != null) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.Top) {
+                    // The hanging quotation mark — ornament only, so TalkBack
+                    // skips straight to the verse itself.
+                    Text(
+                        "“",
+                        style = NuruType.display.copy(fontSize = 44.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
+                        color = Nuru.gold,
+                        modifier = Modifier.offset(y = 2.dp).clearAndSetSemantics { },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        vl.text,
+                        style = NuruType.display.copy(fontSize = 19.5.sp, lineHeight = 26.5.sp),
+                        color = Nuru.navyDeep,
+                        modifier = Modifier.padding(top = 7.dp),
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    ref.uppercase(),
+                    vl.reference.uppercase(),
                     style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
                     color = LitDeepGold,
                 )
+            } else {
+                l.scriptureRef?.let { ref ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        ref.uppercase(),
+                        style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                        color = LitDeepGold,
+                    )
+                }
             }
-        }
-        l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
-            Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Nuru.border))
-            Spacer(Modifier.height(12.dp))
-            val chargeStyle = NuruType.body.copy(
-                fontSize = 12.5.sp, lineHeight = 17.5.sp, fontWeight = FontWeight.Normal,
-            )
-            if (l.scriptureRef == null) {
+            l.charge?.takeIf { it.isNotBlank() }?.let { charge ->
+                Spacer(Modifier.height(14.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Nuru.border))
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = Nuru.navyDeep)) {
-                            append("Why this word today: ")
-                        }
-                        append(charge)
-                    },
-                    style = chargeStyle,
+                    charge,
+                    style = NuruType.body.copy(
+                        fontSize = 12.5.sp, lineHeight = 17.5.sp, fontWeight = FontWeight.Normal,
+                    ),
                     color = Nuru.ink600,
                 )
-            } else {
-                Text(charge, style = chargeStyle, color = Nuru.ink600)
             }
         }
     }
 }
 
-/** The hour + Nuru Pathway brand row atop the liturgy card.
+/** The hour row atop the liturgy card — just the hour (owner's trim,
+ *  2026-08-25): no season word, no brand lockup — the card speaks for
+ *  itself. Voice controls keep their seats.
  *  [onToggleVoice] null means the spoken-liturgy control isn't offered
  *  right now (engine still warming up, unusable on this device, or a
  *  spoken-feedback accessibility service is already active — see
@@ -268,7 +301,6 @@ private fun LitKicker(
     partEmoji: String,
     partLabel: String,
     isSunday: Boolean,
-    season: String,
     onArt: Boolean,
     textShadow: Shadow,
     speaking: Boolean = false,
@@ -280,24 +312,11 @@ private fun LitKicker(
         Text(partEmoji, style = NuruType.body)
         Spacer(Modifier.width(7.dp))
         Text(
-            if (isSunday) "SUNDAY · $partLabel" else "$partLabel · ${season.uppercase()}",
+            if (isSunday) "SUNDAY · $partLabel" else partLabel,
             style = NuruType.micro.copy(shadow = if (onArt) textShadow else null),
             color = if (onArt) Color(0xFFF2DDA0) else LitDeepGold,
             fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp, maxLines = 1,
         )
-        Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Nuru.goldGradient),
-            contentAlignment = Alignment.Center,
-        ) { Text("✝", color = Color.White, style = NuruType.micro) }
-        Spacer(Modifier.width(4.dp))
-        Text(
-            "Nuru Pathway",
-            style = NuruType.micro.copy(shadow = if (onArt) textShadow else null),
-            color = if (onArt) Color.White else Nuru.navy,
-            fontWeight = FontWeight.SemiBold, maxLines = 1,
-        )
-        Text("  ✔", style = NuruType.micro, color = if (onArt) Color(0xFFF2DDA0) else LitDeepGold)
         Spacer(Modifier.weight(1f))
         // "His voice" recorder door — Admin/SuperAdmin only (see LiturgyCard's
         // canManageRecordings/HomeScreen.kt's role check), small and
