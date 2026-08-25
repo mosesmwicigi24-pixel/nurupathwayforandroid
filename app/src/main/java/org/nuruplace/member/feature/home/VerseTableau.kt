@@ -76,8 +76,26 @@ fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: S
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize(),
         )
-        // Deep-navy veil — the type stays certain over any image.
-        Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
+        // The photograph SHOWS (owner, 2026-08-25): no full veil — a slim top
+        // scrim for the kicker and a bottom-third scrim for the verse, so the
+        // words occupy only the image's lower third (iOS parity).
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0.35f),
+                    0.28f to Color.Transparent,
+                ),
+            ),
+        )
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(
+                    0.5f to Color.Transparent,
+                    0.78f to Color(0xFF0A1C33).copy(alpha = 0.85f),
+                    1f to Color(0xFF06111F).copy(alpha = 0.95f),
+                ),
+            ),
+        )
         Row(
             Modifier.align(Alignment.TopStart).fillMaxWidth().padding(Spacing.base),
             verticalAlignment = Alignment.CenterVertically,
@@ -94,15 +112,20 @@ fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: S
         }
         Column(Modifier.align(Alignment.BottomStart).padding(Spacing.base)) {
             if (!text.isNullOrBlank()) {
-                val style = when {
-                    text.length > 220 -> NuruType.rowTitle
-                    text.length > 140 -> NuruType.cardTitle
-                    else -> NuruType.featureTitle
+                // Smaller, lower-third (owner, 2026-08-25) — long verses step down.
+                val size = when {
+                    text.length > 220 -> 12.sp
+                    text.length > 140 -> 13.sp
+                    else -> 14.sp
                 }
-                Text("“$text”", style = style, color = Color.White, maxLines = 5)
-                Spacer(Modifier.height(6.dp))
+                Text(
+                    "“$text”",
+                    style = NuruType.rowTitle.copy(fontSize = size, lineHeight = size * 1.35),
+                    color = Color.White, maxLines = 4,
+                )
+                Spacer(Modifier.height(5.dp))
             }
-            Text(refLine, style = NuruType.caption, color = GoldLight, fontWeight = FontWeight.Bold)
+            Text(refLine, style = NuruType.micro.copy(fontSize = 11.sp), color = GoldLight, fontWeight = FontWeight.Bold)
         }
     }
 }
