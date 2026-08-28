@@ -1,10 +1,21 @@
 // Notification center — ported to the Figma NotificationsScreen. A white app bar
 // with an unread count + "Mark all read" navy pill, then rows carrying a
-// category-toned icon chip (info · success · warning · security — §B2), a gold
-// left-accent + pulsing dot when unread, and reward rows (badge/certificate/
-// level) in a gold gift treatment. Deep-links mirror the iOS routing.
+// category-toned icon chip (info · success · warning · security — §B2) and
+// reward rows (badge/certificate/level) in a gold gift treatment. Read-state
+// contrast is the owner's amber/green design (2026-08-26, iOS parity): unread
+// rows carry a GLOWING AMBER dot on a warm wash + amber accent bar; read rows a
+// LUMINOUS GREEN dot beside a double tick. Mark-all and row-open flip
+// OPTIMISTICALLY via a locallyRead override set — the page answers the tap
+// instantly, the API call and a quiet reload confirm. Deep-links mirror iOS.
 package org.nuruplace.member.feature.events
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,18 +27,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -37,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -94,15 +110,34 @@ private fun toneFor(template: String): Tone {
     }
 }
 
+// Owner's read-state palette (2026-08-26): amber for what still waits, luminous
+// green for what's been received — the two states must contrast at a glance.
+private val Amber = Color(0xFFF59E0B)
+private val LumGreen = Color(0xFF22C55E)
+
 @Composable
 fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     AsyncContent(load = { Net.client.api.notifications() }) { res: NotificationsRes, reload ->
         val scope = rememberCoroutineScope()
         // The notification opened in the read-and-continue popup (unroutable ones).
         var popup by remember { mutableStateOf<NotificationRow?>(null) }
+        // Optimistic read overrides — the page answers the tap INSTANTLY (the old
+        // flow waited a full network round-trip before anything moved, which read
+        // as "mark all read does nothing"). The server reload then confirms.
+        var locallyRead by remember { mutableStateOf(setOf<String>()) }
+        var markedAll by remember { mutableStateOf(false) }
+        // Fresh server data carries the truth — quietly drop the overrides.
+        LaunchedEffect(res) { locallyRead = emptySet(); markedAll = false }
+        fun isUnread(n: NotificationRow) = n.isUnread && n.notificationId !in locallyRead
+        val unreadCount =
+            if (markedAll) 0
+            else (res.unread - res.data.count { it.isUnread && it.notificationId in locallyRead }).coerceAtLeast(0)
         fun open(n: NotificationRow) {
-            if (n.isUnread) scope.launch {
-                runCatching { Net.client.api.markNotificationsRead(MarkReadBody(listOf(n.notificationId))); reload() }
+            if (isUnread(n)) {
+                locallyRead = locallyRead + n.notificationId
+                scope.launch {
+                    runCatching { Net.client.api.markNotificationsRead(MarkReadBody(listOf(n.notificationId))) }
+                }
             }
             val route = routeFor(n)
             if (route != null) onNavigate(route) else popup = n
@@ -116,13 +151,22 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy) }
                 Column(Modifier.weight(1f)) {
                     Text("Notifications", style = NuruType.cardTitle, color = Nuru.ink)
-                    Text(if (res.unread > 0) "${res.unread} unread" else "All caught up ✨", style = NuruType.caption, color = Nuru.ink600)
+                    // Animates with the OPTIMISTIC count — mark-all lands here immediately.
+                    AnimatedContent(targetState = unreadCount, label = "notifUnreadCount") { u ->
+                        Text(if (u > 0) "$u unread" else "All caught up ✨", style = NuruType.caption, color = Nuru.ink600)
+                    }
                 }
-                if (res.unread > 0) {
+                AnimatedVisibility(visible = unreadCount > 0, enter = fadeIn(), exit = fadeOut()) {
                     Box(
                         Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
                             .clickable {
-                                scope.launch { try { Net.client.api.markNotificationsRead(MarkReadBody(null)); reload() } catch (_: Exception) {} }
+                                // Flip the whole page NOW, then tell the server and quietly confirm.
+                                locallyRead = locallyRead + res.data.map { it.notificationId }
+                                markedAll = true
+                                scope.launch {
+                                    runCatching { Net.client.api.markNotificationsRead(MarkReadBody(null)) }
+                                    reload()
+                                }
                             }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) { Text("✓ Mark all read", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
@@ -141,7 +185,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
             } else {
                 LazyColumn(Modifier.fillMaxWidth()) {
                     items(res.data, key = { it.notificationId }) { n ->
-                        NotifRow(n, onClick = { open(n) })
+                        NotifRow(n, unread = isUnread(n), onClick = { open(n) })
                         Box(Modifier.fillMaxWidth().height(1.dp).background(Nuru.border))
                     }
                 }
@@ -223,11 +267,53 @@ private fun encouragementFor(n: NotificationRow): String {
     }
 }
 
+/** Amber for what still waits, green for what's been received (owner's design,
+ *  2026-08-26; iOS statusCluster parity): unread → a 9dp glowing amber dot in a
+ *  20dp amber halo; read → a 7dp luminous green dot beside a green double tick. */
 @Composable
-private fun NotifRow(n: NotificationRow, onClick: () -> Unit) {
+private fun StatusCluster(unread: Boolean) {
+    Crossfade(targetState = unread, label = "notifStatus") { u ->
+        if (u) {
+            Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(20.dp).clip(CircleShape).background(Amber.copy(alpha = 0.22f)))
+                // The soft glow — a translucent ring between halo and core.
+                Box(Modifier.size(14.dp).clip(CircleShape).background(Amber.copy(alpha = 0.30f)))
+                Box(Modifier.size(9.dp).clip(CircleShape).background(Amber))
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(11.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(11.dp).clip(CircleShape).background(LumGreen.copy(alpha = 0.25f)))
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(LumGreen))
+                }
+                // Double tick — two overlapping checks, the "received" cue.
+                Box(Modifier.size(width = 17.dp, height = 12.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Check, null, tint = LumGreen, modifier = Modifier.size(12.dp).offset(x = (-2.5).dp))
+                    Icon(Icons.Filled.Check, null, tint = LumGreen, modifier = Modifier.size(12.dp).offset(x = 2.5.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotifRow(n: NotificationRow, unread: Boolean, onClick: () -> Unit) {
     val tone = toneFor(n.template)
-    Box(Modifier.fillMaxWidth().background(if (n.isUnread) Nuru.white else Color.Transparent).clickable { onClick() }) {
-        if (n.isUnread) Box(Modifier.padding(vertical = Spacing.sm).size(width = 4.dp, height = 40.dp).clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)).background(Nuru.gold).align(Alignment.CenterStart))
+    // All read-state visuals animate, so the optimistic flip is a visible settle.
+    val rowBg by animateColorAsState(if (unread) Amber.copy(alpha = 0.07f) else Color.Transparent, label = "notifRowBg")
+    val titleColor by animateColorAsState(if (unread) Nuru.ink else Nuru.ink600, label = "notifTitle")
+    val timeColor by animateColorAsState(if (unread) Amber else Nuru.ink400, label = "notifTime")
+    val bodyColor by animateColorAsState(if (unread) Nuru.ink600 else Nuru.ink400, label = "notifBody")
+    val rowAlpha by animateFloatAsState(if (unread) 1f else 0.92f, label = "notifRowAlpha")
+    val accentAlpha by animateFloatAsState(if (unread) 1f else 0f, label = "notifAccent")
+    Box(Modifier.fillMaxWidth().alpha(rowAlpha).background(rowBg).clickable { onClick() }) {
+        // Unread rows carry the amber accent bar on the leading edge.
+        Box(
+            Modifier.padding(vertical = Spacing.sm).size(width = 4.dp, height = 40.dp)
+                .alpha(accentAlpha)
+                .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)).background(Amber)
+                .align(Alignment.CenterStart),
+        )
         Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.base), verticalAlignment = Alignment.Top) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.control)).background(tone.bg), contentAlignment = Alignment.Center) {
                 Text(tone.glyph, style = NuruType.body)
@@ -237,23 +323,21 @@ private fun NotifRow(n: NotificationRow, onClick: () -> Unit) {
                 Row(verticalAlignment = Alignment.Top) {
                     Text(
                         n.payload?.title ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() },
-                        style = NuruType.rowTitle, color = Nuru.ink, modifier = Modifier.weight(1f),
-                        fontWeight = if (n.isUnread) FontWeight.SemiBold else FontWeight.Normal,
+                        style = NuruType.rowTitle, color = titleColor, modifier = Modifier.weight(1f),
+                        fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
                     )
-                    Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = Nuru.ink400)
+                    Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = timeColor)
                 }
-                n.payload?.body?.let { Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2) }
-                if (tone.reward && n.isUnread) {
+                n.payload?.body?.let { Text(it, style = NuruType.caption, color = bodyColor, maxLines = 2) }
+                if (tone.reward && unread) {
                     Spacer(Modifier.height(Spacing.xs))
                     Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint).padding(horizontal = 8.dp, vertical = 2.dp)) {
                         Text("🎁 Tap to open your gift", style = NuruType.micro, color = Nuru.goldChipText)
                     }
                 }
             }
-            if (n.isUnread) {
-                Spacer(Modifier.size(Spacing.sm))
-                Box(Modifier.size(8.dp).clip(CircleShape).background(Nuru.gold))
-            }
+            Spacer(Modifier.size(Spacing.sm))
+            Box(Modifier.padding(top = 4.dp)) { StatusCluster(unread) }
         }
     }
 }
