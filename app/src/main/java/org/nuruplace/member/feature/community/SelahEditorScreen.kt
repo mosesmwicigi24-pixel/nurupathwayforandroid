@@ -146,6 +146,13 @@ fun SelahEditorScreen(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     EditText(ctx).apply {
+                        // The BASE face, and it has to be Inter: SelahRichText.build()
+                        // and applyFont() both SKIP the typeface span when the chosen
+                        // font is INTER, on the assumption that the base already is
+                        // Inter. It never was set, so every unformatted thought — and
+                        // every run a member explicitly set back to "Inter" — rendered
+                        // in the device's Roboto (owner, 2026-08-26: app fonts only).
+                        typeface = SelahFont.INTER.typeface(ctx)
                         setText(SelahRichText.build(ctx, draft.body, draft.spans))
                         setTextColor(android.graphics.Color.parseColor(SelahRichText.BASE_COLOR_HEX))
                         textSize = 16f

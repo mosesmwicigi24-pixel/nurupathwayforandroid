@@ -92,12 +92,12 @@ import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
-import org.nuruplace.member.ui.components.InlineVideo
+import org.nuruplace.member.ui.components.InlineVideoPlayer
+import org.nuruplace.member.ui.components.VideoPosterFrame
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
-import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.feature.live.GoLiveButton
 import org.nuruplace.member.feature.live.GoLiveSetupSheet
@@ -110,6 +110,9 @@ import org.nuruplace.member.feature.events.evTime
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
+import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -391,9 +394,7 @@ fun HomeScreen(
                 // bar stays pinned above it while a broadcast is live.
                 welcomeVideo?.let { w ->
                     Entrance(entrance, 0) {
-                        FeaturedVideo(w, videoPlaying, onPlay = { playable ->
-                            if (w.isExternal) Unit else videoPlaying = true
-                        }, onExternal = { url -> })
+                        FeaturedVideo(w, videoPlaying, onPlay = { videoPlaying = true })
                     }
                 }
                 // 0b · Live now — a worship-ish gathering happening right now or
@@ -581,12 +582,16 @@ private fun HomeHeader(
         // Nuru's daily word (GET /me/home/greeting) — hanging gold quote + serif
         // voice, mirroring iOS HomePersonalWord. Absent until the wire answers.
         personalWord?.let { word ->
+            // Owner (2026-08-26): the quoted head-card word steps down one point
+            // — the hanging gold glyph and the line it opens. Sizes are written
+            // out (not NuruType.title / NuruType.body) precisely because this
+            // pair moves together and independently of those shared tokens.
             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Top) {
-                Text("“", style = NuruType.title, color = Nuru.gold)
+                Text("“", style = nuruSerif(21, FontWeight.Medium), color = Nuru.gold)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     word,
-                    style = NuruType.body.copy(fontStyle = FontStyle.Italic, lineHeight = 20.sp),
+                    style = nuruSans(13).copy(fontStyle = FontStyle.Italic, lineHeight = scaledLineHeight(19)),
                     color = Nuru.ink600,
                 )
             }
@@ -921,9 +926,12 @@ private fun RhythmTile(label: String, done: Boolean, modifier: Modifier) {
     }
 }
 
+// Featured welcome video — it plays IN PLACE, inside this card's inset 16:9
+// box, for every source. See ui/components/VideoPlayer.kt for the browser/
+// download bug this replaced, and ui/components/VideoPoster.kt for the poster
+// frame we cut ourselves when the server sends no thumbnail_url.
 @Composable
-private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) -> Unit, onExternal: (String) -> Unit) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .shadow(6.dp, RoundedCornerShape(20.dp), spotColor = Color(0x1A0A2540))
@@ -939,27 +947,73 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
         }
         Spacer(Modifier.height(Spacing.md))
         val playable = v.playUrl
-        if (playing && !v.isExternal && playable != null) {
-            InlineVideo(playable, modifier = Modifier.clip(RoundedCornerShape(16.dp)))
+        if (playing && playable != null) {
+            // Direct/cloudinary/HLS → ExoPlayer; youtube/vimeo → provider embed.
+            // Either way it renders inside this box, with its own gold buffering
+            // cue — no Intent, no browser, no download.
+            InlineVideoPlayer(
+                url = playable,
+                source = v.videoSource,
+                externalVideoId = v.externalVideoId,
+                modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+            )
         } else {
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                    .clickable {
-                        if (v.isExternal && playable != null) openExternal(ctx, playable)
-                        else if (playable != null) onPlay(playable)
-                    },
+                Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp))
+                    // iOS videoThumb's neutral bed (#D6DADE) — a shade darker than
+                    // the card so the gold disc still reads while the poster loads.
+                    .background(Color(0xFFD6DADE))
+                    .clickable { if (playable != null) onPlay(playable) },
                 contentAlignment = Alignment.Center,
             ) {
-                FitImage(v.thumbnailUrl, contentDescription = v.caption)
+                if (v.thumbnailUrl.isNullOrBlank()) {
+                    // No server thumbnail (uploaded videos carry none — no ffmpeg
+                    // on the API host): cut a poster frame from the video itself,
+                    // once, and keep it for the session.
+                    if (!v.needsWebEmbed) {
+                        VideoPosterFrame(playable, Modifier.fillMaxSize(), contentDescription = v.caption)
+                    }
+                } else {
+                    AsyncImage(
+                        model = v.thumbnailUrl,
+                        contentDescription = v.caption,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                }
+                // Gold play disc + duration pill ride on top of whichever poster won.
                 Box(Modifier.size(56.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) { Text("▶", color = Nuru.homeNavy, style = NuruType.title) }
+                v.durationSec?.takeIf { it > 0 }?.let { d ->
+                    Box(
+                        Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                            .clip(RoundedCornerShape(6.dp)).background(Nuru.homeNavy.copy(alpha = 0.7f))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    ) {
+                        Text("%d:%02d".format(d / 60, d % 60), style = NuruType.micro, color = Nuru.white, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
         Spacer(Modifier.height(Spacing.sm))
         // Caption is the heading; the sub-line only earns its place when it adds
         // information (an uncaptioned video used to print the same line twice).
-        Text(v.caption ?: "Start here — what the journey looks like", style = NuruType.heading, color = Nuru.ink)
+        // The app's own SERIF title face two points down from featureTitle
+        // (owner, 2026-08-26; iOS moved inter(18,semibold) → fraunces(16,semibold)):
+        // this card was the one sans headline among serif card titles, so it read
+        // as a foreign (portal) font.
+        Text(
+            v.caption ?: "Start here — what the journey looks like",
+            style = NuruType.videoCaption.copy(lineHeight = 20.sp),
+            color = Nuru.ink,
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (v.caption != null && v.caption != "Start here — what the journey looks like") {
-            Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+            Spacer(Modifier.height(7.dp))
+            Text(
+                "Start here — what the journey looks like",
+                style = NuruType.caption, color = Nuru.ink600,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -1252,6 +1306,12 @@ private fun Chip(text: String) {
     }
 }
 
+// MEET YOUR DISCIPLER — a member can have several (cell leader, multiplier,
+// pastoral). This used to render `list.first()` only, silently hiding the rest;
+// it now pages through them all, matching iOS HomeView.disciplersCard: ONE
+// discipler hugs its content with no pager and no dead band, several page with
+// OUR gold dots (the platform indicator is a foreign style, and on iOS the
+// system dots were white-on-white and invisible).
 @Composable
 private fun DisciplersCard(list: List<Discipler>, onView: () -> Unit) {
     HomeCard(modifier = Modifier.clickable { onView() }) {
@@ -1260,19 +1320,76 @@ private fun DisciplersCard(list: List<Discipler>, onView: () -> Unit) {
             Spacer(Modifier.weight(1f))
             RowScopeLink("View ›", onView)
         }
-        val d = list.first()
         Spacer(Modifier.height(Spacing.md))
-        Row(verticalAlignment = Alignment.Top) {
-            Avatar(d.avatarUrl, 44.dp)
-            Spacer(Modifier.width(Spacing.md))
-            Column(Modifier.weight(1f)) {
-                Text(d.fullName, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
-                Text(d.roleLabel.uppercase(), style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.Bold)
-                d.message?.takeIf { it.isNotBlank() }?.let {
-                    Spacer(Modifier.height(Spacing.xs))
-                    Text("“$it”", style = NuruType.caption, color = Nuru.ink600, maxLines = 4, overflow = TextOverflow.Ellipsis)
+        if (list.size == 1) {
+            DisciplerPage(list.first(), inPager = false)
+        } else {
+            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { list.size })
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth(),
+                pageSpacing = Spacing.base,
+            ) { i ->
+                DisciplerPage(list[i], inPager = true)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = Spacing.sm),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                list.indices.forEach { i ->
+                    val on = i == pagerState.currentPage
+                    Box(
+                        Modifier.padding(horizontal = 2.5.dp)
+                            .size(width = if (on) 16.dp else 6.dp, height = 6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (on) Nuru.gold else Nuru.gold.copy(alpha = 0.22f)),
+                    )
                 }
             }
+        }
+    }
+}
+
+/** One discipler slide — avatar, name, role caps, quoted word, and the "Message
+ *  · walk together" pill that previews the hub's hero CTA (iOS disciplerView). */
+@Composable
+private fun DisciplerPage(d: Discipler, inPager: Boolean) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(d.avatarUrl, 52.dp)
+            Spacer(Modifier.width(Spacing.md))
+            Column(Modifier.weight(1f)) {
+                Text(d.fullName, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(3.dp))
+                Text(d.roleLabel.uppercase(), style = NuruType.kicker, color = Nuru.goldLo)
+            }
+            Text("›", style = NuruType.title, color = Nuru.ink300)
+        }
+        val quote = d.message?.takeIf { it.isNotBlank() }
+        // In the pager every slide reserves the same three lines (minLines), so
+        // the card doesn't jump height as you swipe between a chatty leader and
+        // a silent one. A lone discipler hugs whatever it actually has.
+        if (quote != null || inPager) {
+            Spacer(Modifier.height(Spacing.md))
+            Text(
+                quote?.let { "“$it”" } ?: "",
+                style = nuruSerif(14).copy(fontStyle = FontStyle.Italic, lineHeight = scaledLineHeight(20)),
+                color = Nuru.dayWord,
+                minLines = if (inPager) 3 else 1,
+                maxLines = if (inPager) 3 else Int.MAX_VALUE,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.height(Spacing.md))
+        Row(
+            Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.gold.copy(alpha = 0.10f))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("💬", style = NuruType.micro)
+            Spacer(Modifier.width(6.dp))
+            Text("Message · walk together", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
         }
     }
 }
