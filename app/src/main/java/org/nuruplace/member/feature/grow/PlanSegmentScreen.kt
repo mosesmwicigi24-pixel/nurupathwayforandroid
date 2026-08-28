@@ -52,7 +52,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -67,10 +66,8 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.ui.components.GrowCreamHeader
-import org.nuruplace.member.ui.components.InlineVideo
+import org.nuruplace.member.ui.components.InlineVideoPlayer
 import org.nuruplace.member.ui.components.VerseQuoteCard
-import org.nuruplace.member.ui.components.isExternalVideoHost
-import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.Nuru
@@ -107,7 +104,6 @@ fun PlanSegmentScreen(
     onBack: () -> Unit,
     onContinue: (Int) -> Unit,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var detail by remember { mutableStateOf<ReadingPlanDetail?>(null) }
@@ -164,10 +160,7 @@ fun PlanSegmentScreen(
                             .padding(top = 16.dp, bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        SegmentBody(
-                            segment = segment,
-                            onPlay = { url -> openExternal(context, url) },
-                        )
+                        SegmentBody(segment = segment)
                         EncouragementRow()
                     }
 
@@ -328,7 +321,7 @@ private fun StepChip(label: String, done: Boolean, modifier: Modifier = Modifier
 // ── Reader blocks per segment kind ──
 
 @Composable
-private fun SegmentBody(segment: PlanSegment, onPlay: (String) -> Unit) {
+private fun SegmentBody(segment: PlanSegment) {
     val content = segment.content?.takeIf { it.isNotEmpty() }
     val reference = segment.reference?.takeIf { it.isNotEmpty() }
 
@@ -337,7 +330,6 @@ private fun SegmentBody(segment: PlanSegment, onPlay: (String) -> Unit) {
             VideoCard(
                 imageUrl = segment.imageUrl,
                 videoUrl = segment.videoUrl,
-                onPlay = onPlay,
             )
             content?.let { PassageText(it) }
         }
@@ -369,30 +361,27 @@ private fun SegmentBody(segment: PlanSegment, onPlay: (String) -> Unit) {
 
 // ── 16:9 video card (real `videoUrl` only) ──
 
-/** [onPlay] now fires ONLY for a genuinely external host (YouTube/Vimeo —
- *  see [isExternalVideoHost]); a direct/self-hosted video URL plays right
- *  here via InlineVideo instead of ever reaching openExternal(). See
- *  VideoPlayer.kt's isExternalVideoHost doc for the real-device bug this
- *  closes — a self-hosted `/media/<uuid>.mov` used to pop a bare "Download
- *  file again?" Chrome prompt instead of playing in-app. */
+/** EVERY video plays in place — nothing here ever leaves the app.
+ *  [InlineVideoPlayer] picks the engine by provider: ExoPlayer for a direct/
+ *  self-hosted/cloudinary/HLS URL, the provider's own inline iframe for
+ *  YouTube/Vimeo. Two bugs met here: a self-hosted `/media/<uuid>.mov` handed
+ *  to openExternal() used to pop a bare "Download file again?" Chrome prompt
+ *  (2026-07-31), and a YouTube URL bounced the member out of the app entirely
+ *  (fixed 2026-08-28 by dropping the external-host branch this card kept). */
 @Composable
-private fun VideoCard(imageUrl: String?, videoUrl: String?, onPlay: (String) -> Unit) {
+private fun VideoCard(imageUrl: String?, videoUrl: String?) {
     var playingInline by remember(videoUrl) { mutableStateOf(false) }
-    val isExternal = videoUrl != null && isExternalVideoHost(videoUrl)
     Box(
         Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(24.dp))
             .background(Nuru.navyGradient)
-            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) {
-                val url = videoUrl ?: return@clickable
-                if (isExternal) onPlay(url) else playingInline = true
-            },
+            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) { playingInline = true },
         contentAlignment = Alignment.Center,
     ) {
         if (playingInline && videoUrl != null) {
-            InlineVideo(videoUrl, modifier = Modifier.fillMaxSize())
+            InlineVideoPlayer(videoUrl, modifier = Modifier.fillMaxSize())
         } else {
             if (!imageUrl.isNullOrBlank()) {
                 AsyncImage(

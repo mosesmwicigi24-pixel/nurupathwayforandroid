@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -57,7 +56,6 @@ import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
 import org.nuruplace.member.ui.components.VerseQuoteCard
-import org.nuruplace.member.ui.components.openExternal
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
 
@@ -71,7 +69,6 @@ private fun rankOf(s: PlanSegment): Int = when (s.kind.lowercase()) {
 
 @Composable
 fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: Int, onBack: () -> Unit) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pal = ReaderPalette(ReaderMode.night)
 
@@ -168,7 +165,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                         Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 28.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
-                        PartContent(part = part, group = group, pal = pal, onPlay = { url -> openExternal(context, url) })
+                        PartContent(part = part, group = group, pal = pal)
                         if (part == "respond") ReflectionBox(planId, dayNumber, pal)
                         EncouragementLine(pal)
                     }
@@ -206,7 +203,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
 }
 
 @Composable
-private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalette, onPlay: (String) -> Unit) {
+private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalette) {
     when (part) {
         "word" -> group.forEach { seg ->
             when (seg.kind.lowercase()) {
@@ -230,7 +227,7 @@ private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalet
         }
         else -> {
             val seg = group.first()
-            RMediaCard(seg.imageUrl, seg.videoUrl, portrait = true, onPlay = onPlay)
+            RMediaCard(seg.imageUrl, seg.videoUrl, portrait = true)
             if (seg.title.isNotEmpty()) Text(seg.title, style = rSerif(20, FontWeight.Medium), color = pal.ink)
             seg.content?.takeIf { it.isNotEmpty() }?.let { RKeynotes(it, pal) }
         }

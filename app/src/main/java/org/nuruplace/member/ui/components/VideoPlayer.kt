@@ -173,8 +173,10 @@ private fun InlineWebVideo(embedUrl: String, modifier: Modifier = Modifier) {
 }
 
 /** Open an external link in the browser or a handling app. Reserved for real
- *  links (web pages, maps); NEVER for a video the app can play — see the file
- *  header for the download-prompt bug that rule exists to prevent. */
+ *  links (web pages, maps); NEVER for a video — as of 2026-08-28 every video
+ *  surface plays in place via [InlineVideoPlayer], so this has no video call
+ *  site left and must not gain one. See the file header for the
+ *  download-prompt bug that rule exists to prevent. */
 fun openExternal(context: Context, url: String) {
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -195,12 +197,14 @@ fun openExternal(context: Context, url: String) {
 // left on the server's `external_url != null` flag and kept the bug until
 // 2026-08-26 (see the file header).
 //
-// Remaining hand-off, audited and deliberately left in place for now: the two
-// plan-video cards (PlanReaderKit.RMediaCard / PlanSegmentScreen.VideoCard)
-// still call openExternal for a YouTube/Vimeo URL. That is never a download —
-// those really are player pages — but now that [InlineVideoPlayer] embeds them,
-// those cards could play in place too. Home is the only surface the owner asked
-// for in this pass.
+// As of 2026-08-28 NO video surface hands off at all: the last two — the plan
+// cards PlanReaderKit.RMediaCard and PlanSegmentScreen.VideoCard — dropped
+// their YouTube/Vimeo branch and call [InlineVideoPlayer], which embeds those
+// player pages in the card. [videoEmbedUrl] is now the only live provider gate;
+// [isExternalVideoHost] below keeps its tests as the pinned definition of "a
+// player page, not a media file", but has no production call site, and a new
+// `if (isExternalVideoHost(...)) openExternal(...)` would be a regression, not
+// a feature.
 private val EXTERNAL_VIDEO_HOSTS = setOf("youtube.com", "youtu.be", "vimeo.com")
 
 // java.net.URI (plain JDK), not android.net.Uri — deliberately, so this stays
