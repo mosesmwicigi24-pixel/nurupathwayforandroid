@@ -7,6 +7,7 @@ package org.nuruplace.member.feature.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +55,7 @@ import org.nuruplace.member.ui.components.Kicker
 import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.NuruCard
 import org.nuruplace.member.ui.components.ScreenHeader
+import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
@@ -111,7 +116,9 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                 }
             }
 
-            c.roster?.takeIf { it.count > 0 }?.let { MembersFacesRow(it, c.members) }
+            c.roster?.takeIf { it.count > 0 }?.let {
+                MembersFacesRow(it, c.members, onOpen = { onNavigate("cell-roster") })
+            }
 
             // Meeting rhythm — the OWN cell's server-derived (or admin-typed)
             // rhythm. When nothing is on the calendar and no real series
@@ -201,11 +208,13 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
 
 /**
  * Faces of the cell — up to 5 overlapping avatars (photo or initials) with a
- * "+N" bubble for the rest, same idiom as the pathway FootprintsStrip.
+ * "+N" bubble for the rest, same idiom as the pathway FootprintsStrip. Tapping
+ * opens the full roster (owner, 2026-08-26: "when you click at the members,
+ * they open…").
  */
 @Composable
-private fun MembersFacesRow(roster: CellSummary.Roster, members: Int) {
-    NuruCard {
+private fun MembersFacesRow(roster: CellSummary.Roster, members: Int, onOpen: () -> Unit) {
+    NuruCard(modifier = Modifier.pressScale().clickable { onOpen() }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val shown = roster.faces.take(5)
             Row {
@@ -234,6 +243,12 @@ private fun MembersFacesRow(roster: CellSummary.Roster, members: Int) {
                 style = NuruType.caption,
                 color = Nuru.ink600,
                 modifier = Modifier.weight(1f),
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Open the roster",
+                tint = Nuru.ink300,
+                modifier = Modifier.size(20.dp),
             )
         }
     }

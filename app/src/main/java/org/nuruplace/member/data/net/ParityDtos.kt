@@ -254,6 +254,43 @@ data class CellSummary(val cell: Cell? = null) {
     data class LeaderView(val count: Int = 0, val names: List<String> = emptyList())
 }
 
+// --- Cell roster (GET /me/cell/members) ---
+// The privacy split IS the contract: an ordinary member gets ONLY the people
+// fields; the shepherd fields (score/band/attendance/last_seen_days) are ABSENT
+// from the JSON for them, not null. Modelled nullable-with-defaults so both
+// shapes — and an older server that serves neither — decode without throwing,
+// and so the UI can tell "not shown to you" from a real value. Never invent a
+// score: a null score means the screen shows people only.
+@Serializable
+data class CellRoster(
+    val cell: Cell? = null,
+    val canShepherd: Boolean = false,
+    val members: List<CellRosterMember> = emptyList(),
+) {
+    @Serializable
+    data class Cell(val cellGroupId: String = "", val name: String = "")
+}
+
+@Serializable
+data class CellRosterMember(
+    val userId: String = "",
+    val fullName: String = "",
+    val firstName: String = "",
+    val avatarUrl: String? = null,
+    val isLeader: Boolean = false,
+    val isMe: Boolean = false,
+    // Shepherd-only, absent otherwise.
+    val score: Int? = null,
+    val band: String? = null,
+    val attendance: RosterAttendance? = null,
+    val lastSeenDays: Int? = null,
+)
+
+/** "present of of" — null on the wire when this cell has no meetings to count
+ *  yet. 0-of-0 is never shown as attendance; the screen says so in words. */
+@Serializable
+data class RosterAttendance(val present: Int = 0, val of: Int = 0)
+
 @Serializable
 data class ScoreBreakdown(
     val score: Int = 0,

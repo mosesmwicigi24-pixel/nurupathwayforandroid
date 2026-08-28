@@ -726,6 +726,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNavigate = { nav.navigate(it) },
                 )
             }
+            // The cell's people (behind Cell info's faces row). "Message" opens
+            // the ordinary DM thread — the same `chat/{id}` destination the
+            // inbox, the new-message directory and the discipler dossier use.
+            composable("cell-roster") {
+                org.nuruplace.member.feature.home.CellRosterScreen(
+                    me = me,
+                    onBack = { nav.popBackStack() },
+                    onOpenThread = { nav.navigate("chat/$it") },
+                )
+            }
             // Nuru Live (L2, viewer-only) — the full-screen player is one
             // destination fed entirely via query args (Home's banner, the
             // cell card, and Replays rows all build this route through
