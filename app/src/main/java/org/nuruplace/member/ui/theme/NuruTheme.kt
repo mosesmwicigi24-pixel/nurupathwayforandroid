@@ -190,6 +190,11 @@ object NuruType {
     val sectionLabel get() = nuruSans(11, FontWeight.Bold, tracking = 1.8f)
     // Fraunces feature-card headline (verse text, card titles) — iOS "Fraunces 18 semibold".
     val featureTitle get() = nuruSerif(18, FontWeight.SemiBold)
+    // Featured-video caption — featureTitle two points down, and SERIF like every
+    // other card title (owner, 2026-08-26: "all fonts should be the primary fonts
+    // for the App and not mixed with the portal fonts"; iOS moved this line from
+    // inter(18, semibold) to fraunces(16, semibold) in the same pass).
+    val videoCaption get() = nuruSerif(16, FontWeight.SemiBold)
     // Greeting — iOS "Fraunces 22 semibold, kerning −0.22".
     val greeting get() = nuruSerif(22, FontWeight.SemiBold, tracking = -0.22f)
     // iOS build 80 parity (nChipLabel/nActionLabel): segment/filter chips and
@@ -222,14 +227,35 @@ fun NuruTheme(content: @Composable () -> Unit) {
     // rebuilt HERE, at theme-build time, reading AppPrefs.lineSpacing so this
     // recomposes — and therefore every MaterialTheme.typography.* consumer
     // downstream repaints — exactly when the pref changes.
+    // APP FONTS ONLY (owner, 2026-08-26: "all fonts should be the primary fonts
+    // for the App and not mixed with the portal fonts"). Material3's MaterialTheme
+    // does `ProvideTextStyle(typography.bodyLarge)`, so a style-less `Text(…)`
+    // already inherits Inter — but every Material component that reads a slot we
+    // had NOT overridden (AlertDialog title → headlineSmall, TextField
+    // label/supporting → bodySmall, assist chips → labelSmall, …) fell through to
+    // the M3 default, i.e. FontFamily.Default = the device's system face. Those
+    // are the "foreign" letters. Every one of the 15 slots is now pinned to an
+    // app family — display/headline/title serif (Fraunces), body/label sans
+    // (Inter) — keeping M3's own metrics for the slots we don't otherwise style,
+    // so nothing shifts except the typeface.
     val typography = remember(org.nuruplace.member.data.AppPrefs.lineSpacing) {
+        val m3 = Typography()
         Typography(
+            displayLarge = m3.displayLarge.copy(fontFamily = Fraunces),
+            displayMedium = m3.displayMedium.copy(fontFamily = Fraunces),
+            displaySmall = m3.displaySmall.copy(fontFamily = Fraunces),
+            headlineLarge = m3.headlineLarge.copy(fontFamily = Fraunces),
+            headlineMedium = m3.headlineMedium.copy(fontFamily = Fraunces),
+            headlineSmall = m3.headlineSmall.copy(fontFamily = Fraunces),
             titleLarge = NuruType.title,
             titleMedium = NuruType.cardTitle,
+            titleSmall = NuruType.rowTitle,
             bodyLarge = NuruType.bodyLg,
             bodyMedium = NuruType.body,
+            bodySmall = NuruType.caption,
             labelLarge = NuruType.cardCta,
             labelMedium = NuruType.label,
+            labelSmall = NuruType.micro,
         )
     }
     CompositionLocalProvider(LocalDensity provides scaled) {

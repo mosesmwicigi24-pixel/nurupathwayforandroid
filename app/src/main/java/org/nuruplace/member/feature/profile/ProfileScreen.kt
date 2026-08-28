@@ -82,7 +82,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -682,7 +681,10 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
                 }
                 Text(
                     memberId,
-                    style = pInter(11, FontWeight.Medium).copy(fontFamily = FontFamily.Monospace),
+                    // App fonts only (owner, 2026-08-26): Inter with wide tracking, not the
+                    // device's Monospace face — the tracking is what makes an id
+                    // scannable, and the foreign typeface was the only thing it added.
+                    style = pInter(11, FontWeight.Medium, 0.8f),
                     color = PROF.navy,
                     maxLines = 2,
                 )
@@ -1159,7 +1161,7 @@ private fun CertificateCard(
             Icon(FingerprintIcon, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(13.dp))
             Text(
                 c.verificationCode,
-                style = pInter(12, FontWeight.SemiBold, 0.5f).copy(fontFamily = FontFamily.Monospace),
+                style = pInter(12, FontWeight.SemiBold, 1.1f),   // Inter + tracking, never system Monospace
                 color = PROF.navy,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

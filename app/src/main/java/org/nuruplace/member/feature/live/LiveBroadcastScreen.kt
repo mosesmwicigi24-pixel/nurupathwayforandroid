@@ -558,8 +558,8 @@ fun LiveBroadcastScreen(
         if (showEndConfirm) {
             AlertDialog(
                 onDismissRequest = { showEndConfirm = false },
-                title = { Text("End this broadcast?") },
-                text = { Text("Viewers watching now will see the stream end. This can't be undone.") },
+                title = { Text("End this broadcast?", style = NuruType.cardTitle, color = Nuru.navy) },
+                text = { Text("Viewers watching now will see the stream end. This can't be undone.", style = NuruType.body, color = Nuru.ink600) },
                 confirmButton = {
                     Text(
                         "End", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
@@ -821,8 +821,8 @@ private fun SummaryView(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false }, // dismissing keeps the recording, per spec
-            title = { Text("Delete “${title.ifBlank { "Nuru Live" }}”?") },
-            text = { Text("The recording will be gone forever.") },
+            title = { Text("Delete “${title.ifBlank { "Nuru Live" }}”?", style = NuruType.cardTitle, color = Nuru.navy) },
+            text = { Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600) },
             confirmButton = {
                 Text(
                     "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,

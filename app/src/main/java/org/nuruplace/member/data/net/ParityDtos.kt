@@ -284,8 +284,22 @@ data class WelcomeVideo(
     /** The playable URL — external link when set, else the hosted signed url. */
     val playUrl: String? get() = externalUrl ?: url
 
-    /** True when playback should hand off to the browser (YouTube/Vimeo/external). */
-    val isExternal: Boolean get() = externalUrl != null || videoSource == "youtube" || videoSource == "vimeo"
+    /**
+     * True when the URL is a player PAGE (YouTube/Vimeo) and needs the
+     * provider's iframe rather than ExoPlayer. It is never a reason to leave
+     * the app — see ui/components/VideoPlayer.kt.
+     *
+     * This replaced an `externalUrl != null || …` test that was wrong at the
+     * root (owner bug, 2026-08-26: the featured card opened a browser and
+     * offered to download the file). The backend registers an UPLOADED video
+     * as `video_source = 'direct'` with `external_url` pointing at OUR OWN
+     * public `/media/<uuid>.mp4` (pathway packages/backend/src/modules/media/
+     * video.ts `registerUploaded`, and `welcomeVideo` returns `external_url`
+     * for every source in its EXTERNAL_SOURCES set — which includes "direct").
+     * `external_url` means "shareable link", not "unplayable in-app"; only the
+     * provider decides, exactly as iOS InlineVideoPlayer does.
+     */
+    val needsWebEmbed: Boolean get() = videoSource == "youtube" || videoSource == "vimeo"
 }
 
 @Serializable

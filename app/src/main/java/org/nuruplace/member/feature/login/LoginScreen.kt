@@ -54,7 +54,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -356,7 +355,10 @@ private fun DarkField(
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(Radii.control)
     val fieldTextStyle = if (monospace)
-        TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 3.sp, color = Color.White)
+        // App fonts only (owner, 2026-08-26): Inter, not the device's Monospace
+        // face. The 3sp tracking is what disambiguates the code; the foreign
+        // typeface added nothing but a different alphabet on the login screen.
+        TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 3.sp, color = Color.White)
     else
         TextStyle(fontFamily = Inter, fontSize = 16.sp, color = Color.White)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

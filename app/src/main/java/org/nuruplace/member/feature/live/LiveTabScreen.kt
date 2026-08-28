@@ -397,8 +397,8 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete “$displayTitle”?") },
-            text = { Text("The recording will be gone forever.") },
+            title = { Text("Delete “$displayTitle”?", style = NuruType.cardTitle, color = Nuru.navy) },
+            text = { Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600) },
             confirmButton = {
                 Text(
                     "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
