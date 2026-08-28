@@ -562,6 +562,13 @@ interface MemberApi {
     @GET("me/cell-summary")
     suspend fun cellSummary(): CellSummary
 
+    // The cell's people. Server-authoritative privacy: the shepherd fields
+    // (score/band/attendance/last_seen_days) are only serialized for a caller
+    // the server itself judges `can_shepherd` — the client never decides who
+    // may see standing, it only renders what arrived.
+    @GET("me/cell/members")
+    suspend fun cellRoster(): CellRoster
+
     @GET("me/scores/{pillar}")
     suspend fun scoreDetail(@Path("pillar") pillar: String): ScoreBreakdown
 
