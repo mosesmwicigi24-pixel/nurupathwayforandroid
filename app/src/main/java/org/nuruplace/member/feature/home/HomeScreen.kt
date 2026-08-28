@@ -1776,7 +1776,9 @@ private fun CohortSection(cohort: CellSummary?, onOpen: () -> Unit) {
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(14.dp)).clickable { onOpen() }.padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text("Open community  →", style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold) }
+                // Says what it opens: this link goes to the CELL, not community
+                // (owner audit, 2026-08-26 — iOS parity).
+            ) { Text("Open your cell  →", style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

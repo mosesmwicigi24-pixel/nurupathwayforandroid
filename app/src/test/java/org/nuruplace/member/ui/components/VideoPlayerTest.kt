@@ -2,18 +2,21 @@ package org.nuruplace.member.ui.components
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.nuruplace.member.data.net.WelcomeVideo
 
-/** Pure-logic coverage for [isExternalVideoHost] — the gate that decides
- *  whether a video URL plays in-app (InlineVideo) or hands off to the
- *  browser (openExternal). Added 2026-07-31 alongside the fix for a
- *  real-device bug: a self-hosted `/media/<uuid>.mov` upload was handed
- *  unconditionally to openExternal() by two plan-video cards, popping a bare
- *  "Download file again?" Chrome prompt instead of playing the clip — see
- *  VideoPlayer.kt's own doc for the full trace. */
+/** Pure-logic coverage for [isExternalVideoHost] — which URLs are player
+ *  PAGES rather than media files. Added 2026-07-31 when it was the gate that
+ *  decided in-app playback vs. a browser hand-off, after a self-hosted
+ *  `/media/<uuid>.mov` upload was handed unconditionally to openExternal() by
+ *  two plan-video cards and popped a bare "Download file again?" Chrome
+ *  prompt. Since 2026-08-28 nothing hands off — [videoEmbedUrl] is the live
+ *  gate and these cases are kept as the pinned definition of a player page,
+ *  including the lookalike-host guard. `both classifiers agree` below holds
+ *  the two in step. */
 class VideoPlayerTest {
     @Test fun `youtube watch url is external`() {
         assertTrue(isExternalVideoHost("https://www.youtube.com/watch?v=abc123"))
@@ -49,6 +52,24 @@ class VideoPlayerTest {
 
     @Test fun `malformed url returns false rather than throwing`() {
         assertFalse(isExternalVideoHost("not a url at all"))
+    }
+
+    /** Dropping the external-host branch from the plan cards (2026-08-28) is
+     *  only lossless while every URL this classifier calls external is one
+     *  [videoEmbedUrl] can actually embed — otherwise a video the app used to
+     *  hand to the browser would now render an empty box. */
+    @Test fun `both classifiers agree - every external host has an inline embed`() {
+        listOf(
+            "https://www.youtube.com/watch?v=abc123",
+            "https://youtube.com/watch?v=abc123",
+            "https://youtu.be/abc123",
+            "https://www.youtube.com/embed/abc123",
+            "https://vimeo.com/12345678",
+            "https://player.vimeo.com/video/12345678",
+        ).forEach { url ->
+            assertTrue(url, isExternalVideoHost(url))
+            assertNotNull(url, videoEmbedUrl(url))
+        }
     }
 }
 

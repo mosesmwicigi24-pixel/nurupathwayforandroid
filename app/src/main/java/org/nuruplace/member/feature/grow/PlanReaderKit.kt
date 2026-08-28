@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.nuruplace.member.data.net.PlanDayUnlockAck
+import org.nuruplace.member.ui.components.InlineVideoPlayer
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
@@ -204,29 +205,29 @@ internal fun RPrayer(text: String, pal: ReaderPalette) {
     }
 }
 
-/** [onPlay] now fires ONLY for a genuinely external host (YouTube/Vimeo —
- *  see [org.nuruplace.member.ui.components.isExternalVideoHost]); a direct/
- *  self-hosted video URL plays right here via InlineVideo instead of ever
- *  reaching openExternal(). Real-device bug (2026-07-31): this card used to
- *  hand ANY videoUrl straight to the caller's openExternal(), which for a
- *  self-hosted `/media/<uuid>.mov` upload popped a bare "Download file
- *  again?" Chrome prompt instead of playing the clip — see VideoPlayer.kt's
- *  isExternalVideoHost doc for the full trace. */
+/** EVERY video plays in place — there is no hand-off left. [InlineVideoPlayer]
+ *  picks the engine by provider: ExoPlayer for a direct/self-hosted/cloudinary/
+ *  HLS URL, the provider's own inline iframe for YouTube/Vimeo. Two bugs met
+ *  here: a self-hosted `/media/<uuid>.mov` handed to openExternal() popped a
+ *  bare "Download file again?" Chrome prompt (2026-07-31), and a YouTube URL
+ *  bounced the member out of the app entirely (fixed 2026-08-28 by dropping the
+ *  external-host branch this card used to keep).
+ *
+ *  Portrait (9:15) note: the card fixes its own aspect and passes fillMaxSize,
+ *  so the player's internal 16:9 cannot be satisfied and the incoming (tight)
+ *  constraints win — the video fills the tall card and PlayerView / the
+ *  provider iframe letterbox inside it, exactly as before this change. */
 @Composable
-internal fun RMediaCard(imageUrl: String?, videoUrl: String?, portrait: Boolean, onPlay: (String) -> Unit) {
+internal fun RMediaCard(imageUrl: String?, videoUrl: String?, portrait: Boolean) {
     var playingInline by androidx.compose.runtime.remember(videoUrl) { mutableStateOf(false) }
-    val isExternal = videoUrl != null && org.nuruplace.member.ui.components.isExternalVideoHost(videoUrl)
     Box(
         Modifier.fillMaxWidth().aspectRatio(if (portrait) 9f / 15f else 16f / 9f)
             .clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(Color(0xFF1A406B), Color(0xFF0B1F33), Color(0xFF00132F))))
-            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) {
-                val url = videoUrl ?: return@clickable
-                if (isExternal) onPlay(url) else playingInline = true
-            },
+            .clickable(enabled = !videoUrl.isNullOrEmpty() && !playingInline) { playingInline = true },
         contentAlignment = Alignment.Center,
     ) {
         if (playingInline && videoUrl != null) {
-            org.nuruplace.member.ui.components.InlineVideo(videoUrl, modifier = Modifier.fillMaxSize())
+            InlineVideoPlayer(videoUrl, modifier = Modifier.fillMaxSize())
         } else {
             if (!imageUrl.isNullOrBlank()) {
                 AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
