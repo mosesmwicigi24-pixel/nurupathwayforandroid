@@ -1001,9 +1001,19 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
         // (owner, 2026-08-26; iOS moved inter(18,semibold) → fraunces(16,semibold)):
         // this card was the one sans headline among serif card titles, so it read
         // as a foreign (portal) font.
-        Text(v.caption ?: "Start here — what the journey looks like", style = NuruType.videoCaption, color = Nuru.ink)
+        Text(
+            v.caption ?: "Start here — what the journey looks like",
+            style = NuruType.videoCaption.copy(lineHeight = 20.sp),
+            color = Nuru.ink,
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (v.caption != null && v.caption != "Start here — what the journey looks like") {
-            Text("Start here — what the journey looks like", style = NuruType.caption, color = Nuru.ink600)
+            Spacer(Modifier.height(7.dp))
+            Text(
+                "Start here — what the journey looks like",
+                style = NuruType.caption, color = Nuru.ink600,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

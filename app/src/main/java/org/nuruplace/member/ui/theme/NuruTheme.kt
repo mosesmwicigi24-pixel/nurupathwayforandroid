@@ -194,7 +194,9 @@ object NuruType {
     // other card title (owner, 2026-08-26: "all fonts should be the primary fonts
     // for the App and not mixed with the portal fonts"; iOS moved this line from
     // inter(18, semibold) to fraunces(16, semibold) in the same pass).
-    val videoCaption get() = nuruSerif(16, FontWeight.SemiBold)
+    // Four points off the old sans headline (owner, 2026-08-26) — iOS parity:
+    // fraunces 14 semibold, full width, with real leading and air below.
+    val videoCaption get() = nuruSerif(14, FontWeight.SemiBold)
     // Greeting — iOS "Fraunces 22 semibold, kerning −0.22".
     val greeting get() = nuruSerif(22, FontWeight.SemiBold, tracking = -0.22f)
     // iOS build 80 parity (nChipLabel/nActionLabel): segment/filter chips and
