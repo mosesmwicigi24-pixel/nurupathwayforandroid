@@ -1,9 +1,10 @@
 // Reading plans — the discovery/browse home for the Plans tab. A pixel-faithful
 // port of the iOS ReadingPlansView (ReadingPlansView.swift) + its screen-specific
-// cards (PLStreakStrip / PLContinueRow / PLPlanCard / PLPlanTile from
+// cards (PLStreakStrip / PLContinueRow / PLPlanPromo / PLPlanTile from
 // ReadingPlanCards.swift): cream header with bell, search, a streak/reward strip,
-// continue-reading rows, a "Plan of the day" hero, topic chips and collection
-// carousels — with a 2-col search grid when a query/topic filter is active.
+// continue-reading rows, a "Plan of the day" promo, topic chips, and every plan
+// in a vertical 2-col grid grouped by length (nothing behind a sideways swipe),
+// with a second "Worth your week" promo woven in after the first section.
 // Shared PL palette + PLCover/PLDaysBadge/plInter/plSerif/PLOverline live in
 // PlansShared.kt. Plan detail lives in its own file.
 package org.nuruplace.member.feature.grow
@@ -35,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CardGiftcard
@@ -69,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReadingPlanRow
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.Calendar
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,8 +116,13 @@ fun ReadingPlansScreen(
             if (!c.isNullOrEmpty() && seen.add(c)) add(c)
         }
     }
+    // Every plan, grouped by the commitment it asks for — and every one VISIBLE
+    // (owner, 2026-08-26: "make sure all plans are not hidden"). The old browse
+    // put 17 plans in a sideways rail where ~14 lived off-screen behind a gesture
+    // most members never make, and each plan appeared twice (once under
+    // "Featured for you", once in its length bucket). "Featured" is gone: one
+    // vertical grid per section, each plan exactly once.
     val collections = buildList {
-        if (plans.isNotEmpty()) add(Triple("featured", "Featured for you", plans.take(8)))
         val short = plans.filter { it.dayCount <= 7 }
         if (short.isNotEmpty()) add(Triple("short", "Short reads · 7 days or less", short))
         // Mid-length (8–13 days) — most study plans are 10-day, so without this
@@ -124,6 +132,9 @@ fun ReadingPlansScreen(
         val long = plans.filter { it.dayCount >= 14 }
         if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
     }
+    // A second plan to promote further down the page — never the one already at
+    // the top, and never one already being read.
+    val midPromo = midPromoPlan(plans, planOfDay?.planId, System.currentTimeMillis() / 86_400_000L)
 
     Column(
         Modifier
@@ -154,8 +165,15 @@ fun ReadingPlansScreen(
                 if (!searching && continueReading.isNotEmpty()) {
                     ContinueSection(plans = continueReading, onOpenPlan = onOpenPlan)
                 }
+                // The day's invitation, given room to actually invite: cover +
+                // subtitle + the plan's own opening line + a CTA.
                 if (!searching && planOfDay != null) {
-                    PlanOfDayCard(plan = planOfDay, onOpenPlan = onOpenPlan)
+                    PlanPromo(
+                        plan = planOfDay,
+                        kicker = "PLAN OF THE DAY",
+                        shimmer = true,
+                        onOpenPlan = onOpenPlan,
+                    )
                 }
                 CategoriesSection(
                     categories = categories,
@@ -165,7 +183,7 @@ fun ReadingPlansScreen(
                 if (searching) {
                     FilteredResults(category = category, plans = filtered, onOpenPlan = onOpenPlan)
                 } else {
-                    CollectionsSections(collections = collections, onOpenPlan = onOpenPlan)
+                    CollectionsSections(collections = collections, midPromo = midPromo, onOpenPlan = onOpenPlan)
                     InvitationCard(onClick = onOpenReadWithFriend)
                 }
             }
@@ -482,63 +500,150 @@ private fun ContinueRow(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Plan of the day (hero)
+// The plan promo ("an ad, beautifully done") — port of iOS PLPlanPromo
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The opening of a plan's description — the hook, never the essay.
+ *
+ * A sentence ends at `.`/`!`/`?` ONLY when whitespace and a capital (or digit)
+ * follow it; otherwise "the failure at 2 a.m." gets guillotined into "…at 2 a."
+ * (a real bug caught on iOS, owner screenshot 2026-08-26). Two sentences, or
+ * about 110 characters, is what this card can carry.
+ *
+ * Returns null when the plan has no description — nothing here is invented.
+ */
+internal fun planPromoHook(description: String?): String? {
+    val d = description?.trim().orEmpty()
+    if (d.isEmpty()) return null
+    val out = StringBuilder()
+    var sentences = 0
+    var i = 0
+    while (i < d.length) {
+        val c = d[i]
+        out.append(c)
+        if (c == '.' || c == '!' || c == '?') {
+            val next = if (i + 1 < d.length) d[i + 1] else ' '
+            val after = if (i + 2 < d.length) d[i + 2] else 'A'
+            // A real ending: whitespace then a capital or digit (or the text ends).
+            if (i + 1 >= d.length || (next.isWhitespace() && (after.isUpperCase() || after.isDigit()))) {
+                sentences += 1
+                if (sentences >= 2 || out.length >= 110) break
+            }
+        }
+        i += 1
+    }
+    val s = out.toString().trim()
+    if (s.length >= 30) {
+        return if (s.length > 190) s.take(187).trimEnd() + "…" else s
+    }
+    // Too short to be a hook on its own (a one-clause opener) — show the
+    // description, trimmed to something a card can hold.
+    return if (d.length > 170) d.take(167).trimEnd() + "…" else d
+}
+
+/**
+ * The second plan promoted further down the browse: never the one already
+ * featured at the top, never one already being read, and only plans whose own
+ * words can carry a promo. Rotates with `epochDay` so browsing feels edited
+ * rather than random (iOS: `(epochDay / 2) % pool.count`).
+ */
+internal fun midPromoPlan(
+    plans: List<ReadingPlanRow>,
+    planOfDayId: String?,
+    epochDay: Long,
+): ReadingPlanRow? {
+    val pool = plans.filter { !it.enrolled && it.planId != planOfDayId && !it.description.isNullOrEmpty() }
+    if (pool.isEmpty()) return null
+    val idx = ((epochDay / 2) % pool.size).toInt().let { if (it < 0) it + pool.size else it }
+    return pool[idx]
+}
+
+/**
+ * A full-bleed invitation to one plan (owner, 2026-08-26: "make beautiful ads
+ * that promote plans with nice images and messages"). Nothing here is invented:
+ * the picture is the plan's own cover, and the words are the plan's own subtitle
+ * and the opening of its description — copy already written with care. The card
+ * simply gives them room to be read.
+ */
 @Composable
-private fun PlanOfDayCard(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
+private fun PlanPromo(
+    plan: ReadingPlanRow,
+    kicker: String,
+    onOpenPlan: (String) -> Unit,
+    shimmer: Boolean = false,
+) {
+    val hook = remember(plan.description) { planPromoHook(plan.description) }
     val shape = RoundedCornerShape(22.dp)
-    Box(
+    Column(
         Modifier
             .fillMaxWidth()
-            .height(192.dp)
             .clip(shape)
+            .background(Color.White)
+            .border(1.dp, PL.gold.copy(alpha = 0.3f), shape)
             .clickable { onOpenPlan(plan.planId) },
     ) {
-        PLCover(url = plan.imageUrl, modifier = Modifier.matchParentSize())
-        // Top→bottom scrim (light at top, deep at the bottom for text legibility).
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0x40081424),
-                            Color(0x59081424),
-                            Color(0xE6081424),
-                        ),
-                    ),
-                ),
-        )
-        // Shimmering "PLAN OF THE DAY" pill, top-leading, 14dp inset.
-        Box(Modifier.align(Alignment.TopStart).padding(14.dp)) { PlanOfDayPill() }
-        // Title + meta, bottom-leading.
-        Column(
-            Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                plan.title,
-                style = plSerif(22, FontWeight.SemiBold, -0.22f),
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+        // 16:9 cover, softly scrimmed, with the gold kicker pill top-leading.
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+            PLCover(url = plan.imageUrl, modifier = Modifier.matchParentSize())
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color(0x0D081424), Color(0x8C081424)))),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Schedule, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(12.dp))
+            Box(Modifier.align(Alignment.TopStart).padding(14.dp)) { PromoKicker(label = kicker, shimmer = shimmer) }
+        }
+        Column(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(plan.title, style = plSerif(19, FontWeight.Medium, -0.3f), color = PL.navy)
+            plan.subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = plInter(12, FontWeight.SemiBold), color = PL.gold)
+            }
+            hook?.let {
+                Text(
+                    it,
+                    style = plSerif(13, italic = true).copy(lineHeight = scaledLineHeight(21)),
+                    color = PL.ink2,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            // Gold CTA capsule — the whole card is tappable; this says where to.
+            Row(
+                Modifier
+                    .padding(top = 6.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(PL.gold)
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (plan.enrolled) "Continue the journey" else "Begin the journey",
+                    style = plInter(12, FontWeight.Bold),
+                    color = PL.navy,
+                )
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = PL.navy,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Schedule, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(11.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("${plan.dayCount} days", style = plInter(11), color = Color.White.copy(alpha = 0.8f))
+                Text("${plan.dayCount} days · a few minutes a day", style = plInter(11), color = PL.ink3)
             }
         }
     }
 }
 
 @Composable
-private fun PlanOfDayPill() {
+private fun PromoKicker(label: String, shimmer: Boolean) {
     Box(
         Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -551,10 +656,10 @@ private fun PlanOfDayPill() {
         ) {
             Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = PL.navy, modifier = Modifier.size(9.dp))
             Spacer(Modifier.width(4.dp))
-            Text("PLAN OF THE DAY", style = plInter(9, FontWeight.Bold, 1.26f), color = PL.navy)
+            Text(label, style = plInter(9, FontWeight.Bold, 1.26f), color = PL.navy)
         }
         // A slow white sweep across the pill — the iOS PLShimmer.
-        ShimmerSweep(Modifier.matchParentSize())
+        if (shimmer) ShimmerSweep(Modifier.matchParentSize())
     }
 }
 
@@ -622,16 +727,22 @@ private fun TopicChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Collections (browse) — horizontal carousels of portrait cards
+// Collections (browse) — a vertical 2-col grid per section, nothing off-screen
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Browse: every plan on the page, two to a row, grouped by commitment — nothing
+ * behind a sideways swipe. One promo card is woven in after the first section so
+ * the page reads like a magazine rather than a stock list.
+ */
 @Composable
 private fun CollectionsSections(
     collections: List<Triple<String, String, List<ReadingPlanRow>>>,
+    midPromo: ReadingPlanRow?,
     onOpenPlan: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        for ((_, label, colPlans) in collections) {
+        collections.forEachIndexed { i, (_, label, colPlans) ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -640,68 +751,32 @@ private fun CollectionsSections(
                         color = PL.navy,
                         modifier = Modifier.weight(1f),
                     )
-                    Text("See all", style = plInter(11, FontWeight.Bold), color = PL.gold)
+                    Text("${colPlans.size}", style = plInter(11, FontWeight.Bold), color = PL.ink3)
                 }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    for (plan in colPlans) PlanCard(plan = plan, onOpenPlan = onOpenPlan)
-                }
+                PlanGrid(plans = colPlans, onOpenPlan = onOpenPlan)
+            }
+            if (i == 0 && midPromo != null) {
+                PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan)
             }
         }
     }
 }
 
+/**
+ * Two-column grid, laid out as chunked Rows so the parent stays a plain scroll
+ * Column (a nested LazyVerticalGrid inside a verticalScroll crashes on measure).
+ */
 @Composable
-private fun PlanCard(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
-    val shape = RoundedCornerShape(18.dp)
-    Box(
-        Modifier
-            .width(150.dp)
-            .height(200.dp)
-            .clip(shape)
-            .clickable { onOpenPlan(plan.planId) },
-    ) {
-        PLCover(url = plan.imageUrl, modifier = Modifier.matchParentSize())
-        // iOS scrim: #081424@5% at ~40% down → #081424@85% at the bottom.
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.4f to Color(0x0D081424),
-                        1.0f to Color(0xD9081424),
-                    ),
-                ),
-        )
-        // "N DAYS" badge, top-leading (PLDaysBadge already carries its 8dp inset).
-        PLDaysBadge(days = plan.dayCount, modifier = Modifier.align(Alignment.TopStart))
-        Column(
-            Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                plan.title,
-                style = plSerif(13, FontWeight.SemiBold),
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            plan.category?.takeIf { it.isNotEmpty() }?.let {
-                Text(
-                    it.uppercase(),
-                    style = plInter(9, FontWeight.Bold, 0.9f),
-                    color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+private fun PlanGrid(plans: List<ReadingPlanRow>, onOpenPlan: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        for (pair in plans.chunked(2)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PlanTile(plan = pair[0], onOpenPlan = onOpenPlan, modifier = Modifier.weight(1f))
+                if (pair.size > 1) {
+                    PlanTile(plan = pair[1], onOpenPlan = onOpenPlan, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
@@ -743,21 +818,7 @@ private fun FilteredResults(category: String, plans: List<ReadingPlanRow>, onOpe
                 Text("No plans found", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
             }
         } else {
-            // Two-column grid, laid out as rows so the parent stays a plain scroll
-            // Column (no nested-vertical-scroll conflict from a LazyVerticalGrid).
-            val rows = plans.chunked(2)
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (pair in rows) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        PlanTile(plan = pair[0], onOpenPlan = onOpenPlan, modifier = Modifier.weight(1f))
-                        if (pair.size > 1) {
-                            PlanTile(plan = pair[1], onOpenPlan = onOpenPlan, modifier = Modifier.weight(1f))
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
+            PlanGrid(plans = plans, onOpenPlan = onOpenPlan)
         }
     }
 }
@@ -772,10 +833,40 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
             .border(1.dp, PL.border, shape)
             .clickable { onOpenPlan(plan.planId) },
     ) {
+        val done = plan.completedAt != null
+        val reading = plan.enrolled && !done
         // 16:10 cover with the "N DAYS" badge in its top-leading corner.
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
             PLCover(url = plan.imageUrl, modifier = Modifier.matchParentSize())
             PLDaysBadge(days = plan.dayCount, modifier = Modifier.align(Alignment.TopStart))
+            if (done) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(PL.gold),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                }
+            }
+            // Progress rail for a plan already in progress — the browse grid now
+            // shows enrolled plans too, so it must say where the member is.
+            if (reading) {
+                val doneDays = plan.completedDays?.size ?: ((plan.currentDay ?: 1) - 1).coerceAtLeast(0)
+                val pct = if (plan.dayCount > 0) (doneDays.toFloat() / plan.dayCount).coerceIn(0f, 1f) else 0f
+                Box(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Color.Black.copy(alpha = 0.28f)),
+                ) {
+                    Box(Modifier.fillMaxWidth(fraction = pct).height(4.dp).background(PL.gold))
+                }
+            }
         }
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
@@ -788,14 +879,23 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            plan.category?.takeIf { it.isNotEmpty() }?.let {
-                Text(
-                    it.uppercase(),
-                    style = plInter(9, FontWeight.Bold, 0.9f),
-                    color = PL.catText,
+            when {
+                reading -> Text(
+                    "Day ${plan.currentDay ?: 1} of ${plan.dayCount}",
+                    style = plInter(9, FontWeight.Bold, 0.5f),
+                    color = PL.goldDeep,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
+                done -> Text("COMPLETED", style = plInter(9, FontWeight.Bold, 0.9f), color = PL.goldDeep, maxLines = 1)
+                else -> plan.category?.takeIf { it.isNotEmpty() }?.let {
+                    Text(
+                        it.uppercase(),
+                        style = plInter(9, FontWeight.Bold, 0.9f),
+                        color = PL.catText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
