@@ -112,6 +112,12 @@ interface MemberApi {
     @GET("growth/plans")
     suspend fun plans(): Envelope<ReadingPlanRow>
 
+    // Up to five personalized plan promos, most-personal-first; each row's
+    // plan_id joins against the plan list above. Best-effort on the client — a
+    // failure here must leave the Plans page exactly as it was.
+    @GET("growth/plans/promos")
+    suspend fun planPromos(): PlanPromoEnvelope
+
     @GET("growth/plans/{id}")
     suspend fun plan(@Path("id") planId: String): ReadingPlanDetail
 

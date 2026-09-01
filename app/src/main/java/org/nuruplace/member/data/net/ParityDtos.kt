@@ -464,3 +464,22 @@ data class RadioComment(
     val authorName: String? = null,
     val authorAvatarUrl: String? = null,
 )
+
+// --- Plan promos (GET /growth/plans/promos) ---
+// Up to five personalized promos, ordered most-personal-first. Each is earned
+// from something true about this member (a plan in progress, what they last
+// finished, the theme of an open prayer, what their cell is reading, the
+// least-offered plan); `slot` names which. `planId` joins against the already
+// loaded plan list, and `reason` is the server's sentence for why THIS member
+// is seeing THIS plan — shown verbatim in place of the plan's own opening line.
+// This route genuinely wraps its rows in {data:[…]}, hence the envelope.
+@Serializable
+data class PlanPromo(
+    val planId: String = "",
+    val slot: String = "",
+    val kicker: String = "",
+    val reason: String = "",
+)
+
+@Serializable
+data class PlanPromoEnvelope(val data: List<PlanPromo> = emptyList())

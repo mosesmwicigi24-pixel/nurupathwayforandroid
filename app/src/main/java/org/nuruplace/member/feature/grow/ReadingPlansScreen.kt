@@ -2,9 +2,15 @@
 // port of the iOS ReadingPlansView (ReadingPlansView.swift) + its screen-specific
 // cards (PLStreakStrip / PLContinueRow / PLPlanPromo / PLPlanTile from
 // ReadingPlanCards.swift): cream header with bell, search, a streak/reward strip,
-// continue-reading rows, a "Plan of the day" promo, topic chips, and every plan
-// in a vertical 2-col grid grouped by length (nothing behind a sideways swipe),
-// with a second "Worth your week" promo woven in after the first section.
+// continue-reading rows, a promo at the top, topic chips, and every plan in a
+// vertical 2-col grid grouped by length (nothing behind a sideways swipe), with
+// further promos woven between the sections.
+//
+// The promos come from GET /growth/plans/promos — up to five, most-personal-
+// first, each earned from something true about this member, with the server's
+// own kicker and reason. That call is best-effort: when it returns nothing the
+// page falls back to the local choices it has always made (plan of the day at
+// the top, one "Worth your week" after the first section).
 // Shared PL palette + PLCover/PLDaysBadge/plInter/plSerif/PLOverline live in
 // PlansShared.kt. Plan detail lives in its own file.
 package org.nuruplace.member.feature.grow
@@ -69,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.PlanPromo as PlanPromoDto
 import org.nuruplace.member.data.net.ReadingPlanRow
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
@@ -85,6 +92,7 @@ fun ReadingPlansScreen(
     onOpenReadWithFriend: () -> Unit = {},
 ) {
     var plans by remember { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
+    var promos by remember { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
     var streak by remember { mutableStateOf(0) }
     var todayWordDone by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
@@ -92,6 +100,10 @@ fun ReadingPlansScreen(
     LaunchedEffect(Unit) {
         // Plans is the blocking load; achievements + rhythm are non-fatal accents.
         plans = runCatching { Net.client.api.plans().data }.getOrDefault(emptyList())
+        // The personalized promos are strictly an upgrade: if the route is
+        // missing, slow or angry, the page falls back to the local choices
+        // below and the member never learns anything went wrong.
+        promos = runCatching { Net.client.api.planPromos().data }.getOrNull().orEmpty()
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
         todayWordDone = runCatching { Net.client.api.rhythmToday().word }.getOrDefault(false)
         loading = false
@@ -132,6 +144,12 @@ fun ReadingPlansScreen(
         val long = plans.filter { it.dayCount >= 14 }
         if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
     }
+    // The server's promos, joined to the plans we actually hold. When it returns
+    // nothing (or failed), `resolved` is empty and the page keeps its exact local
+    // behaviour: plan-of-the-day at the top, one promo woven in mid-page.
+    val resolved = remember(promos, plans) { resolvePromos(promos, plans) }
+    val heroPromo = resolved.firstOrNull()
+    val restPromos = if (resolved.isEmpty()) emptyList() else resolved.drop(1)
     // A second plan to promote further down the page — never the one already at
     // the top, and never one already being read.
     val midPromo = midPromoPlan(plans, planOfDay?.planId, System.currentTimeMillis() / 86_400_000L)
@@ -166,14 +184,25 @@ fun ReadingPlansScreen(
                     ContinueSection(plans = continueReading, onOpenPlan = onOpenPlan)
                 }
                 // The day's invitation, given room to actually invite: cover +
-                // subtitle + the plan's own opening line + a CTA.
-                if (!searching && planOfDay != null) {
-                    PlanPromo(
-                        plan = planOfDay,
-                        kicker = "PLAN OF THE DAY",
-                        shimmer = true,
-                        onOpenPlan = onOpenPlan,
-                    )
+                // subtitle + a reason + a CTA. The most personal promo the server
+                // could earn takes this slot; without one it is the plan of the day.
+                if (!searching) {
+                    if (heroPromo != null) {
+                        PlanPromo(
+                            plan = heroPromo.plan,
+                            kicker = heroPromo.kicker,
+                            reason = heroPromo.reason,
+                            shimmer = true,
+                            onOpenPlan = onOpenPlan,
+                        )
+                    } else if (planOfDay != null) {
+                        PlanPromo(
+                            plan = planOfDay,
+                            kicker = "PLAN OF THE DAY",
+                            shimmer = true,
+                            onOpenPlan = onOpenPlan,
+                        )
+                    }
                 }
                 CategoriesSection(
                     categories = categories,
@@ -183,7 +212,12 @@ fun ReadingPlansScreen(
                 if (searching) {
                     FilteredResults(category = category, plans = filtered, onOpenPlan = onOpenPlan)
                 } else {
-                    CollectionsSections(collections = collections, midPromo = midPromo, onOpenPlan = onOpenPlan)
+                    CollectionsSections(
+                        collections = collections,
+                        midPromo = midPromo,
+                        promos = restPromos,
+                        onOpenPlan = onOpenPlan,
+                    )
                     InvitationCard(onClick = onOpenReadWithFriend)
                 }
             }
@@ -560,6 +594,41 @@ internal fun midPromoPlan(
 }
 
 /**
+ * One server promo, joined to the plan it names.
+ *
+ * The server chooses the plan, the kicker and the reason; the client only has to
+ * find the plan in the list it already holds. A promo naming a plan this member
+ * cannot see (gated, retired, or simply not in this page's payload) is dropped
+ * rather than rendered half-empty, and a plan is promoted at most once so one
+ * plan cannot own the shelf.
+ */
+internal data class ResolvedPromo(
+    val plan: ReadingPlanRow,
+    val kicker: String,
+    val reason: String?,
+)
+
+/** Join the server's promos to the loaded plans, in the server's order. */
+internal fun resolvePromos(
+    promos: List<PlanPromoDto>,
+    plans: List<ReadingPlanRow>,
+): List<ResolvedPromo> {
+    if (promos.isEmpty() || plans.isEmpty()) return emptyList()
+    val byId = plans.associateBy { it.planId }
+    val seen = HashSet<String>()
+    return promos.mapNotNull { p ->
+        val plan = byId[p.planId] ?: return@mapNotNull null
+        if (!seen.add(plan.planId)) return@mapNotNull null
+        ResolvedPromo(
+            plan = plan,
+            // The kicker is the pill's whole content — never leave it blank.
+            kicker = p.kicker.trim().ifEmpty { "FOR YOU" },
+            reason = p.reason.trim().ifEmpty { null },
+        )
+    }
+}
+
+/**
  * A full-bleed invitation to one plan (owner, 2026-08-26: "make beautiful ads
  * that promote plans with nice images and messages"). Nothing here is invented:
  * the picture is the plan's own cover, and the words are the plan's own subtitle
@@ -571,9 +640,14 @@ private fun PlanPromo(
     plan: ReadingPlanRow,
     kicker: String,
     onOpenPlan: (String) -> Unit,
+    reason: String? = null,
     shimmer: Boolean = false,
 ) {
-    val hook = remember(plan.description) { planPromoHook(plan.description) }
+    // When the server has a reason THIS member is being shown THIS plan, it
+    // speaks instead of the plan's own opening line — it knows more than we do.
+    val hook = remember(plan.description, reason) {
+        reason?.takeIf { it.isNotBlank() } ?: planPromoHook(plan.description)
+    }
     val shape = RoundedCornerShape(22.dp)
     Column(
         Modifier
@@ -732,15 +806,21 @@ private fun TopicChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /**
  * Browse: every plan on the page, two to a row, grouped by commitment — nothing
- * behind a sideways swipe. One promo card is woven in after the first section so
- * the page reads like a magazine rather than a stock list.
+ * behind a sideways swipe. Promo cards are woven between the sections so the
+ * page reads like a magazine rather than a stock list.
+ *
+ * With server promos, the ones left after the hero take the gaps between the
+ * length sections, one each, and any that don't fit follow the last section.
+ * With none, the page keeps its old single mid-page promo exactly.
  */
 @Composable
 private fun CollectionsSections(
     collections: List<Triple<String, String, List<ReadingPlanRow>>>,
     midPromo: ReadingPlanRow?,
+    promos: List<ResolvedPromo>,
     onOpenPlan: (String) -> Unit,
 ) {
+    val gaps = (collections.size - 1).coerceAtLeast(0)
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         collections.forEachIndexed { i, (_, label, colPlans) ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -755,9 +835,20 @@ private fun CollectionsSections(
                 }
                 PlanGrid(plans = colPlans, onOpenPlan = onOpenPlan)
             }
-            if (i == 0 && midPromo != null) {
-                PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan)
+            if (promos.isEmpty()) {
+                if (i == 0 && midPromo != null) {
+                    PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan)
+                }
+            } else if (i < gaps) {
+                promos.getOrNull(i)?.let { p ->
+                    PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan)
+                }
             }
+        }
+        // More promos than gaps (or no sections at all) — the remainder closes
+        // the page rather than being silently dropped.
+        for (p in promos.drop(gaps)) {
+            PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan)
         }
     }
 }
