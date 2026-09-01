@@ -11,6 +11,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.nuruplace.member.data.net.PlanPromo as PlanPromoDto
 import org.nuruplace.member.data.net.ReadingPlanRow
 
 class PlanPromoHookTest {
@@ -101,5 +102,40 @@ class PlanPromoHookTest {
         )
         val picks = (day until day + 16).mapNotNull { midPromoPlan(plans, "a", it)?.planId }.toSet()
         assertTrue("the promo never rotated: $picks", picks.size > 1)
+    }
+
+    // --- joining the server's promos to the plans we hold -----------------
+
+    private fun promo(id: String, kicker: String = "PICK UP WHERE YOU LEFT OFF", reason: String = "You have already begun this one.") =
+        PlanPromoDto(planId = id, slot = "continue", kicker = kicker, reason = reason)
+
+    @Test fun `promos keep the server's order and carry its words`() {
+        val plans = listOf(plan("a"), plan("b"), plan("c"))
+        val out = resolvePromos(listOf(promo("c"), promo("a")), plans)
+        assertEquals(listOf("c", "a"), out.map { it.plan.planId })
+        assertEquals("PICK UP WHERE YOU LEFT OFF", out[0].kicker)
+        assertEquals("You have already begun this one.", out[0].reason)
+    }
+
+    @Test fun `a promo naming a plan we do not hold is dropped, not rendered empty`() {
+        val out = resolvePromos(listOf(promo("a"), promo("ghost"), promo("b")), listOf(plan("a"), plan("b")))
+        assertEquals(listOf("a", "b"), out.map { it.plan.planId })
+    }
+
+    @Test fun `one plan cannot take two slots`() {
+        val out = resolvePromos(listOf(promo("a"), promo("a"), promo("b")), listOf(plan("a"), plan("b")))
+        assertEquals(listOf("a", "b"), out.map { it.plan.planId })
+    }
+
+    @Test fun `an empty or failed promo load leaves the page to its local choices`() {
+        assertTrue(resolvePromos(emptyList(), listOf(plan("a"))).isEmpty())
+        assertTrue(resolvePromos(listOf(promo("a")), emptyList()).isEmpty())
+    }
+
+    @Test fun `a blank kicker still gets a pill and a blank reason falls back to the plan's own words`() {
+        val out = resolvePromos(listOf(promo("a", kicker = "  ", reason = "  ")), listOf(plan("a")))
+        assertEquals(1, out.size)
+        assertEquals("FOR YOU", out[0].kicker)
+        assertNull(out[0].reason)
     }
 }
