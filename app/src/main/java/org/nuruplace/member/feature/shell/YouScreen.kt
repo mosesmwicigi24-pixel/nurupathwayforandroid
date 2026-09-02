@@ -131,6 +131,7 @@ fun YouScreen(
                     onBack = {}, // embedded segment, not a pushed screen — no back affordance (unused by GivingScreen today anyway)
                     onOpenStatement = { onNavigate("statement") },
                     onOpenSchedules = { onNavigate("schedules") },
+                    onOpenPartners = { onNavigate("partners") },
                 )
                 YouSegment.Profile -> ProfileScreen(me, onOpen = { onNavigate(it) }, onSignOut = onSignOut)
             }

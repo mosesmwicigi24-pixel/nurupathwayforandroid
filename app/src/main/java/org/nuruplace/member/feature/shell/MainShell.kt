@@ -655,6 +655,11 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("statement") {
                 GivingStatementScreen(onBack = { nav.popBackStack() }, onOpenReceipt = { nav.navigate("receipt/$it") })
             }
+            // Partners is its own screen — separate from Give, as the design
+            // asks — but reached from it. The money reporting stays on Give.
+            composable("partners") {
+                org.nuruplace.member.feature.give.PartnersScreen()
+            }
             composable(
                 "receipt/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),

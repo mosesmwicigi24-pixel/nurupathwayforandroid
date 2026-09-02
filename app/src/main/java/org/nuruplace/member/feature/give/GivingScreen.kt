@@ -107,7 +107,7 @@ private fun firstChargeDate(freq: Int): String =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedules: () -> Unit = {}) {
+fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedules: () -> Unit = {}, onOpenPartners: () -> Unit = {}) {
     AsyncContent(
         load = {
             val hist = runCatching { Net.client.api.givingHistory().data }.getOrDefault(emptyList())
@@ -116,7 +116,7 @@ fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedule
             Triple(hist, sched, phone)
         },
     ) { (history, schedules, phone), reload ->
-        GiveTab(history, schedules, phone, reload, onOpenStatement)
+        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenPartners)
     }
 }
 
@@ -128,6 +128,7 @@ private fun GiveTab(
     phone: String,
     reload: () -> Unit,
     onOpenStatement: () -> Unit,
+    onOpenPartners: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
 
@@ -456,6 +457,31 @@ private fun GiveTab(
                             }
                         }
                     }
+                }
+
+                // Partners — its own screen, reached from here because this is
+                // where someone thinking about giving already is. iOS parity.
+                Row(
+                    Modifier.padding(top = 16.dp).fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp)).background(GIVE.white)
+                        .border(1.dp, GIVE.gold.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+                        .clickable { onOpenPartners() }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Partners", style = giInter(15, FontWeight.SemiBold), color = GIVE.navy)
+                        Text(
+                            "Your standing, and what this season has held",
+                            style = giInter(12), color = GIVE.sub,
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
+                    Icon(
+                        androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null, tint = GIVE.gold,
+                        modifier = Modifier.size(14.dp),
+                    )
                 }
             }
         }

@@ -80,3 +80,57 @@ data class PayPalCaptureBody(val orderId: String)
 
 @Serializable
 data class PayPalCaptureRes(val status: String = "")
+
+// --- Partnership (Phase 1 of the Partners design) ---
+//
+// A partner is not a new record: it is an active or paused giving schedule,
+// read a different way. The server derives this standing, so nothing here is a
+// second copy of the truth.
+//
+// Two field names carry rules that must not erode:
+//   · `kept` is cycles actually COLLECTED, never cycles scheduled.
+//   · `sinceYouBegan` is what the WHOLE CHURCH did during the partnership —
+//     never this member's money traced to an outcome.
+@Serializable
+data class Partnership(
+    /** The schedule this standing derives from — what the resume button acts on. */
+    val scheduleId: String? = null,
+    val isPartner: Boolean = false,
+    val everPartnered: Boolean = false,
+    val status: String? = null,          // active | paused
+    val since: String? = null,
+    val kept: Int = 0,
+    val givenMinor: Int = 0,
+    val currency: String = "KES",
+    val rhythm: PartnerRhythm? = null,
+    /** Present ONLY when there is something to say. */
+    val trouble: PartnerTrouble? = null,
+    val sinceYouBegan: PartnerSeason? = null,
+)
+
+@Serializable
+data class PartnerRhythm(
+    val frequency: String = "monthly",
+    val method: String = "",
+    val amountMinor: Int = 0,
+    val fund: String = "",
+    /** null while paused — nothing is coming. */
+    val nextRunAt: String? = null,
+)
+
+@Serializable
+data class PartnerTrouble(
+    val paused: Boolean = false,
+    val consecutiveFailures: Int = 0,
+    val lastFailedAt: String? = null,
+    // No error text by design: the provider's wording is for the church's admin
+    // view, not for a member who is already worried.
+)
+
+@Serializable
+data class PartnerSeason(
+    val from: String = "",
+    val levelsCompleted: Int = 0,
+    val modulesCompleted: Int = 0,
+    val plansFinished: Int = 0,
+)

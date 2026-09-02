@@ -515,6 +515,18 @@ interface MemberApi {
     @POST("giving/schedules/{id}/cancel")
     suspend fun cancelSchedule(@Path("id") scheduleId: String): Unit
 
+    /**
+     * Re-arm a schedule paused after repeated collection failures. It
+     * deliberately does NOT collect the cycle that was missed — money must
+     * never surprise anyone.
+     */
+    @POST("giving/schedules/{id}/resume")
+    suspend fun resumeSchedule(@Path("id") scheduleId: String): Unit
+
+    /** The member's standing as a partner. Recognition, not receipts. */
+    @GET("giving/partnership")
+    suspend fun partnership(): Partnership
+
     // --- Announcements ---
     @GET("me/announcements")
     suspend fun myAnnouncements(): Envelope<MyAnnouncement>
