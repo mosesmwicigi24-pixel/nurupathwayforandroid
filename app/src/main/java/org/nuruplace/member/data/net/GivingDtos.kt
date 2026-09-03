@@ -134,3 +134,54 @@ data class PartnerSeason(
     val modulesCompleted: Int = 0,
     val plansFinished: Int = 0,
 )
+
+// --- The partner invitation ---
+//
+// The server's answer to "may I invite this member today, and with what".
+// Every rule of restraint lives there (invitation.ts) so the two apps cannot
+// drift apart — and they would only ever drift towards asking more often.
+// This client asks, renders what comes back, and reports what happened.
+@Serializable
+data class PartnerInvite(
+    val show: Boolean = false,
+    /** Why not, when show is false. Not rendered — carried for diagnostics. */
+    val reason: String? = null,
+    /** Which showing this is about to be. "Don't ask again" appears from 2. */
+    val showing: Int? = null,
+    val campaign: InviteCampaign? = null,
+)
+
+@Serializable
+data class InviteCampaign(
+    val campaignId: String = "",
+    val title: String = "",
+    val blurb: String = "",
+    val imageUrl: String? = null,
+    val goalMinor: Int = 0,
+    val raisedMinor: Int = 0,
+    val currency: String = "KES",
+    val endsOn: String = "",
+    val daysLeft: Int = 0,
+    /** Present ONLY when a real person pledged it. Never rendered otherwise. */
+    val match: InviteMatch? = null,
+    val tiers: List<InviteTier> = emptyList(),
+) {
+    /** Clamped: a campaign past its goal shows full, never overflowing. */
+    val progress: Float
+        get() = if (goalMinor <= 0) 0f else minOf(1f, raisedMinor.toFloat() / goalMinor)
+}
+
+@Serializable
+data class InviteMatch(val amountMinor: Int = 0, val pledger: String = "")
+
+/** An amount with its meaning. The amount alone is a price list. */
+@Serializable
+data class InviteTier(
+    val amountMinor: Int = 0,
+    val currency: String = "KES",
+    val disciplesPerYear: Int = 0,
+    val meaning: String = "",
+)
+
+@Serializable
+data class InviteOutcomeBody(val outcome: String)

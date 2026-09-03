@@ -163,6 +163,52 @@ fun HomeScreen(
     // exact eligibility rule and its reasoning).
     var showGoLiveSheet by remember { mutableStateOf(false) }
 
+    // The partner invitation. Whether it may be shown is decided entirely by
+    // the server; Home asks once and presents whatever comes back. Nothing
+    // about WHEN to ask is decided here — see PartnerInviteSheet.kt.
+    var partnerInvite by remember {
+        mutableStateOf<org.nuruplace.member.data.net.InviteCampaign?>(null)
+    }
+    var partnerInviteShowing by remember { mutableIntStateOf(1) }
+    LaunchedEffect(Unit) {
+        val d = runCatching { Net.client.api.partnerInvite() }.getOrNull()
+        if (d != null && d.show && d.campaign != null) {
+            partnerInviteShowing = d.showing ?: 1
+            partnerInvite = d.campaign
+            // Rendered, not merely decided — this is what the cap counts.
+            runCatching { Net.client.api.inviteShown(d.campaign.campaignId) }
+        }
+    }
+    partnerInvite?.let { c ->
+        org.nuruplace.member.feature.give.PartnerInviteSheet(
+            campaign = c,
+            showing = partnerInviteShowing,
+            onBecomePartner = {
+                scope.launch {
+                    runCatching {
+                        Net.client.api.inviteOutcome(
+                            c.campaignId,
+                            org.nuruplace.member.data.net.InviteOutcomeBody("opened"))
+                    }
+                }
+                partnerInvite = null
+                // Opens Give, where Partners lives. NOT a payment sheet.
+                onOpenGive()
+            },
+            onDismiss = { permanent ->
+                scope.launch {
+                    runCatching {
+                        Net.client.api.inviteOutcome(
+                            c.campaignId,
+                            org.nuruplace.member.data.net.InviteOutcomeBody(
+                                if (permanent) "declined" else "dismissed"))
+                    }
+                }
+                partnerInvite = null
+            },
+        )
+    }
+
     // One tick per full load — pull-to-refresh bumps it to re-run the batch;
     // `loadedOnce` keeps the skeleton from ever returning after first paint.
     var refreshTick by remember { mutableIntStateOf(0) }

@@ -523,6 +523,18 @@ interface MemberApi {
     @POST("giving/schedules/{id}/resume")
     suspend fun resumeSchedule(@Path("id") scheduleId: String): Unit
 
+    /** May we invite this member today, and with what. The client never decides. */
+    @GET("giving/invitation")
+    suspend fun partnerInvite(): PartnerInvite
+
+    /** Rendered, not merely decided — this is what the "three times" cap counts. */
+    @POST("giving/invitation/{id}/shown")
+    suspend fun inviteShown(@Path("id") campaignId: String): Unit
+
+    /** dismissed | declined | opened | gave. `declined` is permanent. */
+    @POST("giving/invitation/{id}/outcome")
+    suspend fun inviteOutcome(@Path("id") campaignId: String, @Body body: InviteOutcomeBody): Unit
+
     /** The member's standing as a partner. Recognition, not receipts. */
     @GET("giving/partnership")
     suspend fun partnership(): Partnership
