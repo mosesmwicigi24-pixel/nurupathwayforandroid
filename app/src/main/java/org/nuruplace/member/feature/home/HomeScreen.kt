@@ -90,6 +90,7 @@ import org.nuruplace.member.data.net.VerseReactionBody
 import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
+import org.nuruplace.member.feature.grow.PLCover
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideoPlayer
@@ -1196,17 +1197,28 @@ private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
 }
 
 /** 2c — "Continue your plan" resume banner (iOS HomeView.planResumeBanner
- *  parity): a navy card with a gold circular progress ring, "Day N of M" +
- *  plan title, tapping opens that plan on the Plans tab. */
+ *  parity): a navy card showing the plan's own cover (the same PLCover the
+ *  Plans tab draws) with a gold progress bar, "Day N of M" + plan title;
+ *  a plan with no cover keeps the gold circular progress ring. Tapping opens
+ *  that plan on the Plans tab. */
 @Composable
 private fun PlanResumeBanner(p: ReadingPlanRow, onClick: () -> Unit) {
     val day = p.currentDay ?: 1
     val done = p.completedDays?.size ?: (day - 1).coerceAtLeast(0)
     val pct = if (p.dayCount > 0) (done * 100 / p.dayCount).coerceIn(0, 100) else 0
+    val hasCover = !p.imageUrl.isNullOrBlank()
     NavyCard(modifier = Modifier.pressScale().clickable { onClick() }, pad = Spacing.base) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ProgressRing(pct = pct, size = 48.dp, stroke = 4.dp, track = Color.White.copy(alpha = 0.22f), arc = Nuru.gold) {
-                Text("📖", style = NuruType.body)
+            if (hasCover) {
+                // THE plan, not a generic book: its cover as a rounded tile.
+                val tile = RoundedCornerShape(14.dp)
+                Box(Modifier.size(64.dp).clip(tile).border(1.dp, Color.White.copy(alpha = 0.14f), tile)) {
+                    PLCover(url = p.imageUrl, modifier = Modifier.matchParentSize())
+                }
+            } else {
+                ProgressRing(pct = pct, size = 48.dp, stroke = 4.dp, track = Color.White.copy(alpha = 0.22f), arc = Nuru.gold) {
+                    Text("📖", style = NuruType.body)
+                }
             }
             Spacer(Modifier.width(Spacing.md))
             Column(Modifier.weight(1f)) {
@@ -1216,6 +1228,11 @@ private fun PlanResumeBanner(p: ReadingPlanRow, onClick: () -> Unit) {
                     "Day $day of ${p.dayCount} · pick up where you left off",
                     style = NuruType.micro, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
+                if (hasCover) {
+                    // The ring's job, now that the cover has its spot.
+                    Spacer(Modifier.height(6.dp))
+                    ProgressBar(pct, Nuru.gold, track = Color.White.copy(alpha = 0.22f), height = 4.dp)
+                }
             }
             Spacer(Modifier.width(Spacing.sm))
             Text("›", style = NuruType.title, color = Nuru.gold)
