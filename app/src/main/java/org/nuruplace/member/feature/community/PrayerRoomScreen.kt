@@ -56,7 +56,10 @@ private val Capsule = RoundedCornerShape(999.dp)
 @Composable
 fun PrayerRoomScreen(
     initialTab: PrayerRoomTab = PrayerRoomTab.Private,
-    onBack: () -> Unit,
+    /** Inside the Community segment there is nothing to go back TO — the back
+     *  circle is hidden. Same precedent as PrayerWallScreen(embedded). */
+    embedded: Boolean = false,
+    onBack: () -> Unit = {},
     onOpenPost: (String) -> Unit,
 ) {
     var tab by remember { mutableStateOf(initialTab) }
@@ -65,15 +68,17 @@ fun PrayerRoomScreen(
         GrowCreamHeader {
             Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.lg)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(Nuru.white)
-                            .border(1.dp, Nuru.border, CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    if (!embedded) {
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).background(Nuru.white)
+                                .border(1.dp, Nuru.border, CircleShape)
+                                .clickable { onBack() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(Spacing.md))
                     }
-                    Spacer(Modifier.width(Spacing.md))
                     Text("MY PRAYER ROOM", style = NuruType.kicker, color = Nuru.eyebrow)
                 }
                 Text(
