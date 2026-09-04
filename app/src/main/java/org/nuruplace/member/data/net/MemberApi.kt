@@ -130,6 +130,10 @@ interface MemberApi {
     @POST("growth/segments/{id}/complete")
     suspend fun completeSegment(@Path("id") segmentId: String): SegmentCompleteResult
 
+    /** Passage text by reference ("Book C:V" or "Book C:V-V"); server-cached. */
+    @GET("scripture")
+    suspend fun scripture(@Query("ref") ref: String): ScripturePassage
+
     @GET("growth/plans/{id}/days/{n}/reflection")
     suspend fun dayReflection(@Path("id") planId: String, @Path("n") dayNumber: Int): PlanDayReflectionEnv
 

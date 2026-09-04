@@ -149,6 +149,16 @@ data class PlanDayReflection(
 @Serializable
 data class PlanDayReflectionEnv(val data: PlanDayReflection? = null)
 
+/** GET /scripture?ref= — a sanitised YouVersion passage (§3.3). `text` carries
+ *  its verse numbers inline; the reader styles them. */
+@Serializable
+data class ScripturePassage(
+    val reference: String = "",
+    val version: String? = null,
+    val language: String? = null,
+    val text: String = "",
+)
+
 @Serializable
 data class SaveReflectionBody(val body: String, val clientMutationId: String)
 

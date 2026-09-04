@@ -623,7 +623,7 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
                 when {
                     syncing -> "Finishing your sync… tap to check"
                     locked -> "${day.reference} · opens when today is done"
-                    else -> "${day.reference} · ~5 min read"
+                    else -> "${day.reference} · about ${ReadTime.minutes(day)} min"
                 },
                 style = plInter(11),
                 color = if (syncing) PL.goldDeep else PL.ink3,
