@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
@@ -208,17 +209,20 @@ private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalet
         "word" -> group.forEach { seg ->
             when (seg.kind.lowercase()) {
                 // The day's passage — the shared cream card (parity with the
-                // Pathway lesson's scripture blockquotes).
-                "scripture" -> VerseQuoteCard(
-                    verse = seg.content?.takeIf { it.isNotEmpty() } ?: (seg.reference ?: seg.title),
-                    reference = seg.reference ?: "Scripture",
-                )
-                "reading" -> seg.content?.takeIf { it.isNotEmpty() }?.let {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("GO DEEPER", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-                        Text(it, style = rInter(13, FontWeight.Medium).copy(lineHeight = scaledLineHeight(19)), color = pal.inkDim)
+                // Pathway lesson's scripture blockquotes). Authored text wins; a
+                // bare reference fetches its passage so the card never reads
+                // "Proverbs 13:4" and nothing else.
+                "scripture" -> {
+                    val content = seg.content?.takeIf { it.isNotEmpty() }
+                    val ref = seg.reference
+                    when {
+                        content != null -> VerseQuoteCard(verse = content, reference = ref ?: "Scripture")
+                        ref != null && ScriptureRefs.isReference(ref) -> RScriptureQuote(ref)
+                        else -> VerseQuoteCard(verse = ref ?: seg.title, reference = ref ?: "Scripture")
                     }
                 }
+                // Go Deeper: the passages themselves, one card per reference.
+                "reading" -> seg.content?.takeIf { it.isNotEmpty() }?.let { RGoDeeper(it, pal) }
                 else -> seg.content?.takeIf { it.isNotEmpty() }?.let { RPassage(it, pal) }
             }
         }
@@ -240,6 +244,10 @@ private fun ReflectionBox(planId: String, dayNumber: Int, pal: ReaderPalette) {
     var text by remember { mutableStateOf("") }
     var hasSaved by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
+    var justSaved by remember { mutableStateOf(false) }
+    // Why the last save did not land — shown under the button, in words. A
+    // silent failure reads as "Update does nothing" (owner report, 2026-09-04).
+    var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(planId, dayNumber) {
         runCatching { Net.client.api.dayReflection(planId, dayNumber).data?.body }.getOrNull()?.let {
@@ -266,16 +274,37 @@ private fun ReflectionBox(planId: String, dayNumber: Int, pal: ReaderPalette) {
                 .border(1.dp, pal.gold.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
                 .clickable(enabled = text.isNotBlank() && !saving) {
                     scope.launch {
-                        saving = true
-                        val ok = runCatching { Net.client.api.saveDayReflection(planId, dayNumber, SaveReflectionBody(text.trim().take(4000), UUID.randomUUID().toString())) }.isSuccess
-                        saving = false; if (ok) hasSaved = true
+                        saving = true; error = null
+                        val result = runCatching {
+                            Net.client.api.saveDayReflection(planId, dayNumber, SaveReflectionBody(text.trim().take(4000), UUID.randomUUID().toString()))
+                        }
+                        saving = false
+                        result.onSuccess { row ->
+                            hasSaved = true
+                            // The server's copy is what the next visit will show —
+                            // mirror it now, so what you see is what was kept.
+                            if (row.body.isNotEmpty()) text = row.body
+                            justSaved = true
+                            delay(2_200)
+                            justSaved = false
+                        }.onFailure {
+                            error = "Couldn't save your reflection — check your connection and try again."
+                        }
                     }
                 }.padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (saving) CircularProgressIndicator(color = pal.goldDeep, strokeWidth = 1.5.dp, modifier = Modifier.size(14.dp))
-            else Text(if (hasSaved) "Update" else "Save reflection", style = rInter(12, FontWeight.Bold), color = pal.goldDeep)
+            else Text(
+                when {
+                    justSaved -> "Saved ✓"
+                    hasSaved -> "Update"
+                    else -> "Save reflection"
+                },
+                style = rInter(12, FontWeight.Bold), color = pal.goldDeep,
+            )
         }
+        error?.let { Text(it, style = rInter(12, FontWeight.Medium), color = Color(0xFFB91C1C)) }
     }
 }
 
