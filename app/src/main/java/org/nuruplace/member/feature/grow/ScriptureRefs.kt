@@ -62,9 +62,37 @@ object ScriptureRefs {
         .replace(Regex("""\s*-\s*"""), "-")
         .replace(Regex("""\s+"""), " ")
 
-    /** Verse numbers YouVersion leaves inline ("22 Do not merely listen… 23 Anyone…"):
-     *  a 1–3 digit token followed by a space and a capital or an opening quote. */
-    val verseNumber: Regex by lazy { Regex("""(?<=^|\s)(\d{1,3})(?=\s[A-Z“"'(\[])""") }
+    /** How many verses a reference spans, when that can be read off it: a
+     *  single verse is 1, "James 1:22-25" is 4. A cross-chapter span
+     *  ("John 3:16-4:2") is not counted here and comes back null. */
+    fun verseCount(ref: String): Int? {
+        val m = pattern.find(normalize(ref)) ?: return null
+        if (m.groups[5] != null) return null
+        val start = m.groups[3]?.value?.toIntOrNull() ?: return null
+        val end = m.groups[4]?.value?.toIntOrNull() ?: return 1
+        return if (end >= start) end - start + 1 else null
+    }
+
+    /** Short passages open without a tap — anything under five verses. */
+    fun opensByDefault(ref: String): Boolean = verseCount(ref)?.let { it <= 4 } ?: false
+
+    /** "James 1:22-25" → "James 1": the prefix a single verse's own reference
+     *  is built from ("James 1:23") when it is saved on its own. */
+    fun chapterPrefix(ref: String): String? {
+        val m = pattern.find(normalize(ref)) ?: return null
+        return "${m.groupValues[1]} ${m.groupValues[2]}"
+    }
+
+    /** CANDIDATE verse numbers YouVersion leaves inline ("22 Do not merely
+     *  listen… 23 Anyone… 24 and, after looking…"): a 1–3 digit token followed
+     *  by a space and a word or an opening quote. Deliberately loose (a verse
+     *  can begin lowercase); [passageVerses] keeps only the ones that run
+     *  consecutively, which is what rejects "430 years" inside a verse. */
+    val verseNumber: Regex by lazy { Regex("""(?<=^|\s)(\d{1,3})(?=\s[A-Za-z“"'(\[])""") }
+
+    /** The verse a reference starts at ("James 1:22-25" → 22) — the number
+     *  the first verse of its passage text carries. */
+    fun startVerse(ref: String): Int? = pattern.find(normalize(ref))?.groups?.get(3)?.value?.toIntOrNull()
 }
 
 /** Session cache over GET /scripture, on top of the server's month-long one. */

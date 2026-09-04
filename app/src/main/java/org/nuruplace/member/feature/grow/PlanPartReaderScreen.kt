@@ -35,6 +35,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -48,10 +49,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
@@ -146,6 +150,12 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                     ReaderChip(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(8.dp))
                     Text("DAY $dayNumber", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
+                    // Text size: Small → Regular → Large → Small, one tap each,
+                    // remembered per device (AppPrefs.readerTextScale).
+                    ReaderChip(onClick = { AppPrefs.updateReaderTextScale(ReaderTextScale.next(AppPrefs.readerTextScale)) }) {
+                        Text("Aa", style = rInter(13, FontWeight.Bold), color = Color.White)
+                    }
+                    Spacer(Modifier.width(8.dp))
                     ReaderChip(onClick = { ReaderMode.night = !ReaderMode.night }) {
                         Icon(if (ReaderMode.night) Icons.Filled.LightMode else Icons.Filled.DarkMode, "Reader mode", tint = Color.White, modifier = Modifier.size(16.dp))
                     }
@@ -162,13 +172,18 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                 loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = pal.gold) }
                 group.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nothing to read here.", style = rInter(13), color = pal.inkDim) }
                 else -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                    Column(
-                        Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 28.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
-                    ) {
-                        PartContent(part = part, group = group, pal = pal)
-                        if (part == "respond") ReflectionBox(planId, dayNumber, pal)
-                        EncouragementLine(pal)
+                    // The reader's text-size step scales every sp in the reading
+                    // canvas (and only there — header and CTA stay put).
+                    val base = LocalDensity.current
+                    CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * AppPrefs.readerTextScale)) {
+                        Column(
+                            Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 28.dp),
+                            verticalArrangement = Arrangement.spacedBy(18.dp),
+                        ) {
+                            PartContent(part = part, group = group, pal = pal, dayTitle = day?.title, reference = group.firstOrNull { it.kind.lowercase() == "scripture" }?.reference)
+                            if (part == "respond") ReflectionBox(planId, dayNumber, pal)
+                            EncouragementLine(pal)
+                        }
                     }
                     // Right-rail pace dot (only when the part scrolls).
                     if (scroll.maxValue > 40) {
@@ -204,26 +219,36 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
 }
 
 @Composable
-private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalette) {
+private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalette, dayTitle: String? = null, reference: String? = null) {
     when (part) {
-        "word" -> group.forEach { seg ->
+        "word" -> {
+            // The opening: kicker, the day's title, the reference and an honest
+            // read time — a front door before the Word.
+            RDayOpening(title = dayTitle, reference = reference, minutes = ReadTime.minutes(group), pal = pal)
+            val hasTeaching = group.any { rankOf(it) == 2 && !it.content.isNullOrEmpty() }
+            group.forEach { seg ->
             when (seg.kind.lowercase()) {
                 // The day's passage — the shared cream card (parity with the
                 // Pathway lesson's scripture blockquotes). Authored text wins; a
                 // bare reference fetches its passage so the card never reads
-                // "Proverbs 13:4" and nothing else.
+                // "Proverbs 13:4" and nothing else. Long-press keeps the verse.
                 "scripture" -> {
                     val content = seg.content?.takeIf { it.isNotEmpty() }
                     val ref = seg.reference
                     when {
-                        content != null -> VerseQuoteCard(verse = content, reference = ref ?: "Scripture")
-                        ref != null && ScriptureRefs.isReference(ref) -> RScriptureQuote(ref)
+                        content != null -> RLongPressSave(reference = ref?.takeIf { ScriptureRefs.isReference(it) }, text = content, version = null, pal = pal) {
+                            VerseQuoteCard(verse = content, reference = ref ?: "Scripture")
+                        }
+                        ref != null && ScriptureRefs.isReference(ref) -> RScriptureQuote(ref, pal)
                         else -> VerseQuoteCard(verse = ref ?: seg.title, reference = ref ?: "Scripture")
                     }
+                    // Where the Word ends and the teaching begins.
+                    if (hasTeaching) ROrnament(pal)
                 }
                 // Go Deeper: the passages themselves, one card per reference.
                 "reading" -> seg.content?.takeIf { it.isNotEmpty() }?.let { RGoDeeper(it, pal) }
                 else -> seg.content?.takeIf { it.isNotEmpty() }?.let { RPassage(it, pal) }
+            }
             }
         }
         "respond" -> group.forEach { seg ->
