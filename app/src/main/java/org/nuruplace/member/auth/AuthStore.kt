@@ -58,7 +58,7 @@ class AuthStore : ViewModel() {
         // takes the refresh token in the body). Capture the token BEFORE clearing;
         // never block sign-out on the network — local sign-out always proceeds.
         val rt = Net.client.vault.refreshToken
-        Net.client.vault.clear()
+        Net.client.signOutLocally()
         // A fingerprint-enrolled Broadcast password belongs to THIS account —
         // never let it silently carry over to whoever signs in next on this
         // device.
