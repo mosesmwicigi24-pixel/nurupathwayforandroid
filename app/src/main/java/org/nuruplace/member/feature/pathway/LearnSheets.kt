@@ -84,6 +84,15 @@ fun NuruCoachDialog(moduleId: String, onRetry: () -> Unit, onDismiss: () -> Unit
                             body, style = LSBody, color = LSInkOnPaper,
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LSPaper).padding(20.dp),
                         )
+                        // The end of the review is a finish line, not a fade-out
+                        // (owner, 2026-09-15: "…say you have finished the review").
+                        Spacer(Modifier.height(14.dp))
+                        Text("Congratulations", style = NuruType.title, color = Color.White,
+                             modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Spacer(Modifier.height(4.dp))
+                        Text("You've finished the review. When you're ready, the quiz is waiting.",
+                             style = NuruType.body, color = Color.White.copy(alpha = 0.85f),
+                             modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         Spacer(Modifier.height(16.dp))
                         Box(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))

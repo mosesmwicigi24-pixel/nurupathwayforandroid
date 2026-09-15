@@ -47,6 +47,10 @@ import org.nuruplace.member.data.net.GiftAnswerInput
 import org.nuruplace.member.data.net.GiftPersona
 import org.nuruplace.member.data.net.GiftQuestion
 import org.nuruplace.member.data.net.GiftQuestionSet
+import org.nuruplace.member.data.QuizDraftStore
+import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.Moment
+import androidx.compose.runtime.LaunchedEffect
 import org.nuruplace.member.data.net.GiftSubmitBody
 import org.nuruplace.member.data.net.MyGifts
 import org.nuruplace.member.data.net.Net
@@ -100,11 +104,18 @@ private fun BackTile(onBack: () -> Unit) {
 
 @Composable
 private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
-    AsyncContent(key = "gq", load = { Net.client.api.giftQuestions() }) { set: GiftQuestionSet, _ ->
+    // A draft left mid-assessment wins over a fresh fetch: the set can be
+    // AI-personalised per fetch, so the draft carries the exact set the member
+    // was answering. (See QuizDraftStore.)
+    val draft = remember { QuizDraftStore.loadGifts() }
+    AsyncContent(key = "gq", load = { draft?.questionSet ?: Net.client.api.giftQuestions() }) { set: GiftQuestionSet, _ ->
         val scope = rememberCoroutineScope()
-        val answers = remember { mutableStateMapOf<String, Int>() }
-        var step by remember { mutableIntStateOf(0) }
+        val answers = remember { mutableStateMapOf<String, Int>().apply { draft?.chosen?.let { putAll(it) } } }
+        var step by remember { mutableIntStateOf(draft?.chosen?.size?.coerceIn(0, set.data.lastIndex) ?: 0) }
         var busy by remember { mutableStateOf(false) }
+        // Every answer, the moment it is given.
+        val answersSnap = answers.toMap()
+        LaunchedEffect(answersSnap) { if (answersSnap.isNotEmpty()) QuizDraftStore.saveGifts(set, answersSnap) }
 
         val submit: () -> Unit = {
             if (!busy) {
@@ -117,6 +128,12 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                                 set.setId,
                                 answers.map { GiftAnswerInput(it.key, it.value) },
                             ),
+                        )
+                        // Finished. Draft done; congratulations before the profile reveals.
+                        QuizDraftStore.clearGifts()
+                        CelebrationCenter.fire(
+                            Moment(key = "finished:gifts:${set.setId}", title = "Congratulations",
+                                   subtitle = "You've finished the assessment."),
                         )
                         onDone()
                     } catch (_: Exception) {

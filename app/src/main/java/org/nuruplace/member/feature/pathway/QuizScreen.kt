@@ -54,6 +54,10 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.QKind
 import org.nuruplace.member.data.net.QuizAnswer
 import org.nuruplace.member.data.net.QuizQuestion
+import org.nuruplace.member.data.QuizDraftStore
+import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.Moment
+import androidx.compose.runtime.LaunchedEffect
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.Kicker
@@ -79,12 +83,13 @@ fun QuizScreen(
     onDone: () -> Unit,
     onPassed: (() -> Unit)? = null,   // level exam: route to the level-complete ceremony
     moduleId: String? = null,         // module quizzes only: unlocks "Review with Nuru" on a fail
+    draftKey: String,                 // "module:<id>" | "level:<n>" — where saved answers live
 ) {
     AsyncContent(key = title, load = { loadQuestions() }) { questions, _ ->
         if (questions.isEmpty()) {
             EmptyQuiz(onDone)
         } else {
-            QuizFlow(title, questions, submit, onDone, onPassed, moduleId)
+            QuizFlow(title, questions, submit, onDone, onPassed, moduleId, draftKey)
         }
     }
 }
@@ -92,20 +97,34 @@ fun QuizScreen(
 @Composable
 private fun QuizFlow(
     title: String,
-    questions: List<QuizQuestion>,
+    freshQuestions: List<QuizQuestion>,
     submit: suspend (List<QuizAnswer>, String) -> QuizVerdict,
     onDone: () -> Unit,
     onPassed: (() -> Unit)?,
     moduleId: String? = null,
+    draftKey: String,
 ) {
     val scope = rememberCoroutineScope()
-    val values = remember { mutableStateMapOf<String, String>() }          // single / scale / text
-    val checks = remember { mutableStateMapOf<String, Set<String>>() }     // checkbox
-    var idx by remember { mutableIntStateOf(0) }
+    // A draft left mid-test wins over the fresh fetch: the server randomises
+    // the order every time, so the draft's own questions are the ones the
+    // member was actually answering. (See QuizDraftStore for why.)
+    val draft = remember(draftKey) { QuizDraftStore.load(draftKey) }
+    val questions = draft?.questions ?: freshQuestions
+    var resumedFrom by remember { mutableStateOf(draft?.index?.takeIf { it > 0 }) }
+    val values = remember { mutableStateMapOf<String, String>().apply { draft?.values?.let { putAll(it) } } }
+    val checks = remember { mutableStateMapOf<String, Set<String>>().apply { draft?.checks?.let { putAll(it) } } }
+    var idx by remember { mutableIntStateOf(draft?.index?.coerceIn(0, questions.lastIndex) ?: 0) }
     var mutationId by remember { mutableStateOf(newId()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var verdict by remember { mutableStateOf<QuizVerdict?>(null) }
+    // Every answer and every step is written the moment it happens. Snapshots,
+    // so the effect keys on content rather than on the maps' identity.
+    val valuesSnap = values.toMap()
+    val checksSnap = checks.toMap()
+    LaunchedEffect(valuesSnap, checksSnap, idx) {
+        if (verdict == null) QuizDraftStore.save(draftKey, questions, idx, valuesSnap, checksSnap)
+    }
 
     fun answered(q: QuizQuestion): Boolean {
         if (q.required == false) return true
@@ -139,11 +158,26 @@ private fun QuizFlow(
     }
 
     verdict?.let { v ->
+        // Finished — pass or fail. The draft's job is done, and the member is
+        // told they finished BEFORE they are told how they scored (owner,
+        // 2026-09-15: "it should tell you congratulations and say you have
+        // finished the test").
+        LaunchedEffect(v) {
+            QuizDraftStore.clear(draftKey)
+            CelebrationCenter.fire(
+                Moment(
+                    key = "finished:$draftKey:$mutationId",
+                    title = "Congratulations",
+                    subtitle = if (draftKey.startsWith("level:")) "You've finished the exam." else "You've finished the test.",
+                ),
+            )
+        }
         // A passed level exam continues into the level-complete ceremony; a passed
         // module quiz (or manual review) just returns to the pathway.
         val onContinue = if (v.isPassed && onPassed != null) onPassed else onDone
         ResultScreen(v, moduleId = moduleId, onDone = onContinue, onRetry = {
             verdict = null; error = null; values.clear(); checks.clear(); idx = 0; mutationId = newId()
+            QuizDraftStore.clear(draftKey)
         })
         return
     }
@@ -177,6 +211,15 @@ private fun QuizFlow(
             verticalArrangement = Arrangement.spacedBy(Spacing.base),
         ) {
             Text("Question ${idx + 1} of ${questions.size}", style = NuruType.kicker, color = Nuru.ink400)
+            // Shown once, on the question they came back to; gone as soon as they move.
+            LaunchedEffect(idx) { if (resumedFrom != null && idx != resumedFrom) resumedFrom = null }
+            resumedFrom?.let { r ->
+                Text(
+                    "Picking up where you left off — question ${r + 1} of ${questions.size}.",
+                    style = NuruType.caption, color = Nuru.ink600,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Nuru.goldTint).padding(8.dp),
+                )
+            }
             Text(q.questionText, style = NuruType.cardTitle, color = Nuru.ink)
             when (q.kind) {
                 QKind.CHECKBOX -> q.choices().forEach { c ->
