@@ -10,7 +10,12 @@ import android.content.Context
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import okhttp3.Authenticator
+import okhttp3.Cache
+import okhttp3.CacheControl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -63,6 +68,67 @@ class ApiClient(context: Context) {
         chain.proceed(b.build())
     }
 
+    // ── The last good copy ──────────────────────────────────────────────────
+    // The server has been vanishing for two to four hours at a time (pathway
+    // docs/DEPLOYMENT.md, incident ledger 2026-09-05→11). While it is away a
+    // member should see a stale Home, not a blank page. So every GET's last
+    // good response is kept on disk, and served ONLY when the wire fails:
+    // online reads always go to the network (max-age=0), so nothing is ever
+    // stale while the server answers. Cleared whenever the signed-in member
+    // changes, so nobody is shown someone else's copies.
+    private val httpCache = Cache(File(context.cacheDir, "api-http"), 10L * 1024 * 1024)
+
+    /** Reads whose last good copy is worth keeping: GETs that are not auth and
+     *  not the offline engine's own sync traffic (it keeps its own truth). */
+    private fun keepsLastGoodCopy(req: Request): Boolean {
+        if (req.method != "GET") return false
+        val path = req.url.encodedPath.lowercase()
+        return !path.contains("/auth/") && !path.contains("/sync")
+    }
+
+    /** Network interceptor: marks a good GET response storable. "public" is what
+     *  lets OkHttp keep a response to a request that carried an Authorization
+     *  header; max-age=0 sends every online read to the wire regardless. */
+    private val storeLastGoodCopy = Interceptor { chain ->
+        val req = chain.request()
+        val resp = chain.proceed(req)
+        if (!keepsLastGoodCopy(req) || !resp.isSuccessful) return@Interceptor resp
+        resp.newBuilder().header("Cache-Control", "public, max-age=0").removeHeader("Pragma").build()
+    }
+
+    /** Application interceptor, first in the chain: a GET that failed on the
+     *  wire is answered from its last good copy (up to seven days old); a GET
+     *  with no copy, and every write, fails exactly as before. */
+    private val serveLastGoodCopy = Interceptor { chain ->
+        val req = chain.request()
+        try {
+            chain.proceed(req).also { if (it.networkResponse != null) ServerReach.reached() }
+        } catch (e: IOException) {
+            if (!keepsLastGoodCopy(req)) throw e
+            val copy = runCatching {
+                chain.proceed(
+                    req.newBuilder()
+                        .cacheControl(CacheControl.Builder().onlyIfCached().maxStale(7, TimeUnit.DAYS).build())
+                        .build(),
+                )
+            }.getOrNull()
+            // OkHttp answers an unsatisfiable only-if-cached request with a synthetic 504.
+            if (copy != null && copy.code == 200) {
+                ServerReach.servedStale()
+                copy.newBuilder().header("X-Nuru-Stale", "1").build()
+            } else {
+                copy?.close()
+                throw e
+            }
+        }
+    }
+
+    /** Drop every kept copy — on sign-in and sign-out, never on a token refresh. */
+    private fun forgetLastGoodCopies() {
+        runCatching { httpCache.evictAll() }
+        ServerReach.reached()
+    }
+
     // Bare client (no authenticator) used only for the refresh call, so refresh
     // can never recurse into itself.
     private val bareClient = OkHttpClient.Builder()
@@ -83,6 +149,7 @@ class ApiClient(context: Context) {
             }
             if (!doRefresh()) {
                 vault.clear()
+                forgetLastGoodCopies()
                 onSessionExpired?.invoke()
                 return@Authenticator null
             }
@@ -111,13 +178,18 @@ class ApiClient(context: Context) {
         // Bounded timeouts so a flaky/slow mobile network fails predictably with a
         // clear message instead of hanging (which read as "the app froze" / an ANR
         // and "can't connect"). Generous enough for a slow first login, capped by
-        // an overall callTimeout so no request ever hangs indefinitely.
-        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .callTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+        // an overall callTimeout so no request ever hangs indefinitely. Connect is
+        // 10 s: a SYN that Paris has not answered in ten seconds will not be
+        // answered in fifteen, and the last good copy is waiting behind it.
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .cache(httpCache)
+        .addInterceptor(serveLastGoodCopy)
         .addInterceptor(authInterceptor)
+        .addNetworkInterceptor(storeLastGoodCopy)
         .authenticator(authenticator)
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
@@ -143,14 +215,21 @@ class ApiClient(context: Context) {
     /** Login is the one endpoint that may return a 2FA challenge instead of a session. */
     suspend fun login(email: String, password: String): LoginResponse {
         val res = api.login(LoginBody(email.trim(), password))
-        res.session?.let { vault.set(it.accessToken, it.refreshToken) }
+        res.session?.let { vault.set(it.accessToken, it.refreshToken); forgetLastGoodCopies() }
         return res
     }
 
     suspend fun completeMfa(mfaToken: String, code: String): Session {
         val s = api.completeMfa(MfaBody(mfaToken, code))
         vault.set(s.accessToken, s.refreshToken)
+        forgetLastGoodCopies()
         return s
+    }
+
+    /** Sign-out: the next member on this phone starts with no copies of this one's reads. */
+    fun signOutLocally() {
+        vault.clear()
+        forgetLastGoodCopies()
     }
 
     private fun baseUrl(): String {

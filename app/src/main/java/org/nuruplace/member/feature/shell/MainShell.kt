@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -308,6 +309,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // LiveHudOverlay) rather than being pre-inset by Scaffold's padding
             // the way every other destination is.
             val contentPadding = if (onLiveBroadcast) androidx.compose.foundation.layout.PaddingValues(0.dp) else pad
+            // While the server is away and screens show their last good copies, say so once, here.
+            org.nuruplace.member.ui.components.ServerReachBanner(
+                Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding()).zIndex(1f),
+            )
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding)) {
             composable("home") {
                 HomeScreen(

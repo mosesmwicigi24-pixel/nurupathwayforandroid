@@ -420,7 +420,7 @@ private fun ActionsRow() {
                 .clickable {
                     // Full sign-out: clear the token vault + drive AuthStore back to /login
                     // via the wired onSessionExpired callback (identical to AuthStore.signOut()).
-                    Net.client.vault.clear()
+                    Net.client.signOutLocally()
                     Net.client.onSessionExpired?.invoke()
                 },
             contentAlignment = Alignment.Center,

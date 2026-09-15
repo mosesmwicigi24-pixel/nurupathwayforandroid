@@ -50,7 +50,14 @@ object ApiException {
             is UnknownHostException ->
                 if (online == null) "You appear to be offline. Check your connection and try again."
                 else "Couldn't reach Nuru Place. Please try again in a moment."
-            is SocketTimeoutException -> "Nuru Place is taking too long to respond. Please try again."
+            // OkHttp says "connect timed out" when the server never answered the
+            // handshake at all — the box is away (a recurring host outage, see
+            // the pathway incident ledger), not the phone. Say so, so a tester
+            // stops blaming their network. A read timeout is the slower kind.
+            is SocketTimeoutException ->
+                if (e.message?.contains("connect", ignoreCase = true) == true)
+                    "Nuru Place can't be reached right now — that's on our side, not your phone. We'll keep trying; please try again in a few minutes."
+                else "Nuru Place is taking too long to respond. Please try again."
             is SSLException -> "Secure connection failed. Please try again."
             is ConnectException -> "Couldn't reach Nuru Place. Please try again in a moment."
             else -> "Couldn't reach Nuru Place. Please check your connection and try again."
