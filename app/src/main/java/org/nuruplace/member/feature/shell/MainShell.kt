@@ -871,6 +871,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     },
                     onDone = { nav.popBackStack() },
                     moduleId = id,
+                    draftKey = "module:$id",
                 )
             }
             composable(
@@ -887,6 +888,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     },
                     onDone = { nav.popBackStack() },
                     onPassed = { nav.navigate("level-complete/$n") { popUpTo("pathway") } },
+                    draftKey = "level:$n",
                 )
             }
             }

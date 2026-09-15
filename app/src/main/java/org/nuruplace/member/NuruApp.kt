@@ -13,6 +13,7 @@ class NuruApp : Application() {
         super.onCreate()
         Net.init(this)
         AppPrefs.init(this)
+        org.nuruplace.member.data.QuizDraftStore.init(this)
         CelebrationCenter.init(this) // once-only celebration memory (§human moments)
         // Home-screen widgets (Pathway + Radio, Glance) — belt-and-suspenders
         // 15-min timeline refresh; cheap no-op when no widget is pinned.
