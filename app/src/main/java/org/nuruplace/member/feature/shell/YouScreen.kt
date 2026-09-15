@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VolunteerActivism
@@ -52,7 +53,7 @@ private val Capsule = RoundedCornerShape(999.dp)
 /** The four fused segments — `route` doubles as the standalone NavHost route
  *  that pre-selects it (see MainShell), so the two never drift apart. */
 enum class YouSegment(val route: String, val label: String, val icon: ImageVector) {
-    Chat("chat", "Chat", Icons.AutoMirrored.Filled.Chat),
+    Chat("chat", "Community", Icons.Filled.Groups),   // name + route stay: deep links resolve to them
     Events("events", "Events", Icons.Filled.CalendarMonth),
     Give("give", "Give", Icons.Filled.VolunteerActivism),
     Profile("profile", "Profile", Icons.Filled.Person),
@@ -108,16 +109,27 @@ fun YouScreen(
 
         Box(Modifier.weight(1f)) {
             when (segment) {
-                YouSegment.Chat -> ChatInboxScreen(
-                    onOpenThread = { onNavigate("chat/$it") },
-                    onNewMessage = { onNavigate("new-message") },
-                    onOpenAssistant = { onNavigate("assistant") },
-                    onOpenNotifications = { onNavigate("notifications") },
-                    isStaff = isStaff,
-                    pastoralEligible = pastoralEligible,
-                    onOpenBroadcast = { onNavigate("broadcast/$it") },
-                    onOpenThreadWithContext = { id, ctx -> onNavigate("chat/$id?ctx=$ctx") },
-                    onUnreadChange = onChatUnreadChange,
+                YouSegment.Chat -> org.nuruplace.member.feature.community.CommunitySegment(
+                    chatUnread = chatUnread,
+                    talk = {
+                        ChatInboxScreen(
+                            onOpenThread = { onNavigate("chat/$it") },
+                            onNewMessage = { onNavigate("new-message") },
+                            onOpenAssistant = { onNavigate("assistant") },
+                            onOpenNotifications = { onNavigate("notifications") },
+                            isStaff = isStaff,
+                            pastoralEligible = pastoralEligible,
+                            onOpenBroadcast = { onNavigate("broadcast/$it") },
+                            onOpenThreadWithContext = { id, ctx -> onNavigate("chat/$id?ctx=$ctx") },
+                            onUnreadChange = onChatUnreadChange,
+                        )
+                    },
+                    pray = {
+                        org.nuruplace.member.feature.community.PrayerRoomScreen(
+                            embedded = true,
+                            onOpenPost = { onNavigate("prayer-wall/$it") },
+                        )
+                    },
                 )
                 YouSegment.Events -> EventsScreen(
                     onOpenEvent = { id, end -> onNavigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") },
