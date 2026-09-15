@@ -6,12 +6,16 @@
 // keynotes). Ported from the iOS PlanSegmentView + NuruReadingBar/NuruPaceRail.
 package org.nuruplace.member.feature.grow
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -25,13 +29,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,23 +55,35 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.PlanDayUnlockAck
+import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.ScripturePassage
+import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.ui.components.InlineVideoPlayer
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import java.util.UUID
 
 // ── Type helpers (exact-size brand faces) ──
 internal fun rInter(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
@@ -155,15 +183,297 @@ private fun rLines(content: String): List<RLine> =
 
 @Composable
 internal fun RPassage(text: String, pal: ReaderPalette) {
+    // The cited reference a tap just opened — read in a sheet, in place.
+    var openRef by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         rLines(text).forEach { line ->
-            val annotated = buildAnnotatedString {
-                line.number?.let { n ->
-                    withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("$n  ") }
+            if (line.number == null) {
+                // Every reference the teaching cites ("(James 2:17)") is a gold
+                // link; the passage opens below without leaving the page.
+                RLinkedParagraph(line.text, pal) { openRef = it }
+            } else {
+                val annotated = buildAnnotatedString {
+                    withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("${line.number}  ") }
+                    withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = pal.ink)) { append(line.text) }
                 }
-                withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = pal.ink)) { append(line.text) }
+                Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = scaledLineHeight(25)))
             }
-            Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = scaledLineHeight(25)))
+        }
+    }
+    openRef?.let { ref -> RScriptureSheet(ref, pal) { openRef = null } }
+}
+
+// ── Scripture woven in (iOS ScripturePassages.swift parity) ──
+// Go Deeper references open into their passages; references cited inline in
+// the teaching are links that open the passage in a sheet; a scripture segment
+// with only a reference fetches its text. Text comes from GET /scripture
+// through [ScriptureStore]; everything degrades to the reference alone.
+
+internal fun passageCaption(p: ScripturePassage): String =
+    p.version?.trim()?.takeIf { it.isNotEmpty() }?.let { "${p.reference} · $it" } ?: p.reference
+
+/** One verse's row: the number small, gold and raised, the words in serif. */
+private fun verseRow(v: PassageVerse, pal: ReaderPalette, size: Int): AnnotatedString = buildAnnotatedString {
+    v.number?.let { n ->
+        withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("$n ") }
+    }
+    withStyle(SpanStyle(fontFamily = Fraunces, fontWeight = FontWeight.Normal, fontSize = size.sp, color = pal.ink)) { append(v.body) }
+}
+
+/** Long-press on a verse or the day's quote: keep it in the verse library, or
+ *  copy it with its reference. `reference` null disables saving (nothing to
+ *  file it under); the menu still offers Copy. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun RLongPressSave(
+    reference: String?,
+    text: String,
+    version: String?,
+    pal: ReaderPalette,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    var menu by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    fun flash(t: String) {
+        note = t
+        scope.launch { delay(2_200); if (note == t) note = null }
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })) {
+            content()
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = pal.card) {
+                if (reference != null) {
+                    DropdownMenuItem(
+                        text = { Text("Save to my verses", style = rInter(13, FontWeight.SemiBold), color = pal.ink) },
+                        onClick = {
+                            menu = false
+                            scope.launch {
+                                val ok = runCatching {
+                                    Net.client.api.saveVerse(
+                                        VerseUpsertBody(
+                                            savedVerseId = UUID.randomUUID().toString(), reference = reference,
+                                            version = version, verseText = text, clientMutationId = UUID.randomUUID().toString(),
+                                        ),
+                                    )
+                                }.isSuccess
+                                flash(if (ok) "Saved to your verses" else "Couldn't save — try again")
+                            }
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("Copy", style = rInter(13, FontWeight.SemiBold), color = pal.ink) },
+                    onClick = {
+                        menu = false
+                        clipboard.setText(AnnotatedString(if (reference != null) "$text — $reference" else text))
+                        flash("Copied")
+                    },
+                )
+            }
+        }
+        note?.let {
+            Text(
+                it, style = rInter(11, FontWeight.SemiBold), color = pal.goldDeep,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(pal.gold.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
+/** Passage text, one row per verse, each a long press away from the verse
+ *  library. `reference`/`version` name the passage the rows came from; a
+ *  numbered verse is saved as "Book C:V" built from them. */
+@Composable
+internal fun RScripturePassageText(text: String, pal: ReaderPalette, size: Int = 16, reference: String? = null, version: String? = null) {
+    val prefix = reference?.takeIf { ScriptureRefs.isReference(it) }?.let { ScriptureRefs.chapterPrefix(it) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        passageVerses(text, reference?.let(ScriptureRefs::startVerse)).forEach { v ->
+            val ref = when {
+                reference == null || !ScriptureRefs.isReference(reference) -> null
+                v.number != null && prefix != null -> "$prefix:${v.number}"
+                else -> reference
+            }
+            RLongPressSave(reference = ref, text = v.body, version = version, pal = pal) {
+                Text(verseRow(v, pal, size), style = rSerif(size, FontWeight.Normal, (size * 1.55).toInt()))
+            }
+        }
+    }
+}
+
+// ── The opening, and the ornament between the Word and the teaching ──
+
+/** Kicker · the day's title in serif · the reference and an honest read time. */
+@Composable
+internal fun RDayOpening(title: String?, reference: String?, minutes: Int, pal: ReaderPalette) {
+    val meta = listOfNotNull(reference?.takeIf { it.isNotEmpty() }, "about $minutes min").joinToString(" · ")
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("TODAY'S READING", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(24, FontWeight.Medium), color = pal.ink) }
+        Text(meta, style = rInter(12, FontWeight.Medium), color = pal.inkDim)
+    }
+}
+
+@Composable
+internal fun ROrnament(pal: ReaderPalette) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.weight(1f).height(1.dp).background(pal.border))
+        Text("✝", style = rInter(12, FontWeight.Medium), color = pal.gold)
+        Box(Modifier.weight(1f).height(1.dp).background(pal.border))
+    }
+}
+
+/** Go Deeper: one reference, opened into its passage on tap. */
+@Composable
+internal fun RScriptureRefCard(reference: String, pal: ReaderPalette) {
+    // Anything under five verses opens without a tap — the hungry reader
+    // should not have to ask for four lines.
+    var open by remember(reference) { mutableStateOf(ScriptureRefs.opensByDefault(reference)) }
+    var passage by remember(reference) { mutableStateOf<ScripturePassage?>(null) }
+    var loading by remember(reference) { mutableStateOf(false) }
+    var failed by remember(reference) { mutableStateOf(false) }
+    var attempt by remember(reference) { mutableStateOf(0) }
+    LaunchedEffect(open, attempt) {
+        if (!open || passage != null) return@LaunchedEffect
+        loading = true; failed = false
+        ScriptureStore.passage(reference).onSuccess { passage = it }.onFailure { failed = true }
+        loading = false
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.fillMaxWidth().clip(shape).background(pal.gold.copy(alpha = 0.06f))
+            .border(1.dp, pal.gold.copy(alpha = if (open) 0.3f else 0f), shape)
+            .animateContentSize(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.goldDeep, modifier = Modifier.size(16.dp))
+            Text(reference, style = rInter(13, FontWeight.SemiBold), color = pal.ink, modifier = Modifier.weight(1f))
+            if (loading) CircularProgressIndicator(color = pal.goldDeep, strokeWidth = 1.5.dp, modifier = Modifier.size(14.dp))
+            else Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, if (open) "Hide" else "Read", tint = pal.inkDim, modifier = Modifier.size(18.dp))
+        }
+        if (open) {
+            passage?.let { p ->
+                Row(
+                    Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp).height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(pal.gold))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RScripturePassageText(p.text, pal, reference = reference, version = p.version)
+                        Text(passageCaption(p).uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
+                    }
+                }
+            }
+            if (failed && passage == null) {
+                Text(
+                    "Couldn't load this passage — tap to try again.",
+                    style = rInter(12, FontWeight.Medium), color = pal.inkDim,
+                    modifier = Modifier.fillMaxWidth().clickable { attempt++ }.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+/** The Go Deeper block: every reference as its own card; any authored note
+ *  between them stays a plain line. */
+@Composable
+internal fun RGoDeeper(refs: String, pal: ReaderPalette) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("GO DEEPER", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+        ScriptureRefs.split(refs).forEach { line ->
+            if (ScriptureRefs.isReference(line)) RScriptureRefCard(line, pal)
+            else Text(line, style = rInter(13, FontWeight.Medium).copy(lineHeight = scaledLineHeight(19)), color = pal.inkDim)
+        }
+    }
+}
+
+/** The day's pull-quote when the author gave a reference and no text: fetch
+ *  the passage, show the reference alone until it lands (or if it never does). */
+@Composable
+internal fun RScriptureQuote(reference: String, pal: ReaderPalette) {
+    var passage by remember(reference) { mutableStateOf<ScripturePassage?>(null) }
+    LaunchedEffect(reference) { ScriptureStore.passage(reference).onSuccess { passage = it } }
+    val text = passage?.text ?: reference
+    RLongPressSave(reference = reference, text = text, version = passage?.version, pal = pal) {
+        VerseQuoteCard(verse = text, reference = passage?.let(::passageCaption) ?: reference)
+    }
+}
+
+/** One paragraph of teaching; every reference it cites is a gold, underlined
+ *  link that opens the passage in place. */
+@Composable
+internal fun RLinkedParagraph(text: String, pal: ReaderPalette, onReference: (String) -> Unit) {
+    val open by rememberUpdatedState(onReference)
+    val annotated = remember(text, pal.night) {
+        buildAnnotatedString {
+            val body = SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = pal.ink)
+            val link = TextLinkStyles(
+                style = SpanStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = pal.goldDeep, textDecoration = TextDecoration.Underline),
+            )
+            var last = 0
+            for (m in ScriptureRefs.detect(text)) {
+                if (m.range.first > last) withStyle(body) { append(text.substring(last, m.range.first)) }
+                withLink(LinkAnnotation.Clickable(tag = m.reference, styles = link, linkInteractionListener = { open(m.reference) })) {
+                    append(text.substring(m.range.first, m.range.last + 1))
+                }
+                last = m.range.last + 1
+            }
+            if (last < text.length) withStyle(body) { append(text.substring(last)) }
+        }
+    }
+    Text(annotated, style = rInter(16, FontWeight.Medium).copy(lineHeight = scaledLineHeight(25)))
+}
+
+/** A cited reference, read in place — the sheet a gold link in the teaching opens. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: () -> Unit) {
+    var passage by remember(reference) { mutableStateOf<ScripturePassage?>(null) }
+    var failed by remember(reference) { mutableStateOf(false) }
+    var attempt by remember(reference) { mutableStateOf(0) }
+    LaunchedEffect(reference, attempt) {
+        failed = false
+        ScriptureStore.passage(reference).onSuccess { passage = it }.onFailure { failed = true }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = pal.bg) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(36.dp).clip(CircleShape).background(pal.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.gold, modifier = Modifier.size(16.dp))
+                }
+                Column {
+                    Text("SCRIPTURE", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+                    Text(reference, style = rSerif(20, FontWeight.Medium), color = pal.ink)
+                }
+            }
+            val p = passage
+            when {
+                p != null -> {
+                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(pal.gold))
+                        RScripturePassageText(p.text, pal, size = 17, reference = reference, version = p.version)
+                    }
+                    p.version?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                        Text(it.uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
+                    }
+                }
+                failed -> {
+                    Text("Couldn't load this passage — check your connection and try again.", style = rInter(13), color = pal.inkDim)
+                    Text("Try again", style = rInter(13, FontWeight.Bold), color = pal.goldDeep, modifier = Modifier.clickable { attempt++ }.padding(vertical = 4.dp))
+                }
+                else -> Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = pal.gold)
+                }
+            }
         }
     }
 }

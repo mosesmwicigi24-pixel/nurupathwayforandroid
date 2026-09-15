@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -122,7 +123,10 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(GrowPal.paper)) {
+    // imePadding: the keyboard resizes the page instead of covering the pinned
+    // composer (every other composer in the app already does this; this one
+    // was the exception — owner report, 2026-09-04).
+    Column(Modifier.fillMaxSize().background(GrowPal.paper).imePadding()) {
         // Navy header.
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp)).background(GrowPal.heroGradient)
