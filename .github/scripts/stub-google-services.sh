@@ -15,9 +15,10 @@
 # clobber a real file if one is already present — run it locally and your own
 # google-services.json survives.
 #
-# Consequence worth knowing: release builds are deliberately NOT covered by CI.
-# They upload native symbols to Crashlytics, which needs credentials this stub
-# cannot fake. CI covers debug compile + unit tests; releases stay a local task.
+# Consequence worth knowing: the release workflow (release.yml) uses this same
+# placeholder unless the GOOGLE_SERVICES_JSON secret holds the real file — the
+# build ships either way, but only the real file lets R8's mapping reach
+# Crashlytics so release crashes read as code.
 set -euo pipefail
 
 DEST="${1:-app/google-services.json}"
