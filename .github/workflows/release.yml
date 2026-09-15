@@ -1,0 +1,176 @@
+# Android release — a SIGNED App Bundle for Google Play, built on a runner.
+#
+# WHY THIS EXISTS
+# ---------------
+# The upload key lives on one Mac, so until now a Play release meant that Mac.
+# This workflow signs from repository secrets instead: run it, wait about ten
+# minutes, download the .aab from the run page, upload it in Play Console.
+#
+# ONE-TIME SETUP — Settings → Secrets and variables → Actions → New repository secret
+#   ANDROID_UPLOAD_KEYSTORE_B64   the upload keystore, base64. On the Mac:
+#                                   base64 -i nuru-release.keystore | pbcopy
+#   ANDROID_KEYSTORE_PASSWORD     storePassword from keystore.properties
+#   ANDROID_KEY_ALIAS             keyAlias from keystore.properties
+#   ANDROID_KEY_PASSWORD          keyPassword from keystore.properties
+#   GOOGLE_SERVICES_JSON          optional — the real app/google-services.json,
+#                                 so R8's mapping file reaches Crashlytics and a
+#                                 release crash reads as code, not hex. Without
+#                                 it the build still ships; that upload is skipped.
+#
+# The secrets are read only by this job, on a runner that is thrown away, and
+# the keystore is deleted at the end whatever happened. Nothing is printed: the
+# passwords go straight into a git-ignored keystore.properties, which
+# app/build.gradle.kts already knows how to read.
+#
+# RUN IT: Actions → "Android release" → Run workflow → main. The artifact is
+# named after what was built, e.g. NuruPathway-2.54.0-vc79, and the run summary
+# shows the versionCode and the signing certificate it verified.
+name: Android release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Signed bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Presence of a secret, never its value — for the `if:` checks below.
+      HAVE_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 != '' }}
+      HAVE_GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Play rejects a bundle signed with any key but the registered upload
+      # key, so without it there is nothing useful to build. Say so in one
+      # line instead of eight minutes later inside packageRelease.
+      - name: Refuse to build unsigned
+        if: env.HAVE_KEYSTORE != 'true'
+        run: |
+          echo "::error::ANDROID_UPLOAD_KEYSTORE_B64 is not set — see the header of .github/workflows/release.yml for the one-time setup."
+          exit 1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Same packages, same reasoning as android.yml: install what the build
+      # needs rather than trusting the runner image, and verify they landed.
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          printf 'y\n%.0s' $(seq 50) > /tmp/sdk-licences
+          "$SDKMANAGER" --licenses < /tmp/sdk-licences > /dev/null
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;35.0.0"
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
+
+      - name: Restore the upload keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [ -n "${!v}" ] || { echo "::error::the secret behind $v is not set — see the header of release.yml"; exit 1; }
+          done
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > app/upload.keystore
+          # Prove the file is a keystore these credentials open. The failure
+          # that actually happens is a mis-pasted base64 or a wrong alias;
+          # keytool catches both here, in a second.
+          keytool -list -keystore app/upload.keystore -storepass:env STORE_PASSWORD -alias "$KEY_ALIAS" > /dev/null
+          # app/build.gradle.kts reads this file from the repo root; storeFile
+          # is resolved relative to app/.
+          {
+            echo "storeFile=upload.keystore"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          if [ "$HAVE_GOOGLE_SERVICES" = "true" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            python3 -c 'import json; json.load(open("app/google-services.json"))'
+            echo "real google-services.json in place — Crashlytics mapping upload on"
+          else
+            ./.github/scripts/stub-google-services.sh
+            echo "::warning::GOOGLE_SERVICES_JSON is not set — built with a placeholder, so the Crashlytics mapping upload is skipped and release crashes will show obfuscated names."
+          fi
+
+      - name: Build the signed bundle and APK
+        run: |
+          set -euo pipefail
+          SKIP=""
+          [ "$HAVE_GOOGLE_SERVICES" = "true" ] || SKIP="-x :app:uploadCrashlyticsMappingFileRelease"
+          ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease $SKIP
+
+      # Not "did gradle exit 0" but "is this the thing Play will accept":
+      # signed (an unsigned build names its APK app-release-unsigned.apk),
+      # verifiable, and carrying the versionCode we meant to ship.
+      - name: Verify what was built
+        id: verify
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$AAB" || { echo "::error::no bundle at $AAB"; exit 1; }
+          test -f "$APK" || { echo "::error::no signed APK — the release signingConfig was not applied"; ls app/build/outputs/apk/release/; exit 1; }
+          jarsigner -verify "$AAB" | grep -q "jar verified" || { echo "::error::the bundle is not signed"; exit 1; }
+          "$BT/apksigner" verify --print-certs "$APK" > /tmp/certs.txt
+          BADGING="$("$BT/aapt" dump badging "$APK" | head -1)"
+          VC="$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<<"$BADGING")"
+          VN="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$BADGING")"
+          [ -n "$VC" ] && [ -n "$VN" ] || { echo "::error::could not read the version from the APK: $BADGING"; exit 1; }
+          echo "$BADGING"
+          grep -E "SHA-256" /tmp/certs.txt || true
+          NAME="NuruPathway-${VN}-vc${VC}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          mkdir -p out
+          cp "$AAB" "out/$NAME.aab"
+          cp "$APK" "out/$NAME.apk"
+          {
+            echo "## $NAME"
+            echo
+            echo '```'
+            echo "$BADGING"
+            grep -E "SHA-256" /tmp/certs.txt || true
+            echo '```'
+            echo
+            echo "Play Console → Production → Create new release → upload the .aab. The .apk is for sideloading a tester's phone."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the signed bundle and APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.verify.outputs.name }}
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Forget the keystore
+        if: always()
+        run: rm -f app/upload.keystore keystore.properties app/google-services.json

@@ -5,10 +5,9 @@
 # the first CI run there failed immediately on a call that had drifted out of
 # sync with `main` while a branch was open. This closes the same hole here.
 #
-# Scope is debug compile + JVM unit tests. Release is deliberately NOT covered:
-# it signs with a keystore that lives outside this repo and uploads native
-# symbols to Crashlytics, neither of which CI has credentials for. Those stay a
-# local task — see app/build.gradle.kts.
+# Scope is debug compile + JVM unit tests. The signed release build for Play
+# is a separate, on-demand workflow — release.yml — that reads the upload key
+# from repository secrets; it is not run on every push.
 name: Android
 
 # One run per push, not two. A push to a branch with an open PR matches both
