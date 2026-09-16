@@ -54,8 +54,8 @@ android {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 36
-        versionCode = 81                  // bump every release so devices take it as an update
-        versionName = "2.56.0"
+        versionCode = 82                  // bump every release so devices take it as an update
+        versionName = "2.57.0"
         vectorDrawables { useSupportLibrary = true }
     }
 

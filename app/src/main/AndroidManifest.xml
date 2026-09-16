@@ -38,6 +38,11 @@
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.NuruMember"
         android:networkSecurityConfig="@xml/network_security_config">
+        <!-- Barcode scanning moved to the Play-services (unbundled) artifact
+             2026-09-16: the 4.7 MB per-ABI model no longer ships inside the app;
+             this asks Play services to download it at install time so the first
+             check-in scan does not wait. -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
