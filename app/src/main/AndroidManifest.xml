@@ -52,16 +52,23 @@
                 android:resource="@xml/shortcuts" />
             <!-- Read with a Friend (docs/READING_SOCIAL_PLAN.md §5 tier 2/3):
                  the public /join/{token} landing page's inline script attempts
-                 nuru://join/{token} before falling back to the Play Store.
-                 Custom-scheme only — no autoVerify App Link yet (no
-                 assetlinks.json hosted at pathway.nuruplace.org yet; that's
-                 backend/infra work, tracked separately, honestly noted rather
-                 than silently skipped). -->
+                 nuru://join/{token} before falling back to the Play Store. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="nuru" android:host="join" />
+            </intent-filter>
+            <!-- Verified Android App Link: https://pathway.nuruplace.org/join/{token}
+                 opens straight into the app once the OS has checked
+                 /.well-known/assetlinks.json (hosted 2026-09-16). A SEPARATE
+                 filter from the custom scheme on purpose — an autoVerify filter
+                 that also lists a non-http scheme fails verification wholesale. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="pathway.nuruplace.org" android:pathPrefix="/join/" />
             </intent-filter>
         </activity>
 

@@ -371,6 +371,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     groupId = entry.arguments?.getString("groupId") ?: "",
                     myUserId = me?.profile?.userId ?: "",
                     onBack = { nav.popBackStack() },
+                    // "Open chat" after a friends-first invite — the DM the
+                    // server posted it into.
+                    onOpenChat = { nav.navigate("chat/$it") },
                 )
             }
             composable(
@@ -391,7 +394,12 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
             ) { entry ->
                 val id = entry.arguments?.getString("id") ?: ""
-                PlanDetailScreen(planId = id, onBack = { nav.popBackStack() }, onOpenDay = { d -> nav.navigate("plan/$id/day/$d") })
+                PlanDetailScreen(
+                    planId = id,
+                    onBack = { nav.popBackStack() },
+                    onOpenDay = { d -> nav.navigate("plan/$id/day/$d") },
+                    onOpenChat = { nav.navigate("chat/$it") },
+                )
             }
             composable(
                 "plan/{id}/day/{n}",
@@ -572,6 +580,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     conversationId = entry.arguments?.getString("id") ?: "",
                     onBack = { nav.popBackStack() },
                     threadContext = entry.arguments?.getString("ctx"),
+                    // Invite cards + in-app join links in bubbles → reading/join/{token}.
+                    onNavigate = { nav.navigate(it) },
                 )
             }
             composable("events") {

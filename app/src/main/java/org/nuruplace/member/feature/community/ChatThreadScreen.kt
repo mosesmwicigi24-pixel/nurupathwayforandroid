@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Pause
@@ -78,6 +80,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,10 +88,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -108,6 +117,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.PastoralLock
+import org.nuruplace.member.data.net.ChatInviteMeta
 import org.nuruplace.member.data.net.ChatMessage
 import org.nuruplace.member.data.net.ChatThreadDetail
 import org.nuruplace.member.data.net.EditMessageBody
@@ -143,7 +153,7 @@ private val Capsule = RoundedCornerShape(999.dp)
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: String? = null) {
+fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: String? = null, onNavigate: (String) -> Unit = {}) {
     // A pastoral thread reached through an ordinary route (a stale DM row, a
     // deep link) still gets its privacy dressing and the local gate when this
     // device has already learned the thread's id — otherwise the gate would be
@@ -451,6 +461,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         m, thread.kind, runHead, player,
                         onReact = { emoji -> react(m, emoji) },
                         onLongPress = { if (m.mine) { Haptics.tap(view); actionsForMessage = m } },
+                        onOpenRoute = onNavigate,
                     )
                 }
             }
@@ -968,6 +979,90 @@ private fun PastoralMenuButton(
     }
 }
 
+// ---- Links in text bubbles + the Read with a Friend invite card ----
+
+private val UrlRegex = Regex("""https?://[^\s<>"'()\[\]]+""")
+private val JoinLinkRegex = Regex("""^https?://pathway\.nuruplace\.org/join/([A-Za-z0-9_.\-]+)""")
+
+/** A text bubble whose URLs are live: a pathway.nuruplace.org/join/{token}
+ *  link opens IN-APP (`reading/join/{token}` via [onOpenRoute]); any other
+ *  URL goes to the browser through the platform UriHandler. Links underline
+ *  gold in own bubbles, navy in others. Plain text stays a plain Text. */
+@Composable
+private fun LinkifiedBubbleText(body: String, mine: Boolean, onOpenRoute: (String) -> Unit) {
+    val style = cInter(13).copy(lineHeight = 18.sp)
+    val color = if (mine) Color.White else CHAT.textDark
+    val matches = remember(body) { UrlRegex.findAll(body).toList() }
+    if (matches.isEmpty()) {
+        Text(body, style = style, color = color)
+        return
+    }
+    val open by rememberUpdatedState(onOpenRoute)
+    val linkStyles = TextLinkStyles(
+        style = SpanStyle(color = if (mine) CHAT.goldLight else CHAT.navy, textDecoration = TextDecoration.Underline, fontWeight = FontWeight.SemiBold),
+    )
+    val annotated = remember(body, mine) {
+        buildAnnotatedString {
+            var last = 0
+            for (match in matches) {
+                if (match.range.first > last) append(body.substring(last, match.range.first))
+                // Trailing sentence punctuation is prose, not part of the link.
+                val url = match.value.trimEnd('.', ',', '!', '?', ';', ':')
+                val token = JoinLinkRegex.find(url)?.groupValues?.getOrNull(1)
+                if (token != null) {
+                    withLink(LinkAnnotation.Clickable(tag = url, styles = linkStyles, linkInteractionListener = { open("reading/join/$token") })) { append(url) }
+                } else {
+                    withLink(LinkAnnotation.Url(url = url, styles = linkStyles)) { append(url) }
+                }
+                val urlEnd = match.range.first + url.length
+                if (urlEnd <= match.range.last) append(body.substring(urlEnd, match.range.last + 1))
+                last = match.range.last + 1
+            }
+            if (last < body.length) append(body.substring(last))
+        }
+    }
+    Text(annotated, style = style, color = color)
+}
+
+/** attachment_meta.invite → a tappable card inside the bubble: plan cover
+ *  (16:9, gold fallback), kicker, title, "N-day plan · from <name>", and a
+ *  gold "Open invite" pill. Tap anywhere → the in-app invite preview. */
+@Composable
+private fun InviteCardBubble(invite: ChatInviteMeta, from: String, mine: Boolean, onOpen: () -> Unit) {
+    val view = LocalView.current
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.width(236.dp).clip(shape)
+            .background(if (mine) Color.White.copy(alpha = 0.08f) else CHAT.white)
+            .border(1.dp, if (mine) Color.White.copy(alpha = 0.14f) else CHAT.hairline, shape)
+            .clickable { Haptics.tap(view); onOpen() },
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(CHAT.storyRing), contentAlignment = Alignment.Center) {
+            if (!invite.imageUrl.isNullOrBlank()) {
+                AsyncImage(model = invite.imageUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            } else {
+                Icon(Icons.Filled.MenuBook, null, tint = CHAT.navy.copy(alpha = 0.6f), modifier = Modifier.size(28.dp))
+            }
+        }
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("READ WITH A FRIEND", style = cInter(9, FontWeight.Bold, 1.6f), color = if (mine) CHAT.goldLight else CHAT.eyebrow)
+            Text(
+                invite.planTitle.ifBlank { "A reading plan" },
+                style = cSerif(15, FontWeight.SemiBold), color = if (mine) Color.White else CHAT.navy,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                listOfNotNull(invite.dayCount?.takeIf { it > 0 }?.let { "$it-day plan" }, "from $from").joinToString(" · "),
+                style = cInter(11), color = if (mine) Color.White.copy(alpha = 0.72f) else CHAT.quoteBody,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Box(
+                Modifier.padding(top = 6.dp).clip(Capsule).background(CHAT.gold).padding(horizontal = 12.dp, vertical = 7.dp),
+            ) { Text("Open invite", style = cInter(11, FontWeight.Bold), color = CHAT.navy) }
+        }
+    }
+}
+
 @Composable
 private fun DaySeparator(iso: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -986,6 +1081,7 @@ private fun MessageRow(
     player: VoicePlayer,
     onReact: (String) -> Unit,
     onLongPress: () -> Unit = {},
+    onOpenRoute: (String) -> Unit = {},
 ) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -1049,7 +1145,21 @@ private fun MessageRow(
                         Text(m.replyBody!!, style = cInter(11), color = if (m.mine) Color.White.copy(alpha = 0.75f) else CHAT.quoteBody, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                when (m.msgType) {
+                // A Read with a Friend invite (attachment_meta.invite) renders as
+                // a card whatever its msg_type; the body rides below it only when
+                // it is a personal note rather than the link the card already is.
+                val invite = m.invite
+                if (invite != null) {
+                    InviteCardBubble(
+                        invite = invite,
+                        from = if (m.mine) "you" else m.authorName.trim().substringBefore(' ').ifBlank { "a friend" },
+                        mine = m.mine,
+                        onOpen = { onOpenRoute("reading/join/${invite.token}") },
+                    )
+                    if (m.body.isNotBlank() && !m.body.contains("/join/")) {
+                        LinkifiedBubbleText(m.body, mine = m.mine, onOpenRoute = onOpenRoute)
+                    }
+                } else when (m.msgType) {
                     "image" -> {
                         FitImage(m.attachmentUrl, modifier = Modifier.widthIn(max = 240.dp).clip(RoundedCornerShape(12.dp)))
                         if (m.body.isNotBlank()) Text(m.body, style = cInter(13).copy(lineHeight = 18.sp), color = if (m.mine) Color.White else CHAT.textDark)
@@ -1097,7 +1207,7 @@ private fun MessageRow(
                         Icon(Icons.Filled.Movie, null, tint = if (m.mine) Color.White else CHAT.textDark, modifier = Modifier.size(14.dp))
                         Text(if (m.body.isNotBlank()) m.body else "Shared a video", style = cInter(13), color = if (m.mine) Color.White else CHAT.textDark)
                     }
-                    else -> Text(m.body, style = cInter(13).copy(lineHeight = 18.sp), color = if (m.mine) Color.White else CHAT.textDark)
+                    else -> LinkifiedBubbleText(m.body, mine = m.mine, onOpenRoute = onOpenRoute)
                 }
                 // Prayer chip — the server tags prayer-request messages (ai_tag = "prayer");
                 // iOS renders "🙏 I'm praying" on incoming ones, tapping = a 🙏 reaction.

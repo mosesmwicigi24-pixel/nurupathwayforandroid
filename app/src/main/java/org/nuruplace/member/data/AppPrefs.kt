@@ -39,6 +39,9 @@ object AppPrefs {
     // member typed/picked, so the next custom gift preselects it subtly
     // (iOS @AppStorage "giving.lastAccountName" parity).
     private const val KEY_GIVING_LAST_ACCOUNT_NAME = "nuru.giving.lastAccountName"
+    // Play Install Referrer read once per install (MainActivity) — the
+    // store-then-plan path for Read with a Friend join links.
+    private const val KEY_INSTALL_REFERRER_CHECKED = "install_referrer_checked"
 
     private lateinit var prefs: SharedPreferences
 
@@ -89,6 +92,13 @@ object AppPrefs {
         shareLocation = on
         if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_SHARE_LOCATION, on).apply()
     }
+
+    /** Whether the Play Install Referrer has been consulted on this install
+     *  (MainActivity.checkInstallReferrerOnce) — set before the attempt, so it
+     *  is one shot regardless of what Play answers. */
+    var installReferrerChecked: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_INSTALL_REFERRER_CHECKED, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_INSTALL_REFERRER_CHECKED, v).apply() }
 
     /** One-time location-first onboarding invite (shown right after first login). */
     var locationInviteShown: Boolean

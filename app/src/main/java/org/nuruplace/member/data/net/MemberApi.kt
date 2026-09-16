@@ -49,6 +49,10 @@ interface MemberApi {
     suspend fun updateMe(@Body body: kotlinx.serialization.json.JsonObject): UpdateMeRes
 
     // --- Pathway (server-authoritative gating §1.9) ---
+    // "What needs you today" — the Home rail (HomeDtos.kt HomeNudge).
+    @GET("me/home/nudges")
+    suspend fun nudges(): NudgesRes
+
     @GET("me/pathway")
     suspend fun pathway(): PathwaySummary
 

@@ -65,6 +65,7 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ConnectionRow
 import org.nuruplace.member.data.net.CreateReadingGroupBody
 import org.nuruplace.member.data.net.CreateReadingInviteBody
+import org.nuruplace.member.data.net.DmBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReadingGroupMember
 import org.nuruplace.member.data.net.ReadingGroupRow
@@ -95,6 +96,19 @@ private fun shareText(context: android.content.Context, text: String) {
 }
 
 private fun firstName(name: String): String = name.trim().split(Regex("\\s+")).firstOrNull() ?: name
+
+/** The open-link invite's share sheet — "Share another way" on every invite entry. */
+internal fun shareReadingInvite(context: android.content.Context, planTitle: String, dayCount: Int, token: String) =
+    shareText(context, readingInviteMessage(planTitle, dayCount, token))
+
+/** The DM to open after a friends-first invite: the conversation the server
+ *  echoed with the invite when it sent one, else POST /chat/dms (create-or-
+ *  open — two connections never hit CONSENT_REQUIRED). Failure is a Result,
+ *  never a throw, so the toast can say so. */
+internal suspend fun dmConversationWith(friendUserId: String, known: String?): Result<String> =
+    if (!known.isNullOrBlank()) Result.success(known)
+    else runCatching { Net.client.api.createDm(DmBody(friendUserId)).conversationId }
+        .mapCatching { it.ifBlank { error("No conversation came back") } }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hub — "my active shared groups"
@@ -228,12 +242,14 @@ private fun ReadingGroupCard(group: ReadingGroupRow, myUserId: String, onClick: 
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Unit) {
+fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Unit, onOpenChat: (String) -> Unit = {}) {
     var group by remember { mutableStateOf<ReadingGroupRow?>(null) }
     var pendingInvites by remember { mutableStateOf<List<ReadingInviteRow>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
+    // A gold verb on the toast ("Open chat") — cleared with the toast.
+    var toastAction by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var showFriendPicker by remember { mutableStateOf(false) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -253,22 +269,51 @@ fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Un
     // "refreshing on appear" — the roster's progress is a moving target.
     LaunchedEffect(groupId) { reload() }
 
-    fun toastFor(seconds: Long = 2400) {
-        scope.launch { kotlinx.coroutines.delay(seconds); toast = null }
+    fun toastFor(millis: Long = 2400) {
+        scope.launch { kotlinx.coroutines.delay(millis); toast = null; toastAction = null }
+    }
+
+    // "Share another way" — the open-link invite + system share sheet (the
+    // former "Share join link" row, now the picker sheet's secondary action).
+    fun shareOpenLink() {
+        val g = group ?: return
+        scope.launch {
+            runCatching {
+                Net.client.api.createReadingInvite(groupId, CreateReadingInviteBody(clientMutationId = UUID.randomUUID().toString()))
+            }.onSuccess { invite ->
+                Haptics.confirm(view)
+                shareText(context, readingInviteMessage(g.plan.title, g.plan.dayCount, invite.token))
+            }.onFailure { toast = ApiException.message(it); toastFor() }
+        }
     }
 
     if (showFriendPicker) {
         FriendPickerSheet(
             alreadyIn = (group?.members ?: emptyList()).filter(ReadingGroupMember::isActive).map { it.userId }.toSet(),
             onDismiss = { showFriendPicker = false },
-            onPick = { userId ->
+            onPick = { friend ->
                 showFriendPicker = false
                 scope.launch {
-                    runCatching { Net.client.api.createReadingInvite(groupId, CreateReadingInviteBody(userId = userId, clientMutationId = UUID.randomUUID().toString())) }
-                        .onSuccess { Haptics.confirm(view); toast = "Invite sent"; toastFor(); reload() }
+                    runCatching { Net.client.api.createReadingInvite(groupId, CreateReadingInviteBody(userId = friend.userId, clientMutationId = UUID.randomUUID().toString())) }
+                        .onSuccess { invite ->
+                            // The server also posts the invite into your DM with
+                            // them — say so, and offer the thread.
+                            Haptics.confirm(view)
+                            toast = "Sent to ${firstName(friend.fullName)} in chat"
+                            toastAction = "Open chat" to {
+                                scope.launch {
+                                    dmConversationWith(friend.userId, invite.conversationId)
+                                        .onSuccess { toast = null; toastAction = null; onOpenChat(it) }
+                                        .onFailure { toast = ApiException.message(it); toastAction = null; toastFor() }
+                                }
+                            }
+                            toastFor(5000)
+                            reload()
+                        }
                         .onFailure { toast = ApiException.message(it); toastFor() }
                 }
             },
+            onShareAnotherWay = { showFriendPicker = false; shareOpenLink() },
         )
     }
     if (showLeaveConfirm) {
@@ -313,17 +358,9 @@ fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Un
                     }
                     GroupActionsCard(
                         isCreator = g.createdBy == myUserId,
+                        // Friends first: the picker sheet, with "Share another
+                        // way" (the old open-link share) as its secondary row.
                         onInviteFriend = { showFriendPicker = true },
-                        onShareLink = {
-                            scope.launch {
-                                runCatching {
-                                    Net.client.api.createReadingInvite(groupId, CreateReadingInviteBody(clientMutationId = UUID.randomUUID().toString()))
-                                }.onSuccess { invite ->
-                                    Haptics.confirm(view)
-                                    shareText(context, readingInviteMessage(g.plan.title, g.plan.dayCount, invite.token))
-                                }.onFailure { toast = ApiException.message(it); toastFor() }
-                            }
-                        },
                         onArchive = {
                             scope.launch {
                                 runCatching { Net.client.api.archiveReadingGroup(groupId) }
@@ -340,7 +377,7 @@ fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Un
                 Text(error ?: "Couldn't load this shared plan.", style = plInter(13), color = PL.ink2)
             }
         }
-        toast?.let { ReadingToast(it, Modifier.align(Alignment.BottomCenter)) }
+        toast?.let { ReadingToast(it, Modifier.align(Alignment.BottomCenter), actionLabel = toastAction?.first, onAction = toastAction?.second) }
     }
 }
 
@@ -425,13 +462,14 @@ private fun PendingInvitesCard(invites: List<ReadingInviteRow>, onRevoke: (Readi
 private fun GroupActionsCard(
     isCreator: Boolean,
     onInviteFriend: () -> Unit,
-    onShareLink: () -> Unit,
     onArchive: () -> Unit,
     onLeave: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // One door: the friend picker, which carries "Share another way" (the
+        // former "Share join link" row) at its foot — two rows opening the same
+        // sheet would have been the same door twice.
         ActionRow(Icons.Filled.PersonAdd, "Invite a friend", PL.navy, onInviteFriend)
-        ActionRow(Icons.Filled.Share, "Share join link", PL.navy, onShareLink)
         if (isCreator) ActionRow(Icons.Filled.Flag, "End this shared plan", PL.ink2, onArchive)
         ActionRow(Icons.AutoMirrored.Filled.Logout, "Leave", Color.Red, onLeave)
     }
@@ -453,24 +491,45 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
     }
 }
 
+/** Transient navy pill at the foot of a screen; [actionLabel] + [onAction]
+ *  add a gold tappable verb ("Open chat") at its trailing edge. */
 @Composable
-private fun ReadingToast(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text, style = plInter(12, FontWeight.SemiBold), color = Color.White,
-        modifier = modifier
+internal fun ReadingToast(text: String, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    val view = LocalView.current
+    Row(
+        modifier
             .padding(bottom = Spacing.tabBarSpace + 12.dp)
             .clip(RoundedCornerShape(999.dp)).background(PL.navy)
             .padding(horizontal = 16.dp, vertical = 10.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(text, style = plInter(12, FontWeight.SemiBold), color = Color.White)
+        if (actionLabel != null && onAction != null) {
+            Text(actionLabel, style = plInter(12, FontWeight.Bold), color = PL.goldLight, modifier = Modifier.clickable { Haptics.tap(view); onAction() })
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Friend picker (targeted invite) — reuses the chat connection graph
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** "Invite a friend" — the friends-first invite sheet shared by the plan
+ *  detail CTA and the shared-plan group page: chat connections with avatar +
+ *  name behind a search field; [onPick] hands back the chosen friend (the
+ *  caller mints the targeted invite, which the server also posts into their
+ *  DM). "Share another way" ([onShareAnotherWay]) is the open-link share
+ *  sheet — a secondary row under the list, and the primary button when the
+ *  member has no connections yet. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun FriendPickerSheet(alreadyIn: Set<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+internal fun FriendPickerSheet(
+    alreadyIn: Set<String>,
+    onDismiss: () -> Unit,
+    onPick: (ConnectionRow) -> Unit,
+    onShareAnotherWay: () -> Unit,
+) {
     var connections by remember { mutableStateOf<List<ConnectionRow>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
@@ -502,22 +561,45 @@ private fun FriendPickerSheet(alreadyIn: Set<String>, onDismiss: () -> Unit, onP
                 loading -> Box(Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = PL.gold)
                 }
-                filtered.isEmpty() -> Column(
-                    Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                connections.none { it.status == "accepted" } -> Column(
+                    Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text("No connections yet", style = plInter(14, FontWeight.SemiBold), color = PL.navy)
                     Text(
-                        "Connect with someone in Chat first, then invite them to read together.",
+                        "Connect with someone in Community first — or send the invite link any way you like.",
                         style = plInter(12), color = PL.ink2, textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 4.dp),
                     )
+                    // Primary here: with nobody to pick, the link IS the invite.
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 16.dp)
+                            .clip(RoundedCornerShape(16.dp)).background(PL.navyGrad)
+                            .clickable { Haptics.tap(view); onShareAnotherWay() }
+                            .padding(vertical = 14.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Share, null, tint = PL.goldLight, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share another way", style = plInter(13, FontWeight.Bold), color = Color.White)
+                    }
+                }
+                filtered.isEmpty() -> Column(
+                    Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        if (query.isBlank()) "Everyone you're connected with is already in." else "No one by that name.",
+                        style = plInter(13), color = PL.ink2, textAlign = TextAlign.Center,
+                    )
+                    ShareAnotherWayRow(onShareAnotherWay)
                 }
                 else -> Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     filtered.forEach { c ->
                         Row(
                             Modifier.fillMaxWidth()
-                                .clickable { Haptics.tap(view); onPick(c.userId) }
+                                .clickable { Haptics.tap(view); onPick(c) }
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -526,9 +608,27 @@ private fun FriendPickerSheet(alreadyIn: Set<String>, onDismiss: () -> Unit, onP
                             Text(c.fullName, style = plInter(14, FontWeight.Medium), color = PL.navy)
                         }
                     }
+                    ShareAnotherWayRow(onShareAnotherWay)
                 }
             }
         }
+    }
+}
+
+/** The picker's secondary row — the open-link system share sheet. */
+@Composable
+private fun ShareAnotherWayRow(onClick: () -> Unit) {
+    val view = LocalView.current
+    Row(
+        Modifier.fillMaxWidth().padding(top = 12.dp)
+            .clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, PL.border, RoundedCornerShape(16.dp))
+            .clickable { Haptics.tap(view); onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(10.dp))
+        Text("Share another way", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
     }
 }
 
