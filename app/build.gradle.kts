@@ -54,8 +54,8 @@ android {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 36
-        versionCode = 80                  // bump every release so devices take it as an update
-        versionName = "2.55.0"
+        versionCode = 81                  // bump every release so devices take it as an update
+        versionName = "2.56.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -157,6 +157,10 @@ dependencies {
     // transitive graphics-path 1.0.0 ships a 4 KB-aligned .so — pin the fixed one.
     implementation("androidx.graphics:graphics-path:1.0.1")
     implementation(libs.play.location)
+    // Read with a Friend store-then-plan: the Play referrer on first launch
+    // carries `join_token=…` for a member who installed from a join link
+    // (MainActivity.checkInstallReferrerOnce).
+    implementation(libs.play.install.referrer)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

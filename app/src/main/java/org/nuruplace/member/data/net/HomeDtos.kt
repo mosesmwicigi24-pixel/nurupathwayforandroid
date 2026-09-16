@@ -2,10 +2,19 @@
 // lives in Dtos.kt. Ported from the iOS Models/Home.swift.
 package org.nuruplace.member.data.net
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class NextActionParams(val moduleId: String? = null, val levelNumber: Int? = null)
+// The server writes these two keys in camelCase inside a snake_case envelope;
+// the client's global SnakeCase naming strategy would look for `module_id`
+// and never match — so the hero's "module" route always fell back to the
+// pathway tab (found 2026-09-16 while wiring the nudges rail). Explicit
+// @SerialName wins over the naming strategy.
+data class NextActionParams(
+    @SerialName("moduleId") val moduleId: String? = null,
+    @SerialName("levelNumber") val levelNumber: Int? = null,
+)
 
 @Serializable
 data class NextAction(
@@ -21,6 +30,57 @@ data class NextAction(
 
 @Serializable
 data class NextActionEnvelope(val action: NextAction? = null)
+
+/** GET /me/home/nudges — "What needs you today": the server-ranked, dated list
+ *  of things waiting on this member (a reflection due, a quiz mid-way, an
+ *  unread letter, a friend's reading invite …). HomeScreen.nudgeRouteFor turns
+ *  `route` + `params` into an in-app destination. Every field defaults so an
+ *  older/partial server never blanks the rail — an empty list is the honest
+ *  "nothing waiting" state.
+ *
+ *  `params` stays a raw JsonObject ON PURPOSE: the server writes its keys in
+ *  camelCase (`{ moduleId, levelNumber, planId, token, conversationId,
+ *  letterId }` — home/service.ts) while the envelope is snake_case, and the
+ *  client's global JsonNamingStrategy.SnakeCase would rewrite a typed
+ *  `moduleId` property into a `module_id` lookup that never matches. Raw keys
+ *  are untouched by the strategy, so [param] reads the camel spelling and
+ *  tolerates a snake twin. */
+@Serializable
+data class HomeNudge(
+    val id: String = "",
+    val kind: String = "",
+    val title: String = "",
+    val body: String = "",
+    val ctaLabel: String = "",
+    val route: String = "",
+    val params: kotlinx.serialization.json.JsonObject? = null,
+    val accent: String = "gold",     // gold | navy | success | steady
+    val priority: Int = 0,
+    val due: String? = null,         // "today" | "tomorrow" | null
+) {
+    /** A params value by its camelCase key (snake_case accepted too); numbers
+     *  come back as their decimal text. Null when absent or JSON null. */
+    fun param(camel: String): String? {
+        val obj = params ?: return null
+        val snake = camel.replace(Regex("([A-Z])")) { "_" + it.value.lowercase() }
+        val v = obj[camel] ?: obj[snake] ?: return null
+        return (v as? kotlinx.serialization.json.JsonPrimitive)?.let { kotlinx.serialization.json.JsonPrimitive::class; it.contentOrNullCompat() }
+    }
+    val moduleId: String? get() = param("moduleId")
+    val levelNumber: Int? get() = param("levelNumber")?.toIntOrNull()
+    val planId: String? get() = param("planId")
+    val token: String? get() = param("token")
+    val conversationId: String? get() = param("conversationId")
+    val letterId: String? get() = param("letterId")
+}
+
+/** JsonPrimitive.contentOrNull without pulling the whole json.* import set
+ *  into this DTO file: JsonNull answers null, everything else its content. */
+private fun kotlinx.serialization.json.JsonPrimitive.contentOrNullCompat(): String? =
+    if (this is kotlinx.serialization.json.JsonNull) null else content
+
+@Serializable
+data class NudgesRes(val nudges: List<HomeNudge> = emptyList())
 
 @Serializable
 data class TailoredVerse(

@@ -64,9 +64,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
+import org.nuruplace.member.data.net.ConnectionRow
+import org.nuruplace.member.data.net.CreateReadingGroupBody
+import org.nuruplace.member.data.net.CreateReadingInviteBody
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.ReadingGroupRow
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Spacing
 
 // Vertical scrim over the hero cover (iOS #081424 @ 40% / 10% / 92%, top→bottom).
@@ -75,7 +81,7 @@ private val heroScrim = Brush.verticalGradient(
 )
 
 @Composable
-fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Unit) {
+fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Unit, onOpenChat: (String) -> Unit = {}) {
     var loading by remember { mutableStateOf(true) }
     var detail by remember { mutableStateOf<ReadingPlanDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -127,6 +133,7 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                 onOpenDay = onOpenDay,
                 onStart = { scope.launch { runCatching { Net.client.api.startPlan(planId) }; reload() } },
                 onRetrySync = { scope.launch { reload() } },
+                onOpenChat = onOpenChat,
             )
             loading -> CircularProgressIndicator(
                 color = PL.gold,
@@ -150,6 +157,7 @@ private fun PlanDetailContent(
     onOpenDay: (Int) -> Unit,
     onStart: () -> Unit,
     onRetrySync: () -> Unit,
+    onOpenChat: (String) -> Unit,
 ) {
     // Real completion state, derived from the day rows the server returns.
     val done = d.days.count { it.completed == true }
@@ -184,35 +192,125 @@ private fun PlanDetailContent(
         )
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-        ) {
-            CoverHero(d = d, onBack = onBack)
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                AboutCard(d)
-                WhatYoullRead(
-                    d = d, done = done, allDone = allDone, nextDay = nextDay,
-                    awaitingUnlock = awaitingUnlock,
-                    onOpenDay = onOpenDay,
-                    onLockedDay = { lockedNudgeFor = it },
-                    onRetrySync = onRetrySync,
-                )
-                PLFinishEarnCard(category = d.category, dayCount = d.dayCount)
-                Nudge()
-            }
+    // Read with a Friend (spec §6) — friends first. "Invite" creates-or-gets
+    // MY shared group for this plan, then opens the connections picker; a
+    // picked friend gets a targeted invite, which the server also posts into
+    // your DM with them ("Sent to <name> in chat" → Open chat). "Share
+    // another way" is the open-link invite + system share sheet.
+    var inviting by remember { mutableStateOf(false) }
+    var inviteGroup by remember { mutableStateOf<ReadingGroupRow?>(null) }
+    var showFriendPicker by remember { mutableStateOf(false) }
+    var inviteError by remember { mutableStateOf<String?>(null) }
+    var toast by remember { mutableStateOf<String?>(null) }
+    var toastAction by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val view = androidx.compose.ui.platform.LocalView.current
+
+    fun toastFor(millis: Long) {
+        scope.launch { kotlinx.coroutines.delay(millis); toast = null; toastAction = null }
+    }
+
+    fun startInvite() {
+        if (inviting) return
+        inviting = true
+        scope.launch {
+            runCatching { Net.client.api.createOrGetReadingGroup(CreateReadingGroupBody(planId = d.planId)) }
+                .onSuccess { inviteGroup = it; showFriendPicker = true }
+                .onFailure { inviteError = ApiException.message(it, context) }
+            inviting = false
         }
-        CtaBar(
-            d = d,
-            done = done,
-            allDone = allDone,
-            firstIncomplete = firstIncomplete,
-            onOpenDay = onOpenDay,
-            onStart = onStart,
+    }
+
+    fun inviteFriend(friend: ConnectionRow) {
+        val group = inviteGroup ?: return
+        scope.launch {
+            runCatching {
+                Net.client.api.createReadingInvite(group.groupId, CreateReadingInviteBody(userId = friend.userId, clientMutationId = java.util.UUID.randomUUID().toString()))
+            }.onSuccess { invite ->
+                Haptics.confirm(view)
+                toast = "Sent to ${friend.fullName.trim().substringBefore(' ').ifBlank { "them" }} in chat"
+                toastAction = "Open chat" to {
+                    scope.launch {
+                        dmConversationWith(friend.userId, invite.conversationId)
+                            .onSuccess { toast = null; toastAction = null; onOpenChat(it) }
+                            .onFailure { toast = ApiException.message(it, context); toastAction = null; toastFor(2400) }
+                    }
+                }
+                toastFor(5000)
+            }.onFailure { inviteError = ApiException.message(it, context) }
+        }
+    }
+
+    fun shareAnotherWay() {
+        val group = inviteGroup ?: return
+        scope.launch {
+            runCatching {
+                Net.client.api.createReadingInvite(group.groupId, CreateReadingInviteBody(clientMutationId = java.util.UUID.randomUUID().toString()))
+            }.onSuccess { invite ->
+                shareReadingInvite(context, d.title, d.dayCount, invite.token)
+            }.onFailure { inviteError = ApiException.message(it, context) }
+        }
+    }
+
+    if (showFriendPicker) {
+        FriendPickerSheet(
+            alreadyIn = inviteGroup?.members.orEmpty().filter { it.isActive }.map { it.userId }.toSet(),
+            onDismiss = { showFriendPicker = false },
+            onPick = { friend -> showFriendPicker = false; inviteFriend(friend) },
+            onShareAnotherWay = { showFriendPicker = false; shareAnotherWay() },
         )
+    }
+    inviteError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { inviteError = null },
+            confirmButton = { TextButton(onClick = { inviteError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
+            title = { Text("Couldn't send that invite", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
+            text = { Text(msg, style = plInter(13), color = PL.ink2) },
+            containerColor = Color.White,
+        )
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            ) {
+                CoverHero(d = d, onBack = onBack)
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    AboutCard(d)
+                    WhatYoullRead(
+                        d = d, done = done, allDone = allDone, nextDay = nextDay,
+                        awaitingUnlock = awaitingUnlock,
+                        onOpenDay = onOpenDay,
+                        onLockedDay = { lockedNudgeFor = it },
+                        onRetrySync = onRetrySync,
+                    )
+                    PLFinishEarnCard(category = d.category, dayCount = d.dayCount)
+                    Nudge()
+                }
+            }
+            CtaBar(
+                d = d,
+                done = done,
+                allDone = allDone,
+                firstIncomplete = firstIncomplete,
+                onOpenDay = onOpenDay,
+                onStart = onStart,
+                inviting = inviting,
+                onInvite = { startInvite() },
+            )
+        }
+        // Floats above the CTA bar (whose own foot already carries tabBarSpace).
+        toast?.let {
+            ReadingToast(
+                it, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp),
+                actionLabel = toastAction?.first, onAction = toastAction?.second,
+            )
+        }
     }
 }
 
@@ -424,6 +522,8 @@ private fun CtaBar(
     firstIncomplete: ReadingPlanDay?,
     onOpenDay: (Int) -> Unit,
     onStart: () -> Unit,
+    inviting: Boolean,
+    onInvite: () -> Unit,
 ) {
     val target = if (allDone) d.days.firstOrNull() else firstIncomplete
     val targetDay = target?.dayNumber ?: 1
@@ -431,52 +531,6 @@ private fun CtaBar(
         if (allDone) "Review plan" else "Continue · Day $targetDay"
     } else {
         "Start plan"
-    }
-
-    // Read with a Friend (spec §6): create-or-get MY shared group for this
-    // plan, mint a fresh open-link invite, and hand the public
-    // /join/{token} URL + a rich message to the system share sheet —
-    // replaces the old no-op button (docs/READING_SOCIAL_PLAN.md §3).
-    var inviting by remember { mutableStateOf(false) }
-    var inviteError by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
-
-    fun startInvite() {
-        if (inviting) return
-        inviting = true
-        scope.launch {
-            runCatching {
-                val group = org.nuruplace.member.data.net.Net.client.api.createOrGetReadingGroup(
-                    org.nuruplace.member.data.net.CreateReadingGroupBody(planId = d.planId),
-                )
-                org.nuruplace.member.data.net.Net.client.api.createReadingInvite(
-                    group.groupId,
-                    org.nuruplace.member.data.net.CreateReadingInviteBody(clientMutationId = java.util.UUID.randomUUID().toString()),
-                )
-            }.onSuccess { invite ->
-                val message = readingInviteMessage(d.title, d.dayCount, invite.token)
-                runCatching {
-                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, message)
-                    }
-                    context.startActivity(android.content.Intent.createChooser(send, null))
-                }
-            }.onFailure { e ->
-                inviteError = org.nuruplace.member.data.net.ApiException.message(e, context)
-            }
-            inviting = false
-        }
-    }
-
-    inviteError?.let { msg ->
-        AlertDialog(
-            onDismissRequest = { inviteError = null },
-            confirmButton = { TextButton(onClick = { inviteError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
-            title = { Text("Couldn't send that invite", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
-            text = { Text(msg, style = plInter(13), color = PL.ink2) },
-            containerColor = Color.White,
-        )
     }
 
     Column(Modifier.fillMaxWidth().background(Color.White)) {
@@ -505,14 +559,14 @@ private fun CtaBar(
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = plInter(14, FontWeight.Bold), color = PL.navy)
             }
-            // "Invite" — Read with a Friend (was a no-op; now creates-or-gets a
-            // shared group, mints an invite, and opens the share sheet).
+            // "Invite" — Read with a Friend, friends first: the flow lives in
+            // PlanDetailContent (picker sheet → targeted invite → "Open chat").
             Row(
                 Modifier.heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, PL.border, RoundedCornerShape(16.dp))
-                    .clickable(enabled = !inviting) { startInvite() }
+                    .clickable(enabled = !inviting) { onInvite() }
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,

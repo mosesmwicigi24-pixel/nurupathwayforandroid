@@ -2,7 +2,10 @@
 // (ported from the iOS Models/Community.swift + Chat.swift).
 package org.nuruplace.member.data.net
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 // --- Prayer wall (public, opt-in) ---
 @Serializable
@@ -130,7 +133,33 @@ data class ChatMessage(
     // Set when this message was delivered by a broadcast — the mark that lets a
     // member's thread dress itself as "Talk with Pastor" instead of a plain DM.
     val broadcastId: String? = null,
+) {
+    /** The Read with a Friend invite this message carries — attachment_meta
+     *  `{ invite: {…} }`, posted by the server into your DM when you invite a
+     *  connection — or null for every other message (a malformed object is
+     *  null too, never a throw: the thread must still render). */
+    val invite: ChatInviteMeta?
+        get() = (attachmentMeta?.get("invite") as? JsonObject)
+            ?.let { runCatching { MetaJson.decodeFromJsonElement(ChatInviteMeta.serializer(), it) }.getOrNull() }
+            ?.takeIf { it.token.isNotBlank() }
+}
+
+/** attachment_meta.invite (reading-social invites.ts). Explicit @SerialName
+ *  because this nested object is decoded from the raw meta with a plain Json,
+ *  not the client's snake_case naming strategy. */
+@Serializable
+data class ChatInviteMeta(
+    val token: String = "",
+    @SerialName("join_url") val joinUrl: String? = null,
+    @SerialName("plan_title") val planTitle: String = "",
+    @SerialName("plan_subtitle") val planSubtitle: String? = null,
+    @SerialName("day_count") val dayCount: Int? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
 )
+
+/** Tolerant decoder for nested meta objects (unknown keys skipped, nulls
+ *  coerced to defaults) — the ApiClient Json minus its naming strategy. */
+private val MetaJson = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
 @Serializable
 data class ChatThreadDetail(

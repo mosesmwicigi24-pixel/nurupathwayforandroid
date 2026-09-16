@@ -90,6 +90,7 @@ private object PW {
     val gold = Color(0xFFC9A227)
     val goldLight = Color(0xFFE6C068)
     val goldDeep = Color(0xFFA8861C)
+    val goldTint = Color(0xFFFFF4C7)
     val eyebrow = Color(0xFF9A7A2A)
     val ink = Color(0xFF0B0B0C)
     val ink2 = Color(0xFF59667C)
@@ -336,10 +337,16 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
             Text("Map view", style = PW.over(9, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp)) {
+            // "Up next" — the level right after the active one, only while it
+            // is still locked: a gold ring + NEXT marker so the rail reads as a
+            // path with a visible next step, not a row of greys.
+            val activeIdx = levels.indexOfFirst { it.status == LevelStatus.ACTIVE }
+            val upNextIdx = (activeIdx + 1).takeIf { activeIdx >= 0 && it < levels.size && levels[it].status == LevelStatus.LOCKED } ?: -1
             levels.forEachIndexed { i, lvl ->
-                JourneyNode(lvl, i + 1, lvl.levelNumber == selected) { onSelect(lvl.levelNumber) }
+                JourneyNode(lvl, i + 1, lvl.levelNumber == selected, upNext = i == upNextIdx) { onSelect(lvl.levelNumber) }
                 if (i < levels.size - 1) {
-                    Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.status == LevelStatus.COMPLETED) PW.gold else PW.navy.copy(alpha = 0.12f)))
+                    // Uncompleted connectors at 28% navy — 12% vanished on cream.
+                    Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.status == LevelStatus.COMPLETED) PW.gold else PW.navy.copy(alpha = 0.28f)))
                 }
             }
         }
@@ -347,23 +354,38 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
 }
 
 @Composable
-private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, onTap: () -> Unit) {
+private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upNext: Boolean = false, onTap: () -> Unit) {
     val done = level.status == LevelStatus.COMPLETED
     val active = level.status == LevelStatus.ACTIVE
+    val locked = !done && !active
     Column(Modifier.width(68.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(if (active) "▾ You" else " ", style = PW.over(7, 0.7f), color = if (active) PW.gold else Color.Transparent, modifier = Modifier.height(12.dp))
+        Text(
+            when { active -> "▾ You"; upNext -> "▾ NEXT"; else -> " " },
+            style = PW.over(7, 0.7f),
+            color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
+            modifier = Modifier.height(12.dp),
+        )
         // The level NUMBER never leaves the circle — completion becomes a corner
-        // check-seal; locked levels keep their number with a lock-seal.
+        // check-seal; locked levels keep their number with a lock-seal. Locked
+        // circles are surface + a navy hairline (the flat #EEF1F5 fill and its
+        // grey-blue numeral were invisible on cream); the up-next one wears gold.
         Box(contentAlignment = Alignment.Center) {
             if (selected) Box(Modifier.size(54.dp).clip(RoundedCornerShape(999.dp)).border(2.dp, PW.gold, RoundedCornerShape(999.dp)))
             Box(contentAlignment = Alignment.TopEnd) {
                 Box(
                     Modifier.size(48.dp).clip(RoundedCornerShape(999.dp))
-                        .background(if (done || active) PW.goldGrad else Brush.linearGradient(listOf(PW.mutedBg, PW.mutedBg)))
-                        .then(if (active) Modifier.border(2.dp, PW.navy, RoundedCornerShape(999.dp)) else Modifier),
+                        .background(if (done || active) PW.goldGrad else Brush.linearGradient(listOf(PW.surface, PW.surface)))
+                        .then(
+                            when {
+                                active -> Modifier.border(2.dp, PW.navy, RoundedCornerShape(999.dp))
+                                upNext -> Modifier.border(2.dp, PW.gold, RoundedCornerShape(999.dp))
+                                locked -> Modifier.border(1.5.dp, PW.navy.copy(alpha = 0.28f), RoundedCornerShape(999.dp))
+                                else -> Modifier
+                            },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("$number", style = PW.t(15, FontWeight.Bold), color = if (done || active) PW.navy else PW.ink3)
+                    Text("$number", style = PW.t(15, FontWeight.Bold), color = if (done || active) PW.navy else PW.navy.copy(alpha = 0.75f))
                 }
                 if (done) {
                     Box(
@@ -375,14 +397,19 @@ private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, onT
                 } else if (!active) {
                     Box(
                         Modifier.offset(x = 3.dp, y = (-2).dp).size(16.dp)
-                            .clip(RoundedCornerShape(999.dp)).background(PW.mutedBg)
+                            .clip(RoundedCornerShape(999.dp)).background(PW.goldTint)
                             .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(8.dp)) }
+                    ) { Icon(Icons.Filled.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(9.dp)) }
                 }
             }
         }
-        Text(pwShort(level.title), style = PW.t(9, if (active) FontWeight.Bold else FontWeight.Medium), color = if (active) PW.navy else if (level.status == LevelStatus.LOCKED) PW.ink3 else PW.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+        Text(
+            pwShort(level.title),
+            style = PW.t(9, if (active) FontWeight.Bold else FontWeight.Medium),
+            color = when { active -> PW.navy; upNext -> PW.goldDeep; else -> PW.ink2 },
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }
 

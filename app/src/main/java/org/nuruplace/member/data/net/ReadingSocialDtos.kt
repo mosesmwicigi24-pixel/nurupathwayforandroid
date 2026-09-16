@@ -96,6 +96,9 @@ data class ReadingInviteRow(
     val expiresAt: String? = null,
     val decidedAt: String? = null,
     val acceptedBy: String? = null,
+    // The DM the server posted a targeted invite into (friends-first flow);
+    // optional — an older server omits it and the client falls back to POST /chat/dms.
+    val conversationId: String? = null,
 ) {
     val isOpenLink: Boolean get() = inviteeUserId == null
     val isPending: Boolean get() = status == "pending"

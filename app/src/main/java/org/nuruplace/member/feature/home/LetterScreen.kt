@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +52,13 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PastoralLetter
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.theme.nuruSerif
+import java.time.DayOfWeek
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 
 private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
@@ -63,27 +71,48 @@ private val LetterBody = NuruType.rowTitle.copy(fontWeight = FontWeight.Normal)
 
 /** Home, when no letter has arrived yet. The ritual IS the pull: telling a
  *  member when their letter comes is honest anticipation, and it beats showing
- *  nothing at all — which is what Home did before. Deliberately quiet: this is
- *  a promise, not a call to action. */
+ *  nothing at all — which is what Home did before. Wears the same deep navy as
+ *  the unread knock card below (the old translucent navy read as grey on the
+ *  cream page), with a live countdown to Sunday 6 pm East Africa Time. Tap
+ *  opens the You tab — no letters-archive screen exists yet (GET /me/letters
+ *  has no route), so the caller decides where "your letters" lives. */
 @Composable
-fun LetterAwaitingCard() {
+fun LetterAwaitingCard(onClick: () -> Unit = {}) {
+    val countdown = remember { letterCountdownLabel() }
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF11253F).copy(alpha = 0.45f))
-            .border(1.dp, Color(0xFFC9A227).copy(alpha = 0.22f), RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
+            .border(1.dp, Color(0xFFC9A227).copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+            .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            Modifier.size(38.dp).clip(CircleShape).background(Color(0xFFC9A227).copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Mail, null, tint = Color(0xFFC9A227).copy(alpha = 0.8f), modifier = Modifier.size(17.dp)) }
-        Column(Modifier.weight(1f)) {
-            Text("Your letter arrives Sunday evening", style = NuruType.rowTitle, color = Color(0xFFDCE4EF))
-            Text("Written for your week", style = NuruType.caption, color = Color(0xFF8FA0B4))
+        Box(Modifier.size(40.dp).clip(CircleShape).background(SealGrad), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
+        Column(Modifier.weight(1f)) {
+            Text("THE SUNDAY LETTER", style = nuruSans(9, FontWeight.Bold, tracking = 1.6f), color = Color(0xFFE8CA6C))
+            Text("Your letter arrives Sunday evening", style = nuruSerif(15, FontWeight.SemiBold), color = Color.White)
+            Text("Written for your week", style = nuruSans(12), color = Color(0xFFC7D0DC))
+        }
+        Box(
+            Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFC9A227)).padding(horizontal = 10.dp, vertical = 6.dp),
+        ) { Text(countdown, style = nuruSans(10, FontWeight.Bold), color = Color(0xFF0A1628)) }
+    }
+}
+
+/** "Today" / "Tomorrow" / "In N days" until the next Sunday 6 pm in East
+ *  Africa Time — the letter's fixed delivery hour, whatever zone the phone is
+ *  in. A Sunday already past 6 pm counts toward NEXT Sunday. */
+internal fun letterCountdownLabel(now: ZonedDateTime = ZonedDateTime.now(ZoneId.of("Africa/Nairobi"))): String {
+    var target = now.toLocalDate().with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).atTime(18, 0).atZone(now.zone)
+    if (!target.isAfter(now)) target = target.plusWeeks(1)
+    return when (val days = ChronoUnit.DAYS.between(now.toLocalDate(), target.toLocalDate())) {
+        0L -> "Today"
+        1L -> "Tomorrow"
+        else -> "In $days days"
     }
 }
 

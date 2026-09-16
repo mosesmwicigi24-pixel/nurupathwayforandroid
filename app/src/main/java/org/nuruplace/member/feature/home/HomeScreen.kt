@@ -75,6 +75,7 @@ import org.nuruplace.member.data.net.FeaturedAnnouncement
 import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
 import org.nuruplace.member.data.net.HomeEventRow
+import org.nuruplace.member.data.net.HomeNudge
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
@@ -154,6 +155,9 @@ fun HomeScreen(
     var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
+    // "What needs you today" (GET /me/home/nudges) — empty = nothing waiting OR
+    // the endpoint is unreachable; either way the old reflection strip stands in.
+    var nudges by remember { mutableStateOf<List<HomeNudge>>(emptyList()) }
     // Nuru Live (L2, viewer-only) — GET /live/now returns church streams
     // always plus cell streams scoped to the caller's own cell; Home only
     // ever renders the church-scope one (CellInfoScreen renders the cell one
@@ -217,6 +221,7 @@ fun HomeScreen(
     var loadedOnce by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTick) {
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
+        nudges = runCatching { Net.client.api.nudges().nudges }.getOrDefault(emptyList())
         // Nuru's daily word — a blessing written for THIS member (server-side,
         // grounded in their streak/level/prayers, cached per day). iOS parity.
         personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
@@ -353,7 +358,9 @@ fun HomeScreen(
                 // spinner, no pop); cards stagger in once the wire answers.
                 if (!loadedOnce && rhythm == null && next == null && verse == null && streak == null) {
                     HomeSkeleton()
-                    Spacer(Modifier.height(Spacing.tabBarSpace))
+                    // The Scaffold already insets the NavHost by the bottom bar,
+                    // so only a breath of air is needed here, not tabBarSpace.
+                    Spacer(Modifier.height(Spacing.base))
                     return@Column
                 }
                 radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
@@ -454,7 +461,9 @@ fun HomeScreen(
                     }
                 }
                 // The Sunday Letter knock — three states (knock / quiet row / awaiting).
-                if (letter == null) LetterAwaitingCard()
+                // Awaiting opens the You tab: there is no letters-archive route
+                // (GET /me/letters has no screen), and You is where "yours" lives.
+                if (letter == null) Entrance(entrance, 2) { LetterAwaitingCard(onClick = { onSelectTab("profile") }) }
                 letter?.takeIf { !it.isUnread }?.let { lt ->
                     LetterReadRow(lt) { showLetter = true }
                     if (showLetter) {
@@ -467,9 +476,23 @@ fun HomeScreen(
                         LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
                     }
                 }
-                // Reflection due — deep-links to the devotional's reflection
-                // composer, the one act that ticks the rhythm and clears this.
-                if (reflectionDue) Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
+                // "What needs you today" — the server-ranked rail (GET /me/home/
+                // nudges). If the endpoint fails or has nothing, the old single-
+                // purpose reflection strip stands in, so Home never loses the
+                // nudge that ticks the rhythm. The unread-letter nudge opens the
+                // same letter sheet the knock card does, in place.
+                if (nudges.isNotEmpty()) {
+                    Entrance(entrance, 2) {
+                        NeedsYouRail(nudges) { n ->
+                            if (n.route == "letter" && letter != null) showLetter = true
+                            else onNavigate(nudgeRouteFor(n))
+                        }
+                    }
+                } else if (reflectionDue) {
+                    // Reflection due — deep-links to the devotional's reflection
+                    // composer, the one act that ticks the rhythm and clears this.
+                    Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
+                }
                 // The hour's word — BELOW the reflection strip (owner's order).
                 Entrance(entrance, 0) {
                     LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
@@ -509,7 +532,9 @@ fun HomeScreen(
                 EncouragementCard(prayers.size)
                 CohortSection(cohort) { onNavigate("cell-info") }
                 GiveCard { onSelectTab("give") }
-                Spacer(Modifier.height(Spacing.tabBarSpace))
+                // Scaffold already reserves the bottom bar; tabBarSpace here
+                // double-counted it and left a hole under the Give card.
+                Spacer(Modifier.height(Spacing.base))
             }
         }
         }
@@ -1913,6 +1938,22 @@ private fun routeFor(a: NextAction): String = when (a.route) {
     "memory_verse", "verse" -> "memory-verses"
     "prayer", "reflection" -> "prayer-room"
     "give" -> "give"
+    else -> "pathway"
+}
+
+/** Map a Home nudge (GET /me/home/nudges) to an in-app destination. Keyed on
+ *  `route` with the `kind` as a fallback spelling; every branch has a landing
+ *  so a row missing its param still goes somewhere sensible, never to a route
+ *  the NavHost cannot match. */
+private fun nudgeRouteFor(n: HomeNudge): String = when (n.route.ifBlank { n.kind }) {
+    "devotional", "reflection_due" -> "devotional"
+    "quiz", "quiz_in_progress" -> n.moduleId?.let { "quiz/$it" } ?: "pathway"
+    "level_exam", "level_review" -> n.levelNumber?.let { "exam/$it" } ?: "pathway"
+    "letter", "letter_unread" -> "profile"   // no letters-archive route yet; caller opens the sheet when the letter is loaded
+    "cell", "cell_gathering" -> "cell-info"
+    "plan", "plan_day_due" -> n.planId?.let { "plan/$it" } ?: "plans"
+    "reading_invite" -> n.token?.let { "reading/join/$it" } ?: "read-with-friend"
+    "chat", "chat_unread" -> n.conversationId?.let { "chat/$it" } ?: "chat"
     else -> "pathway"
 }
 
