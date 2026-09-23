@@ -164,8 +164,9 @@ private fun GiveTab(
         )
     }
     // 0 once / 1 weekly / 2 monthly (FREQ_* in GiveSubmitLogic.kt). A pledge's
-    // "Pay now" is a one-time payment toward it, so it lands on One-time.
-    var freq by remember { mutableIntStateOf(if (preset?.pledgeId != null) FREQ_ONCE else FREQ_MONTHLY) }
+    // "Pay now" (or a need's "Give to this need") is a one-time payment toward
+    // it, so it lands on One-time.
+    var freq by remember { mutableIntStateOf(if (preset?.isTargeted == true) FREQ_ONCE else FREQ_MONTHLY) }
     val methods = remember { mutableStateListOf(*GIVE_METHODS.toTypedArray()) }
     var selectedMethod by remember { mutableStateOf("mpesa") }
     var coverFee by remember { mutableStateOf(false) }
@@ -202,6 +203,7 @@ private fun GiveTab(
             freq = freq, provider = method.provider, fundId = fundId, amountMajor = amountMajor,
             coverFee = coverFee, phone = phone, accountName = accountName,
             idempotencyKey = UUID.randomUUID().toString(), pledgeId = preset?.pledgeId,
+            needId = preset?.needId,
         )
         if (plan is GiveSubmission.Blocked) { error = plan.message; return }
         busy = true; error = null
@@ -228,9 +230,10 @@ private fun GiveTab(
                     Text("GIVE", style = giInter(9, FontWeight.Bold, 1.62f), color = GIVE.eyebrow)
                     Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
                     Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
-                    // Paying toward a pledge — say so, so the member knows this
-                    // gift will be counted (spec §1 attribution rule a).
-                    preset?.takeIf { it.pledgeId != null }?.let { p ->
+                    // Paying toward a pledge, or giving to a department need —
+                    // say so, so the member knows this gift will be counted
+                    // (spec §1 attribution rule a; §4 needs).
+                    preset?.takeIf { it.isTargeted }?.let { p ->
                         Row(
                             Modifier.padding(top = 10.dp).clip(Capsule).background(GIVE.goldChipBg)
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -238,7 +241,10 @@ private fun GiveTab(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
-                            Text("Counts toward your pledge${p.title?.let { " · $it" } ?: ""}", style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText)
+                            Text(
+                                (if (p.needId != null) "Giving to a need" else "Counts toward your pledge") + (p.title?.let { " · $it" } ?: ""),
+                                style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText,
+                            )
                         }
                     }
                     Row(

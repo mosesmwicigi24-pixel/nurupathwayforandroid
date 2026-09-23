@@ -74,6 +74,11 @@ data class NotifPayload(
     val name: String? = null,
     val moduleId: String? = null,
     val announcementId: String? = null,
+    // Departments (departments/service.ts): serve_request_* / department_post /
+    // department_need_* all carry department_id; need pushes also need_id.
+    val departmentId: String? = null,
+    val needId: String? = null,
+    val department: String? = null,
 )
 
 @Serializable

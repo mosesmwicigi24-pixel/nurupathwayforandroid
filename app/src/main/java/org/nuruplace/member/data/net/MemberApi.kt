@@ -516,6 +516,43 @@ interface MemberApi {
     @GET("certificates")
     suspend fun certificates(): Envelope<Certificate>
 
+    // --- Departments: where members serve (docs/PARTNERS_PROGRAMME.md §4, §5) ---
+    @GET("departments")
+    suspend fun departments(): Envelope<Department>
+
+    @GET("me/departments")
+    suspend fun myDepartments(): Envelope<Department>
+
+    @GET("departments/{id}")
+    suspend fun department(@Path("id") departmentId: String): Department
+
+    // "I'd like to serve here" — the leader decides. 422 when not open to join.
+    @POST("departments/{id}/serve")
+    suspend fun requestToServe(@Path("id") departmentId: String): ServeStatus
+
+    // Leave, or withdraw a pending request (204).
+    @DELETE("departments/{id}/serve")
+    suspend fun leaveDepartment(@Path("id") departmentId: String): Unit
+
+    // Leader-only (403 FORBIDDEN_SCOPE otherwise; the server checks).
+    @POST("departments/{id}/posts")
+    suspend fun createDepartmentPost(@Path("id") departmentId: String, @Body body: DepartmentPostBody): DepartmentPostCreated
+
+    @DELETE("departments/{id}/posts/{postId}")
+    suspend fun deleteDepartmentPost(@Path("id") departmentId: String, @Path("postId") postId: String): Unit
+
+    @POST("departments/{id}/needs")
+    suspend fun submitDepartmentNeed(@Path("id") departmentId: String, @Body body: DepartmentNeedBody): DepartmentNeedCreated
+
+    // decision: approve | decline. Not surfaced in the app yet (the request
+    // push carries no user_id) — the portal decides; kept for contract parity.
+    @POST("departments/{id}/serve-requests/{userId}/{decision}")
+    suspend fun decideServeRequest(
+        @Path("id") departmentId: String,
+        @Path("userId") userId: String,
+        @Path("decision") decision: String,
+    ): ServeStatus
+
     // --- Recurring giving schedules ---
     @GET("giving/schedules")
     suspend fun schedules(): Envelope<GivingSchedule>

@@ -61,6 +61,10 @@ enum class GiveSegment(val route: String, val label: String, val icon: ImageVect
 fun GiveTabScreen(
     initial: GiveSegment,
     onNavigate: (String) -> Unit,
+    /** A preset arriving from OUTSIDE the tab — a department need's "Give to
+     *  this need" (MainShell's give-need route). In-tab handoffs (a pledge's
+     *  Pay now) set the same state from Partners below. */
+    initialPreset: GivePreset? = null,
 ) {
     val view = LocalView.current
     // rememberSaveable so rotation / process death restore the segment; landing
@@ -69,7 +73,7 @@ fun GiveTabScreen(
     // Hoisted so a pledge created in the flow, or a Pay now handoff, reloads
     // Partners without the segment switch throwing the standing away.
     val partnersVm = remember { PartnersViewModel() }
-    var payPreset by remember { mutableStateOf<GivePreset?>(null) }
+    var payPreset by remember { mutableStateOf<GivePreset?>(initialPreset) }
     var newPledge by remember { mutableStateOf(false) }
 
     if (newPledge) {

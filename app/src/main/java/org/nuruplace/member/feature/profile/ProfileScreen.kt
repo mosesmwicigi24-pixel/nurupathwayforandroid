@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Diversity3
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -103,6 +104,7 @@ import org.nuruplace.member.data.net.Achievements
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Badge
 import org.nuruplace.member.data.net.Certificate
+import org.nuruplace.member.data.net.Department
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ScoresSummary
@@ -126,10 +128,15 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     var achievements by remember { mutableStateOf<Achievements?>(null) }
     var badgeGallery by remember { mutableStateOf<List<Badge>>(emptyList()) }
     var certs by remember { mutableStateOf<List<Certificate>>(emptyList()) }
+    // Departments I actively serve in (GET /me/departments, spec §4) — the
+    // "Serving in" card below; requests-in-waiting live on the Departments
+    // segment, not here.
+    var serving by remember { mutableStateOf<List<Department>>(emptyList()) }
     LaunchedEffect(Unit) {
         scores = runCatching { Net.client.api.scores() }.getOrNull()
         achievements = runCatching { Net.client.api.achievements() }.getOrNull()
         certs = runCatching { Net.client.api.certificates().data }.getOrDefault(emptyList())
+        serving = runCatching { Net.client.api.myDepartments().data.filter { it.isActive } }.getOrDefault(emptyList())
         // GET /badges catalogue merged with earned awards (iOS ProfileView.loadExtras):
         // earned first (with awarded_at), then locked — so the rail shows what's
         // still ahead, not just trophies already won.
@@ -280,6 +287,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             if (p?.role in setOf("Instructor", "Admin", "SuperAdmin")) {
                 DisciplesEntryCard { onOpen("disciples") }
             }
+            if (serving.isNotEmpty()) ServingInCard(serving) { onOpen("department/$it") }
             AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             AiConsentCard()
@@ -789,6 +797,49 @@ private fun LanguagesRow() {
 }
 
 // ── Discipler console entry (staff only) ────────────────────────────────────
+// ── Serving in ──────────────────────────────────────────────────────────────
+/** The departments this member actively serves in (spec §4: an approved
+ *  request "shows on the department and on the member's profile"). One row
+ *  each → the department page. Hidden entirely when there are none. */
+@Composable
+private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
+    SectionCard {
+        SectionTitle(Icons.Filled.Diversity3, "SERVING IN")
+        Column(Modifier.padding(top = 4.dp)) {
+            serving.forEachIndexed { index, d ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpen(d.departmentId) }.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(PROF.goldChipBg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (!d.imageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = d.imageUrl, contentDescription = null, contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)),
+                            )
+                        } else {
+                            Icon(Icons.Filled.Diversity3, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(d.name, style = pInter(14, FontWeight.SemiBold), color = PROF.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            if (d.myRole == "leader") "Leader" else "Serving",
+                            style = pInter(11), color = PROF.sub,
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
+                }
+                if (index != serving.lastIndex) HairlineDivider()
+            }
+        }
+    }
+}
+
 @Composable
 private fun DisciplesEntryCard(onOpen: () -> Unit) {
     Row(

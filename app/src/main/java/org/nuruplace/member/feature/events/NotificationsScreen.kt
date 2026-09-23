@@ -77,10 +77,14 @@ import org.nuruplace.member.util.relTime
 private fun routeFor(n: NotificationRow): String? {
     n.payload?.moduleId?.let { return "module/$it" }
     n.payload?.announcementId?.let { return "announcement/$it" }
+    // serve_request_* / department_post / department_need_* (departments/
+    // service.ts) all carry department_id → the department page itself.
+    n.payload?.departmentId?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
     val t = n.template.lowercase()
     // Level notifications land on the EXACT level (was the bare hub).
     n.payload?.levelNumber?.let { return "level/$it" }
     return when {
+        "department" in t || "serve_request" in t -> "departments"
         "prayer" in t -> "prayer-room?tab=corporate"
         "verse" in t || "memory" in t -> "memory-verses"
         "devotional" in t -> "devotional"
@@ -105,6 +109,7 @@ private fun toneFor(template: String): Tone {
         "certificate" in t || "cert" in t -> Tone("📜", Nuru.navy, Nuru.gold, reward = true)
         "level" in t || "advanced" in t -> Tone("📈", Nuru.navy, Nuru.gold, reward = true)
         "reflection" in t && ("return" in t || "revis" in t) -> Tone("✍️", Nuru.warning, Nuru.warningBg)     // warning
+        "department" in t || "serve_request" in t -> Tone("🤝", Nuru.info, Nuru.infoBg)                        // departments
         "event" in t || "reminder" in t -> Tone("📅", Nuru.info, Nuru.infoBg)                                 // info
         "announcement" in t || "announce" in t -> Tone("📣", Nuru.info, Nuru.infoBg)                          // info
         "system" in t || "security" in t || "login" in t || "password" in t -> Tone("⚙️", Nuru.ink600, Nuru.inputBg) // security

@@ -26,6 +26,7 @@ val RECURRING_PROVIDERS = setOf("mpesa", "airtel")
 
 const val RECURRING_BLOCKED_MESSAGE = "Recurring gifts are available with M-Pesa or Airtel Money."
 const val RECURRING_CARD_BLOCKED_MESSAGE = "Recurring card gifts need the Stripe step — coming soon. Use M-Pesa or Airtel Money."
+const val NEED_RECURRING_BLOCKED_MESSAGE = "A gift to a department need is a one-time gift. Choose One-time to give to it."
 
 sealed interface GiveSubmission {
     data class Intent(val body: GiveBody) : GiveSubmission
@@ -50,6 +51,9 @@ fun frequencyWire(freq: Int): String = when (freq) {
  *   means a SOON method, which is blocked for every frequency.
  * @param pledgeId carried from a pledge's "Pay now" so the server attributes
  *   the gift (intent) or binds the schedule (spec §1, §5).
+ * @param needId carried from a department need's "Give to this need" (spec
+ *   §4). Intents only — a schedule cannot target a need, so a recurring
+ *   choice with a need is blocked rather than silently dropping the need.
  */
 fun planGiveSubmission(
     freq: Int,
@@ -62,6 +66,7 @@ fun planGiveSubmission(
     idempotencyKey: String,
     pledgeId: String? = null,
     currency: String = "KES",
+    needId: String? = null,
 ): GiveSubmission {
     if (amountMajor <= 0) return GiveSubmission.Blocked("Enter an amount to give.")
     if (provider.isNullOrBlank()) return GiveSubmission.Blocked("This method is coming soon.")
@@ -77,9 +82,11 @@ fun planGiveSubmission(
                 accountName = accountName.trim().ifBlank { null },
                 idempotencyKey = idempotencyKey,
                 pledgeId = pledgeId,
+                needId = needId,
             ),
         )
     } else {
+        if (needId != null) return GiveSubmission.Blocked(NEED_RECURRING_BLOCKED_MESSAGE)
         if (provider !in RECURRING_PROVIDERS) {
             return GiveSubmission.Blocked(if (provider == "card") RECURRING_CARD_BLOCKED_MESSAGE else RECURRING_BLOCKED_MESSAGE)
         }
