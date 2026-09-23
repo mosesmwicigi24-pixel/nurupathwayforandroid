@@ -520,6 +520,15 @@ interface MemberApi {
     @GET("giving/schedules")
     suspend fun schedules(): Envelope<GivingSchedule>
 
+    /**
+     * A Weekly/Monthly choice on Give creates a REAL server-charged schedule —
+     * never an intent (docs/PARTNERS_PROGRAMME.md §0, the Android money fix;
+     * iOS GivingView.createSchedule parity). Mobile money only (mpesa/airtel).
+     * The reply is the created schedule (schedule_id/status/next_run_at/…).
+     */
+    @POST("giving/schedules")
+    suspend fun createSchedule(@Body body: CreateScheduleBody): GivingSchedule
+
     @POST("giving/schedules/{id}/cancel")
     suspend fun cancelSchedule(@Path("id") scheduleId: String): Unit
 
@@ -543,9 +552,32 @@ interface MemberApi {
     @POST("giving/invitation/{id}/outcome")
     suspend fun inviteOutcome(@Path("id") campaignId: String, @Body body: InviteOutcomeBody): Unit
 
-    /** The member's standing as a partner. Recognition, not receipts. */
+    /** The member's standing as a partner. Recognition, not receipts — and,
+     *  since the Partners programme (docs/PARTNERS_PROGRAMME.md §5), also the
+     *  membership, tier, pledges[] (with progress) and due[]. */
     @GET("giving/partnership")
     suspend fun partnership(): Partnership
+
+    // --- Partners programme (docs/PARTNERS_PROGRAMME.md §5) ---
+
+    /** Join the programme. No fund, no campaign, no money (spec §1). */
+    @POST("giving/partners/join")
+    suspend fun joinPartners(@Body body: JoinPartnersBody = JoinPartnersBody()): PartnerMembership
+
+    @POST("giving/pledges")
+    suspend fun createPledge(@Body body: CreatePledgeBody): Pledge
+
+    /** Pause / resume / cancel, change the amount or due day, reminders on/off. */
+    @PATCH("giving/pledges/{id}")
+    suspend fun updatePledge(@Path("id") pledgeId: String, @Body body: UpdatePledgeBody): Pledge
+
+    /** The pledge plus its payments. */
+    @GET("giving/pledges/{id}")
+    suspend fun pledge(@Path("id") pledgeId: String): PledgeDetail
+
+    /** By year → by pledge → by fund → payments (JSON; the PDF stays on giving/statement.pdf). */
+    @GET("giving/statements")
+    suspend fun statements(@Query("year") year: Int? = null): GivingStatement
 
     // --- Announcements ---
     @GET("me/announcements")

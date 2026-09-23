@@ -84,6 +84,9 @@ private fun routeFor(n: NotificationRow): String? {
         "prayer" in t -> "prayer-room?tab=corporate"
         "verse" in t || "memory" in t -> "memory-verses"
         "devotional" in t -> "devotional"
+        // pledge_due_soon / pledge_overdue / pledge_fulfilled (Partners
+        // programme §3) → the Give tab on Partners, before the generic give.
+        "pledge" in t || "partner" in t -> "partners"
         "give" in t || "giving" in t || "payment" in t -> "give"
         "event" in t -> "events"
         "badge" in t || "certificate" in t || "cert" in t -> "profile"

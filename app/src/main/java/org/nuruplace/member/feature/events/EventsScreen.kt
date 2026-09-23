@@ -86,6 +86,10 @@ fun EventsScreen(
     onOpenAnnouncements: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenAttendance: () -> Unit,
+    /** Broadcasters only (docs/PARTNERS_PROGRAMME.md §0): the "Broadcast" card
+     *  MainShell mounts at the top of the body — Go Live / return / My
+     *  Broadcasts (feature/live/BroadcastCard.kt). Null for everyone else. */
+    broadcastCard: (@Composable () -> Unit)? = null,
 ) {
     AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, load = {
         val cal = runCatching { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }.getOrDefault(emptyList())
@@ -151,6 +155,9 @@ fun EventsScreen(
                 Modifier.padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // Broadcast (live:go members only) — Live moved into Events.
+                broadcastCard?.invoke()
+
                 // Week strip card
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)

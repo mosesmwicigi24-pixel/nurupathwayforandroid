@@ -2,9 +2,12 @@
 // Money is server-authoritative + ONLINE-ONLY (§5.6): pick a fund + amount +
 // method, then create a REAL intent server-side (never fabricated, never queued).
 // M-Pesa STK push is the default; PayPal returns an approve URL; SOON methods are
-// disabled. Recurring gifts create schedules; the active-schedules rail lets you
-// review + cancel one in a bottom sheet. All shared tokens/tables live in
-// GiveShared.kt (same package — no import).
+// disabled. Recurring gifts create schedules (POST /giving/schedules — the
+// intent-vs-schedule decision is GiveSubmitLogic.kt, pinned by a unit test);
+// the active-schedules rail lets you review + cancel one in a bottom sheet.
+// A pledge's "Pay now" (Partners) opens this screen with a GivePreset — fund,
+// amount and the pledge_id the intent must carry. All shared tokens/tables
+// live in GiveShared.kt (same package — no import).
 package org.nuruplace.member.feature.give
 
 import android.content.Intent
@@ -66,7 +69,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
-import org.nuruplace.member.data.net.GiveBody
 import org.nuruplace.member.data.net.GivingIntentResult
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
@@ -107,7 +109,14 @@ private fun firstChargeDate(freq: Int): String =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedules: () -> Unit = {}, onOpenPartners: () -> Unit = {}) {
+fun GivingScreen(
+    onBack: () -> Unit,
+    onOpenStatement: () -> Unit,
+    onOpenSchedules: () -> Unit = {},
+    onOpenPartners: () -> Unit = {},
+    /** A pledge's "Pay now": fund + amount preset, pledge_id carried into the intent. */
+    preset: GivePreset? = null,
+) {
     AsyncContent(
         load = {
             val hist = runCatching { Net.client.api.givingHistory().data }.getOrDefault(emptyList())
@@ -116,7 +125,7 @@ fun GivingScreen(onBack: () -> Unit, onOpenStatement: () -> Unit, onOpenSchedule
             Triple(hist, sched, phone)
         },
     ) { (history, schedules, phone), reload ->
-        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenPartners)
+        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenSchedules, onOpenPartners, preset)
     }
 }
 
@@ -128,12 +137,14 @@ private fun GiveTab(
     phone: String,
     reload: () -> Unit,
     onOpenStatement: () -> Unit,
+    onOpenSchedules: () -> Unit = {},
     onOpenPartners: () -> Unit = {},
+    preset: GivePreset? = null,
 ) {
     val scope = rememberCoroutineScope()
 
-    var fundId by remember { mutableStateOf("tithe") }
-    var amountMajor by remember { mutableIntStateOf(1000) }
+    var fundId by remember { mutableStateOf(preset?.fundId?.takeIf { it.isNotBlank() } ?: "tithe") }
+    var amountMajor by remember { mutableIntStateOf(preset?.amountMinor?.takeIf { it > 0 }?.let { it / 100 } ?: 1000) }
     var customOpen by remember { mutableStateOf(false) }
     // "Named giving" (custom sheet, optional): set from the custom-amount
     // dialog. Rides the M-Pesa AccountReference + persists for
@@ -152,7 +163,9 @@ private fun GiveTab(
             onDismiss = { customOpen = false },
         )
     }
-    var freq by remember { mutableIntStateOf(2) } // 0 once / 1 weekly / 2 monthly
+    // 0 once / 1 weekly / 2 monthly (FREQ_* in GiveSubmitLogic.kt). A pledge's
+    // "Pay now" is a one-time payment toward it, so it lands on One-time.
+    var freq by remember { mutableIntStateOf(if (preset?.pledgeId != null) FREQ_ONCE else FREQ_MONTHLY) }
     val methods = remember { mutableStateListOf(*GIVE_METHODS.toTypedArray()) }
     var selectedMethod by remember { mutableStateOf("mpesa") }
     var coverFee by remember { mutableStateOf(false) }
@@ -160,11 +173,17 @@ private fun GiveTab(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<GivingIntentResult?>(null) }
+    var scheduled by remember { mutableStateOf<GivingSchedule?>(null) }
     var sheetSchedule by remember { mutableStateOf<GivingSchedule?>(null) }
 
     // Full-screen generosity ceremony once an intent is created.
     result?.let { r ->
         GiveResult(r, fundLabel = giveFund(fundId).name, giftName = accountName.trim().ifBlank { null }, onDone = { result = null })
+        return
+    }
+    // …or once the server really created a schedule (never faked here).
+    scheduled?.let { s ->
+        ScheduledResult(s, fundLabel = giveFund(fundId).name, onDone = { scheduled = null; reload() })
         return
     }
 
@@ -177,20 +196,22 @@ private fun GiveTab(
 
     fun submit() {
         val method = methods.firstOrNull { it.id == selectedMethod } ?: return
+        // One-time → intent; Weekly/Monthly → schedule (mobile money only);
+        // cover-fee inside amount_minor; pledge_id carried. GiveSubmitLogic.kt.
+        val plan = planGiveSubmission(
+            freq = freq, provider = method.provider, fundId = fundId, amountMajor = amountMajor,
+            coverFee = coverFee, phone = phone, accountName = accountName,
+            idempotencyKey = UUID.randomUUID().toString(), pledgeId = preset?.pledgeId,
+        )
+        if (plan is GiveSubmission.Blocked) { error = plan.message; return }
         busy = true; error = null
         scope.launch {
             try {
-                result = Net.client.api.giving(
-                    GiveBody(
-                        fund = fundId,
-                        amountMinor = amountMajor * 100,
-                        currency = "KES",
-                        method = method.provider ?: "mpesa",
-                        phoneNumber = phone.ifBlank { null },
-                        accountName = accountName.trim().ifBlank { null },
-                        idempotencyKey = UUID.randomUUID().toString(),
-                    ),
-                )
+                when (plan) {
+                    is GiveSubmission.Intent -> result = Net.client.api.giving(plan.body)
+                    is GiveSubmission.Schedule -> scheduled = Net.client.api.createSchedule(plan.body)
+                    is GiveSubmission.Blocked -> error = plan.message
+                }
             } catch (e: Exception) {
                 error = ApiException.message(e)
             } finally {
@@ -207,6 +228,19 @@ private fun GiveTab(
                     Text("GIVE", style = giInter(9, FontWeight.Bold, 1.62f), color = GIVE.eyebrow)
                     Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
                     Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
+                    // Paying toward a pledge — say so, so the member knows this
+                    // gift will be counted (spec §1 attribution rule a).
+                    preset?.takeIf { it.pledgeId != null }?.let { p ->
+                        Row(
+                            Modifier.padding(top = 10.dp).clip(Capsule).background(GIVE.goldChipBg)
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
+                            Text("Counts toward your pledge${p.title?.let { " · $it" } ?: ""}", style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText)
+                        }
+                    }
                     Row(
                         Modifier.padding(top = 14.dp).clip(Capsule).background(GIVE.white)
                             .border(1.dp, GIVE.gold.copy(alpha = 0.45f), Capsule)
@@ -424,7 +458,11 @@ private fun GiveTab(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text("Cover the transaction fee", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
-                        Text("Adds ${kshMajor(giveFee(amountMajor))} — 100% reaches the fund", style = giInter(11), color = GIVE.sub)
+                        Text(
+                            if (coverFee) "Adds ${kshMajor(giveFee(amountMajor))} — you'll be charged ${kshMajor(chargedAmountMajor(amountMajor, true))}"
+                            else "Adds ${kshMajor(giveFee(amountMajor))} — 100% reaches the fund",
+                            style = giInter(11), color = GIVE.sub,
+                        )
                     }
                     Switch(
                         checked = coverFee,
@@ -459,10 +497,33 @@ private fun GiveTab(
                     }
                 }
 
-                // Partners — its own screen, reached from here because this is
-                // where someone thinking about giving already is. iOS parity.
+                // Manage schedules — the recurring-gifts list (route "schedules")
+                // was unreachable before the Partners programme (spec §0).
                 Row(
-                    Modifier.padding(top = 16.dp).fillMaxWidth()
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp)).background(GIVE.white)
+                        .border(1.dp, GIVE.border, RoundedCornerShape(14.dp))
+                        .clickable { onOpenSchedules() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Manage schedules", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+                        Text(
+                            if (activeSchedules.isEmpty()) "No recurring gifts yet" else "${activeSchedules.size} active · review or cancel",
+                            style = giInter(11), color = GIVE.sub,
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
+                }
+
+                // Partners — the other segment of this tab (GiveTabScreen),
+                // reached from here because this is where someone thinking
+                // about giving already is. iOS parity.
+                Row(
+                    Modifier.padding(top = 4.dp).fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp)).background(GIVE.white)
                         .border(1.dp, GIVE.gold.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
                         .clickable { onOpenPartners() }
@@ -472,7 +533,7 @@ private fun GiveTab(
                     Column(Modifier.weight(1f)) {
                         Text("Partners", style = giInter(15, FontWeight.SemiBold), color = GIVE.navy)
                         Text(
-                            "Your standing, and what this season has held",
+                            "Join the programme, pledge, and see your standing",
                             style = giInter(12), color = GIVE.sub,
                             modifier = Modifier.padding(top = 3.dp),
                         )
@@ -511,12 +572,12 @@ private fun GiveTab(
                     CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.navy, strokeWidth = 2.dp)
                     Spacer(Modifier.width(6.dp))
                     Text("Processing…", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
-                } else if (freq != 0) {
+                } else if (freq != FREQ_ONCE) {
                     Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Schedule ${kshMajor(amountMajor)} / ${if (freq == 1) "week" else "month"}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                    Text("Schedule ${kshMajor(chargedAmountMajor(amountMajor, coverFee))} / ${if (freq == FREQ_WEEKLY) "week" else "month"}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                 } else {
-                    Text("Give ${kshMajor(amountMajor)}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                    Text("Give ${kshMajor(chargedAmountMajor(amountMajor, coverFee))}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                     Spacer(Modifier.width(6.dp))
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
@@ -599,6 +660,55 @@ private fun SheetDetailRow(label: String, value: String) {
 @Composable
 private fun SheetDivider() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(GIVE.border))
+}
+
+/** Full-screen ceremony once the server really created a schedule — the first
+ *  charge is the server's next cycle boundary (`next_run_at`), shown as such;
+ *  "Cancel anytime" is true because Manage schedules is one tap away. */
+@Composable
+private fun ScheduledResult(s: GivingSchedule, fundLabel: String, onDone: () -> Unit) {
+    LaunchedEffect(s.scheduleId) {
+        CelebrationCenter.fire(Moment("schedule-${s.scheduleId}", "Thank you for committing", "Faithfulness, month after month, carries the gospel further."))
+    }
+    val cadence = if (s.frequency == "weekly") "week" else "month"
+    val firstCharge = s.nextRunAt.takeIf { it.isNotBlank() }?.let { prettyDate(it) }
+        ?: firstChargeDate(if (s.frequency == "weekly") FREQ_WEEKLY else FREQ_MONTHLY)
+    Box(Modifier.fillMaxSize().background(GIVE.paper), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                Modifier.size(96.dp).clip(CircleShape).background(GIVE.gold.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(80.dp).clip(CircleShape).background(GIVE.gold), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Scheduled", style = giSerif(24, FontWeight.Medium, -0.48f), color = GIVE.navy, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "${ksh(s.amountMinor)} every $cadence to ${s.fund.replaceFirstChar { it.uppercase() }.ifBlank { fundLabel }}.",
+                style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "First charge $firstCharge · then every $cadence. Cancel anytime from Manage schedules.",
+                style = giInter(13), color = GIVE.sub, textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(
+                Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.gold)
+                    .clickable { onDone() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text("Done", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+            }
+        }
+    }
 }
 
 /** Full-screen generosity ceremony once an intent is created. */

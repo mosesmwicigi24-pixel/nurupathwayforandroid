@@ -1954,6 +1954,9 @@ private fun nudgeRouteFor(n: HomeNudge): String = when (n.route.ifBlank { n.kind
     "plan", "plan_day_due" -> n.planId?.let { "plan/$it" } ?: "plans"
     "reading_invite" -> n.token?.let { "reading/join/$it" } ?: "read-with-friend"
     "chat", "chat_unread" -> n.conversationId?.let { "chat/$it" } ?: "chat"
+    // Partners programme (docs/PARTNERS_PROGRAMME.md §3): a pledge due/overdue
+    // nudge opens the Give tab on Partners, where Pay now lives.
+    "partners", "pledge", "pledge_due", "pledge_due_soon", "pledge_overdue", "pledge_fulfilled" -> "partners"
     else -> "pathway"
 }
 
