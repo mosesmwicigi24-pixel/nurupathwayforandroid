@@ -44,6 +44,29 @@ class NuruMessagingServiceDestForTest {
         )
     }
 
+    @Test fun `department_id routes to the department page`() {
+        // departments/service.ts: serve_request_* / department_post / department_need_*
+        // all carry department_id (the need pushes also need_id — the page is the target).
+        assertEquals(
+            "department/dep-1",
+            NuruMessagingService.destFor(mapOf("department_id" to "dep-1", "template" to "serve_request_approved")),
+        )
+        assertEquals(
+            "department/dep-1",
+            NuruMessagingService.destFor(mapOf("department_id" to "dep-1", "need_id" to "n-1", "template" to "department_need_open")),
+        )
+        assertEquals(
+            "department/dep-1",
+            NuruMessagingService.destFor(mapOf("department_id" to "dep-1", "template" to "department_post", "preview" to "Hi")),
+        )
+    }
+
+    @Test fun `department templates without an id land on the Departments segment`() {
+        assertEquals("departments", NuruMessagingService.destFor(mapOf("template" to "serve_request_received")))
+        assertEquals("departments", NuruMessagingService.destFor(mapOf("template" to "department_post")))
+        assertEquals("departments", NuruMessagingService.destFor(mapOf("department_id" to "", "template" to "department_need_approved")))
+    }
+
     // --- regression guard: the OLD camelCase keys must NOT be honoured ---
 
     @Test fun `stale camelCase keys do not match`() {

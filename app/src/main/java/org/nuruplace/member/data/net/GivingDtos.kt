@@ -80,6 +80,10 @@ data class GiveBody(
     // from a pledge's "Pay now" carries the pledge so the server attributes the
     // transaction to it. Omitted from the wire entirely when absent.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val pledgeId: String? = null,
+    // A gift started from a department need's "Give to this need" (spec §4):
+    // the need is its own giving target, written at giving time so progress
+    // is exact. 422 server-side unless the need is approved and open.
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val needId: String? = null,
 )
 
 /** POST /giving/schedules — a real server-charged recurring gift (money §5.6:

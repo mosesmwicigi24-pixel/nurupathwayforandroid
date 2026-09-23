@@ -106,4 +106,44 @@ class GiveSubmitLogicTest {
     fun `zero amount is blocked before any method check`() {
         assertTrue(plan(FREQ_ONCE, "mpesa", amount = 0) is GiveSubmission.Blocked)
     }
+
+    // --- Departments (docs/PARTNERS_PROGRAMME.md §4): a need is a giving target ---
+
+    @Test
+    fun `need id rides a one-time intent`() {
+        val intent = planGiveSubmission(
+            freq = FREQ_ONCE, provider = "mpesa", fundId = "gift", amountMajor = 5000, coverFee = false,
+            phone = "", accountName = "", idempotencyKey = "idem-2", needId = "need-1",
+        ) as GiveSubmission.Intent
+        assertEquals("need-1", intent.body.needId)
+        assertNull(intent.body.pledgeId)
+        assertEquals("gift", intent.body.fund)
+    }
+
+    @Test
+    fun `a recurring choice with a need is blocked rather than dropping the need`() {
+        val s = planGiveSubmission(
+            freq = FREQ_MONTHLY, provider = "mpesa", fundId = "gift", amountMajor = 5000, coverFee = false,
+            phone = "", accountName = "", idempotencyKey = "idem-3", needId = "need-1",
+        )
+        assertTrue(s is GiveSubmission.Blocked)
+        assertEquals(NEED_RECURRING_BLOCKED_MESSAGE, (s as GiveSubmission.Blocked).message)
+    }
+
+    @Test
+    fun `a need preset is targeted and lands the intent on the need`() {
+        val p = GivePreset(fundId = NEED_GIFT_FUND, amountMinor = 3_750_000, needId = "need-1", title = "Sound desk")
+        assertTrue(p.isTargeted)
+        assertNull(p.pledgeId)
+        assertEquals("need-1", p.needId)
+        assertEquals("gift", p.fundId)
+        val intent = planGiveSubmission(
+            freq = FREQ_ONCE, provider = "card", fundId = p.fundId!!, amountMajor = p.amountMinor!! / 100, coverFee = false,
+            phone = "", accountName = "", idempotencyKey = "idem-4", pledgeId = p.pledgeId, needId = p.needId,
+        ) as GiveSubmission.Intent
+        assertEquals("need-1", intent.body.needId)
+        assertEquals(3_750_000, intent.body.amountMinor)
+        // A plain preset (no pledge, no need) is not targeted.
+        assertTrue(!GivePreset(fundId = "tithe").isTargeted)
+    }
 }

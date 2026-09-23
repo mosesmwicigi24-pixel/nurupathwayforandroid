@@ -176,12 +176,28 @@ fun giveStatus(status: String?): Triple<String, Color, Color> = when (status?.lo
     else -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
 }
 
-/** What a pledge's "Pay now" hands the Give screen (GiveTabScreen → GivingScreen):
- *  the fund and amount to preset, the pledge the intent must carry, and a
- *  title for the "counts toward your pledge" chip. */
+/** What a pledge's "Pay now" — or a department need's "Give to this need" —
+ *  hands the Give screen (GiveTabScreen → GivingScreen): the fund and amount
+ *  to preset, the pledge OR need the intent must carry, and a title for the
+ *  "counts toward…" chip. A need gift is always one-time (schedules carry
+ *  no need_id, spec §5). */
 data class GivePreset(
     val fundId: String? = null,
     val amountMinor: Int? = null,
     val pledgeId: String? = null,
+    val needId: String? = null,
     val title: String? = null,
-)
+) {
+    /** The gift is bound to a target and should land on One-time. */
+    val isTargeted: Boolean get() = pledgeId != null || needId != null
+}
+
+/** The fund a need's gift presets to. Needs carry no fund of their own on the
+ *  member wire; "gift" (a special gift) is the honest default and the member
+ *  can still pick another tile. */
+const val NEED_GIFT_FUND = "gift"
+
+/** MainShell route that opens the Give tab preset for a need (see
+ *  GIVE_NEED_ROUTE there). Title is URL-encoded; amount is minor units. */
+fun giveToNeedRoute(preset: GivePreset): String =
+    "give-need/${preset.needId}?amount=${preset.amountMinor ?: 0}&title=${android.net.Uri.encode(preset.title ?: "")}"

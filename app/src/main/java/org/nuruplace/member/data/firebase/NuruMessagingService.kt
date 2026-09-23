@@ -99,6 +99,8 @@ class NuruMessagingService : FirebaseMessagingService() {
          *    `level_number`    — assessment/levelAdvancement.ts (`level_ushered`)
          *                        and workers/handlers.ts (`level_completed`)
          *    `invite_token`    — reading-social/{groups,invites}.ts (`plan_group_*`)
+         *    `department_id`   — departments/service.ts (`serve_request_*`,
+         *                        `department_post`, `department_need_*`)
          *  (Before 2026-07-20 the first three read camelCase keys that never
          *  matched, so those taps silently fell through to the template branch
          *  and lost their specific target.) */
@@ -110,8 +112,13 @@ class NuruMessagingService : FirebaseMessagingService() {
             // carries invite_token, so the tap opens the SAME invite-preview
             // screen a nuru://join/{token} deep link opens.
             data["invite_token"]?.takeIf { it.isNotBlank() }?.let { return "reading/join/$it" }
+            // Departments (departments/service.ts): serve_request_received /
+            // _approved / _declined, department_post, department_need_* all
+            // carry department_id → the department page (spec §4).
+            data["department_id"]?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
             val t = (data["template"] ?: "").lowercase()
             return when {
+                "department" in t || "serve_request" in t -> "departments"
                 // live_stream_started (packages/backend/src/modules/live/service.ts)
                 // — a tapped push must land IN THE PLAYER, not just Home, and the
                 // payload alone (stream_id/scope/cell_id/title) isn't enough to

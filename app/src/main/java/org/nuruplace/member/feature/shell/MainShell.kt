@@ -102,8 +102,11 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private const val YOU_TAB_ROUTE = "you"
 private const val GIVE_TAB_ROUTE = "give"
 private const val EVENTS_TAB_ROUTE = "events"
-private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile")
-private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners")
+/** The Give tab opened on Give with a department need preset (docs/
+ *  PARTNERS_PROGRAMME.md §4) — built by feature/give/GiveShared.giveToNeedRoute. */
+private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={title}"
+private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile", "departments")
+private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE)
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
 
 /** Pushed sub-routes that belong to a tab for HIGHLIGHTING (they carry their
@@ -565,6 +568,33 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onSignOut = { auth.signOut() },
                 )
             }
+            // Departments (docs/PARTNERS_PROGRAMME.md §4) — the You tab opened
+            // on its Departments segment; serve_request_* / department_*
+            // pushes without a department_id land here.
+            composable("departments") {
+                YouScreen(
+                    initial = YouSegment.Departments,
+                    me = me,
+                    isStaff = me?.profile?.role == "SuperAdmin",
+                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
+                    chatUnread = chatUnread,
+                    onChatUnreadChange = { chatUnread = it },
+                    onNavigate = { nav.navigate(it) },
+                    onSignOut = { auth.signOut() },
+                )
+            }
+            // One department — posts, needs, members; "I'd like to serve
+            // here". A need's "Give to this need" opens the Give tab preset.
+            composable(
+                "department/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.departments.DepartmentScreen(
+                    departmentId = entry.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    onGiveToNeed = { nav.navigate(org.nuruplace.member.feature.give.giveToNeedRoute(it)) },
+                )
+            }
             composable(
                 "broadcast/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
@@ -697,6 +727,28 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.give.GiveTabScreen(
                     initial = org.nuruplace.member.feature.give.GiveSegment.Partners,
                     onNavigate = { nav.navigate(it) },
+                )
+            }
+            // Give, preset for a department need (spec §4): fund "gift", the
+            // need's remaining amount, and need_id carried into the intent.
+            composable(
+                GIVE_NEED_ROUTE,
+                arguments = listOf(
+                    navArgument("needId") { type = NavType.StringType },
+                    navArgument("amount") { type = NavType.IntType; defaultValue = 0 },
+                    navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { entry ->
+                val needId = entry.arguments?.getString("needId") ?: ""
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Give,
+                    onNavigate = { nav.navigate(it) },
+                    initialPreset = org.nuruplace.member.feature.give.GivePreset(
+                        fundId = org.nuruplace.member.feature.give.NEED_GIFT_FUND,
+                        amountMinor = entry.arguments?.getInt("amount")?.takeIf { it > 0 },
+                        needId = needId.ifBlank { null },
+                        title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() },
+                    ),
                 )
             }
             composable(
