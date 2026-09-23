@@ -83,8 +83,14 @@ import org.nuruplace.member.data.net.MfaEnrollment
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationPreferences
 
+/**
+ * @param embedded true when hosted as the You tab's Settings segment
+ *   (YouScreen, docs/PARTNERS_PROGRAMME.md §0) — the capsule above is the
+ *   chrome, so the cream header with its back button is skipped. The pushed
+ *   "settings" route (Profile's gear) still renders the full header.
+ */
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: Boolean = false) {
     val scope = rememberCoroutineScope()
     var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
     var saveFailed by remember { mutableStateOf(false) }
@@ -110,7 +116,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
             .verticalScroll(rememberScrollState()),
     ) {
         // ── Header ──────────────────────────────────────────────────────────
-        ProfCreamHeaderBox {
+        if (!embedded) ProfCreamHeaderBox {
             Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
                 Box(
                     Modifier

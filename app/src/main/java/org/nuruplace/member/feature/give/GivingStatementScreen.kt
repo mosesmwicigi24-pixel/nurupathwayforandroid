@@ -549,8 +549,9 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
 }
 
 // Authed PDF fetch → cache/shared → content:// viewer chooser (FileProvider is
-// declared in the manifest; same plumbing as certificate downloads).
-private suspend fun openPdfAuthed(
+// declared in the manifest; same plumbing as certificate downloads). Shared
+// with the Partners statements section (same package).
+internal suspend fun openPdfAuthed(
     context: android.content.Context,
     fileName: String,
     fetch: suspend () -> okhttp3.ResponseBody,

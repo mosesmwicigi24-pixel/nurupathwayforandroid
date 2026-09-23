@@ -1,9 +1,11 @@
-// Authed shell — bottom bar (Home · Pathway · Plans · You · Live) over a
-// NavHost. Pathway carries its own stack: Levels → Level → Module →
-// Quiz/Exam. "You" (L4 tab restructure, docs/LIVE_STREAMING.md) fuses the
-// old Chat/Events/Give/Profile tabs behind one segmented capsule — see
-// YouScreen.kt. "Live" is broadcaster-only (canGoLive(me)) and hosts Go Live
-// + Replays — see LiveTabScreen.kt. Port of the iOS RootView tab shell.
+// Authed shell — bottom bar (Home · Pathway · Plans · Events · Give · You,
+// docs/PARTNERS_PROGRAMME.md §0) over a NavHost. Pathway carries its own
+// stack: Levels → Level → Module → Quiz/Exam. "Give" is a two-segment capsule
+// (Give · Partners — GiveTabScreen.kt); "You" is a four-segment capsule
+// (Community · Departments · Profile · Settings — YouScreen.kt). Live is no
+// longer a tab: broadcasters (canGoLive(me)) get a "Broadcast" card at the
+// top of Events (BroadcastCard.kt) and the "live" studio route stays
+// reachable for deep links. Port of the iOS RootView tab shell.
 package org.nuruplace.member.feature.shell
 
 import androidx.compose.foundation.background
@@ -18,10 +20,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -88,33 +91,46 @@ import org.nuruplace.member.ui.theme.Spacing
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-/** The "You" tab (L4 tab restructure) is really FOUR routes wearing one tab —
- *  "you" itself (the bottom-bar's own destination, always Chat-default) plus
- *  the four old standalone routes, each of which now pre-selects its segment
- *  in the SAME [YouScreen] (see MainShell's NavHost below and
- *  docs/LIVE_STREAMING.md L4). Every nav call site that still targets one of
- *  these four by name — FCM pushes, NotificationsScreen.routeFor, Home's
- *  onSelectTab, CommunityHubScreen, shortcuts.xml — keeps landing correctly
- *  with zero edits, and the bottom bar must recognize all five as "the You
- *  tab is active" for highlighting/back-stack purposes. */
+/** Some tabs are really SEVERAL routes wearing one tab. "You" is "you" itself
+ *  (always Community-default) plus the old standalone "chat"/"profile" routes,
+ *  each pre-selecting its segment in the SAME [YouScreen]; "Give" is "give"
+ *  (opens on Give) plus "partners" (opens on Partners) in the SAME
+ *  [GiveTabScreen]. Every nav call site that targets one of these by name —
+ *  FCM pushes, NotificationsScreen.routeFor, Home's onSelectTab/onOpenGive,
+ *  CommunityHubScreen — keeps landing correctly with zero edits, and the
+ *  bottom bar must recognize every alias as "that tab is active". */
 private const val YOU_TAB_ROUTE = "you"
-private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "events", "give", "profile")
-private fun isYouRoute(route: String?) = route != null && route in YOU_ALIAS_ROUTES
+private const val GIVE_TAB_ROUTE = "give"
+private const val EVENTS_TAB_ROUTE = "events"
+private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile")
+private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners")
+private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
+
+/** Pushed sub-routes that belong to a tab for HIGHLIGHTING (they carry their
+ *  own back button and no bottom bar, exactly as before — see `onTab`). */
+private val GIVE_SUB_ROUTES = setOf("statement", "schedules", "receipt/{id}")
+private val EVENTS_SUB_ROUTES = setOf("events-calendar", "event/{id}?end={end}", "checkin/{id}", "announcements", "announcement/{id}", "attendance", "service-checkin")
+
+/** Which bottom tab a NavHost route belongs to, or null for none. */
+private fun tabRouteFor(route: String?): String? = when {
+    route == null -> null
+    route in YOU_ALIAS_ROUTES -> YOU_TAB_ROUTE
+    route in GIVE_ALIAS_ROUTES || route in GIVE_SUB_ROUTES -> GIVE_TAB_ROUTE
+    route in EVENTS_ALIAS_ROUTES || route in EVENTS_SUB_ROUTES -> EVENTS_TAB_ROUTE
+    else -> route
+}
+
+/** Tab-LEVEL routes — the ones the bottom bar shows on. */
+private val TAB_LEVEL_ROUTES = YOU_ALIAS_ROUTES + GIVE_ALIAS_ROUTES + EVENTS_ALIAS_ROUTES
 
 private val BASE_TABS = listOf(
     Tab("home", "Home", Icons.Filled.Home),
     Tab("pathway", "Pathway", Icons.Filled.MenuBook),
     Tab("plans", "Plans", Icons.Filled.Bookmark),
+    Tab(EVENTS_TAB_ROUTE, "Events", Icons.Filled.Event),
+    Tab(GIVE_TAB_ROUTE, "Give", Icons.Filled.VolunteerActivism),
     Tab(YOU_TAB_ROUTE, "You", Icons.Filled.Person),
 )
-private val LIVE_TAB = Tab("live", "Live", Icons.Filled.Videocam)
-
-/** "Live" only appears for members holding the "live:go" grant (client-side
- *  advisory gate, §5.4 — the server is the real authority on every /live
- *  route's write regardless). Everyone else gets 4 tabs and watches through
- *  Home/cell surfaces, per docs/LIVE_STREAMING.md L4. */
-private fun tabsFor(me: MeResponse?): List<Tab> =
-    if (org.nuruplace.member.feature.live.canGoLive(me)) BASE_TABS + LIVE_TAB else BASE_TABS
 
 @Composable
 fun MainShell(auth: AuthStore, me: MeResponse?) {
@@ -123,12 +139,12 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val tabs = remember(me) { tabsFor(me) }
-    val onTab = tabs.any { it.route == route } || isYouRoute(route)
+    val tabs = BASE_TABS
+    val onTab = tabs.any { it.route == route } || route in TAB_LEVEL_ROUTES
     val rootView = androidx.compose.ui.platform.LocalView.current
 
     // Chat's total-unread — hoisted here (not inside YouScreen) so it survives
-    // the "you"/"chat"/"events"/"give"/"profile" destination being disposed
+    // the "you"/"chat"/"profile" destination being disposed
     // and recreated by nav (none of this app's tabs use saveState/
     // restoreState), and so it can badge the bottom-bar "You" icon even while
     // a DIFFERENT segment (or a wholly different tab) is on screen. Eagerly
@@ -254,10 +270,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 if (onTab) {
                     NavigationBar(containerColor = Nuru.white) {
                         tabs.forEach { tab ->
-                            // The "You" tab is active on ANY of its five aliased
-                            // routes (see isYouRoute) — every other tab is a
-                            // single literal route.
-                            val isSelected = if (tab.route == YOU_TAB_ROUTE) isYouRoute(route) else route == tab.route
+                            // You/Give/Events are active on any of their aliased
+                            // (and pushed sub-) routes — see tabRouteFor.
+                            val isSelected = tabRouteFor(route) == tab.route
                             NavigationBarItem(
                                 selected = isSelected,
                                 onClick = {
@@ -319,7 +334,9 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     me,
                     onSignOut = { auth.signOut() },
                     onOpenNotifications = { nav.navigate("notifications") },
-                    onOpenGive = { nav.navigate("give") },
+                    // The partner invite's "Become a partner" → the Give tab on
+                    // Partners (the programme), not the giving form.
+                    onOpenGive = { nav.navigate("partners") },
                     onNavigate = { nav.navigate(it) },
                     onSelectTab = { r -> nav.navigate(r) { popUpTo("home"); launchSingleTop = true } },
                 )
@@ -515,15 +532,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 PrayerWallDetailScreen(postId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
-            // "You" tab (L4 tab restructure) — ONE screen (YouScreen) behind
-            // FIVE routes: the canonical bottom-tab destination ("you",
-            // always Chat-default) plus the four old standalone routes,
-            // each pre-selecting its own segment so every existing
-            // nav.navigate("chat"/"events"/"give"/"profile") call site
-            // (FCM pushes, NotificationsScreen, Home's onSelectTab,
-            // CommunityHubScreen, shortcuts.xml) keeps landing correctly.
-            // isStaff/pastoralEligible mirror the OLD "chat" composable's
-            // gating exactly (product decision, 2026-07 / Chat Redesign C4).
+            // "You" tab — ONE screen (YouScreen) behind THREE routes: the
+            // canonical bottom-tab destination ("you", always Community-
+            // default) plus the old standalone "chat"/"profile" routes, each
+            // pre-selecting its own segment so every existing
+            // nav.navigate("chat"/"profile") call site (FCM pushes,
+            // NotificationsScreen, Home's onSelectTab, CommunityHubScreen)
+            // keeps landing correctly. isStaff/pastoralEligible mirror the
+            // OLD "chat" composable's gating exactly (product decision,
+            // 2026-07 / Chat Redesign C4).
             composable(YOU_TAB_ROUTE) {
                 YouScreen(
                     initial = YouSegment.Chat,
@@ -584,16 +601,22 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNavigate = { nav.navigate(it) },
                 )
             }
-            composable("events") {
-                YouScreen(
-                    initial = YouSegment.Events,
-                    me = me,
-                    isStaff = me?.profile?.role == "SuperAdmin",
-                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
-                    chatUnread = chatUnread,
-                    onChatUnreadChange = { chatUnread = it },
-                    onNavigate = { nav.navigate(it) },
-                    onSignOut = { auth.signOut() },
+            // "Events" tab (docs/PARTNERS_PROGRAMME.md §0) — its own bottom-bar
+            // destination again. Broadcasters get the "Broadcast" card at the
+            // top (client-side advisory gate, §5.4 — the server is the real
+            // authority on every /live write regardless).
+            composable(EVENTS_TAB_ROUTE) {
+                val broadcaster = org.nuruplace.member.feature.live.canGoLive(me)
+                org.nuruplace.member.feature.events.EventsScreen(
+                    onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") },
+                    onOpenCalendar = { nav.navigate("events-calendar") },
+                    onOpenAnnouncement = { nav.navigate("announcement/$it") },
+                    onOpenAnnouncements = { nav.navigate("announcements") },
+                    onOpenNotifications = { nav.navigate("notifications") },
+                    onOpenAttendance = { nav.navigate("attendance") },
+                    broadcastCard = if (broadcaster) {
+                        { org.nuruplace.member.feature.live.BroadcastCard(me = me, onNavigate = { nav.navigate(it) }) }
+                    } else null,
                 )
             }
             composable("events-calendar") {
@@ -645,16 +668,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("notifications") {
                 NotificationsScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })
             }
-            composable("give") {
-                YouScreen(
-                    initial = YouSegment.Give,
-                    me = me,
-                    isStaff = me?.profile?.role == "SuperAdmin",
-                    pastoralEligible = me?.profile?.role == "SuperAdmin" || pastorEligible,
-                    chatUnread = chatUnread,
-                    onChatUnreadChange = { chatUnread = it },
+            // "Give" tab (docs/PARTNERS_PROGRAMME.md §0) — ONE screen
+            // (GiveTabScreen) behind two routes: "give" opens on the Give
+            // segment, "partners" (below) on the Partners programme.
+            composable(GIVE_TAB_ROUTE) {
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Give,
                     onNavigate = { nav.navigate(it) },
-                    onSignOut = { auth.signOut() },
                 )
             }
             composable("schedules") { org.nuruplace.member.feature.give.SchedulesScreen(onBack = { nav.popBackStack() }) }
@@ -670,10 +690,14 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("statement") {
                 GivingStatementScreen(onBack = { nav.popBackStack() }, onOpenReceipt = { nav.navigate("receipt/$it") })
             }
-            // Partners is its own screen — separate from Give, as the design
-            // asks — but reached from it. The money reporting stays on Give.
+            // Partners — the Give tab opened on its Partners segment (the
+            // Home invite's "Become a partner", pledge nudges and pushes land
+            // here). The money reporting stays on Give.
             composable("partners") {
-                org.nuruplace.member.feature.give.PartnersScreen()
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Partners,
+                    onNavigate = { nav.navigate(it) },
+                )
             }
             composable(
                 "receipt/{id}",
@@ -693,10 +717,11 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onSignOut = { auth.signOut() },
                 )
             }
-            // "Live" tab (L4, broadcaster-only — MainShell's `tabs` list only
-            // includes it when canGoLive(me), so this destination is simply
-            // unreachable via the bottom bar for anyone else; a stale deep
-            // link here just renders LiveTabScreen's own defensive fallback).
+            // The broadcaster's studio (formerly the "Live" tab — since the
+            // Partners programme restructure it is reached from Events'
+            // Broadcast card's "My Broadcasts" row and by deep link/push; a
+            // non-broadcaster landing here just renders LiveTabScreen's own
+            // defensive fallback, the server gating every /live write).
             composable("live") {
                 org.nuruplace.member.feature.live.LiveTabScreen(me = me, onNavigate = { nav.navigate(it) })
             }

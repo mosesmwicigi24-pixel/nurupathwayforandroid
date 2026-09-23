@@ -1,8 +1,10 @@
-// Nuru Live — the "Live" bottom tab (L4 tab restructure). Broadcaster-only:
-// MainShell only mounts this destination when canGoLive(me) is true (the
-// tab itself is hidden for everyone else, who keep watching live/replay
-// content through Home's "LIVE now" banner and the cell screen — see
-// docs/LIVE_STREAMING.md L4).
+// Nuru Live — the broadcaster's studio screen (route "live"). Since the
+// Partners programme restructure (docs/PARTNERS_PROGRAMME.md §0) it is no
+// longer a bottom tab: Events carries a "Broadcast" card at its top for
+// live:go members (BroadcastCard.kt, which reuses this file's hero) and
+// links here for My Broadcasts; the route stays for deep links and pushes.
+// Everyone else keeps watching live/replay content through Home's "LIVE now"
+// banner and the cell screen — see docs/LIVE_STREAMING.md L4.
 //
 // Owner taste pass (hero redesign): a navy "studio card" fronts the tab —
 // Fraunces "Nuru Live", a warm caption, and a large gold Go Live pill with a
@@ -157,8 +159,9 @@ fun LiveTabScreen(me: MeResponse?, onNavigate: (String) -> Unit) {
     }
 }
 
+/** Shared with BroadcastCard.kt (Events' "Broadcast" card, docs/PARTNERS_PROGRAMME.md §0). */
 @Composable
-private fun LiveHeroCard(
+internal fun LiveHeroCard(
     churchLiveNow: LiveNowRow?,
     myActiveSession: BroadcastSession?,
     onGoLive: () -> Unit,

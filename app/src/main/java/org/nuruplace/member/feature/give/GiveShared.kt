@@ -175,3 +175,13 @@ fun giveStatus(status: String?): Triple<String, Color, Color> = when (status?.lo
     "refunded", "cancelled" -> Triple("Refunded", GIVE.mutedBg, GIVE.ink600)
     else -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
 }
+
+/** What a pledge's "Pay now" hands the Give screen (GiveTabScreen → GivingScreen):
+ *  the fund and amount to preset, the pledge the intent must carry, and a
+ *  title for the "counts toward your pledge" chip. */
+data class GivePreset(
+    val fundId: String? = null,
+    val amountMinor: Int? = null,
+    val pledgeId: String? = null,
+    val title: String? = null,
+)
