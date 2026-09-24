@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -113,9 +115,11 @@ fun GivingScreen(
     onBack: () -> Unit,
     onOpenStatement: () -> Unit,
     onOpenSchedules: () -> Unit = {},
-    onOpenPartners: () -> Unit = {},
     /** A pledge's "Pay now": fund + amount preset, pledge_id carried into the intent. */
     preset: GivePreset? = null,
+    /** The tab's GIVE · PARTNERS control (GiveTabScreen) — the first row of
+     *  this screen's header band, so the member can switch even mid-load. */
+    segmentControl: @Composable () -> Unit = {},
 ) {
     AsyncContent(
         load = {
@@ -124,8 +128,90 @@ fun GivingScreen(
             val phone = runCatching { Net.client.api.me().profile.phoneNumber }.getOrNull().orEmpty()
             Triple(hist, sched, phone)
         },
+        loading = {
+            Column(Modifier.fillMaxSize().background(GIVE.paper)) {
+                GiveHeaderBand(segmentControl, yearTotalMinor = null, preset = preset, onOpenStatement = onOpenStatement)
+                Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = GIVE.gold)
+                }
+            }
+        },
     ) { (history, schedules, phone), reload ->
-        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenSchedules, onOpenPartners, preset)
+        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenSchedules, preset, segmentControl)
+    }
+}
+
+/** The ONE cream band over the Give segment: the segment control, the title,
+ *  the subline, the "counts toward" chip when a preset is bound, then the year
+ *  pill (→ statement) beside the eye that masks it. `yearTotalMinor == null`
+ *  while history is still loading — the pill waits, the rest does not. */
+@Composable
+private fun GiveHeaderBand(
+    segmentControl: @Composable () -> Unit,
+    yearTotalMinor: Int?,
+    preset: GivePreset?,
+    onOpenStatement: () -> Unit,
+) {
+    val hidden = AppPrefs.hideGiveYearTotal
+    GiveCreamHeaderBox {
+        Column(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp)) {
+            segmentControl()
+            Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 14.dp))
+            Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
+            // Paying toward a pledge, or giving to a department need —
+            // say so, so the member knows this gift will be counted
+            // (spec §1 attribution rule a; §4 needs).
+            preset?.takeIf { it.isTargeted }?.let { p ->
+                Row(
+                    Modifier.padding(top = 10.dp).clip(Capsule).background(GIVE.goldChipBg)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
+                    Text(
+                        (if (p.needId != null) "Giving to a need" else "Counts toward your pledge") + (p.title?.let { " · $it" } ?: ""),
+                        style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText,
+                    )
+                }
+            }
+            if (yearTotalMinor != null) {
+                Row(
+                    Modifier.padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        Modifier.clip(Capsule).background(GIVE.white)
+                            .border(1.dp, GIVE.gold.copy(alpha = 0.45f), Capsule)
+                            .clickable { onOpenStatement() }
+                            .padding(horizontal = 16.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                        Text(
+                            (if (hidden) "KSh ••••" else ksh(yearTotalMinor)) + " given this year",
+                            style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow,
+                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
+                    }
+                    // Masks the amount on a phone that gets shown around.
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).background(GIVE.white)
+                            .border(1.dp, GIVE.border, CircleShape)
+                            .clickable { AppPrefs.updateHideGiveYearTotal(!hidden) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            if (hidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            contentDescription = if (hidden) "Show this year's total" else "Hide this year's total",
+                            tint = GIVE.navy, modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -138,8 +224,8 @@ private fun GiveTab(
     reload: () -> Unit,
     onOpenStatement: () -> Unit,
     onOpenSchedules: () -> Unit = {},
-    onOpenPartners: () -> Unit = {},
     preset: GivePreset? = null,
+    segmentControl: @Composable () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
 
@@ -224,43 +310,8 @@ private fun GiveTab(
 
     Box(Modifier.fillMaxSize().background(GIVE.paper)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            // ── Header ──
-            GiveCreamHeaderBox {
-                Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 20.dp)) {
-                    Text("GIVE", style = giInter(9, FontWeight.Bold, 1.62f), color = GIVE.eyebrow)
-                    Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
-                    Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
-                    // Paying toward a pledge, or giving to a department need —
-                    // say so, so the member knows this gift will be counted
-                    // (spec §1 attribution rule a; §4 needs).
-                    preset?.takeIf { it.isTargeted }?.let { p ->
-                        Row(
-                            Modifier.padding(top = 10.dp).clip(Capsule).background(GIVE.goldChipBg)
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
-                            Text(
-                                (if (p.needId != null) "Giving to a need" else "Counts toward your pledge") + (p.title?.let { " · $it" } ?: ""),
-                                style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText,
-                            )
-                        }
-                    }
-                    Row(
-                        Modifier.padding(top = 14.dp).clip(Capsule).background(GIVE.white)
-                            .border(1.dp, GIVE.gold.copy(alpha = 0.45f), Capsule)
-                            .clickable { onOpenStatement() }
-                            .padding(horizontal = 16.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
-                        Text("${ksh(yearTotalMinor)} given this year", style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow)
-                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
-                    }
-                }
-            }
+            // ── Header — the one cream band (segment control · title · year pill) ──
+            GiveHeaderBand(segmentControl, yearTotalMinor = yearTotalMinor, preset = preset, onOpenStatement = onOpenStatement)
 
             // ── Body ──
             Column(
@@ -523,32 +574,6 @@ private fun GiveTab(
                         )
                     }
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
-                }
-
-                // Partners — the other segment of this tab (GiveTabScreen),
-                // reached from here because this is where someone thinking
-                // about giving already is. iOS parity.
-                Row(
-                    Modifier.padding(top = 4.dp).fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp)).background(GIVE.white)
-                        .border(1.dp, GIVE.gold.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
-                        .clickable { onOpenPartners() }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Partners", style = giInter(15, FontWeight.SemiBold), color = GIVE.navy)
-                        Text(
-                            "Join the programme, pledge, and see your standing",
-                            style = giInter(12), color = GIVE.sub,
-                            modifier = Modifier.padding(top = 3.dp),
-                        )
-                    }
-                    Icon(
-                        androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null, tint = GIVE.gold,
-                        modifier = Modifier.size(14.dp),
-                    )
                 }
             }
         }

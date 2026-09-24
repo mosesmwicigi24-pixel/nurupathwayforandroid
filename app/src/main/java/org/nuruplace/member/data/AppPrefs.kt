@@ -42,6 +42,10 @@ object AppPrefs {
     // Play Install Referrer read once per install (MainActivity) — the
     // store-then-plan path for Read with a Friend join links.
     private const val KEY_INSTALL_REFERRER_CHECKED = "install_referrer_checked"
+    // Give tab header: the eye button that masks "KSh 12,340 given this year"
+    // to "KSh •••• given this year" (a phone shown around in church). Visible
+    // by default; persisted so the choice survives restarts.
+    private const val KEY_GIVE_HIDE_YEAR_TOTAL = "give.hideYearTotal"
 
     private lateinit var prefs: SharedPreferences
 
@@ -65,12 +69,30 @@ object AppPrefs {
     var shareLocation by mutableStateOf(false)
         private set
 
+    /** Give header's year total masked (eye button). Compose state so the
+     *  pill re-renders the moment it flips; false = shown, the default. */
+    var hideGiveYearTotal by mutableStateOf(false)
+        private set
+
     fun init(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        attach(context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE))
+    }
+
+    /** Bind to a store and read the observed values back out of it. `init`
+     *  hands in the real SharedPreferences; tests hand in an in-memory one so
+     *  a preference's round trip (write → fresh read) is provable off-device. */
+    internal fun attach(store: SharedPreferences) {
+        prefs = store
         textScale = prefs.getFloat(KEY_TEXT_SCALE, 1.0f)
         lineSpacing = prefs.getFloat(KEY_LINE_SPACING, 1.0f)
         readerTextScale = prefs.getFloat(KEY_READER_TEXT_SCALE, 1.0f)
         shareLocation = prefs.getBoolean(KEY_SHARE_LOCATION, false)
+        hideGiveYearTotal = prefs.getBoolean(KEY_GIVE_HIDE_YEAR_TOTAL, false)
+    }
+
+    fun updateHideGiveYearTotal(hidden: Boolean) {
+        hideGiveYearTotal = hidden
+        if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_GIVE_HIDE_YEAR_TOTAL, hidden).apply()
     }
 
     fun updateReaderTextScale(scale: Float) {

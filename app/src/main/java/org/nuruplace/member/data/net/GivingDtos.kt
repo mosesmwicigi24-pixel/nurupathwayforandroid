@@ -178,6 +178,10 @@ data class Pledge(
     val progress: PledgeProgress = PledgeProgress(),
     val scheduleId: String? = null,
     val remindersEnabled: Boolean = true,
+    /** When the promise was made (wire `created_at`, OpenAPI `Pledge`). The
+     *  partner statement rule counts a monthly pledge's due dates from here
+     *  (PartnerStatementMath.kt) — a March pledge was never owed January. */
+    val createdAt: String? = null,
 ) {
     /** What the pledge is for, in the member's words. */
     val targetTitle: String?
@@ -316,6 +320,9 @@ data class StatementPayment(
     val method: String? = null,
     val title: String? = null,
     val pledgeId: String? = null,
+    /** The pledge this gift counted toward, as the server names it (wire
+     *  `pledge_title`, financial/partners.ts statements). Null off-pledge. */
+    val pledgeTitle: String? = null,
     val receiptCode: String? = null,
     val at: String? = null,
     val createdAt: String? = null,

@@ -144,6 +144,16 @@ fun money(minor: Int, currency: String?): String = when (currency?.uppercase()) 
 /** "KSh 1,000" from major units. */
 fun kshMajor(major: Int): String = "KSh " + "%,d".format(major)
 
+/** "M-Pesa" / "Airtel Money" / "Card" / "PayPal" for a wire method code
+ *  (schedules, statement rows). Unknown codes are simply capitalised. */
+fun giveMethodLabel(method: String): String = when (method.lowercase().trim()) {
+    "mpesa" -> "M-Pesa"
+    "airtel" -> "Airtel Money"
+    "card" -> "Card"
+    "paypal" -> "PayPal"
+    else -> method.replaceFirstChar { it.uppercase() }
+}
+
 // Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun giInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
     nuruSans(size, weight, kerning.takeIf { it != 0f })
