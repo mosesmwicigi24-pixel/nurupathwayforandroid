@@ -4,12 +4,14 @@
 // /giving/pledges, §5). Opened over the Give tab by GiveTabScreen; system
 // back closes it.
 //
-// "What is this pledge for?" (pledge names, contract 2026-09-25) is a picker
-// over the server's `pledge_options` — General partnership, funds, campaigns,
-// approved department needs, in the server's order — plus "Custom name…",
-// which reveals a 2–60 character field. The wire rule (an option travels as
-// its target and no title; a custom name travels as `title` only) is
-// PledgeRequestLogic.kt, pinned by its test.
+// "What is this pledge for?" (pledge names, contract 2026-09-25) lays the
+// server's `pledge_options` out on the step itself as grouped, selectable
+// cards — General partnership, funds, campaigns, approved department needs,
+// in the server's order, each with an icon and a one-line cue — then a
+// "Custom name" card that expands a 2–60 character field in place (owner's
+// UX call, 2026-09-25; iOS is built to the same design). The wire rule (an
+// option travels as its target and no title; a custom name travels as
+// `title` only) is PledgeRequestLogic.kt, pinned by its test.
 //
 // Nothing here moves money. A pledge is a promise; "charge me automatically"
 // asks the server to bind a schedule to it, and the server makes the charges
@@ -43,23 +45,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,11 +73,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
@@ -103,16 +109,29 @@ private enum class PledgeStep(val title: String) {
 
 private val PLEDGE_PRESETS = listOf(500, 1_000, 2_500, 5_000, 10_000, 20_000)
 
-/** The field's second line for the chosen target. */
-private fun pledgeForSubline(target: PledgeFor): String = when (target) {
-    is PledgeFor.Custom -> "Your own name for it"
-    is PledgeFor.Option -> when (target.option.kind) {
-        PLEDGE_KIND_FUND -> "A fund"
-        PLEDGE_KIND_CAMPAIGN -> "A campaign"
-        PLEDGE_KIND_NEED -> "A department need"
-        PLEDGE_KIND_GENERAL -> "Wherever the need is greatest"
-        else -> "A target the church named"
+/** The picked card's cream — warmer than the Give tab's fund-tile tint so a
+ *  chosen promise reads as "held", not merely highlighted (design 2026-09-25;
+ *  no theme token carries this value). */
+private val PLEDGE_FOR_SELECTED_BG = Color(0xFFFFF9EC)
+
+/** A card's icon tile and one-line cue, by the option's kind. */
+private class PledgeForLook(val icon: ImageVector, val tileBg: Color, val iconTint: Color, val subtitle: String)
+
+/** general → the church as a whole; fund → the Give tab's own tile for it
+ *  (an unknown fund code gets a gold tile and a generic line rather than the
+ *  purple "gift" fallback, so nothing looks mislabelled); campaign and need
+ *  by the department palette. An unknown kind still gets a card. */
+private fun pledgeForLook(option: PledgeOption): PledgeForLook = when (option.kind) {
+    PLEDGE_KIND_GENERAL -> PledgeForLook(Icons.Filled.Handshake, GIVE.mutedBg, Nuru.navy, "The church as a whole")
+    PLEDGE_KIND_FUND -> {
+        val fund = giveFund(option.fund)
+        val known = GIVE_FUNDS.any { it.id.equals(option.fund?.trim(), ignoreCase = true) }
+        if (known) PledgeForLook(fund.icon, fund.tint, fund.fg, fund.tagline.ifBlank { "A fund of the church" })
+        else PledgeForLook(fund.icon, Nuru.goldChipBg, Nuru.gold, "A fund of the church")
     }
+    PLEDGE_KIND_CAMPAIGN -> PledgeForLook(Icons.Filled.Campaign, Nuru.goldChipBg, Nuru.gold, "Church campaign")
+    PLEDGE_KIND_NEED -> PledgeForLook(Icons.Filled.VolunteerActivism, Nuru.dangerBg, Nuru.danger, "Department need")
+    else -> PledgeForLook(Icons.Filled.Flag, GIVE.mutedBg, Nuru.navy, "A target the church named")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -135,7 +154,6 @@ fun NewPledgeFlow(
     // Default: General partnership (the programme itself).
     var target by remember { mutableStateOf<PledgeFor>(PledgeFor.Option(GENERAL_PLEDGE_OPTION)) }
     var customName by remember { mutableStateOf("") }
-    var pickerOpen by remember { mutableStateOf(false) }
     var serverOptions by remember { mutableStateOf(pledgeOptions) }
     var dueDay by remember { mutableIntStateOf(LocalDate.now().dayOfMonth.coerceIn(1, 28)) }
     var dueOn by remember { mutableStateOf<LocalDate?>(null) }
@@ -273,59 +291,73 @@ fun NewPledgeFlow(
                     }
                 }
                 PledgeStep.Target -> {
-                    Text(
-                        "General partnership goes wherever the need is greatest. Or point it at a fund, a campaign or a department need — or give it a name of your own.",
-                        style = NuruType.body, color = Nuru.ink600,
-                    )
-                    Text("FOR", style = NuruType.micro, color = Nuru.goldLo)
-                    // The field: what it's for, a chevron; tap → the picker sheet.
-                    val custom = target is PledgeFor.Custom
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nuru.white)
-                            .border(1.dp, Nuru.border, RoundedCornerShape(14.dp))
-                            .clickable { Haptics.tick(view); pickerOpen = true }
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(if (custom) Icons.Filled.Edit else Icons.Filled.Flag, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(if (custom) "Custom name" else pledgeForTitle(target), style = NuruType.heading, color = Nuru.ink)
-                            Text(pledgeForSubline(target), style = NuruType.caption, color = Nuru.ink600)
+                    Text("Pick what your promise supports, or name it yourself.", style = NuruType.body, color = Nuru.ink600)
+                    val customOn = target is PledgeFor.Custom
+                    val customFocus = remember { FocusRequester() }
+                    // One tap picks; a tap on the card already showing as picked
+                    // is a no-op (no second tick — and General stays whichever
+                    // row lit it, local default or the server's). The typed
+                    // custom name survives a switch away and back: it lives in
+                    // customName, not in the card.
+                    fun pick(next: PledgeFor) {
+                        val already = when (next) {
+                            is PledgeFor.Option -> pledgeOptionSelected(next.option, target)
+                            is PledgeFor.Custom -> target is PledgeFor.Custom
                         }
-                        Icon(Icons.Filled.ExpandMore, "Choose", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
+                        if (already) return
+                        Haptics.tick(view); target = next
                     }
-                    if (custom) {
-                        val valid = pledgeTitleValid(customName)
-                        OutlinedTextField(
-                            value = customName,
-                            onValueChange = { v ->
-                                customName = v.take(PLEDGE_TITLE_MAX)
-                                target = PledgeFor.Custom(customName)
-                            },
-                            singleLine = true,
-                            placeholder = { Text("Name your pledge", style = NuruType.body, color = Nuru.ink400) },
-                            supportingText = {
-                                Row(Modifier.fillMaxWidth()) {
-                                    Text(
-                                        if (!valid && customName.isNotBlank()) "$PLEDGE_TITLE_MIN–$PLEDGE_TITLE_MAX characters" else "",
-                                        style = NuruType.caption, color = Nuru.danger, modifier = Modifier.weight(1f),
-                                    )
-                                    Text("${customName.length}/$PLEDGE_TITLE_MAX", style = NuruType.caption, color = Nuru.ink400)
-                                }
-                            },
-                            isError = !valid && customName.isNotBlank(),
-                            textStyle = nuruSans(16, FontWeight.Medium).copy(color = Nuru.ink),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text("Your name is what the card and every reminder will call it.", style = NuruType.caption, color = Nuru.ink400)
+                    groupedPledgeOptions(options).forEach { group ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PledgeForEyebrow(group.label)
+                            group.options.forEach { o ->
+                                val look = pledgeForLook(o)
+                                PledgeForCard(
+                                    selected = pledgeOptionSelected(o, target),
+                                    icon = look.icon, tileBg = look.tileBg, iconTint = look.iconTint,
+                                    title = o.title.ifBlank { GENERAL_PLEDGE_OPTION.title }, subtitle = look.subtitle,
+                                    onSelect = { pick(PledgeFor.Option(o)) },
+                                )
+                            }
+                        }
                     }
-                    if (pickerOpen) {
-                        PledgeForPicker(
-                            options = options, selected = target,
-                            onPick = { Haptics.tick(view); target = it; pickerOpen = false },
-                            onCustom = { Haptics.tick(view); target = PledgeFor.Custom(customName); pickerOpen = false },
-                            onDismiss = { pickerOpen = false },
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PledgeForEyebrow("Name it yourself")
+                        PledgeForCard(
+                            selected = customOn,
+                            icon = Icons.Filled.Edit, tileBg = Nuru.goldChipBg, iconTint = Nuru.gold,
+                            title = "Custom name", subtitle = "A promise in your own words",
+                            onSelect = { pick(PledgeFor.Custom(customName)) },
+                        ) {
+                            if (customOn) {
+                                val valid = pledgeTitleValid(customName)
+                                OutlinedTextField(
+                                    value = customName,
+                                    onValueChange = { v ->
+                                        customName = v.take(PLEDGE_TITLE_MAX)
+                                        target = PledgeFor.Custom(customName)
+                                    },
+                                    singleLine = true,
+                                    placeholder = { Text("e.g. School fees for Grace", style = NuruType.body, color = Nuru.ink400) },
+                                    supportingText = {
+                                        Row(Modifier.fillMaxWidth()) {
+                                            Text(
+                                                if (!valid && customName.isNotBlank()) "$PLEDGE_TITLE_MIN–$PLEDGE_TITLE_MAX characters" else "",
+                                                style = NuruType.caption, color = Nuru.danger, modifier = Modifier.weight(1f),
+                                            )
+                                            Text("${customName.length}/$PLEDGE_TITLE_MAX", style = NuruType.caption, color = Nuru.ink400)
+                                        }
+                                    },
+                                    isError = !valid && customName.isNotBlank(),
+                                    textStyle = nuruSans(16, FontWeight.Medium).copy(color = Nuru.ink),
+                                    modifier = Modifier.fillMaxWidth().focusRequester(customFocus),
+                                )
+                                Text("Your name is what the card and every reminder will call it.", style = NuruType.caption, color = Nuru.ink400)
+                                // The field exists in this same composition, so
+                                // the requester is attached by the time this runs.
+                                LaunchedEffect(Unit) { customFocus.requestFocus() }
+                            }
+                        }
                     }
                 }
                 PledgeStep.Due -> {
@@ -452,57 +484,51 @@ private fun ordinalDay(n: Int): String {
     return "$n$suffix"
 }
 
-/** The "what is this pledge for?" picker — the app's bottom-sheet idiom
- *  (PartnersScreen's sheets): every server option by title, grouped under
- *  small section labels in the server's order, then "Custom name…" last. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** A section's small label on the "what is this pledge for?" step — the
+ *  Give tab's "CHOOSE A FUND" eyebrow, so the two screens read as one. */
 @Composable
-private fun PledgeForPicker(
-    options: List<PledgeOption>,
-    selected: PledgeFor,
-    onPick: (PledgeFor) -> Unit,
-    onCustom: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val picked = (selected as? PledgeFor.Option)?.option
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Nuru.paper) {
-        Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("What is this pledge for?", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
-            groupedPledgeOptions(options).forEach { group ->
-                Text(group.label.uppercase(), style = NuruType.micro, color = Nuru.goldLo, modifier = Modifier.padding(top = 6.dp))
-                group.options.forEach { o ->
-                    // General matches by kind too: the local default and the
-                    // server's own General row may not share a key.
-                    val on = picked != null && (o.key == picked.key || (o.kind == PLEDGE_KIND_GENERAL && picked.kind == PLEDGE_KIND_GENERAL))
-                    PickerRow(selected = on, title = o.title, icon = null) { onPick(PledgeFor.Option(o)) }
-                }
-            }
-            Text("OR", style = NuruType.micro, color = Nuru.goldLo, modifier = Modifier.padding(top = 6.dp))
-            PickerRow(selected = selected is PledgeFor.Custom, title = "Custom name…", icon = Icons.Filled.Edit) { onCustom() }
-        }
-    }
+private fun PledgeForEyebrow(label: String) {
+    Text(label.uppercase(), style = giInter(9, FontWeight.SemiBold, 1.6f), color = Nuru.goldLo)
 }
 
+/** One selectable card on the "what is this pledge for?" step: icon tile,
+ *  title, one-line cue, and a gold check once picked (the Give tab's fund
+ *  tile, laid out as a row). [expanded] renders inside the same card under
+ *  the row — the custom-name card puts its field there. */
 @Composable
-private fun PickerRow(selected: Boolean, title: String, icon: androidx.compose.ui.graphics.vector.ImageVector?, onSelect: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(if (selected) Nuru.goldChipBg else Nuru.white)
-            .border(1.dp, if (selected) Nuru.gold else Nuru.border, RoundedCornerShape(14.dp))
-            .clickable { onSelect() }.padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+private fun PledgeForCard(
+    selected: Boolean,
+    icon: ImageVector,
+    tileBg: Color,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    onSelect: () -> Unit,
+    expanded: @Composable () -> Unit = {},
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(if (selected) PLEDGE_FOR_SELECTED_BG else Nuru.white)
+            .border(if (selected) 2.dp else 1.dp, if (selected) Nuru.gold else Nuru.border, shape)
+            .clickable { onSelect() }.padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (icon != null) Icon(icon, null, tint = Nuru.gold, modifier = Modifier.size(16.dp))
-        Text(title, style = NuruType.label, color = Nuru.ink, modifier = Modifier.weight(1f))
-        Box(
-            Modifier.size(22.dp).clip(CircleShape).background(if (selected) Nuru.gold else Nuru.white)
-                .border(1.dp, if (selected) Nuru.gold else Nuru.ink300, CircleShape),
-            Alignment.Center,
-        ) { if (selected) Icon(Icons.Filled.Check, null, tint = Nuru.navyDeep, modifier = Modifier.size(12.dp)) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(tileBg), Alignment.Center) {
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(19.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = giInter(15, FontWeight.SemiBold), color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = giInter(12), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (selected) {
+                Box(Modifier.size(22.dp).clip(CircleShape).background(Nuru.gold), Alignment.Center) {
+                    Icon(Icons.Filled.Check, null, tint = Nuru.navyDeep, modifier = Modifier.size(12.dp))
+                }
+            }
+        }
+        expanded()
     }
 }
 

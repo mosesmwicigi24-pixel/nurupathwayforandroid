@@ -102,4 +102,17 @@ class PledgeRequestLogicTest {
         // Empty kinds have no section.
         assertEquals(listOf("General", "Funds"), groupedPledgeOptions(listOf(general, fund)).map { it.label })
     }
+
+    @Test
+    fun `a card is picked by key, and General by kind alone`() {
+        assertTrue(pledgeOptionSelected(fund, PledgeFor.Option(fund)))
+        assertFalse(pledgeOptionSelected(fund, PledgeFor.Option(campaign)))
+        // The server's General row and the flow's local default share a kind, not a key.
+        val serverGeneral = PledgeOption(key = "partnership", title = "General partnership", kind = "general")
+        assertTrue(pledgeOptionSelected(serverGeneral, PledgeFor.Option(GENERAL_PLEDGE_OPTION)))
+        assertFalse(pledgeOptionSelected(fund, PledgeFor.Option(GENERAL_PLEDGE_OPTION)))
+        // A custom name — or nothing — lights no option's card.
+        assertFalse(pledgeOptionSelected(general, PledgeFor.Custom("Mum's house")))
+        assertFalse(pledgeOptionSelected(general, null))
+    }
 }
