@@ -1,8 +1,11 @@
-// Giving statement (history) + receipt (detail with the double-entry ledger).
+// Giving statement (history) + receipt (receipt v2 — the green hero, details,
+// where it went, share; no ledger).
 // Port of the iOS GivingStatementView + GivingReceiptView. Uses the shared GIVE
 // palette / helpers from GiveShared.kt (same package — no import needed).
 package org.nuruplace.member.feature.give
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,16 +26,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,13 +54,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.nuruplace.member.data.net.GivingDetail
 import org.nuruplace.member.data.net.GivingRecord
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.Haptics
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -60,7 +84,7 @@ private val NAIROBI: ZoneId = ZoneId.of("Africa/Nairobi")
 private val Capsule = RoundedCornerShape(999.dp)
 
 /** Parse an ISO timestamp into a Nairobi-zoned date-time, tolerating several shapes. */
-private fun parseNairobi(iso: String?): ZonedDateTime? {
+internal fun parseNairobi(iso: String?): ZonedDateTime? {
     if (iso.isNullOrBlank()) return null
     return runCatching { Instant.parse(iso).atZone(NAIROBI) }
         .recoverCatching { OffsetDateTime.parse(iso).atZoneSameInstant(NAIROBI) }
@@ -71,16 +95,12 @@ private fun parseNairobi(iso: String?): ZonedDateTime? {
 
 private val DAY_FMT = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
 private val TIME_FMT = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
-private val FULL_FMT = DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a", Locale.ENGLISH)
 
 private fun dayHeader(iso: String?): String =
     parseNairobi(iso)?.format(DAY_FMT)?.uppercase(Locale.ENGLISH) ?: "—"
 
 private fun timeLabel(iso: String?): String =
     parseNairobi(iso)?.format(TIME_FMT) ?: ""
-
-private fun fullDate(iso: String?): String =
-    parseNairobi(iso)?.format(FULL_FMT) ?: "—"
 
 /** Year a record belongs to — prefer settledAt, fall back to createdAt. */
 private fun recordYear(r: GivingRecord): Int? =
@@ -389,162 +409,347 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
     }
 }
 
-// ── GivingReceiptScreen — iOS GivingReceiptView ───────────────────────────────
+// ── GivingReceiptScreen — receipt v2 (owner, 2026-09-25) ──────────────────────
+// "Enhance the receipt format and feel, appealing and well coloured; I like the
+// green; best UX." The green hero says the gift was received, the details card
+// holds what a member actually needs (the M-Pesa code one tap from the
+// clipboard), a line says where the money went, then Share / View statement
+// and a verse. No ledger — members never see account codes. Every word comes
+// from GiveReceiptCopy.kt (pure, pinned by GiveReceiptCopyTest); the server
+// resolves the display names (fund_name, pledge, need, method_label,
+// member_name) and the copy falls back to the local tables for an older one.
+private val RECEIPT_GREEN = Color(0xFF16A34A)
+private val RECEIPT_GREEN_BG = Color(0xFFDCFCE7)
+private val RECEIPT_GREEN_TEXT = Color(0xFF166534)
+private val RECEIPT_DATE = Color(0xFF8B95A5)
+private val RECEIPT_LABEL = Color(0xFF68758A)
+private val RECEIPT_RED = Color(0xFFDC2626)
+private val RECEIPT_RED_BG = Color(0xFFFEE2E2)
+
 @Composable
-fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit) {
-    AsyncContent(key = transactionId, load = { Net.client.api.givingDetail(transactionId) }) { d: GivingDetail, _ ->
+fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStatement: () -> Unit = {}) {
+    AsyncContent(
+        key = transactionId,
+        load = {
+            val d = Net.client.api.givingDetail(transactionId)
+            // "Thank you, <first name>." reads the server's member_name; an older
+            // server sends none, so fall back to the signed-in profile. A failed
+            // lookup only drops the line — never the receipt.
+            val profileName = if (d.memberName.isNullOrBlank()) {
+                runCatching { Net.client.api.me().profile.fullName }.getOrNull()
+            } else {
+                null
+            }
+            d to profileName
+        },
+    ) { loaded: Pair<GivingDetail, String?>, _ ->
+        val (d, profileName) = loaded
+        val context = LocalContext.current
+        val view = LocalView.current
+        val clipboard = LocalClipboardManager.current
+        val scope = rememberCoroutineScope()
+        var sharing by remember { mutableStateOf(false) }
+        var shareError by remember { mutableStateOf<String?>(null) }
+        var copied by remember { mutableStateOf<String?>(null) } // which row just hit the clipboard
+
+        val chip = receiptStatusChip(d)
+        val firstName = receiptFirstName(d.memberName, profileName)
+        val (badgeBg, badgeFg, badgeIcon) = when (chip?.tone) {
+            null -> Triple(RECEIPT_GREEN_BG, RECEIPT_GREEN, Icons.Filled.Verified)
+            ReceiptTone.Waiting -> Triple(GIVE.goldChipBg, GIVE.goldChipText, Icons.Filled.Schedule)
+            ReceiptTone.NotCompleted -> Triple(RECEIPT_RED_BG, RECEIPT_RED, Icons.Filled.Close)
+            ReceiptTone.Refunded -> Triple(GIVE.mutedBg, GIVE.ink600, Icons.AutoMirrored.Filled.Undo)
+        }
+
+        fun copy(key: String, value: String) {
+            clipboard.setText(AnnotatedString(value))
+            Haptics.tick(view)
+            copied = key
+            scope.launch { delay(1_600); if (copied == key) copied = null }
+        }
+
+        // Share = the PDF (authed fetch → FileProvider) with a one-line summary;
+        // when the PDF cannot be fetched the summary alone goes out and we say so.
+        fun share() {
+            if (sharing) return
+            sharing = true
+            shareError = null
+            scope.launch {
+                val text = receiptShareText(d)
+                val ok = sharePdfAuthed(context, receiptFileName(d), text) { Net.client.api.givingReceiptPdf(d.transactionId) }
+                if (!ok) {
+                    shareTextOnly(context, text)
+                    shareError = "Couldn't fetch the PDF just now — shared the summary instead."
+                }
+                sharing = false
+            }
+        }
+
         Column(
             Modifier
                 .fillMaxSize()
                 .background(GIVE.paper)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Cream header
+            // Cream header — back · Receipt · share
             GiveCreamHeaderBox {
                 Row(
                     Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = 20.dp)
                         .padding(top = 12.dp, bottom = 24.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(GIVE.white)
-                            .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = GIVE.navy,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                    ReceiptHeaderButton(Icons.AutoMirrored.Filled.ArrowBack, "Back") { onBack() }
                     Text("Receipt", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy)
+                    Spacer(Modifier.weight(1f))
+                    ReceiptHeaderButton(Icons.Filled.Share, "Share receipt") { share() }
                 }
             }
 
-            // Body
             Column(
                 Modifier
                     .padding(horizontal = 20.dp)
                     .padding(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // Amount card
+                // ── Hero — the green ──
                 Column(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(24.dp))
                         .background(GIVE.white)
                         .border(1.dp, GIVE.border, RoundedCornerShape(24.dp))
-                        .padding(24.dp),
+                        .padding(horizontal = 24.dp, vertical = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Box(
-                        Modifier.size(64.dp).clip(CircleShape).background(GIVE.successBg),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Filled.Verified,
-                            contentDescription = null,
-                            tint = GIVE.success,
-                            modifier = Modifier.size(30.dp),
+                    Box(Modifier.size(72.dp).clip(CircleShape).background(badgeBg), contentAlignment = Alignment.Center) {
+                        Icon(badgeIcon, contentDescription = null, tint = badgeFg, modifier = Modifier.size(32.dp))
+                    }
+                    Text(
+                        receiptEyebrow(chip),
+                        style = giInter(10, FontWeight.SemiBold, 1.6f),
+                        color = if (chip == null) RECEIPT_GREEN_TEXT else badgeFg,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                    // A thank-you belongs to a gift that arrived or is on its way —
+                    // not to one that failed or was refunded.
+                    if (firstName != null && (chip == null || chip.tone == ReceiptTone.Waiting)) {
+                        Text(
+                            "Thank you, $firstName.",
+                            style = giSerif(18, FontWeight.SemiBold),
+                            color = GIVE.navy,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
-                    Text(money(d.amountMinor, d.currency), style = giSerif(36, FontWeight.Bold), color = GIVE.ink)
-                    Text("to ${giveFund(d.fund).name}", style = giInter(14), color = GIVE.sub)
-                    // "Named giving" (custom sheet, optional): the member's own
-                    // label for this gift, shown right under the fund.
-                    d.accountName?.takeIf { it.isNotBlank() }?.let {
-                        Text("“$it”", style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow)
+                    val (mark, number) = receiptAmountParts(d.amountMinor, d.currency)
+                    Row(Modifier.padding(top = 8.dp)) {
+                        Text(
+                            mark,
+                            style = giInter(16, FontWeight.SemiBold),
+                            color = GIVE.tertiary,
+                            modifier = Modifier.alignByBaseline().padding(end = 6.dp),
+                        )
+                        Text(number, style = giSerif(40, FontWeight.SemiBold, -1f), color = GIVE.navy, modifier = Modifier.alignByBaseline())
                     }
-                    StatusChip(d.status)
+                    Text(
+                        receiptDestinationLine(d),
+                        style = giInter(14),
+                        color = GIVE.ink600,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    // "Named giving": the member's own label for this gift, when set.
+                    d.accountName?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            "“$it”",
+                            style = giInter(13, FontWeight.SemiBold),
+                            color = GIVE.eyebrow,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    Text(receiptWhen(d), style = giInter(12), color = RECEIPT_DATE, modifier = Modifier.padding(top = 10.dp))
+                    if (chip != null) {
+                        Row(
+                            Modifier
+                                .padding(top = 14.dp)
+                                .clip(Capsule)
+                                .background(badgeBg)
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(badgeIcon, contentDescription = null, tint = badgeFg, modifier = Modifier.size(13.dp))
+                            Text(chip.label, style = giInter(12, FontWeight.SemiBold), color = badgeFg)
+                        }
+                    }
                 }
 
-                // Detail card
+                // ── Details ──
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(20.dp))
                         .background(GIVE.white)
-                        .border(1.dp, GIVE.border, RoundedCornerShape(22.dp))
-                        .padding(horizontal = 16.dp),
+                        .border(1.dp, GIVE.border, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                 ) {
-                    DetailRow("Date", fullDate(d.createdAt), showDivider = true)
-                    DetailRow("Method", (d.method ?: "").replaceFirstChar { it.uppercase() }, showDivider = true)
-                    d.accountName?.takeIf { it.isNotBlank() }?.let {
-                        DetailRow("Gift name", it, showDivider = true)
+                    ReceiptRow("Fund", receiptFundName(d))
+                    // Plain for now: the pledge sheet lives inside PartnersScreen
+                    // and has no route of its own to navigate to.
+                    receiptPledgeTitle(d)?.let { ReceiptRow("Pledge", it) }
+                    d.accountName?.takeIf { it.isNotBlank() }?.let { ReceiptRow("Gift name", it) }
+                    ReceiptRow("Method", receiptMethodLabel(d))
+                    receiptProviderRef(d)?.let { ref ->
+                        ReceiptRow(receiptReferenceLabel(d), ref, mono = true, copied = copied == "ref") { copy("ref", ref) }
                     }
-                    DetailRow("Currency", d.currency, showDivider = true)
-                    DetailRow("Reference", d.receiptCode ?: d.providerRef ?: "—", showDivider = true)
-                    DetailRow("Transaction", d.transactionId.take(8) + "…", showDivider = false)
+                    ReceiptRow("Date", receiptWhen(d))
+                    ReceiptRow("Reference", receiptShortId(d), mono = true, copied = copied == "id", last = true) { copy("id", d.transactionId) }
                 }
 
-                // Ledger card
-                if (d.ledger.isNotEmpty()) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(GIVE.white)
-                            .border(1.dp, GIVE.border, RoundedCornerShape(22.dp))
-                            .padding(16.dp),
-                    ) {
-                        Text("LEDGER", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.gold)
-                        d.ledger.forEach { e ->
-                            Row(
-                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    e.side.uppercase(Locale.ENGLISH),
-                                    style = giInter(11, FontWeight.Medium),
-                                    color = if (e.side == "debit") GIVE.ledgerDebit else GIVE.ledgerCredit,
-                                    modifier = Modifier.width(56.dp),
-                                )
-                                Text(
-                                    e.account,
-                                    style = giInter(12),
-                                    color = GIVE.ink,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(money(e.amountMinor, d.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.ink)
+                // ── Where it went ──
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = RECEIPT_GREEN, modifier = Modifier.size(16.dp))
+                    Text(receiptWhereItWent(d), style = giInter(12), color = GIVE.sub)
+                }
+
+                // ── Actions ──
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(Capsule)
+                                .background(GIVE.navy)
+                                .clickable(enabled = !sharing) { share() },
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (sharing) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Filled.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             }
+                            Spacer(Modifier.width(8.dp))
+                            Text("Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White)
+                        }
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clip(Capsule)
+                                .background(GIVE.white)
+                                .border(1.dp, GIVE.navy.copy(alpha = 0.22f), Capsule)
+                                .clickable { onOpenStatement() },
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.Description, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("View statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
                         }
                     }
+                    shareError?.let {
+                        Text(it, style = giInter(11), color = GIVE.danger, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
                 }
 
-                // Download this gift's receipt PDF (authed fetch — never a token URL).
-                val pdfScope = rememberCoroutineScope()
-                val pdfCtx = androidx.compose.ui.platform.LocalContext.current
-                Row(
+                // ── Verse ──
+                Column(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(GIVE.gold)
-                        .clickable {
-                            pdfScope.launch {
-                                openPdfAuthed(pdfCtx, "nuru-giving-receipt-${d.transactionId.take(8)}.pdf") {
-                                    Net.client.api.givingReceiptPdf(d.transactionId)
-                                }
-                            }
-                        }
-                        .padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(GIVE.cream)
+                        .border(1.dp, GIVE.border, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(Icons.Filled.Download, null, tint = GIVE.navy, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Download receipt (PDF)", style = giInter(13, FontWeight.Bold), color = GIVE.navy)
+                    Text(
+                        "“God loves a cheerful giver.”",
+                        style = giSerif(16, FontWeight.Normal).copy(fontStyle = FontStyle.Italic),
+                        color = GIVE.navy,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        "— 2 Corinthians 9:7",
+                        style = giInter(11, FontWeight.SemiBold, 0.6f),
+                        color = GIVE.eyebrow,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ReceiptHeaderButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(GIVE.white)
+            .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = GIVE.navy, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** One details row: label left, value right; `mono` for codes; `onCopy` adds
+ *  the copy glyph, makes the row tappable, and swaps in "Copied" while [copied]. */
+@Composable
+private fun ReceiptRow(
+    label: String,
+    value: String,
+    mono: Boolean = false,
+    copied: Boolean = false,
+    last: Boolean = false,
+    onCopy: (() -> Unit)? = null,
+) {
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(if (onCopy != null) Modifier.clickable { onCopy() } else Modifier)
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = giInter(13), color = RECEIPT_LABEL)
+            Spacer(Modifier.width(16.dp))
+            Text(
+                value,
+                style = giInter(14, FontWeight.SemiBold).let {
+                    if (mono) it.copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp) else it
+                },
+                color = GIVE.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f),
+            )
+            if (onCopy != null) {
+                Spacer(Modifier.width(8.dp))
+                if (copied) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = RECEIPT_GREEN_TEXT, modifier = Modifier.size(13.dp))
+                        Text("Copied", style = giInter(11, FontWeight.SemiBold), color = RECEIPT_GREEN_TEXT)
+                    }
+                } else {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy $label", tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
+        if (!last) HairlineDivider()
     }
 }
 
@@ -574,23 +779,48 @@ internal suspend fun openPdfAuthed(
     }
 }
 
-@Composable
-private fun DetailRow(label: String, value: String, showDivider: Boolean) {
-    Column {
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, style = giInter(12), color = GIVE.tertiary)
-            Spacer(Modifier.weight(1f))
-            Text(
-                value,
-                style = giInter(13, FontWeight.SemiBold),
-                color = GIVE.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+// Share this gift's receipt: the PDF is fetched through the authed client
+// (never a ?token= URL), written to cache/shared, and handed out as a
+// content:// URI through the manifest FileProvider
+// (${applicationId}.fileprovider → res/xml/file_paths.xml cache-path "shared")
+// as an ACTION_SEND application/pdf with the one-line summary as EXTRA_TEXT.
+// False when the PDF could not be fetched or no app took the share — the
+// caller then shares the summary alone and says so. Cancellation propagates.
+internal suspend fun sharePdfAuthed(
+    context: Context,
+    fileName: String,
+    text: String,
+    fetch: suspend () -> okhttp3.ResponseBody,
+): Boolean {
+    val file = runCatching {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
+            java.io.File(dir, fileName).also { f ->
+                fetch().byteStream().use { input -> f.outputStream().use { input.copyTo(it) } }
+            }
         }
-        if (showDivider) HairlineDivider()
+    }.getOrElse { e ->
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        return false
+    }
+    return runCatching {
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("application/pdf")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_TEXT, text)
+            .putExtra(Intent.EXTRA_SUBJECT, "Nuru Place gift receipt")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(
+            Intent.createChooser(send, "Share receipt").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }.isSuccess
+}
+
+/** The summary alone (text/plain) — the fallback when the PDF is unavailable. */
+internal fun shareTextOnly(context: Context, text: String) {
+    val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
+    runCatching {
+        context.startActivity(Intent.createChooser(send, "Share receipt").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }

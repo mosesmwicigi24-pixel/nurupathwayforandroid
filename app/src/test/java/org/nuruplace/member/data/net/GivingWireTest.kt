@@ -6,6 +6,7 @@
 package org.nuruplace.member.data.net
 
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
@@ -25,6 +26,38 @@ class GivingWireTest {
         coerceInputValues = true
         encodeDefaults = true
         namingStrategy = JsonNamingStrategy.SnakeCase
+    }
+
+    @Test
+    fun `receipt detail decodes the v2 display fields and tolerates an older server`() {
+        val v2 = json.decodeFromString<GivingDetail>(
+            """{"transaction_id":"t1","amount_minor":50000,"currency":"KES","status":"succeeded","fund":"discipleship",
+               "method":"mpesa","receipt_code":"UIPJ27PBO3","created_at":"2026-09-25T17:11:00Z",
+               "fund_name":"Discipleship","pledge":{"pledge_id":"p1","title":"School fees"},
+               "need":{"need_id":"n1","title":"Sound desk"},"method_label":"M-Pesa",
+               "member_name":"Moses Mwicigi","congregation":"Nairobi","ledger":[]}""",
+        )
+        assertEquals("Discipleship", v2.fundName)
+        assertEquals("p1", v2.pledge?.pledgeId)
+        assertEquals("School fees", v2.pledge?.title)
+        assertEquals("n1", v2.need?.needId)
+        assertEquals("Sound desk", v2.need?.title)
+        assertEquals("M-Pesa", v2.methodLabel)
+        assertEquals("Moses Mwicigi", v2.memberName)
+        assertEquals("Nairobi", v2.congregation)
+
+        // Older server: none of the v2 keys, an explicit null pledge, ledger still present.
+        val old = json.decodeFromString<GivingDetail>(
+            """{"transaction_id":"t1","amount_minor":1,"status":"succeeded","fund":"tithe","created_at":"x","pledge":null,
+               "ledger":[{"side":"debit","account":"cash:mpesa","amount_minor":1,"currency":"KES"}]}""",
+        )
+        assertNull(old.fundName)
+        assertNull(old.pledge)
+        assertNull(old.need)
+        assertNull(old.methodLabel)
+        assertNull(old.memberName)
+        assertNull(old.congregation)
+        assertEquals(1, old.ledger.size)
     }
 
     @Test
