@@ -75,6 +75,15 @@ fun groupedPledgeOptions(options: List<PledgeOption>): List<PledgeOptionGroup> {
     return if (other.isEmpty()) groups else groups + PledgeOptionGroup("Other", other)
 }
 
+/** Whether an option's card shows as picked. By key — except General, which
+ *  matches by kind: the flow's local default (GENERAL_PLEDGE_OPTION) and the
+ *  server's own General row need not share a key, and one of them must still
+ *  light up. A custom name picks no option's card. */
+fun pledgeOptionSelected(option: PledgeOption, target: PledgeFor?): Boolean {
+    val picked = (target as? PledgeFor.Option)?.option ?: return false
+    return option.key == picked.key || (option.kind == PLEDGE_KIND_GENERAL && picked.kind == PLEDGE_KIND_GENERAL)
+}
+
 /** Build the exact wire body (spec §5 + pledge names) from the flow's choices. */
 internal fun buildPledgeBody(
     shape: String,
