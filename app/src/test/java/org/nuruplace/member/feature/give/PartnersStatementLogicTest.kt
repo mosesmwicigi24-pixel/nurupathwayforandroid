@@ -265,20 +265,26 @@ class PartnersStatementLogicTest {
     }
 
     @Test
-    fun `faithfulness line says kept, late months and next due`() {
+    fun `faithfulness line reads the statement's counts, each part only when it is not zero`() {
         val marks = listOf("kept", "kept", "kept", "kept", "kept", "kept", "late", "kept", "kept", "upcoming", "upcoming", "upcoming").map(::monthMark)
+        // The statement's counts — the ledger the hero's Kept tile reads —
+        // even where the strip's months would count differently.
         assertEquals(
-            "Kept on time 8 months · late 1 (Jul) · next due 5 Oct",
-            faithfulnessLine(marks, LocalDate.of(2026, 10, 5), today),
+            "6 kept on time · 1 late · next due 5 Oct",
+            faithfulnessLine(StatementFaithfulness(keptOnTime = 6, late = 1, missed = 0, dueCount = 7), marks, LocalDate.of(2026, 10, 5), today),
         )
+        assertEquals("2 missed", faithfulnessLine(StatementFaithfulness(missed = 2, dueCount = 2), marks, null, today))
+        // No faithfulness block: the strip's months stand in, same wording.
         val twoLate = listOf("kept", "none", "none", "none", "none", "none", "late", "late", "missed", "none", "none", "none").map(::monthMark)
-        assertEquals("Kept on time 1 month · late 2 (Jul, Aug)", faithfulnessLine(twoLate, null, today))
+        assertEquals("1 kept on time · 2 late · 1 missed", faithfulnessLine(null, twoLate, null, today))
         // A new partner with nothing behind them: just the next due.
         val fresh = List(9) { MonthMark.None } + List(3) { MonthMark.Upcoming }
-        assertEquals("Next due 5 Oct", faithfulnessLine(fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due 5 Oct", faithfulnessLine(StatementFaithfulness(), fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due 5 Oct", faithfulnessLine(null, fresh, LocalDate.of(2026, 10, 5), today))
         // Next year's date carries its year.
-        assertEquals("Next due 5 Jan 2027", faithfulnessLine(fresh, LocalDate.of(2027, 1, 5), today))
-        assertNull(faithfulnessLine(fresh, null, today))
+        assertEquals("Next due 5 Jan 2027", faithfulnessLine(null, fresh, LocalDate.of(2027, 1, 5), today))
+        assertNull(faithfulnessLine(StatementFaithfulness(), fresh, null, today))
+        assertNull(faithfulnessLine(null, fresh, null, today))
     }
 
     @Test
@@ -293,7 +299,7 @@ class PartnersStatementLogicTest {
                 Pledge(pledgeId = "d", status = "paused", progress = PledgeProgress(nextDue = "2026-09-26")),   // not active
                 Pledge(pledgeId = "t", shape = "total", status = "active", dueOn = "2026-09-27",
                     progress = PledgeProgress(nextDue = "2026-09-27")),                                         // not monthly
-                Pledge(pledgeId = "o", status = "active", progress = PledgeProgress(nextDue = "2026-09-20")),   // behind us
+                Pledge(pledgeId = "o", status = "active", progress = PledgeProgress(nextDue = "2026-09-20")),   // overdue, no due_day to go on
             ),
         )
         assertEquals(LocalDate.of(2026, 10, 1), nextPledgeDue(p, today))
@@ -312,12 +318,33 @@ class PartnersStatementLogicTest {
         )
         assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(paidToday, today))
         assertEquals(
-            "Kept on time 1 month · next due 25 Oct",
-            faithfulnessLine(List(8) { MonthMark.None } + MonthMark.Kept + List(3) { MonthMark.None }, nextPledgeDue(paidToday, today), today),
+            "1 kept on time · next due 25 Oct",
+            faithfulnessLine(
+                StatementFaithfulness(keptOnTime = 1, dueCount = 1),
+                List(8) { MonthMark.None } + MonthMark.Kept + List(3) { MonthMark.None }, nextPledgeDue(paidToday, today), today,
+            ),
         )
         // Paid ahead as well: the ledger is already at November.
         val prepaid = paidToday.copy(pledges = listOf(paidToday.pledges.single().copy(progress = PledgeProgress(nextDue = "2026-11-25"))))
         assertEquals(LocalDate.of(2026, 11, 25), nextPledgeDue(prepaid, today))
+    }
+
+    @Test
+    fun `an overdue pledge still contributes its next upcoming date, and the line says what was missed`() {
+        // today = 25 Sep. Two instalments behind (10 Aug, 10 Sep): next_due is
+        // the oldest, 10 Aug — but the next one coming is 10 Oct.
+        val behind = Pledge(pledgeId = "o", status = "active", dueDay = 10, progress = PledgeProgress(label = "behind", nextDue = "2026-08-10"))
+        assertEquals(LocalDate.of(2026, 10, 10), nextPledgeDue(Partnership(pledges = listOf(behind)), today))
+        // …and it wins when it comes first.
+        val behind27 = behind.copy(pledgeId = "o2", dueDay = 27, progress = PledgeProgress(label = "behind", nextDue = "2026-08-27"))
+        val onTime = Pledge(pledgeId = "c", status = "active", dueDay = 1, progress = PledgeProgress(nextDue = "2026-10-01"))
+        val p = Partnership(pledges = listOf(onTime, behind27))
+        assertEquals(LocalDate.of(2026, 9, 27), nextPledgeDue(p, today))
+        val marks = List(7) { MonthMark.Kept } + List(2) { MonthMark.Missed } + List(3) { MonthMark.Upcoming }
+        assertEquals(
+            "3 kept on time · 2 missed · next due 27 Sep",
+            faithfulnessLine(StatementFaithfulness(keptOnTime = 3, missed = 2, dueCount = 5), marks, nextPledgeDue(p, today), today),
+        )
     }
 
     @Test

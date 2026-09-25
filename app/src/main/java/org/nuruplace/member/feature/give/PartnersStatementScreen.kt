@@ -326,7 +326,7 @@ fun PartnersStatementScreen(
                     SummaryCard(partnerStatementSummary(year, s, pledges))
                     faithfulnessMarks(s.months)?.let { marks ->
                         val nextDue = if (year == today.year) nextPledgeDue(p, today) else null
-                        FaithfulnessCard(marks, faithfulnessLine(marks, nextDue, today))
+                        FaithfulnessCard(marks, faithfulnessLine(s.faithfulness, marks, nextDue, today))
                     }
                     CommitmentsCard(partnerStatementPledges(year, s, pledges, today))
                     seasonLine(s.season)?.let { SeasonCard(it) }

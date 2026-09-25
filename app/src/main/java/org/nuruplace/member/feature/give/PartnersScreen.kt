@@ -95,9 +95,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -434,7 +437,9 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                 // pending_minor: the part of this instalment already on its
                 // way — Processing instead of Pay once it covers the amount.
                 val shown = dueRowView(d, pendingMethodFor(d.id, vm.statements[today.year]))
-                val whenLabel = partnerDate(d.dueOn)?.let { dueRelativeLabel(it, today, PartnerFormat::dayMonth) } ?: "soon"
+                // "today" · "in 3 days" · "5 Oct" — or, already past,
+                // "overdue since 10 Aug" / "2 overdue since 10 Aug" in amber.
+                val dueWhen = dueWhen(d, today)
                 val what = if (d.kind == "schedule") {
                     "Recurring gift" + (p.rhythm?.method?.takeIf { it.isNotBlank() }?.let { " · ${giveMethodLabel(it)}" } ?: "")
                 } else {
@@ -445,7 +450,13 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("${ksh(shown.leadMinor)} · $whenLabel", style = giInter(15, FontWeight.SemiBold), color = GIVE.navy)
+                        Text(
+                            buildAnnotatedString {
+                                append("${ksh(shown.leadMinor)} · ")
+                                if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
+                            },
+                            style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
+                        )
                         Text(
                             listOfNotNull(what, shown.processingNote).joinToString(" · "),
                             style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
@@ -657,7 +668,15 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
         Row(Modifier.fillMaxWidth()) {
             left?.let { Text(it, style = giInter(11), color = GIVE.sub) }
             Spacer(Modifier.weight(1f))
-            pl.progress.nextDue?.let { partnerDate(it) }?.let { Text("Next ${PartnerFormat.dayMonth(it)}", style = giInter(11), color = GIVE.sub) }
+            // "Next 5 Oct" — or "Overdue since 10 Aug" in amber once its
+            // next instalment is already past.
+            pledgeNextLabel(pl, today)?.let {
+                Text(
+                    it.text,
+                    style = giInter(11, if (it.overdue) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (it.overdue) GIVE.goldChipText else GIVE.sub,
+                )
+            }
         }
     }
 }

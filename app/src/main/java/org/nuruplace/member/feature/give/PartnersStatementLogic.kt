@@ -38,8 +38,6 @@ import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
-import java.time.Month
-import java.time.format.TextStyle
 import java.util.Locale
 
 /** One month of pledge-tied payments, newest first, with its subtotal. A
@@ -239,17 +237,20 @@ internal fun faithfulnessMarks(months: List<StatementMonthStatus>?): List<MonthM
     return marks.takeIf { list -> list.any { it != MonthMark.None } }
 }
 
-/** "Kept on time 6 months · late 1 (Jul) · next due 5 Oct" under the strip.
- *  Counts are the strip's own months; each part appears only when it has
- *  something to say, and `nextDue` only for the year being lived. Null when
- *  nothing is left to say. */
-internal fun faithfulnessLine(marks: List<MonthMark>, nextDue: LocalDate?, today: LocalDate): String? {
-    val kept = marks.count { it == MonthMark.Kept }
-    val lateMonths = marks.withIndex().filter { it.value == MonthMark.Late }
-        .map { Month.of(it.index + 1).getDisplayName(TextStyle.SHORT, Locale.ENGLISH) }
+/** "3 kept on time · 1 late · 2 missed · next due 5 Oct" under the strip.
+ *  The counts are the statement's own `faithfulness` (the ledger the hero's
+ *  Kept tile reads); the strip's month marks stand in only when the
+ *  statement sends no faithfulness block. Each part appears only when it is
+ *  not zero, and `nextDue` only for the year being lived. Null when nothing
+ *  is left to say. */
+internal fun faithfulnessLine(f: StatementFaithfulness?, marks: List<MonthMark>, nextDue: LocalDate?, today: LocalDate): String? {
+    val onTime = maxOf(f?.keptOnTime ?: marks.count { it == MonthMark.Kept }, 0)
+    val late = maxOf(f?.late ?: marks.count { it == MonthMark.Late }, 0)
+    val missed = maxOf(f?.missed ?: marks.count { it == MonthMark.Missed }, 0)
     val parts = buildList {
-        if (kept > 0) add("kept on time $kept month${if (kept == 1) "" else "s"}")
-        if (lateMonths.isNotEmpty()) add("late ${lateMonths.size} (${lateMonths.joinToString(", ")})")
+        if (onTime > 0) add("$onTime kept on time")
+        if (late > 0) add("$late late")
+        if (missed > 0) add("$missed missed")
         nextDue?.let { d ->
             add("next due ${if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())}")
         }
@@ -258,19 +259,22 @@ internal fun faithfulnessLine(marks: List<MonthMark>, nextDue: LocalDate?, today
     return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
 }
 
-/** FAITHFULNESS' "next due": the earliest server `progress.next_due` on or
- *  after `today` across ACTIVE MONTHLY pledges. The server's instalment
- *  ledger advances it once an instalment is paid (26 Sep paid → 26 Oct; a
- *  pre-payment → 26 Nov), so a paid instalment is never shown as still due —
- *  the DUE list is NOT read (it holds an instalment until its payment
- *  settles). `due_day` stands in only for a pledge whose next_due is absent
- *  (an older server). Null when none. */
+/** FAITHFULNESS' "next due": the earliest, across ACTIVE MONTHLY pledges,
+ *  of each pledge's next upcoming date — its server `progress.next_due` when
+ *  that is today or later (the ledger advances it once an instalment is paid:
+ *  26 Sep paid → 26 Oct; a pre-payment → 26 Nov), else the next `due_day`
+ *  on or after today: an OVERDUE pledge (next_due already past) still has
+ *  an instalment coming, and a pledge the server sent no next_due for (an
+ *  older server) has its day. The DUE list is not read (it holds an
+ *  instalment until its payment settles). Null when none. */
 internal fun nextPledgeDue(p: Partnership?, today: LocalDate): LocalDate? {
     if (p == null) return null
     return p.pledges
         .filter { it.status == "active" && it.shape != "total" }
-        .mapNotNull { pl -> partnerDate(pl.progress.nextDue) ?: pl.dueDay?.let { nextDueDayDate(it, today) } }
-        .filter { !it.isBefore(today) }
+        .mapNotNull { pl ->
+            partnerDate(pl.progress.nextDue)?.takeIf { !it.isBefore(today) }
+                ?: pl.dueDay?.let { nextDueDayDate(it, today) }
+        }
         .minOrNull()
 }
 

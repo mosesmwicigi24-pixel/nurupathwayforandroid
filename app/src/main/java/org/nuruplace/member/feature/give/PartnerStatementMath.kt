@@ -191,3 +191,39 @@ internal fun standingKeptLine(p: Partnership, currentYearStatement: GivingStatem
     }
     return listOfNotNull(count, state).joinToString(" · ").replaceFirstChar { it.uppercase() }
 }
+
+/** A "when" as the row or card says it, and whether it is overdue (said in
+ *  amber, GIVE.goldChipText 0xFF7A5A14). */
+internal data class WhenLabel(val text: String, val overdue: Boolean)
+
+/** "10 Aug", or "10 Aug 2025" outside the year being lived. */
+private fun dayMonthIn(d: LocalDate, today: LocalDate): String =
+    if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
+
+/**
+ * The DUE row's "when". A pledge instalment already past reads "overdue
+ * since 10 Aug" — "2 overdue since 10 Aug" with two or more behind (the
+ * amount is then the server's catch-up total) — dated by the server's
+ * `overdue_since` when sent, else `due_on`. Otherwise "today" · "tomorrow" ·
+ * "in N days" (to two weeks) · the date. A recurring-gift row is never
+ * "overdue" (nothing is owed on a schedule); a past date there reads as its
+ * date.
+ */
+internal fun dueWhen(d: DueItem, today: LocalDate): WhenLabel {
+    val due = partnerDate(d.dueOn) ?: return WhenLabel("soon", false)
+    if (d.kind == "pledge" && due.isBefore(today)) {
+        val since = partnerDate(d.overdueSince) ?: due
+        val lead = if (d.overdueCount >= 2) "${d.overdueCount} overdue since" else "overdue since"
+        return WhenLabel("$lead ${dayMonthIn(since, today)}", overdue = true)
+    }
+    return WhenLabel(dueRelativeLabel(due, today, PartnerFormat::dayMonth), overdue = false)
+}
+
+/** The pledge card's foot: "Next 5 Oct", or — its next instalment already
+ *  past — "Overdue since 10 Aug" (amber). Null when the server names no
+ *  next due. */
+internal fun pledgeNextLabel(pl: Pledge, today: LocalDate): WhenLabel? {
+    val next = partnerDate(pl.progress.nextDue) ?: return null
+    return if (next.isBefore(today)) WhenLabel("Overdue since ${dayMonthIn(next, today)}", overdue = true)
+    else WhenLabel("Next ${PartnerFormat.dayMonth(next)}", overdue = false)
+}

@@ -299,6 +299,12 @@ data class DueItem(
      *  row shows Processing instead of Pay while it covers `amount_minor`
      *  (PartnerStatementMath.dueRowView). */
     val pendingMinor: Int = 0,
+    /** kind "pledge": how many instalments are overdue (the amount is then
+     *  the catch-up total). 0 when none, or from an older server. */
+    val overdueCount: Int = 0,
+    /** kind "pledge": the earliest overdue instalment's date — the DUE row
+     *  says "overdue since" it, preferring it over `due_on`. */
+    val overdueSince: String? = null,
 )
 
 /** POST /giving/partners/join `{}` — joining needs no fund, no campaign and no

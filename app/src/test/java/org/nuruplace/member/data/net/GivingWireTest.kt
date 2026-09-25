@@ -466,4 +466,21 @@ class GivingWireTest {
         assertNull(r.approveUrl)
         assertEquals("General partnership", r.pledge?.title)
     }
+
+    @Test
+    fun `due items decode overdue_count and overdue_since, defaulting to none`() {
+        val p = json.decodeFromString<Partnership>(
+            """{"due":[
+                 {"kind":"pledge","id":"p1","title":"General partnership","amount_minor":200000,"due_on":"2026-08-10","action":"pay",
+                  "overdue":true,"overdue_count":2,"overdue_since":"2026-08-10","pending_minor":0},
+                 {"kind":"pledge","id":"p2","title":"Roof","amount_minor":50000,"due_on":"2026-10-01","action":"pay","overdue_count":null,"overdue_since":null},
+                 {"kind":"schedule","id":"s1","title":"Recurring gift","amount_minor":20000,"due_on":"2026-10-01","action":"pay"}]}""",
+        )
+        assertEquals(2, p.due[0].overdueCount)
+        assertEquals("2026-08-10", p.due[0].overdueSince)
+        assertEquals(0, p.due[1].overdueCount)
+        assertNull(p.due[1].overdueSince)
+        assertEquals(0, p.due[2].overdueCount)
+        assertNull(p.due[2].overdueSince)
+    }
 }
