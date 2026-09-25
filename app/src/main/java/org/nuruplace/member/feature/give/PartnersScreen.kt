@@ -14,7 +14,13 @@ package org.nuruplace.member.feature.give
 //              server's derived one), state chip, amount + due line, gold
 //              progress, "N of M kept this year" or "paid · to go", next
 //   STATEMENT  year chips · Pledged / Paid / Remaining · pledge-tied payments
-//              only · "Full statement and PDF →"
+//              only · "Partners statement and PDF →"
+//
+// The Statement button and that link open the PARTNERS statement
+// (PartnersStatementScreen, route "partners-statement?year=") for the year the
+// chips show — never the general giving statement (owner 2026-09-25: "have
+// the statement separate for partners"). The giving statement is one tap
+// further, from the partners statement's foot.
 //
 // No explanatory paragraphs. "Your rhythm" lives on the Give segment now (one
 // row under the amount); "Since you began" left this tab. A non-member sees
@@ -196,13 +202,15 @@ fun PartnersScreen(
     vm: PartnersViewModel = remember { PartnersViewModel() },
     onPayNow: (GivePreset) -> Unit = {},
     onOpenReceipt: (String) -> Unit = {},
-    onOpenStatement: () -> Unit = {},
+    /** Open the partners statement on this year (the STATEMENT card's chip). */
+    onOpenPartnersStatement: (year: Int) -> Unit = {},
     onAddPledge: () -> Unit = {},
     /** The tab's GIVE · PARTNERS control (GiveTabScreen) — first row of the band. */
     segmentControl: @Composable () -> Unit = {},
 ) {
     LaunchedEffect(Unit) { if (vm.partnership == null) vm.load() }
     val p = vm.partnership
+    val openStatement = { onOpenPartnersStatement(vm.statementYear ?: LocalDate.now().year) }
 
     Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(rememberScrollState())) {
         PartnersHeaderBand(segmentControl)
@@ -220,13 +228,13 @@ fun PartnersScreen(
                     action = "Try again" to { vm.load() },
                 )
                 p.isMember || p.isPartner -> {
-                    StandingCard(p, onAddPledge, onOpenStatement)
+                    StandingCard(p, onAddPledge, openStatement)
                     if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
                     // Only when there is something to say — a partner whose
                     // giving is collecting cleanly never sees an amber row.
                     p.trouble?.let { t -> TroubleRow(t, vm.resuming) { p.scheduleId?.let(vm::resume) } }
                     PledgesSection(p, vm, onPayNow, onOpenReceipt)
-                    StatementSection(p, vm, onOpenReceipt, onOpenStatement)
+                    StatementSection(p, vm, onOpenReceipt, openStatement)
                 }
                 else -> {
                     JoinCard(vm.joining, onJoin = { vm.join() })
@@ -257,18 +265,18 @@ private fun PartnersHeaderBand(segmentControl: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Eyebrow(text: String) {
+internal fun Eyebrow(text: String) {
     Text(text, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.goldLo)
 }
 
 /** A white card: theme border, 16dp radius, 16dp padding. Clickable when asked. */
-private fun Modifier.partnerCard(onClick: (() -> Unit)? = null): Modifier =
+internal fun Modifier.partnerCard(onClick: (() -> Unit)? = null): Modifier =
     fillMaxWidth().clip(CardShape).background(GIVE.white).border(1.dp, GIVE.border, CardShape)
         .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
         .padding(16.dp)
 
 @Composable
-private fun Hairline() {
+internal fun Hairline() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(GIVE.border))
 }
 
@@ -282,7 +290,7 @@ private fun NavyPill(label: String, enabled: Boolean = true, onClick: () -> Unit
 }
 
 @Composable
-private fun StateChip(text: String, bg: Color, fg: Color) {
+internal fun StateChip(text: String, bg: Color, fg: Color) {
     Text(text, style = giInter(11, FontWeight.SemiBold), color = fg,
         modifier = Modifier.clip(Capsule).background(bg).padding(horizontal = 9.dp, vertical = 4.dp))
 }
@@ -593,7 +601,7 @@ private fun ActionPill(label: String, primary: Boolean = false, enabled: Boolean
     )
 }
 
-private fun ordinal(n: Int): String {
+internal fun ordinal(n: Int): String {
     val suffix = if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
     return "$n$suffix"
 }
@@ -783,15 +791,15 @@ private fun PledgeDetailSheet(
 
 // ── 4. Statement ─────────────────────────────────────────────────────────────
 
-/** Year chips (current year back to the join year, at most four), then ONE
- *  card: Pledged / Paid / Remaining (PartnerStatementMath.kt), a rule, the
- *  pledge-tied payments newest first, and the door to the full statement +
- *  PDF. Gifts without a pledge are not shown here. */
+/** Year chips (current year back to the join year, at most four —
+ *  partnerStatementYears, the same list the partners statement shows), then
+ *  ONE card: Pledged / Paid / Remaining (PartnerStatementMath.kt), a rule, the
+ *  pledge-tied payments newest first, and the door to the partners statement
+ *  + its PDF. Gifts without a pledge are not shown here. */
 @Composable
 private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceipt: (String) -> Unit, onOpenStatement: () -> Unit) {
     val currentYear = LocalDate.now().year
-    val joinYear = partnerDate(p.membership?.joinedAt ?: p.since)?.year ?: currentYear
-    val years = (currentYear downTo maxOf(joinYear, currentYear - 3)).toList()
+    val years = partnerStatementYears(currentYear, partnerDate(p.membership?.joinedAt ?: p.since)?.year)
     val shownYear = vm.statementYear ?: currentYear
     val s = vm.statements[shownYear]
 
@@ -842,7 +850,7 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                         }
                     }
                     Text(
-                        "Full statement and PDF →",
+                        "Partners statement and PDF →",
                         style = giInter(13, FontWeight.SemiBold), color = GIVE.gold, textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth().clip(Capsule).clickable { onOpenStatement() }.padding(vertical = 6.dp),
                     )
@@ -853,7 +861,7 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
 }
 
 @Composable
-private fun SummaryColumn(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+internal fun SummaryColumn(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(label, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
         Text(value, style = giInter(16, FontWeight.SemiBold), color = color, modifier = Modifier.padding(top = 4.dp))

@@ -27,6 +27,11 @@ data class GivingRecord(
     val accountName: String? = null,
     val createdAt: String = "",
     val settledAt: String? = null,
+    // Partners statement (contract 2026-09-25): the pledge this gift counted
+    // toward, by id and name. Null off-pledge and from an older server; the
+    // giving statement tags a row "<title> pledge" when it is set.
+    val pledgeId: String? = null,
+    val pledgeTitle: String? = null,
 )
 
 @Serializable
@@ -377,7 +382,8 @@ data class PledgePayment(
 )
 
 /** GET /giving/statements?year= (spec §5) — by year → by pledge → by fund →
- *  payments. The yearly PDF stays on giving/statement.pdf. */
+ *  payments. The yearly giving PDF stays on giving/statement.pdf; the
+ *  partners PDF is giving/partners/statement.pdf?year=. */
 @Serializable
 data class GivingStatement(
     val years: List<Int> = emptyList(),
@@ -387,6 +393,36 @@ data class GivingStatement(
     val byPledge: List<StatementPledgeLine> = emptyList(),
     val byFund: List<StatementFundLine> = emptyList(),
     val payments: List<StatementPayment> = emptyList(),
+    // Partners statement (contract 2026-09-25): the server's own Pledged /
+    // Paid / Remaining under the partner-only rule (spec §3) and one entry per
+    // pledge with its figures for the year. All null from an older server —
+    // PartnersStatementLogic.kt then derives them locally from `payments` and
+    // GET /giving/partnership, and prefers these whenever they are present.
+    val pledgedMinor: Int? = null,
+    val paidMinor: Int? = null,
+    val remainingMinor: Int? = null,
+    val pledges: List<StatementPledge>? = null,
+)
+
+/** One pledge's year on the partners statement (`pledges[]` on
+ *  GET /giving/statements). `kept` / `dueCount` are "3 of 4 kept" for a
+ *  monthly pledge; a total pledge carries 0 / 0. */
+@Serializable
+data class StatementPledge(
+    val pledgeId: String = "",
+    val title: String = "",
+    val shape: String = "monthly",          // monthly | total
+    val amountMinor: Int? = null,           // monthly: every month
+    val targetMinor: Int? = null,           // total: by due_on
+    val currency: String = "KES",
+    val status: String = "active",          // active | paused | fulfilled | cancelled
+    val dueDay: Int? = null,
+    val dueOn: String? = null,
+    val createdAt: String? = null,
+    val pledgedMinor: Int = 0,
+    val paidMinor: Int = 0,
+    val kept: Int = 0,
+    val dueCount: Int = 0,
 )
 
 @Serializable
@@ -411,6 +447,8 @@ data class StatementPayment(
     /** The pledge this gift counted toward, as the server names it (wire
      *  `pledge_title`, financial/partners.ts statements). Null off-pledge. */
     val pledgeTitle: String? = null,
+    /** The fund's display name (wire `fund_name`, contract 2026-09-25). */
+    val fundName: String? = null,
     val receiptCode: String? = null,
     val at: String? = null,
     val createdAt: String? = null,

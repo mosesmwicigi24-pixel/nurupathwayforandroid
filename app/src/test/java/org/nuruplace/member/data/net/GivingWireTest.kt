@@ -219,6 +219,75 @@ class GivingWireTest {
         assertEquals("p2", nested.asPledge().pledgeId)
     }
 
+    // ── Partners statement (contract 2026-09-25) ──
+
+    @Test
+    fun `statement decodes the partners totals, pledges and the enriched payment rows`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"years":[2025,2026],"year":2026,"total_minor":2600000,"currency":"KES",
+                "pledged_minor":2400000,"paid_minor":600000,"remaining_minor":1800000,
+                "pledges":[
+                  {"pledge_id":"p1","title":"School fees","shape":"monthly","amount_minor":200000,"currency":"KES","status":"active",
+                   "due_day":5,"created_at":"2026-06-10T00:00:00Z","pledged_minor":1200000,"paid_minor":600000,"kept":3,"due_count":4},
+                  {"pledge_id":"p2","title":"New roof","shape":"total","target_minor":1200000,"currency":"KES","status":"fulfilled",
+                   "due_on":"2026-12-15","created_at":"2026-01-02T00:00:00Z","pledged_minor":1200000,"paid_minor":0,"kept":0,"due_count":0}
+                ],
+                "by_pledge":[{"pledge_id":"p1","title":"School fees","total_minor":600000}],
+                "by_fund":[{"code":"tithe","name":"Tithe","total_minor":600000}],
+                "payments":[{"transaction_id":"t","amount_minor":200000,"currency":"KES","at":"2026-09-05T09:00:00Z",
+                             "pledge_id":"p1","pledge_title":"School fees","fund":"tithe","fund_name":"Tithe","method":"mpesa","receipt_code":"UIKJ2713B5"}]}""",
+        )
+        assertEquals(2_400_000, s.pledgedMinor)
+        assertEquals(600_000, s.paidMinor)
+        assertEquals(1_800_000, s.remainingMinor)
+        val pledges = s.pledges!!
+        assertEquals(2, pledges.size)
+        assertEquals("School fees", pledges[0].title)
+        assertEquals(5, pledges[0].dueDay)
+        assertEquals(3 to 4, pledges[0].kept to pledges[0].dueCount)
+        assertEquals(1_200_000, pledges[0].pledgedMinor)
+        assertEquals("total", pledges[1].shape)
+        assertEquals("2026-12-15", pledges[1].dueOn)
+        assertEquals("fulfilled", pledges[1].status)
+        val row = s.payments.single()
+        assertEquals("p1", row.pledgeId)
+        assertEquals("School fees", row.pledgeTitle)
+        assertEquals("Tithe", row.fundName)
+        assertEquals("mpesa", row.method)
+        assertEquals("UIKJ2713B5", row.receiptCode)
+    }
+
+    @Test
+    fun `older statement payload leaves the partners fields null so the client derives them`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"years":[2026],"year":2026,"total_minor":1000,"by_pledge":[],"by_fund":[],
+                "payments":[{"transaction_id":"t","amount_minor":1000,"currency":"KES","at":"2026-02-01T00:00:00Z","receipt_code":"R","fund":"tithe","pledge_id":"p1","pledge_title":"Tithe"}]}""",
+        )
+        assertNull(s.pledgedMinor)
+        assertNull(s.paidMinor)
+        assertNull(s.remainingMinor)
+        assertNull(s.pledges)
+        assertNull(s.payments.single().fundName)
+        assertNull(s.payments.single().method)
+        // An explicit null is the same as absent (coerceInputValues).
+        val nulled = json.decodeFromString<GivingStatement>("""{"year":2026,"pledged_minor":null,"paid_minor":null,"remaining_minor":null,"pledges":null}""")
+        assertNull(nulled.pledgedMinor)
+        assertNull(nulled.pledges)
+    }
+
+    @Test
+    fun `history rows decode pledge_id and pledge_title, defaulting null`() {
+        val tagged = json.decodeFromString<GivingRecord>(
+            """{"transaction_id":"t1","amount_minor":200000,"currency":"KES","status":"succeeded","fund":"tithe","method":"mpesa",
+                "created_at":"2026-09-05T09:00:00Z","pledge_id":"p1","pledge_title":"School fees"}""",
+        )
+        assertEquals("p1", tagged.pledgeId)
+        assertEquals("School fees", tagged.pledgeTitle)
+        val plain = json.decodeFromString<GivingRecord>("""{"transaction_id":"t2","amount_minor":1,"status":"succeeded","fund":"tithe","created_at":"x"}""")
+        assertNull(plain.pledgeId)
+        assertNull(plain.pledgeTitle)
+    }
+
     @Test
     fun `statement decodes by_pledge and by_fund`() {
         val s = json.decodeFromString<GivingStatement>("""{"years":[2025,2026],"year":2026,"total_minor":1000,"by_pledge":[{"pledge_id":"p","title":"Tithe","total_minor":600}],"by_fund":[{"code":"tithe","name":"Tithe","total_minor":1000}],"payments":[{"transaction_id":"t","amount_minor":1000,"currency":"KES","receipt_code":"R","settled_at":"2026-02-01T00:00:00Z"}]}""")

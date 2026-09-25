@@ -361,6 +361,10 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
+                                    // A gift that counted toward a pledge says which
+                                    // (wire pledge_title, contract 2026-09-25) — the
+                                    // partners statement holds the pledge view itself.
+                                    r.pledgeTitle?.takeIf { it.isNotBlank() }?.let { PledgeTag(it) }
                                     Text(
                                         "${timeLabel(r.createdAt)} · ${(r.method ?: "").replaceFirstChar { it.uppercase() }}",
                                         style = giInter(11),
@@ -690,8 +694,23 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
     }
 }
 
+/** "School fees pledge" — the small gold tag a pledge-tied gift wears on the
+ *  giving statement. Shared with the partners statement (same package). */
 @Composable
-private fun ReceiptHeaderButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+internal fun PledgeTag(title: String) {
+    Text(
+        "$title pledge",
+        style = giInter(10, FontWeight.SemiBold),
+        color = GIVE.goldChipText,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 3.dp).clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+}
+
+/** Header chrome button (back · share). Shared with the partners statement. */
+@Composable
+internal fun ReceiptHeaderButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(40.dp)
@@ -790,6 +809,8 @@ internal suspend fun sharePdfAuthed(
     context: Context,
     fileName: String,
     text: String,
+    subject: String = "Nuru Place gift receipt",
+    chooserTitle: String = "Share receipt",
     fetch: suspend () -> okhttp3.ResponseBody,
 ): Boolean {
     val file = runCatching {
@@ -809,10 +830,10 @@ internal suspend fun sharePdfAuthed(
             .setType("application/pdf")
             .putExtra(Intent.EXTRA_STREAM, uri)
             .putExtra(Intent.EXTRA_TEXT, text)
-            .putExtra(Intent.EXTRA_SUBJECT, "Nuru Place gift receipt")
+            .putExtra(Intent.EXTRA_SUBJECT, subject)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(
-            Intent.createChooser(send, "Share receipt").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent.createChooser(send, chooserTitle).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }.isSuccess
 }
