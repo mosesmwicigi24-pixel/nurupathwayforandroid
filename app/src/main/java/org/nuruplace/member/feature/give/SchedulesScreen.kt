@@ -70,7 +70,14 @@ private fun ScheduleCard(s: GivingSchedule, onChanged: () -> Unit) {
                 TextButton(onClick = {
                     if (!busy) {
                         busy = true
-                        scope.launch { try { Net.client.api.cancelSchedule(s.scheduleId); onChanged() } catch (_: Exception) {} finally { busy = false } }
+                        scope.launch {
+                            try {
+                                Net.client.api.cancelSchedule(s.scheduleId)
+                                // A cancelled schedule changes the partnership standing.
+                                GivingEvents.emit()
+                                onChanged()
+                            } catch (_: Exception) {} finally { busy = false }
+                        }
                     }
                 }) { Text("Cancel", style = NuruType.cardCta, color = Nuru.danger) }
             }

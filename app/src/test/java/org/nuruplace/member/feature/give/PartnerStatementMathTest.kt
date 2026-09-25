@@ -8,10 +8,15 @@
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
+import org.nuruplace.member.data.net.DueItem
+import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeProgress
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
+import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
 
 class PartnerStatementMathTest {
@@ -116,6 +121,43 @@ class PartnerStatementMathTest {
         assertEquals(0 to 0, keptThisYear(pl, payments, LocalDate.of(2026, 8, 4)))
     }
 
+    @Test
+    fun `the card reads the server's kept and due first, the local estimate only as a fallback`() {
+        val today = LocalDate.of(2026, 9, 20)
+        val pl = monthly(createdAt = "2026-01-10T00:00:00Z") // local: due Feb..Sep = 8
+        val payments = listOf(payment(200_000, "m1"), payment(200_000, "m1"))
+        // Server (FIFO instalment ledger): 3 kept of 4 RESOLVED — the card says so,
+        // though the local count over the same payments would say 2 of 8.
+        val server = GivingStatement(
+            year = 2026, payments = payments,
+            pledges = listOf(StatementPledge(pledgeId = "other", kept = 9, dueCount = 9), StatementPledge(pledgeId = "m1", kept = 3, dueCount = 4)),
+        )
+        assertEquals(3 to 4, pledgeKeptThisYear(pl, server, today))
+        assertEquals("3 of 4 kept this year", pledgeKeptLine(pl, server, today))
+
+        // The server says nothing is resolved yet (e.g. the first instalment is
+        // due today, unpaid): say nothing — never the local "0 of 8".
+        val nothingResolved = server.copy(pledges = listOf(StatementPledge(pledgeId = "m1", kept = 0, dueCount = 0)))
+        assertEquals(0 to 0, pledgeKeptThisYear(pl, nothingResolved, today))
+        assertNull(pledgeKeptLine(pl, nothingResolved, today))
+
+        // Fallback 1: an older server — no pledges[] at all.
+        val older = GivingStatement(year = 2026, payments = payments, pledges = null)
+        assertEquals(2 to 8, pledgeKeptThisYear(pl, older, today))
+        assertEquals("2 of 8 kept this year", pledgeKeptLine(pl, older, today))
+        // Fallback 2: pledges[] without an entry for this pledge.
+        val noEntry = server.copy(pledges = listOf(StatementPledge(pledgeId = "other", kept = 1, dueCount = 1)))
+        assertEquals(2 to 8, pledgeKeptThisYear(pl, noEntry, today))
+        // Fallback 3: this year's statement not loaded — no payments to count.
+        assertEquals(0 to 8, pledgeKeptThisYear(pl, null, today))
+
+        // The local fallback with nothing due also says nothing.
+        assertNull(pledgeKeptLine(monthly(createdAt = "2026-09-10T00:00:00Z", dueDay = 25), older, today))
+        // A malformed server entry never reads "5 of 4" or a negative count.
+        assertEquals(4 to 4, pledgeKeptThisYear(pl, server.copy(pledges = listOf(StatementPledge(pledgeId = "m1", kept = 5, dueCount = 4))), today))
+        assertEquals(0 to 0, pledgeKeptThisYear(pl, server.copy(pledges = listOf(StatementPledge(pledgeId = "m1", kept = -1, dueCount = -2))), today))
+    }
+
     // ── DUE row relative date ──
 
     @Test
@@ -127,5 +169,55 @@ class PartnerStatementMathTest {
         assertEquals("in 5 days", dueRelativeLabel(today.plusDays(5), today, label))
         assertEquals("25 OCT", dueRelativeLabel(LocalDate.of(2026, 10, 25), today, label))
         assertEquals("20 SEP", dueRelativeLabel(LocalDate.of(2026, 9, 20), today, label))
+    }
+
+    // ── DUE rows and pending_minor (owner, 2026-09-26) ──
+
+    private fun due(amount: Int = 100_000, pending: Int = 0, kind: String = "pledge", action: String = "pay") =
+        DueItem(kind = kind, id = "p1", title = "General partnership", amountMinor = amount, dueOn = "2026-09-25", action = action, pendingMinor = pending)
+
+    @Test
+    fun `nothing on its way leaves the row as it was`() {
+        assertEquals(DueRowView(100_000), dueRowView(due(pending = 0), "mpesa"))
+        assertEquals(DueRowView(100_000), dueRowView(due(pending = -5), "mpesa")) // never negative
+    }
+
+    @Test
+    fun `the whole instalment on its way shows Processing instead of Pay`() {
+        assertEquals(DueRowView(100_000, processingChip = "Waiting for M-Pesa"), dueRowView(due(pending = 100_000), "mpesa"))
+        assertEquals(DueRowView(100_000, processingChip = "Waiting for Airtel Money"), dueRowView(due(pending = 150_000), "airtel"))
+        assertEquals(DueRowView(100_000, processingChip = "Processing"), dueRowView(due(pending = 100_000), "card"))
+        assertEquals(DueRowView(100_000, processingChip = "Processing"), dueRowView(due(pending = 100_000), null))
+    }
+
+    @Test
+    fun `part of it on its way keeps Pay for the uncovered remainder`() {
+        val v = dueRowView(due(amount = 100_000, pending = 40_000), "mpesa")
+        assertEquals(60_000, v.leadMinor) // what the row leads with, and what Pay presets
+        assertNull(v.processingChip)
+        assertEquals("KSh 400 processing", v.processingNote)
+    }
+
+    @Test
+    fun `schedule and resume rows are never changed by pending`() {
+        assertEquals(DueRowView(50_000), dueRowView(due(amount = 50_000, pending = 50_000, kind = "schedule"), "mpesa"))
+        assertEquals(DueRowView(100_000), dueRowView(due(pending = 100_000, action = "resume"), "mpesa"))
+    }
+
+    @Test
+    fun `the chip's method is the pledge's newest payment in flight on this year's statement`() {
+        val s = GivingStatement(
+            year = 2026,
+            pending = listOf(
+                StatementPendingPayment(transactionId = "a", method = "card", at = "2026-09-26T08:00:00Z", pledgeId = "p1"),
+                StatementPendingPayment(transactionId = "b", method = "mpesa", at = "2026-09-26T19:00:00Z", pledgeId = "p1"),
+                StatementPendingPayment(transactionId = "c", method = "airtel", at = "2026-09-26T20:00:00Z", pledgeId = "p2"),
+            ),
+        )
+        assertEquals("mpesa", pendingMethodFor("p1", s))
+        assertEquals("airtel", pendingMethodFor("p2", s))
+        assertNull(pendingMethodFor("p3", s))
+        assertNull(pendingMethodFor("p1", null))
+        assertNull(pendingMethodFor("p1", GivingStatement(year = 2026)))
     }
 }

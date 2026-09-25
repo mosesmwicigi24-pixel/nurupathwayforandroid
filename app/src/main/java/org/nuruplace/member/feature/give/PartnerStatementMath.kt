@@ -15,6 +15,8 @@
 // stay in the full statement (GivingStatementScreen).
 package org.nuruplace.member.feature.give
 
+import org.nuruplace.member.data.net.DueItem
+import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.StatementPayment
 import java.time.Instant
@@ -74,11 +76,35 @@ internal fun statementSummary(year: Int, pledges: List<Pledge>, payments: List<S
 
 /** "N of M kept this year" for a monthly pledge: N = payments this year
  *  attributed to it (capped at M, so an early or doubled gift never reads
- *  "13 of 12"); M = its due dates elapsed this year through `today`. */
+ *  "13 of 12"); M = its due dates elapsed this year through `today`. The
+ *  LOCAL estimate — [pledgeKeptThisYear] prefers the server's figures. */
 internal fun keptThisYear(pl: Pledge, payments: List<StatementPayment>, today: LocalDate): Pair<Int, Int> {
     val elapsed = dueDatesInYear(today.year, pl.dueDay ?: DEFAULT_DUE_DAY, partnerDate(pl.createdAt), through = today)
     val kept = payments.count { it.pledgeId == pl.pledgeId && it.pledgeId?.isNotBlank() == true }
     return minOf(kept, elapsed) to elapsed
+}
+
+/** The pledge card's (kept, due) for this year — SERVER FIRST: the current
+ *  year's statement `pledges[]` entry for this pledge, whose figures come
+ *  from the server's FIFO instalment ledger (payments fill due dates oldest
+ *  first; kept = on time or late; due_count counts only RESOLVED instalments,
+ *  so one due today and still unpaid is not yet counted). Only when that
+ *  statement or that entry is absent — an older server, a statement not yet
+ *  loaded — does the local [keptThisYear] stand in. `currentYearStatement`
+ *  must be THIS year's GET /giving/statements answer. */
+internal fun pledgeKeptThisYear(pl: Pledge, currentYearStatement: GivingStatement?, today: LocalDate): Pair<Int, Int> {
+    currentYearStatement?.pledges?.firstOrNull { it.pledgeId == pl.pledgeId }?.let { e ->
+        val due = maxOf(e.dueCount, 0)
+        return e.kept.coerceIn(0, due) to due
+    }
+    return keptThisYear(pl, currentYearStatement?.payments.orEmpty(), today)
+}
+
+/** "3 of 4 kept this year" — or null, saying nothing, while nothing has
+ *  come due (M = 0), whichever source answered. */
+internal fun pledgeKeptLine(pl: Pledge, currentYearStatement: GivingStatement?, today: LocalDate): String? {
+    val (kept, due) = pledgeKeptThisYear(pl, currentYearStatement, today)
+    return if (due <= 0) null else "$kept of $due kept this year"
 }
 
 /** DUE rows: "today" · "tomorrow" · "in N days" (up to two weeks) · else the
@@ -92,3 +118,40 @@ internal fun dueRelativeLabel(dueOn: LocalDate, today: LocalDate, dateLabel: (Lo
         else -> dateLabel(dueOn)
     }
 }
+
+/** What a DUE row shows once the server's `pending_minor` is known — the
+ *  part of this instalment already on its way (payments started in the last
+ *  15 minutes, still processing). */
+internal data class DueRowView(
+    /** What the row leads with: the instalment itself, or — when part of it
+     *  is already on its way — the uncovered remainder, which Pay presets. */
+    val leadMinor: Int,
+    /** In place of Pay while the whole amount is on its way: "Waiting for
+     *  M-Pesa" · "Waiting for Airtel Money" · "Processing". */
+    val processingChip: String? = null,
+    /** Under a partly covered row: "KSh 500 processing". */
+    val processingNote: String? = null,
+)
+
+/** The DUE row's presentation rule. For a pledge's Pay row: pending ≥ the
+ *  amount → an amber Processing chip instead of Pay (a second tap would pay
+ *  the instalment twice); 0 < pending < amount → Pay stays, for the
+ *  uncovered remainder, with the part in flight said underneath; nothing
+ *  pending → as before. A schedule row and a Resume row are never changed.
+ *  `pendingMethod` names the chip when known ([pendingMethodFor]). */
+internal fun dueRowView(d: DueItem, pendingMethod: String?): DueRowView {
+    val pending = if (d.kind == "pledge" && d.action == "pay") maxOf(d.pendingMinor, 0) else 0
+    return when {
+        pending == 0 -> DueRowView(d.amountMinor)
+        pending >= d.amountMinor -> DueRowView(d.amountMinor, processingChip = pendingChipText(pendingMethod))
+        else -> DueRowView(d.amountMinor - pending, processingNote = "${ksh(pending)} processing")
+    }
+}
+
+/** How this pledge's newest payment in flight is being paid (mpesa |
+ *  airtel | card | paypal), read off this year's statement `pending` rows;
+ *  null when the statement is not loaded or names none. */
+internal fun pendingMethodFor(pledgeId: String, currentYearStatement: GivingStatement?): String? =
+    currentYearStatement?.let { pendingPaymentRows(it) }
+        ?.firstOrNull { it.pledgeId == pledgeId }
+        ?.method?.takeIf { it.isNotBlank() }

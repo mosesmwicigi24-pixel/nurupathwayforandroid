@@ -22,8 +22,11 @@ package org.nuruplace.member.feature.give
 //              "KSh 6,000 paid · 3 of 4 kept" or "KSh 20,000 paid", and
 //              "Church raised N%" on a need; "Remaining this year" in the header
 //   SINCE YOU BEGAN  navy card, the church-wide season; hidden without `season`
-//   PAYMENTS   pledge-tied only, one card per month with its subtotal; a row
-//              is day · pledge · method + receipt code · amount, tap → receipt
+//   PAYMENTS   pledge-tied only. First, when the server sends `pending`, one
+//              PROCESSING card — day · pledge · amber "Waiting for M-Pesa" ·
+//              amount — counted in NO total; then one card per month with its
+//              subtotal; a row is day · pledge · method + receipt code ·
+//              amount, tap → receipt
 //   TOTAL      the year's foot
 //   Download PDF (navy — the money-document action) · Giving statement
 //   (outlined) — the general statement is one tap away, never mixed in here.
@@ -33,6 +36,13 @@ package org.nuruplace.member.feature.give
 // GET /giving/partnership; the PDF is GET /giving/partners/statement.pdf
 // fetched through the authed client and handed out by the manifest
 // FileProvider, exactly as the receipt's share does.
+//
+// Freshness (GivingEvents.kt): the standing and the year's statement refetch
+// on every entry and every resume, keeping the page on screen while they do,
+// and the ViewModel reloads on GivingEvents. While a PROCESSING row is on
+// screen the page also polls — every 10 s for at most two minutes, stopping
+// when none is left, when it leaves or on ON_PAUSE — so an M-Pesa payment
+// settles in front of the member (GivingEvents.pollWhilePending).
 
 import android.content.Context
 import androidx.compose.foundation.background
@@ -70,7 +80,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,8 +106,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.GivingStatement
@@ -107,8 +121,10 @@ import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.StatementFaithfulness
 import org.nuruplace.member.data.net.StatementImpact
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.theme.Nuru
 import java.time.LocalDate
 import java.time.Month
 import java.time.format.TextStyle
@@ -141,18 +157,51 @@ class PartnersStatementViewModel : ViewModel() {
     /** A failed PDF fetch, said once under the button; cleared on the next try. */
     var pdfError by mutableStateOf<String?>(null); private set
 
-    fun load(initialYear: Int? = null) {
-        initialYear?.let { year = it }
-        val y = year
+    private val freshness = GivingFreshness()
+    /** The route's year is applied once — a resume after the member tapped
+     *  another chip must not snap back to it. */
+    private var started = false
+    // Latest request wins (entry, resume and event fetches can overlap).
+    private var partnershipSeq = 0
+    private val yearSeq = mutableMapOf<Int, Int>()
+
+    init {
+        viewModelScope.launch {
+            GivingEvents.changed.debouncedGivingReloads().collect {
+                if (started && freshness.shouldRefetchAfterEvent()) load()
+            }
+        }
+    }
+
+    /** First showing: land on the route's year, then fetch. */
+    fun start(initialYear: Int?) {
+        if (!started) {
+            started = true
+            initialYear?.let { year = it }
+        }
+        refresh()
+    }
+
+    /** Entry / resume (stale-while-revalidate): the standing and the shown
+     *  year, unless a fetch has just started. A no-op before [start] — the
+     *  resume that lands first must not fetch the wrong year. */
+    fun refresh() {
+        if (started && freshness.shouldRefetchOnEntry()) load()
+    }
+
+    fun load() {
+        freshness.fetchStarted()
+        val seq = ++partnershipSeq
         viewModelScope.launch {
             begin()
             val p = runCatching { Net.client.api.partnership() }
-            p.getOrNull()?.let { partnership = it }
-            val s = runCatching { Net.client.api.statements(y) }
-            s.getOrNull()?.let { statements = statements + (y to it) }
-            (s.exceptionOrNull() ?: p.exceptionOrNull())?.let { error = ApiException.message(it) }
+            if (seq == partnershipSeq) {
+                p.getOrNull()?.let { partnership = it }
+                p.exceptionOrNull()?.let { error = ApiException.message(it) }
+            }
             end()
         }
+        loadYear(year)
     }
 
     fun select(y: Int) {
@@ -160,12 +209,26 @@ class PartnersStatementViewModel : ViewModel() {
         if (statements[y] == null) loadYear(y)
     }
 
+    /** The shown year's statement has PROCESSING rows. */
+    fun showsPendingRows(): Boolean = statements[year]?.let { pendingPaymentRows(it).isNotEmpty() } == true
+
+    /** One POLL tick: skipped while a fetch is still in flight (a slow
+     *  network never stacks requests) or has just started; otherwise the
+     *  same guarded load() as every other trigger. */
+    fun pollPending() {
+        if (!loading) refresh()
+    }
+
     fun loadYear(y: Int) {
+        val seq = (yearSeq[y] ?: 0) + 1
+        yearSeq[y] = seq
         viewModelScope.launch {
             begin()
-            runCatching { Net.client.api.statements(y) }
-                .onSuccess { statements = statements + (y to it) }
-                .onFailure { error = ApiException.message(it) }
+            val r = runCatching { Net.client.api.statements(y) }
+            if (yearSeq[y] == seq) {
+                r.onSuccess { statements = statements + (y to it) }
+                    .onFailure { error = ApiException.message(it) }
+            }
             end()
         }
     }
@@ -205,16 +268,30 @@ fun PartnersStatementScreen(
     /** The signed-in member's name (MainShell's `me`) for "Thank you, <first
      *  name>."; the line is left out when it is null or blank. */
     memberName: String? = null,
-    vm: PartnersStatementViewModel = remember { PartnersStatementViewModel() },
+    // Scoped to this destination: it survives a receipt and back (the page
+    // stays while it refetches), and its GivingEvents collector dies with it.
+    vm: PartnersStatementViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    LaunchedEffect(Unit) { if (vm.partnership == null && vm.statements.isEmpty()) vm.load(initialYear) }
+    // Stale-while-revalidate on every entry and every return to the
+    // foreground; refresh() fetches once when the two land together.
+    LaunchedEffect(Unit) { vm.start(initialYear) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
     val p = vm.partnership
     val today = LocalDate.now()
     val years = partnerStatementYears(today.year, partnerDate(p?.membership?.joinedAt ?: p?.since)?.year)
     val year = vm.year
     val s = vm.statements[year]
+    // PROCESSING rows resolve by themselves: poll while the page is in front
+    // and shows one. Keyed so ON_PAUSE (RESUMED → STARTED), a row appearing
+    // or the last one settling restarts or ends it; leaving cancels it.
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val visible = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    val hasPending = s != null && pendingPaymentRows(s).isNotEmpty()
+    LaunchedEffect(visible, hasPending) {
+        pollWhilePending(visible, hasPending = { vm.showsPendingRows() }, poll = { vm.pollPending() })
+    }
 
     Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(rememberScrollState())) {
         PartnersHero(
@@ -253,7 +330,7 @@ fun PartnersStatementScreen(
                     }
                     CommitmentsCard(partnerStatementPledges(year, s, pledges, today))
                     seasonLine(s.season)?.let { SeasonCard(it) }
-                    PaymentsSection(year, paymentsByMonth(s.payments), onOpenReceipt)
+                    PaymentsSection(year, pendingPaymentRows(s), paymentsByMonth(s.payments), onOpenReceipt)
                 }
             }
             if (vm.error != null && s != null) {
@@ -539,11 +616,20 @@ private fun PledgeRow(e: StatementPledge) {
 }
 
 @Composable
-private fun PaymentsSection(year: Int, months: List<StatementMonth>, onOpenReceipt: (String) -> Unit) {
+private fun PaymentsSection(
+    year: Int,
+    pending: List<StatementPendingPayment>,
+    months: List<StatementMonth>,
+    onOpenReceipt: (String) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Eyebrow("PAYMENTS")
+        // Started, not settled — shown first, counted nowhere.
+        if (pending.isNotEmpty()) PendingCard(pending, onOpenReceipt)
         if (months.isEmpty()) {
-            Box(Modifier.partnerCard()) { Text("No pledge payments in $year.", style = giInter(13), color = GIVE.sub) }
+            if (pending.isEmpty()) {
+                Box(Modifier.partnerCard()) { Text("No pledge payments in $year.", style = giInter(13), color = GIVE.sub) }
+            }
         } else {
             months.forEach { m -> MonthCard(m, onOpenReceipt) }
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -598,6 +684,45 @@ private fun PaymentRow(pay: StatementPayment, onOpenReceipt: (String) -> Unit) {
             if (via.isNotBlank()) Text(via, style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
         }
         Text(ksh(pay.amountMinor), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+    }
+}
+
+/** PROCESSING — pledge payments the server has not settled yet: "Not counted
+ *  yet" at the head, then day · pledge · amber chip · amount (muted: it is in
+ *  no total). Tap → the receipt, which says Processing too. */
+@Composable
+private fun PendingCard(rows: List<StatementPendingPayment>, onOpenReceipt: (String) -> Unit) {
+    Column(Modifier.partnerCard()) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("PROCESSING", style = giInter(11, FontWeight.Bold, 1.1f), color = GIVE.overline)
+            Spacer(Modifier.weight(1f))
+            Text("Not counted yet", style = giInter(12, FontWeight.SemiBold), color = GIVE.sub)
+        }
+        rows.forEachIndexed { i, pay ->
+            if (i > 0) Hairline()
+            PendingRow(pay, onOpenReceipt)
+        }
+    }
+}
+
+@Composable
+private fun PendingRow(pay: StatementPendingPayment, onOpenReceipt: (String) -> Unit) {
+    val day = partnerDate(pay.at)?.dayOfMonth?.toString() ?: "—"
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(day, style = giInter(13, FontWeight.SemiBold), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.width(24.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                pay.pledgeTitle?.takeIf { it.isNotBlank() } ?: "Pledge",
+                style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            StateChip(pendingChipText(pay.method), Nuru.warningBg, Nuru.answeredText)
+        }
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.tertiary)
     }
 }
 

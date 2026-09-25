@@ -20,6 +20,7 @@ import org.nuruplace.member.data.net.StatementFaithfulness
 import org.nuruplace.member.data.net.StatementImpact
 import org.nuruplace.member.data.net.StatementMonthStatus
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
 
@@ -331,5 +332,57 @@ class PartnersStatementLogicTest {
         assertEquals("3 plans finished across the church while you have partnered.", seasonLine(PartnerSeason(plansFinished = 3)))
         assertNull(seasonLine(PartnerSeason()))
         assertNull(seasonLine(null))
+    }
+
+    // ── Pending rows (freshness fix, owner 2026-09-26) ──
+
+    private fun pending(id: String, amount: Int = 100_000, method: String? = "mpesa", at: String? = "2026-09-26T19:04:00Z", pledgeId: String? = "p1") =
+        StatementPendingPayment(transactionId = id, amountMinor = amount, method = method, at = at, pledgeId = pledgeId, pledgeTitle = "General partnership")
+
+    @Test
+    fun `pending chip says what the payment is waiting for`() {
+        assertEquals("Waiting for M-Pesa", pendingChipText("mpesa"))
+        assertEquals("Waiting for M-Pesa", pendingChipText(" MPESA "))
+        assertEquals("Waiting for Airtel Money", pendingChipText("airtel"))
+        assertEquals("Processing", pendingChipText("card"))
+        assertEquals("Processing", pendingChipText("paypal"))
+        assertEquals("Processing", pendingChipText(null))
+        assertEquals("Processing", pendingChipText(""))
+    }
+
+    @Test
+    fun `pending rows are pledge-tied, newest first, and never repeat a row that has settled`() {
+        val s = GivingStatement(
+            year = 2026,
+            payments = listOf(payment(200_000, "p1", "2026-09-05T09:00:00Z", id = "settled")),
+            pending = listOf(
+                pending("older", at = "2026-09-20T08:00:00Z"),
+                pending("settled"),                         // settled between the reads — shown once, as settled
+                pending("gift", pledgeId = null),           // not a pledge payment — never on this statement
+                pending("newer", method = "airtel", at = "2026-09-26T19:04:00Z"),
+            ),
+        )
+        assertEquals(listOf("newer", "older"), pendingPaymentRows(s).map { it.transactionId })
+        assertTrue(pendingPaymentRows(GivingStatement(year = 2026)).isEmpty())
+    }
+
+    @Test
+    fun `pending never enters any total`() {
+        val settled = listOf(payment(200_000, "p1", "2026-09-05T09:00:00Z"))
+        val without = GivingStatement(year = 2026, payments = settled)
+        val with = without.copy(pending = listOf(pending("t9", amount = 100_000), pending("t10", amount = 50_000, method = "card")))
+        val pledges = listOf(monthly(id = "p1", amount = 200_000, dueDay = 5, createdAt = "2026-01-01T00:00:00Z"))
+
+        // The summary (local rule), the months, their subtotals and the foot are the settled money only.
+        assertEquals(partnerStatementSummary(2026, without, pledges), partnerStatementSummary(2026, with, pledges))
+        assertEquals(200_000, partnerStatementSummary(2026, with, pledges).paidMinor)
+        assertEquals(paymentsByMonth(without.payments), paymentsByMonth(with.payments))
+        assertEquals(200_000, statementYearTotal(paymentsByMonth(with.payments)))
+        assertEquals(
+            partnerStatementPledges(2026, without, pledges, today),
+            partnerStatementPledges(2026, with, pledges, today),
+        )
+        // …while the rows themselves are still there to be seen.
+        assertEquals(2, pendingPaymentRows(with).size)
     }
 }

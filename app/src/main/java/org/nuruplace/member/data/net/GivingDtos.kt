@@ -243,10 +243,14 @@ data class Pledge(
      *  (PartnerStatementMath.kt) — a March pledge was never owed January. */
     val createdAt: String? = null,
     /** The pledge's name as the server shows it: the custom name when set,
-     *  else the derived one (campaign → fund → need → "Partnership"). */
+     *  else the derived one (campaign → fund → need → "General partnership"). */
     val title: String? = null,
     /** The member's own name for it; null when `title` is derived. */
     val customTitle: String? = null,
+    /** The fund a payment toward this pledge lands in — the server routes
+     *  pledge money, whatever fund the client sends (wire `pays_to`). Null
+     *  from an older server; the Give screen then says "Routed by the church". */
+    val paysTo: FundRef? = null,
 ) {
     /** What the pledge is for, derived client-side from its target — the
      *  fallback when an older server sends no `title`. */
@@ -286,6 +290,15 @@ data class DueItem(
     val currency: String = "KES",
     val dueOn: String = "",
     val action: String = "pay",             // pay | resume
+    /** kind "pledge": the fund its payment lands in (wire `pays_to`, as on
+     *  the pledge itself). Null for a schedule and from an older server. */
+    val paysTo: FundRef? = null,
+    /** kind "pledge": Σ this pledge's payments still processing that were
+     *  started in the last 15 minutes (the STK / checkout window). 0 when
+     *  none, for a schedule, from an older server, or sent as null. The DUE
+     *  row shows Processing instead of Pay while it covers `amount_minor`
+     *  (PartnerStatementMath.dueRowView). */
+    val pendingMinor: Int = 0,
 )
 
 /** POST /giving/partners/join `{}` — joining needs no fund, no campaign and no
@@ -363,12 +376,13 @@ data class PledgeDetail(
     val createdAt: String? = null,
     val title: String? = null,
     val customTitle: String? = null,
+    val paysTo: FundRef? = null,
     val payments: List<PledgePayment> = emptyList(),
 ) {
     fun asPledge(): Pledge = pledge ?: Pledge(
         pledgeId, shape, amountMinor, targetMinor, currency, dueDay, dueOn, fund, campaign,
         needId, status, progress, scheduleId, remindersEnabled,
-        createdAt = createdAt, title = title, customTitle = customTitle,
+        createdAt = createdAt, title = title, customTitle = customTitle, paysTo = paysTo,
     )
 }
 
@@ -413,6 +427,27 @@ data class GivingStatement(
     val faithfulness: StatementFaithfulness? = null,
     /** The church-wide "since you began" season for the partnership. */
     val season: PartnerSeason? = null,
+    /** Pledge payments started but not yet settled (an M-Pesa PIN still
+     *  outstanding, a card still confirming). Shown as "Processing" rows at
+     *  the top of the partners statement's PAYMENTS and NEVER counted in any
+     *  total — `payments` and the server's figures are settled money only.
+     *  Null from an older server. */
+    val pending: List<StatementPendingPayment>? = null,
+)
+
+/** One unsettled pledge payment (`pending[]` on GET /giving/statements). */
+@Serializable
+data class StatementPendingPayment(
+    val transactionId: String = "",
+    val amountMinor: Int = 0,
+    val currency: String = "KES",
+    val at: String? = null,
+    val status: String = "pending",
+    /** mpesa | airtel | card | paypal — picks the chip's "Waiting for …". */
+    val method: String? = null,
+    val receiptCode: String? = null,
+    val pledgeId: String? = null,
+    val pledgeTitle: String? = null,
 )
 
 /** `impact` on GET /giving/statements: what the year's pledge money did.

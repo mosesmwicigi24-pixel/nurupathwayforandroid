@@ -188,15 +188,21 @@ fun giveStatus(status: String?): Triple<String, Color, Color> = when (status?.lo
 
 /** What a pledge's "Pay now" — or a department need's "Give to this need" —
  *  hands the Give screen (GiveTabScreen → GivingScreen): the fund and amount
- *  to preset, the pledge OR need the intent must carry, and a title for the
- *  "counts toward…" chip. A need gift is always one-time (schedules carry
- *  no need_id, spec §5). */
+ *  to preset, the pledge OR need the intent must carry, and what the PAYING
+ *  YOUR PLEDGE / GIVING TO A NEED card says (GiveTargetCopy.kt). A bound gift
+ *  is always one-time (schedules carry no need_id, spec §5). */
 data class GivePreset(
     val fundId: String? = null,
     val amountMinor: Int? = null,
     val pledgeId: String? = null,
     val needId: String? = null,
     val title: String? = null,
+    /** The fund the server routes this gift to (a pledge's / DUE row's
+     *  `pays_to`); null → the card says "Routed by the church". */
+    val paysTo: org.nuruplace.member.data.net.FundRef? = null,
+    /** The pledge's terms, "KSh 1,000 monthly · due on the 25th"
+     *  (GiveTargetCopy.pledgeTermsLine); null when unknown. */
+    val terms: String? = null,
 ) {
     /** The gift is bound to a target and should land on One-time. */
     val isTargeted: Boolean get() = pledgeId != null || needId != null

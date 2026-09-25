@@ -6,9 +6,21 @@
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.serialization.SerializationException
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Test
+import org.nuruplace.member.data.net.FundRef
+import retrofit2.HttpException
+import retrofit2.Response
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 
 class GiveSubmitLogicTest {
     private fun plan(freq: Int, provider: String?, coverFee: Boolean = false, amount: Int = 1000, pledgeId: String? = null) =
@@ -145,5 +157,127 @@ class GiveSubmitLogicTest {
         assertEquals(3_750_000, intent.body.amountMinor)
         // A plain preset (no pledge, no need) is not targeted.
         assertTrue(!GivePreset(fundId = "tithe").isTargeted)
+    }
+
+    // ── Double-pay guard (owner, 2026-09-26) ──
+
+    private val pledgePay = GivePreset(
+        amountMinor = 100_000, pledgeId = "p1", title = "General partnership",
+        paysTo = FundRef("discipleship", "Discipleship"), terms = "KSh 1,000 monthly · due on the 25th",
+    )
+    private val needGive = GivePreset(fundId = NEED_GIFT_FUND, amountMinor = 250_000, needId = "n1", title = "Sound desk")
+
+    @Test
+    fun `a bound gift that succeeded or is on its way spends its binding`() {
+        // New intents answer "processing"; an idempotent replay can answer any status.
+        listOf("processing", "pending", "succeeded", "settled", "completed", " PROCESSING ").forEach { status ->
+            assertTrue("pledge · $status", giftSpendsBinding(pledgePay, status))
+            assertTrue("need · $status", giftSpendsBinding(needGive, status))
+        }
+    }
+
+    @Test
+    fun `only a failed gift keeps the binding, so the member can retry`() {
+        listOf("failed", "FAILED", " cancelled ", "canceled").forEach { status ->
+            assertFalse("pledge · $status", giftSpendsBinding(pledgePay, status))
+            assertFalse("need · $status", giftSpendsBinding(needGive, status))
+        }
+    }
+
+    @Test
+    fun `an unknown or missing status spends the binding — a second payment is the worse mistake`() {
+        assertTrue(giftSpendsBinding(pledgePay, "requires_action"))
+        assertTrue(giftSpendsBinding(pledgePay, ""))
+        assertTrue(giftSpendsBinding(pledgePay, null))
+    }
+
+    @Test
+    fun `an unbound gift has no binding to spend`() {
+        assertFalse(giftSpendsBinding(null, "succeeded"))
+        assertFalse(giftSpendsBinding(GivePreset(fundId = "tithe", amountMinor = 100_000), "processing"))
+    }
+
+    @Test
+    fun `the form seeds from a bound preset on one-time, and resets to the ordinary form`() {
+        assertEquals(GiveFormSeed("tithe", 1_000, FREQ_ONCE), giveFormSeed(pledgePay)) // a General partnership pledge has no fund of its own
+        assertEquals(GiveFormSeed("discipleship", 1_000, FREQ_ONCE), giveFormSeed(pledgePay.copy(fundId = "discipleship")))
+        assertEquals(GiveFormSeed(NEED_GIFT_FUND, 2_500, FREQ_ONCE), giveFormSeed(needGive))
+        // What a spent binding resets to — and what an unbound screen starts on.
+        val ordinary = GiveFormSeed(DEFAULT_GIVE_FUND, DEFAULT_GIVE_AMOUNT_MAJOR, FREQ_MONTHLY)
+        assertEquals(ordinary, giveFormSeed(null))
+        assertEquals(GiveFormSeed("tithe", 1_000, FREQ_MONTHLY), ordinary)
+        // A plain preset (no pledge, no need) keeps the ordinary frequency.
+        assertEquals(GiveFormSeed("offering", 500, FREQ_MONTHLY), giveFormSeed(GivePreset(fundId = "offering", amountMinor = 50_000)))
+    }
+
+    // ── Idempotent retry: keep vs rotate the key (owner, 2026-09-26) ──
+
+    private val gift = GiveRequestShape(
+        amountMajor = 1_000, fundId = "tithe", methodId = "mpesa", pledgeId = "p1", needId = null,
+        freq = FREQ_ONCE, giftName = "", coverFee = false, phone = "+254700000000",
+    )
+    private var minted = 0
+    private val fresh = { "key-${++minted}" }
+    private fun http(code: Int) = HttpException(Response.error<Any>(code, "{}".toResponseBody("application/json".toMediaType())))
+
+    @Test
+    fun `the first tap mints a key for exactly that gift`() {
+        val a = giveKeyFor(null, gift, fresh)
+        assertEquals("key-1", a.key)
+        assertEquals(gift, a.shape)
+    }
+
+    @Test
+    fun `no server answer keeps the key, and the identical retry replays it`() {
+        val held = giveKeyFor(null, gift, fresh)
+        listOf(
+            SocketTimeoutException("timeout"), SocketTimeoutException("connect timed out"),
+            UnknownHostException("pathway.nuruplace.org"), ConnectException("refused"),
+            SSLException("reset"), IOException("unexpected end of stream"),
+        ).forEach { assertTrue("${it::class.simpleName} keeps the key", keepGiveKeyAfter(it)) }
+        // The retry sends the SAME key: the server answers with the transaction
+        // it may already have made — never a second STK push.
+        assertEquals("key-1", giveKeyFor(held, gift, fresh).key)
+        assertEquals(1, minted)
+    }
+
+    @Test
+    fun `any server answer releases the key — success, 4xx or 5xx — so a genuine failure never locks the member out`() {
+        assertFalse(keepGiveKeyAfter(null)) // success (the ceremony takes over)
+        listOf(400, 401, 402, 409, 422, 429, 500, 502, 503).forEach { assertFalse("HTTP $it", keepGiveKeyAfter(http(it))) }
+        assertFalse(keepGiveKeyAfter(SerializationException("bad body"))) // an answer came, just unreadable
+        assertFalse(keepGiveKeyAfter(IllegalStateException("anything else")))
+        // Released → nothing held → the next tap mints a new key.
+        assertEquals("key-1", giveKeyFor(null, gift, fresh).key)
+        assertEquals("key-2", giveKeyFor(null, gift, fresh).key)
+    }
+
+    @Test
+    fun `a changed gift never replays a held key`() {
+        val held = giveKeyFor(null, gift, fresh) // key-1, held after a lost reply
+        val changes = listOf(
+            "amount" to gift.copy(amountMajor = 2_000),
+            "fund" to gift.copy(fundId = "offering"),
+            "method" to gift.copy(methodId = "airtel"),
+            "binding (another pledge)" to gift.copy(pledgeId = "p2"),
+            "binding (dropped)" to gift.copy(pledgeId = null),
+            "binding (a need)" to gift.copy(pledgeId = null, needId = "n1"),
+            "frequency" to gift.copy(freq = FREQ_MONTHLY),
+            "gift name" to gift.copy(giftName = "Thanksgiving"),
+            "cover-fee" to gift.copy(coverFee = true),
+            "phone" to gift.copy(phone = "+254711111111"),
+        )
+        changes.forEach { (what, changed) ->
+            val next = giveKeyFor(held, changed, fresh)
+            assertTrue("$what → a fresh key", next.key != held.key)
+            assertEquals(changed, next.shape)
+        }
+    }
+
+    @Test
+    fun `a gift changed and changed back is the same request, and replays its key`() {
+        val held = giveKeyFor(null, gift, fresh)
+        // 1,000 → 2,000 → 1,000: the tap sends exactly the lost request again.
+        assertEquals(held.key, giveKeyFor(held, gift.copy(amountMajor = 2_000).copy(amountMajor = 1_000), fresh).key)
     }
 }

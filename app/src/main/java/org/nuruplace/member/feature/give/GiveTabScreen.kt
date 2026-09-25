@@ -17,7 +17,18 @@
 // hands a GivePreset to Give and switches the segment; "Make a pledge" opens
 // the full-screen NewPledgeFlow over the tab (system back closes it), and a
 // created pledge reloads Partners through the ViewModel hoisted here so it
-// survives the segment switch.
+// survives the segment switch. That ViewModel is scoped to this destination
+// (viewModel(), not remember) so it outlives a trip to the partners statement
+// and back — the standing stays on screen while it refetches — and so its
+// GivingEvents collector is cancelled with the destination, never leaked.
+//
+// The double-pay guard's upstream half lives here too: when a bound gift goes
+// through (or the member picks "Give to a fund instead") GivingScreen calls
+// onUnbind and the preset is forgotten at once — WITHOUT re-keying the giving
+// form, so the ceremony on screen stays — and a saveable flag keeps a
+// give-need destination from re-binding its need when it re-enters
+// composition (back from the statement, say). If the ceremony's watch then
+// finds the payment FAILED, onRebind hands the binding back for a retry.
 package org.nuruplace.member.feature.give
 
 import androidx.activity.compose.BackHandler
@@ -36,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Nuru
 
@@ -106,8 +119,15 @@ fun GiveTabScreen(
     var segment by rememberSaveable(initial) { mutableStateOf(initial) }
     // Hoisted so a pledge created in the flow, or a Pay handoff, reloads
     // Partners without the segment switch throwing the standing away.
-    val partnersVm = remember { PartnersViewModel() }
-    var payPreset by remember { mutableStateOf<GivePreset?>(initialPreset) }
+    val partnersVm: PartnersViewModel = viewModel()
+    // Set once the preset this destination opened with is spent or dropped;
+    // saveable, so re-entering composition never re-seeds from initialPreset.
+    var initialPresetCleared by rememberSaveable { mutableStateOf(false) }
+    var payPreset by remember { mutableStateOf(if (initialPresetCleared) null else initialPreset) }
+    // Bumped by each Pay handoff so the giving form re-seeds from it. NOT
+    // bumped when a binding is cleared — the form resets itself in place, so
+    // a ceremony on screen is never torn down.
+    var presetSeq by remember { mutableIntStateOf(0) }
     var newPledge by remember { mutableStateOf(false) }
 
     if (newPledge) {
@@ -137,21 +157,32 @@ fun GiveTabScreen(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (segment) {
-                // key(payPreset): a fresh Pay re-seeds the giving form's
+                // key(presetSeq): a fresh Pay re-seeds the giving form's
                 // remembered fund/amount/frequency instead of leaving stale ones.
-                GiveSegment.Give -> key(payPreset) {
+                GiveSegment.Give -> key(presetSeq) {
                     GivingScreen(
                         onBack = {},
                         onOpenStatement = { onNavigate("statement") },
                         onOpenSchedules = { onNavigate("schedules") },
                         preset = payPreset,
                         segmentControl = segmentControl,
+                        onUnbind = {
+                            payPreset = null
+                            initialPresetCleared = true
+                        },
+                        // The ceremony's watch found the payment failed: the
+                        // binding comes back so the member can retry.
+                        onRebind = { p ->
+                            payPreset = p
+                            if (p == initialPreset) initialPresetCleared = false
+                        },
                     )
                 }
                 GiveSegment.Partners -> PartnersScreen(
                     vm = partnersVm,
                     onPayNow = { preset ->
                         payPreset = preset
+                        presetSeq++
                         segment = GiveSegment.Give
                     },
                     onOpenReceipt = { onNavigate("receipt/$it") },

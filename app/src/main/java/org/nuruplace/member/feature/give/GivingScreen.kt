@@ -6,8 +6,19 @@
 // intent-vs-schedule decision is GiveSubmitLogic.kt, pinned by a unit test);
 // the active-schedules rail lets you review + cancel one in a bottom sheet.
 // A pledge's "Pay now" (Partners) opens this screen with a GivePreset — fund,
-// amount and the pledge_id the intent must carry. All shared tokens/tables
-// live in GiveShared.kt (same package — no import).
+// amount and the pledge_id the intent must carry — in PLEDGE-PAY MODE: the fund
+// chooser and the frequency control step aside for one PAYING YOUR PLEDGE card
+// (GiveTargetCopy.kt), since the server, not the member, picks a pledge's fund.
+// A department need's preset wears the same shape (GIVING TO A NEED). A bound
+// gift that goes through SPENDS its binding (the double-pay guard,
+// GiveSubmitLogic.giftSpendsBinding): cleared upstream the moment the intent
+// answers, and the form back to the ordinary one when the ceremony closes.
+// Every gift that moves money raises GivingEvents so Partners and its
+// statement refetch (GivingEvents.kt). The ceremony watches the real
+// transaction until it is final (GiveCeremonyCopy.kt); a Pay tap replays the
+// previous idempotency key only after an attempt that got no server answer
+// (GiveSubmitLogic.giveKeyFor). All shared tokens/tables live in
+// GiveShared.kt (same package — no import).
 package org.nuruplace.member.feature.give
 
 import android.content.Intent
@@ -58,6 +69,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,9 +77,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
@@ -77,6 +92,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PayPalCaptureBody
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.CelebrationCenter
+import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.Moment
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -120,9 +136,21 @@ fun GivingScreen(
     /** The tab's GIVE · PARTNERS control (GiveTabScreen) — the first row of
      *  this screen's header band, so the member can switch even mid-load. */
     segmentControl: @Composable () -> Unit = {},
+    /** The binding is gone — spent by a gift that went through, or dropped
+     *  by "Give to a fund instead": forget the preset upstream so no path
+     *  back to this screen binds it again. */
+    onUnbind: () -> Unit = {},
+    /** A binding spent on the intent's answer comes back: the ceremony's
+     *  watch found the payment failed, so the member can retry at once. */
+    onRebind: (GivePreset) -> Unit = {},
 ) {
+    // The year pill + schedules rail refetch (in place — AsyncContent keeps
+    // the content) when a gift or schedule changes giving elsewhere, or here:
+    // the ceremony's own gift lands in "given this year" once it settles.
+    val freshness = remember { GivingFreshness() }
     AsyncContent(
         load = {
+            freshness.fetchStarted()
             val hist = runCatching { Net.client.api.givingHistory().data }.getOrDefault(emptyList())
             val sched = runCatching { Net.client.api.schedules().data }.getOrDefault(emptyList())
             val phone = runCatching { Net.client.api.me().profile.phoneNumber }.getOrNull().orEmpty()
@@ -130,26 +158,32 @@ fun GivingScreen(
         },
         loading = {
             Column(Modifier.fillMaxSize().background(GIVE.paper)) {
-                GiveHeaderBand(segmentControl, yearTotalMinor = null, preset = preset, onOpenStatement = onOpenStatement)
+                GiveHeaderBand(segmentControl, yearTotalMinor = null, onOpenStatement = onOpenStatement)
                 Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = GIVE.gold)
                 }
             }
         },
     ) { (history, schedules, phone), reload ->
-        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenSchedules, preset, segmentControl)
+        val reloadNow by rememberUpdatedState(reload)
+        LaunchedEffect(Unit) {
+            GivingEvents.changed.debouncedGivingReloads().collect {
+                if (freshness.shouldRefetchAfterEvent()) reloadNow()
+            }
+        }
+        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenSchedules, preset, segmentControl, onUnbind, onRebind)
     }
 }
 
 /** The ONE cream band over the Give segment: the segment control, the title,
- *  the subline, the "counts toward" chip when a preset is bound, then the year
- *  pill (→ statement) beside the eye that masks it. `yearTotalMinor == null`
- *  while history is still loading — the pill waits, the rest does not. */
+ *  the subline, then the year pill (→ statement) beside the eye that masks
+ *  it. `yearTotalMinor == null` while history is still loading — the pill
+ *  waits, the rest does not. A bound gift is said by the PAYING YOUR PLEDGE /
+ *  GIVING TO A NEED card in the body, not by a chip here. */
 @Composable
 private fun GiveHeaderBand(
     segmentControl: @Composable () -> Unit,
     yearTotalMinor: Int?,
-    preset: GivePreset?,
     onOpenStatement: () -> Unit,
 ) {
     val hidden = AppPrefs.hideGiveYearTotal
@@ -158,23 +192,6 @@ private fun GiveHeaderBand(
             segmentControl()
             Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 14.dp))
             Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
-            // Paying toward a pledge, or giving to a department need —
-            // say so, so the member knows this gift will be counted
-            // (spec §1 attribution rule a; §4 needs).
-            preset?.takeIf { it.isTargeted }?.let { p ->
-                Row(
-                    Modifier.padding(top = 10.dp).clip(Capsule).background(GIVE.goldChipBg)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
-                    Text(
-                        (if (p.needId != null) "Giving to a need" else "Counts toward your pledge") + (p.title?.let { " · $it" } ?: ""),
-                        style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText,
-                    )
-                }
-            }
             if (yearTotalMinor != null) {
                 Row(
                     Modifier.padding(top = 14.dp),
@@ -215,6 +232,38 @@ private fun GiveHeaderBand(
     }
 }
 
+/** PAYING YOUR PLEDGE / GIVING TO A NEED — where a bound gift goes, in place
+ *  of the fund chooser: the name, the pledge's terms, the fund the server
+ *  routes it to, and a quiet way out to an ordinary gift. */
+@Composable
+private fun GiveTargetCard(copy: GiveTargetCopy, onGiveToFund: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.priorityBg)
+            .border(1.dp, GIVE.gold.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+            .padding(16.dp),
+    ) {
+        Text(copy.kicker, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+        Text(
+            copy.title, style = giSerif(20, FontWeight.SemiBold, -0.4f), color = GIVE.navy,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
+        )
+        copy.terms?.let { Text(it, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp)) }
+        Row(
+            Modifier.padding(top = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(13.dp))
+            Text(copy.destination, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText)
+        }
+        Text(
+            "Give to a fund instead", style = giInter(12, FontWeight.Medium), color = GIVE.ink600,
+            modifier = Modifier.padding(top = 8.dp).clip(Capsule).clickable { onGiveToFund() }
+                .padding(vertical = 4.dp),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GiveTab(
@@ -226,11 +275,20 @@ private fun GiveTab(
     onOpenSchedules: () -> Unit = {},
     preset: GivePreset? = null,
     segmentControl: @Composable () -> Unit = {},
+    onUnbind: () -> Unit = {},
+    onRebind: (GivePreset) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    val seed = remember { giveFormSeed(preset) }
 
-    var fundId by remember { mutableStateOf(preset?.fundId?.takeIf { it.isNotBlank() } ?: "tithe") }
-    var amountMajor by remember { mutableIntStateOf(preset?.amountMinor?.takeIf { it > 0 }?.let { it / 100 } ?: 1000) }
+    // What this gift is bound to — a pledge's Pay or a need's Give — and so
+    // what the PAYING YOUR PLEDGE card says. "Give to a fund instead" clears
+    // it (the iOS "Remove"): the amount stays, the chooser and the frequency
+    // control come back, and the gift is an ordinary one.
+    var target by remember { mutableStateOf(preset?.takeIf { it.isTargeted }) }
+    var fundId by remember { mutableStateOf(seed.fundId) }
+    var amountMajor by remember { mutableIntStateOf(seed.amountMajor) }
     var customOpen by remember { mutableStateOf(false) }
     // "Named giving" (custom sheet, optional): set from the custom-amount
     // dialog. Rides the M-Pesa AccountReference + persists for
@@ -252,7 +310,7 @@ private fun GiveTab(
     // 0 once / 1 weekly / 2 monthly (FREQ_* in GiveSubmitLogic.kt). A pledge's
     // "Pay now" (or a need's "Give to this need") is a one-time payment toward
     // it, so it lands on One-time.
-    var freq by remember { mutableIntStateOf(if (preset?.isTargeted == true) FREQ_ONCE else FREQ_MONTHLY) }
+    var freq by remember { mutableIntStateOf(seed.freq) }
     val methods = remember { mutableStateListOf(*GIVE_METHODS.toTypedArray()) }
     var selectedMethod by remember { mutableStateOf("mpesa") }
     var coverFee by remember { mutableStateOf(false) }
@@ -264,6 +322,30 @@ private fun GiveTab(
     var resultAmountMinor by remember { mutableIntStateOf(0) }
     var scheduled by remember { mutableStateOf<GivingSchedule?>(null) }
     var sheetSchedule by remember { mutableStateOf<GivingSchedule?>(null) }
+    // The ceremony on screen is for a bound gift that went through: its
+    // binding is already cleared upstream, and closing it resets the form.
+    var ceremonySpentBinding by remember { mutableStateOf(false) }
+    // What the ceremony's gift was bound to, as sent — handed back if its
+    // watch finds the payment failed.
+    var ceremonyBoundTo by remember { mutableStateOf<GivePreset?>(null) }
+    // The idempotency key of the last attempt, held ONLY while that attempt
+    // got no server answer, so an identical retry replays it
+    // (GiveSubmitLogic.giveKeyFor / keepGiveKeyAfter).
+    var heldKey by remember { mutableStateOf<HeldGiveKey?>(null) }
+
+    /** Double-pay guard: back to the ordinary form — no pledge or need, the
+     *  fund chooser and frequency control, the default fund and amount, no
+     *  gift name or fee. The member's payment method stays. */
+    fun resetToOrdinaryGift() {
+        val ordinary = giveFormSeed(null)
+        target = null
+        fundId = ordinary.fundId
+        amountMajor = ordinary.amountMajor
+        freq = ordinary.freq
+        accountName = ""
+        coverFee = false
+        error = null
+    }
 
     // Full-screen generosity ceremony once an intent is created. The copy
     // reads the RESULT (GiveCeremonyCopy.kt): the server names the fund it
@@ -271,8 +353,38 @@ private fun GiveTab(
     // only the fallback for a result that carries neither.
     result?.let { r ->
         GiveResult(
-            r, amountMinor = resultAmountMinor, chipFundLabel = giveFund(fundId).name,
-            giftName = accountName.trim().ifBlank { null }, onDone = { result = null },
+            // A bound gift's fund is the server's to name (pays_to); the
+            // chooser's tile was never shown, so it is never the fallback.
+            r, amountMinor = resultAmountMinor,
+            chipFundLabel = if (target != null) target?.paysTo?.name?.takeIf { it.isNotBlank() } else giveFund(fundId).name,
+            giftName = accountName.trim().ifBlank { null },
+            onOutcome = { outcome ->
+                // The server's final word, read by the watch: everything that
+                // counts the gift refetches (the Processing row goes).
+                GivingEvents.emit()
+                // It didn't go through after all (the STK was cancelled or
+                // timed out): a binding spent on the intent's answer comes
+                // back — unless the member let it go meanwhile — so they can
+                // retry at once, as the double-pay guard promises.
+                if (outcome == GiftOutcome.Failed && ceremonySpentBinding) {
+                    ceremonySpentBinding = false
+                    val back = ceremonyBoundTo
+                    if (back != null && target == back) onRebind(back)
+                }
+            },
+            // Done: the PIN has been entered by now, so the gift has most
+            // likely settled — one more refetch for everything that counts it.
+            // A bound gift that went through leaves an ordinary form behind,
+            // so the same instalment cannot be paid twice. (Leaving by the
+            // segment control or navigation lands on a fresh, unbound form:
+            // the binding was cleared upstream when the intent answered.)
+            // The ceremony resolved: the next Pay tap mints a fresh key.
+            onDone = {
+                result = null
+                heldKey = null
+                if (ceremonySpentBinding) { ceremonySpentBinding = false; resetToOrdinaryGift() }
+                GivingEvents.emit()
+            },
         )
         return
     }
@@ -290,30 +402,71 @@ private fun GiveTab(
     val activeSchedules = schedules.filter { it.status == "active" }
 
     fun submit() {
+        // One request at a time: a second tap inside the same frame (before
+        // the disabled button recomposes) must not start a second payment.
+        if (busy) return
         val method = methods.firstOrNull { it.id == selectedMethod } ?: return
         // One-time → intent; Weekly/Monthly → schedule (mobile money only);
         // cover-fee inside amount_minor; pledge_id carried. GiveSubmitLogic.kt.
+        // A bound gift is one-time whatever the (hidden) control last held.
+        val sendFreq = if (target != null) FREQ_ONCE else freq
+        // The key: replayed only when the last attempt at this EXACT gift got
+        // no server answer; otherwise fresh.
+        val attempt = giveKeyFor(
+            heldKey,
+            GiveRequestShape(
+                amountMajor = amountMajor, fundId = fundId, methodId = method.id,
+                pledgeId = target?.pledgeId, needId = target?.needId, freq = sendFreq,
+                giftName = accountName, coverFee = coverFee, phone = phone,
+            ),
+        ) { UUID.randomUUID().toString() }
         val plan = planGiveSubmission(
-            freq = freq, provider = method.provider, fundId = fundId, amountMajor = amountMajor,
+            freq = sendFreq, provider = method.provider, fundId = fundId, amountMajor = amountMajor,
             coverFee = coverFee, phone = phone, accountName = accountName,
-            idempotencyKey = UUID.randomUUID().toString(), pledgeId = preset?.pledgeId,
-            needId = preset?.needId,
+            idempotencyKey = attempt.key, pledgeId = target?.pledgeId,
+            needId = target?.needId,
         )
         if (plan is GiveSubmission.Blocked) { error = plan.message; return }
+        // What this request is bound to, as sent — not whatever the form
+        // holds when the answer lands.
+        val boundTo = target
+        heldKey = attempt
         busy = true; error = null
         scope.launch {
+            var failure: Throwable? = null
             try {
                 when (plan) {
                     is GiveSubmission.Intent -> {
                         resultAmountMinor = plan.body.amountMinor
-                        result = Net.client.api.giving(plan.body)
+                        // A replay (`reused: true`) is read exactly like a
+                        // fresh answer — the ceremony watches either.
+                        val r = Net.client.api.giving(plan.body)
+                        ceremonyBoundTo = boundTo
+                        // Spent at once upstream (before the ceremony shows),
+                        // so every way off this screen forgets the binding.
+                        if (giftSpendsBinding(boundTo, r.status)) {
+                            ceremonySpentBinding = true
+                            onUnbind()
+                        }
+                        result = r
+                        // Succeeded, or pending on a PIN / card / PayPal:
+                        // Partners, its statement and the year pill refetch.
+                        if (givingIntentAnnounces(r.status)) GivingEvents.emit()
                     }
-                    is GiveSubmission.Schedule -> scheduled = Net.client.api.createSchedule(plan.body)
+                    is GiveSubmission.Schedule -> {
+                        scheduled = Net.client.api.createSchedule(plan.body)
+                        // A schedule is the partnership's rhythm — the standing changes.
+                        GivingEvents.emit()
+                    }
                     is GiveSubmission.Blocked -> error = plan.message
                 }
             } catch (e: Exception) {
+                failure = e
                 error = ApiException.message(e)
             } finally {
+                // No server answer (transport failure / timeout): hold the key
+                // so an identical retry replays it. Any answer releases it.
+                if (!keepGiveKeyAfter(failure)) heldKey = null
                 busy = false
             }
         }
@@ -322,41 +475,42 @@ private fun GiveTab(
     Box(Modifier.fillMaxSize().background(GIVE.paper)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             // ── Header — the one cream band (segment control · title · year pill) ──
-            GiveHeaderBand(segmentControl, yearTotalMinor = yearTotalMinor, preset = preset, onOpenStatement = onOpenStatement)
+            GiveHeaderBand(segmentControl, yearTotalMinor = yearTotalMinor, onOpenStatement = onOpenStatement)
 
             // ── Body ──
             Column(
                 Modifier.padding(horizontal = 20.dp, vertical = 16.dp).padding(bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Funds row
-                Text("CHOOSE A FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    GIVE_FUNDS.forEach { f ->
-                        val on = f.id == fundId
-                        Column(
-                            Modifier.width(124.dp).clip(RoundedCornerShape(16.dp))
-                                .background(if (on) GIVE.priorityBg else GIVE.white)
-                                .border(if (on) 2.dp else 1.dp, if (on) GIVE.gold else GIVE.border, RoundedCornerShape(16.dp))
-                                .clickable { fundId = f.id }
-                                .padding(12.dp),
-                        ) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(f.tint), contentAlignment = Alignment.Center) {
-                                Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(17.dp))
+                // Pledge-pay / need mode: ONE card says where the gift goes,
+                // in place of the chooser (the server picks a pledge's fund).
+                val targetCopy = giveTargetCopy(target, chargedAmountMajor(amountMajor, coverFee))
+                if (targetCopy != null) {
+                    GiveTargetCard(targetCopy) { Haptics.tick(view); target = null; onUnbind() }
+                } else {
+                    // Funds row
+                    Text("CHOOSE A FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        GIVE_FUNDS.forEach { f ->
+                            val on = f.id == fundId
+                            Column(
+                                Modifier.width(124.dp).clip(RoundedCornerShape(16.dp))
+                                    .background(if (on) GIVE.priorityBg else GIVE.white)
+                                    .border(if (on) 2.dp else 1.dp, if (on) GIVE.gold else GIVE.border, RoundedCornerShape(16.dp))
+                                    .clickable { fundId = f.id }
+                                    .padding(12.dp),
+                            ) {
+                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(f.tint), contentAlignment = Alignment.Center) {
+                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(17.dp))
+                                }
+                                Text(f.name, style = giInter(13, FontWeight.SemiBold, -0.13f), color = GIVE.navy, modifier = Modifier.padding(top = 8.dp))
+                                Text(f.tagline, style = giInter(10), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
                             }
-                            Text(f.name, style = giInter(13, FontWeight.SemiBold, -0.13f), color = GIVE.navy, modifier = Modifier.padding(top = 8.dp))
-                            Text(f.tagline, style = giInter(10), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
-                }
-                // A pledge gift lands in the pledge's fund whatever tile is
-                // chosen (the server decides, contract 2026-09-25) — say so,
-                // and keep the chooser so the screen never rearranges.
-                if (preset?.pledgeId != null) {
-                    Text("Routed to the pledge's fund by the church", style = giInter(11), color = GIVE.sub)
                 }
 
                 // Amount card
@@ -374,7 +528,11 @@ private fun GiveTab(
                         Text("KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
                         Text("%,d".format(amountMajor), style = giSerif(42, FontWeight.SemiBold, -1.2f), color = GIVE.navy)
                     }
-                    Text("${giveFund(fundId).name} · ${freqLabel(freq)}", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
+                    Text(
+                        targetCopy?.amountSubtitle ?: "${giveFund(fundId).name} · ${freqLabel(freq)}",
+                        style = giInter(11), color = GIVE.sub, textAlign = TextAlign.Center,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp),
+                    )
                     Row(
                         Modifier.padding(top = 16.dp).horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -412,8 +570,8 @@ private fun GiveTab(
                     }
                 }
 
-                // Frequency segmented
-                Row(
+                // Frequency segmented — a bound gift is one-time, so no control.
+                if (targetCopy == null) Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(GIVE.track).padding(4.dp),
                 ) {
                     listOf("One-time", "Weekly", "Monthly").forEachIndexed { i, label ->
@@ -430,7 +588,7 @@ private fun GiveTab(
                 }
 
                 // Recurring summary
-                if (freq != 0) {
+                if (freq != 0 && targetCopy == null) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.priorityBg)
                             .border(1.dp, GIVE.gold.copy(alpha = 0.25f), RoundedCornerShape(18.dp)).padding(12.dp),
@@ -616,10 +774,21 @@ private fun GiveTab(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
+                val boundCta = giveTargetCopy(target, chargedAmountMajor(amountMajor, coverFee))?.cta
                 if (busy) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.navy, strokeWidth = 2.dp)
                     Spacer(Modifier.width(6.dp))
                     Text("Processing…", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                } else if (boundCta != null) {
+                    // "Pay KSh 1,000 toward General partnership" — a long name
+                    // ellipsizes; the arrow keeps its room.
+                    Text(
+                        boundCta, style = giInter(14, FontWeight.Bold), color = GIVE.navy,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).padding(start = 16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.padding(end = 16.dp).size(14.dp))
                 } else if (freq != FREQ_ONCE) {
                     Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
@@ -678,7 +847,11 @@ private fun GiveTab(
                             .border(1.dp, GIVE.cancelBorder, RoundedCornerShape(16.dp))
                             .clickable {
                                 scope.launch {
-                                    try { Net.client.api.cancelSchedule(s.scheduleId); reload() } catch (_: Exception) {}
+                                    try {
+                                        Net.client.api.cancelSchedule(s.scheduleId)
+                                        GivingEvents.emit()
+                                        reload()
+                                    } catch (_: Exception) {}
                                 }
                                 sheetSchedule = null
                             },
@@ -762,13 +935,17 @@ private fun ScheduledResult(s: GivingSchedule, fundLabel: String, onDone: () -> 
 /** Full-screen generosity ceremony once an intent is created. Its words come
  *  from GiveCeremonyCopy.kt: "Enter your PIN to complete KSh 1,000 toward your
  *  Building pledge." / "… to Tithe." — the RESULT's pledge and fund, never the
- *  chip, which is only the fallback when the result carries no fund. */
+ *  chip, which is only the fallback when the result carries no fund — until
+ *  the watch reads the transaction's final status: "Gift confirmed" or "The
+ *  payment didn't complete". */
 @Composable
 private fun GiveResult(
     r: GivingIntentResult,
     amountMinor: Int,
     chipFundLabel: String? = null,
     giftName: String? = null,
+    /** The gift reached its final outcome while on screen. */
+    onOutcome: (GiftOutcome) -> Unit = {},
     onDone: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -776,41 +953,66 @@ private fun GiveResult(
     // /giving/paypal/capture with the order id (the intent's provider_ref) —
     // without the capture the gift never settles (money §5.6: online-only).
     val scope = rememberCoroutineScope()
-    var captured by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
     var captureError by remember { mutableStateOf<String?>(null) }
-    // Human moment — only once the server says the gift SUCCEEDED: an intent that
-    // comes back succeeded/settled, or a confirmed PayPal capture. Never on a
-    // pending intent — server truth only (§5.6).
-    LaunchedEffect(captured, r.status) {
-        if (captured || r.status.lowercase() in setOf("succeeded", "settled")) {
-            CelebrationCenter.fire(Moment("gift-${r.providerRef ?: r.transactionId}", "Thank you for sowing", "Every gift carries the gospel further."))
+    // The transaction's status: first the intent's answer — fresh or a replay
+    // of the same key, read the same way — then what the watch or a PayPal
+    // capture reports. Server truth only (§5.6).
+    var status by remember(r.transactionId) { mutableStateOf(r.status) }
+    var watchLapsed by remember(r.transactionId) { mutableStateOf(false) }
+    val outcome = giftOutcome(status)
+    // The watch (iOS parity): GET /giving/transactions/{id} every 3 s, at most
+    // 20 times, while the gift is processing. Ends with the ceremony.
+    LaunchedEffect(r.transactionId) {
+        if (r.transactionId.isBlank()) return@LaunchedEffect
+        var readings = 0
+        while (keepWatchingGift(giftOutcome(status), readings)) {
+            delay(CEREMONY_WATCH_INTERVAL_MS)
+            readings++
+            runCatching { Net.client.api.givingDetail(r.transactionId) }.getOrNull()?.let { status = it.status }
         }
+        if (giftOutcome(status) == GiftOutcome.Processing) watchLapsed = true
+    }
+    // A final outcome, once each: the human moment only on the server's
+    // success — never on a pending intent — and the caller is told.
+    val onOutcomeNow by rememberUpdatedState(onOutcome)
+    LaunchedEffect(outcome) {
+        if (outcome == GiftOutcome.Processing) return@LaunchedEffect
+        if (outcome == GiftOutcome.Succeeded) {
+            CelebrationCenter.fire(Moment("gift-${r.transactionId.ifBlank { r.providerRef.orEmpty() }}", "Thank you for sowing", "Every gift carries the gospel further."))
+        }
+        onOutcomeNow(outcome)
     }
     Box(Modifier.fillMaxSize().background(GIVE.paper), contentAlignment = Alignment.Center) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Success badge — gold@0.18 halo + gold core + navy check.
+            // Badge — gold@0.18 halo + gold core + navy check; a muted cross
+            // when the payment didn't complete.
+            val failed = outcome == GiftOutcome.Failed
             Box(
-                Modifier.size(96.dp).clip(CircleShape).background(GIVE.gold.copy(alpha = 0.18f)),
+                Modifier.size(96.dp).clip(CircleShape).background(if (failed) GIVE.mutedBg else GIVE.gold.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(80.dp).clip(CircleShape).background(GIVE.gold), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
+                Box(Modifier.size(80.dp).clip(CircleShape).background(if (failed) GIVE.ink300 else GIVE.gold), contentAlignment = Alignment.Center) {
+                    Icon(if (failed) Icons.Filled.Close else Icons.Filled.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
                 }
             }
             Spacer(Modifier.height(20.dp))
             Text(
-                "Thank you for your generosity",
+                giveCeremonyTitle(outcome),
                 style = giSerif(24, FontWeight.Medium, -0.48f),
                 color = GIVE.navy,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))
-            val sub = if (captured) "Gift confirmed — receipt on its way. 🎉" else giveCeremonyLine(r, amountMinor, chipFundLabel)
-            Text(sub, style = giInter(13), color = if (captured) GIVE.successText else GIVE.sub, textAlign = TextAlign.Center)
+            Text(
+                giveCeremonyStatusLine(r, amountMinor, chipFundLabel, outcome, watchLapsed),
+                style = giInter(13),
+                color = when (outcome) { GiftOutcome.Succeeded -> GIVE.successText; GiftOutcome.Failed -> GIVE.danger; else -> GIVE.sub },
+                textAlign = TextAlign.Center,
+            )
             // Where it went — the pledge by name and the fund the church
             // routed it to, else the fund — with the member's own gift name
             // ("named giving") when they gave one. Stays through success.
@@ -824,7 +1026,7 @@ private fun GiveResult(
                 )
             }
 
-            if (r.approveUrl != null && !captured) {
+            if (r.approveUrl != null && outcome == GiftOutcome.Processing) {
                 Spacer(Modifier.height(20.dp))
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.navy)
@@ -845,8 +1047,16 @@ private fun GiveResult(
                         .clickable(enabled = !capturing && !r.providerRef.isNullOrBlank()) {
                             capturing = true; captureError = null
                             scope.launch {
+                                // The capture's own answer is the status —
+                                // "succeeded" confirms; "processing" means
+                                // PayPal hasn't released it yet.
                                 runCatching { Net.client.api.capturePayPal(PayPalCaptureBody(r.providerRef!!)) }
-                                    .onSuccess { captured = true }
+                                    .onSuccess { res ->
+                                        if (res.status.isNotBlank()) status = res.status
+                                        if (giftOutcome(res.status) == GiftOutcome.Processing) {
+                                            captureError = "PayPal hasn't confirmed it yet — finish approving there, then try again."
+                                        }
+                                    }
                                     .onFailure { captureError = org.nuruplace.member.data.net.ApiException.message(it) }
                                 capturing = false
                             }

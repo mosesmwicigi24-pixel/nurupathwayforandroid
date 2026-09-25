@@ -13,6 +13,9 @@
 //             the giving statement), grouped by month newest first, each month
 //             subtotalled. A row whose date cannot be read keeps its money in
 //             a trailing "undated" group rather than vanishing.
+//   Pending   the server's `pending` rows (started, not settled) sit above
+//             them as PROCESSING with a "Waiting for M-Pesa" chip — and are
+//             counted in NO total: every figure here reads `payments` only.
 //   Years     the chips: this year back to the join year, at most four —
 //             the same list the Partners tab shows.
 //
@@ -32,6 +35,7 @@ import org.nuruplace.member.data.net.StatementFaithfulness
 import org.nuruplace.member.data.net.StatementImpact
 import org.nuruplace.member.data.net.StatementMonthStatus
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
 import java.time.Month
@@ -139,6 +143,24 @@ internal fun paymentsByMonth(payments: List<StatementPayment>): List<StatementMo
 
 /** What the payments list adds up to — the year's total at its foot. */
 internal fun statementYearTotal(months: List<StatementMonth>): Int = months.sumOf { it.subtotalMinor }
+
+/** The PROCESSING rows above PAYMENTS: the server's `pending` list,
+ *  pledge-tied only (as every row here), newest first, minus any row that
+ *  has meanwhile settled into `payments` (the two are read in one answer,
+ *  but a row is never shown twice). Never summed anywhere. */
+internal fun pendingPaymentRows(s: GivingStatement): List<StatementPendingPayment> {
+    val settled = s.payments.map { it.transactionId }.filter { it.isNotBlank() }.toSet()
+    return s.pending.orEmpty()
+        .filter { !it.pledgeId.isNullOrBlank() && (it.transactionId.isBlank() || it.transactionId !in settled) }
+        .sortedByDescending { it.at ?: "" }
+}
+
+/** The amber chip on a PROCESSING row: what the payment is waiting for. */
+internal fun pendingChipText(method: String?): String = when (method?.trim()?.lowercase(Locale.ROOT)) {
+    "mpesa" -> "Waiting for M-Pesa"
+    "airtel" -> "Waiting for Airtel Money"
+    else -> "Processing"
+}
 
 // ── Statement v2: the impact-led top (spec §3d) ──────────────────────────────
 
