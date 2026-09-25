@@ -113,6 +113,9 @@ fun GiveTabScreen(
     if (newPledge) {
         BackHandler { newPledge = false }
         NewPledgeFlow(
+            // The standing is already loaded (Make a pledge lives on it), so
+            // the picker's options ride along instead of a second fetch.
+            pledgeOptions = partnersVm.partnership?.pledgeOptions.orEmpty(),
             onClose = { newPledge = false },
             onCreated = {
                 newPledge = false
