@@ -722,7 +722,19 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.events.AnnouncementDetailScreen(announcementId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable("statement") {
-                GivingStatementScreen(onBack = { nav.popBackStack() }, onOpenReceipt = { nav.navigate("receipt/$it") })
+                GivingStatementScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenReceipt = { nav.navigate("receipt/$it") },
+                    // PARTNER PLEDGES' "Partners statement →" (spec §3d). A
+                    // partners statement already below (its foot opened this
+                    // one) is replaced, never stacked twice.
+                    onOpenPartnersStatement = { y ->
+                        nav.navigate(org.nuruplace.member.feature.give.partnersStatementRoute(y)) {
+                            popUpTo(PARTNERS_STATEMENT_ROUTE) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                )
             }
             // The PARTNERS statement (owner 2026-09-25: "have the statement
             // separate for partners") — Pledged / Paid / Remaining, the
@@ -737,6 +749,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onBack = { nav.popBackStack() },
                     onOpenReceipt = { nav.navigate("receipt/$it") },
                     onOpenGivingStatement = { nav.navigate("statement") },
+                    memberName = me?.profile?.fullName,
                 )
             }
             // Partners — the Give tab opened on its Partners segment (the

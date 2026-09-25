@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Verified
@@ -96,8 +98,9 @@ internal fun parseNairobi(iso: String?): ZonedDateTime? {
 private val DAY_FMT = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
 private val TIME_FMT = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 
-private fun dayHeader(iso: String?): String =
-    parseNairobi(iso)?.format(DAY_FMT)?.uppercase(Locale.ENGLISH) ?: "—"
+/** "FRI, 25 SEP 2026" for a Nairobi calendar day; "—" for an unreadable one. */
+private fun dayHeader(date: LocalDate?): String =
+    date?.format(DAY_FMT)?.uppercase(Locale.ENGLISH) ?: "—"
 
 private fun timeLabel(iso: String?): String =
     parseNairobi(iso)?.format(TIME_FMT) ?: ""
@@ -123,16 +126,31 @@ private fun HairlineDivider() {
 }
 
 // ── GivingStatementScreen — iOS GivingStatementView ───────────────────────────
+// Statement v2 (docs/PARTNERS_PROGRAMME.md §3d): complete but separate. The
+// hero, BY FUND and the day list are GIFTS (rows without a pledge_id); pledge
+// money sits in one collapsed PARTNER PLEDGES group after the day list, with
+// its total and a link to the Partners statement. Gifts + Partner pledges =
+// Total, and the hero says so whenever there is pledge money
+// (GivingStatementLogic.kt, pinned by GivingStatementLogicTest).
 @Composable
-fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
+fun GivingStatementScreen(
+    onBack: () -> Unit,
+    onOpenReceipt: (String) -> Unit,
+    /** The Partners statement for a year — the PARTNER PLEDGES group's link. */
+    onOpenPartnersStatement: (Int) -> Unit = {},
+) {
     AsyncContent(load = { Net.client.api.givingHistory().data }) { records: List<GivingRecord>, _ ->
         var period by remember { mutableIntStateOf(0) } // 0 = This year, 1 = Last year
+        var pledgesOpen by remember { mutableStateOf(false) }
 
         val currentYear = LocalDate.now(NAIROBI).year
         val settled = records.filter { it.status == "succeeded" || it.status == "settled" }
         val targetYear = if (period == 0) currentYear else currentYear - 1
         val periodRecords = settled.filter { recordYear(it) == targetYear }
-        val total = periodRecords.sumOf { it.amountMinor }
+        val split = givingSplit(periodRecords)
+        val hero = givingHero(split)
+        val group = pledgeGroup(split)
+        val periodLabel = if (period == 0) "this year" else "in ${currentYear - 1}"
 
         Column(
             Modifier
@@ -211,20 +229,30 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                             )
                         }
                     }
+                    // "Total given" with no pledge money; else "Gifts" over
+                    // the gifts, and one muted line that foots to the Total.
                     Text(
-                        "Total given",
+                        hero.label,
                         style = giInter(11),
                         color = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.padding(top = 16.dp),
                     )
                     Text(
-                        ksh(total),
+                        ksh(hero.amountMinor),
                         style = giSerif(34, FontWeight.SemiBold, -1f),
                         color = Color.White,
                         modifier = Modifier.padding(top = 2.dp),
                     )
+                    hero.pledgeLine?.let {
+                        Text(
+                            it,
+                            style = giInter(12, FontWeight.Medium),
+                            color = Color.White.copy(alpha = 0.72f),
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                     Text(
-                        "${periodRecords.size} gifts · ${if (period == 0) "this year" else "in ${currentYear - 1}"} · most recent first",
+                        "${split.gifts.size} gift${if (split.gifts.size == 1) "" else "s"} · $periodLabel · most recent first",
                         style = giInter(11),
                         color = Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.padding(top = 2.dp),
@@ -267,7 +295,7 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                     }
                 }
 
-                // BY FUND card
+                // BY FUND card — gifts only; pledge money is in PARTNER PLEDGES.
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -277,10 +305,10 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                         .padding(16.dp),
                 ) {
                     Text("BY FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                    val byFund = periodRecords.groupBy { it.fund }
+                    val byFund = split.gifts.groupBy { it.fund }
                     if (byFund.isEmpty()) {
                         Text(
-                            "No settled gifts ${if (period == 0) "this year" else "in ${currentYear - 1}"}.",
+                            "No settled gifts $periodLabel.",
                             style = giInter(13),
                             color = GIVE.sub,
                             modifier = Modifier.padding(top = 8.dp),
@@ -317,76 +345,34 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                             if (idx < entries.lastIndex) HairlineDivider()
                         }
                     }
-                    // TOTAL GIVEN
+                    // TOTAL GIVEN (no pledge money) · TOTAL GIFTS (gifts only)
                     Row(
                         Modifier.fillMaxWidth().padding(top = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("TOTAL GIVEN", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.navy)
+                        Text(hero.footLabel, style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.navy)
                         Spacer(Modifier.weight(1f))
-                        Text(ksh(total), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
+                        Text(ksh(split.giftsMinor), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
                     }
                 }
 
-                // History grouped by day
-                val grouped = periodRecords
-                    .sortedByDescending { it.createdAt }
-                    .groupBy { dayHeader(it.createdAt) }
-                grouped.forEach { (dayKey, recs) ->
+                // Gifts grouped by day
+                statementDays(split.gifts).forEach { day ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            dayKey,
-                            style = giInter(11, FontWeight.Bold, 1.1f),
-                            color = GIVE.overline,
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                        )
-                        recs.forEach { r ->
-                            val f = giveFund(r.fund)
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .background(GIVE.white)
-                                    .border(1.dp, GIVE.border, RoundedCornerShape(18.dp))
-                                    .clickable { onOpenReceipt(r.transactionId) }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Box(
-                                    Modifier.size(44.dp).clip(CircleShape).background(f.tint),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(18.dp))
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
-                                    // A gift that counted toward a pledge says which
-                                    // (wire pledge_title, contract 2026-09-25) — the
-                                    // partners statement holds the pledge view itself.
-                                    r.pledgeTitle?.takeIf { it.isNotBlank() }?.let { PledgeTag(it) }
-                                    Text(
-                                        "${timeLabel(r.createdAt)} · ${(r.method ?: "").replaceFirstChar { it.uppercase() }}",
-                                        style = giInter(11),
-                                        color = GIVE.tertiary,
-                                    )
-                                    // "Named giving" (custom sheet, optional): the
-                                    // member's own label for this gift, when set.
-                                    r.accountName?.takeIf { it.isNotBlank() }?.let {
-                                        Text("“$it”", style = giInter(11, FontWeight.SemiBold), color = GIVE.sub)
-                                    }
-                                        r.receiptCode?.takeIf { it.isNotBlank() }?.let {
-                                            Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow)
-                                        }
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(money(r.amountMinor, r.currency), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
-                                    Spacer(Modifier.height(4.dp))
-                                    StatusChip(r.status)
-                                }
-                            }
-                        }
+                        DayHeader(day.date)
+                        day.records.forEach { r -> StatementRecordRow(r, onOpenReceipt) }
                     }
+                }
+
+                // PARTNER PLEDGES — collapsed, after the gifts; only with pledge money.
+                group?.let { g ->
+                    PartnerPledgesGroup(
+                        g,
+                        open = pledgesOpen,
+                        onToggle = { pledgesOpen = !pledgesOpen },
+                        onOpenReceipt = onOpenReceipt,
+                        onOpenPartnersStatement = { onOpenPartnersStatement(targetYear) },
+                    )
                 }
 
                 // Empty state
@@ -397,7 +383,7 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            "No gifts ${if (period == 0) "this year" else "in ${currentYear - 1}"}.",
+                            "No gifts $periodLabel.",
                             style = giInter(13),
                             color = GIVE.sub,
                         )
@@ -408,6 +394,138 @@ fun GivingStatementScreen(onBack: () -> Unit, onOpenReceipt: (String) -> Unit) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayHeader(date: LocalDate?) {
+    Text(
+        dayHeader(date),
+        style = giInter(11, FontWeight.Bold, 1.1f),
+        color = GIVE.overline,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    )
+}
+
+/** One statement row — fund badge, fund name, pledge tag when pledge-tied,
+ *  time · method, the member's own label, the receipt code, amount + status.
+ *  Tap → receipt. The same row in the day list and in PARTNER PLEDGES. */
+@Composable
+private fun StatementRecordRow(r: GivingRecord, onOpenReceipt: (String) -> Unit) {
+    val f = giveFund(r.fund)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(GIVE.white)
+            .border(1.dp, GIVE.border, RoundedCornerShape(18.dp))
+            .clickable { onOpenReceipt(r.transactionId) }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(CircleShape).background(f.tint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
+            // A gift that counted toward a pledge says which (wire
+            // pledge_title, contract 2026-09-25); "Partner pledge" when an
+            // older row carries only the id.
+            if (isPledgeRecord(r)) PledgeTag(pledgeTagTitle(r))
+            Text(
+                "${timeLabel(r.createdAt)} · ${(r.method ?: "").replaceFirstChar { it.uppercase() }}",
+                style = giInter(11),
+                color = GIVE.tertiary,
+            )
+            // "Named giving" (custom sheet, optional): the
+            // member's own label for this gift, when set.
+            r.accountName?.takeIf { it.isNotBlank() }?.let {
+                Text("“$it”", style = giInter(11, FontWeight.SemiBold), color = GIVE.sub)
+            }
+            r.receiptCode?.takeIf { it.isNotBlank() }?.let {
+                Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(money(r.amountMinor, r.currency), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+            Spacer(Modifier.height(4.dp))
+            StatusChip(r.status)
+        }
+    }
+}
+
+/** The collapsed PARTNER PLEDGES group (spec §3d): "KSh Y · N payments" and a
+ *  chevron; open, the pledge-tied rows by day in the same row style, then a
+ *  link to the Partners statement for the same year. A light-gold panel so
+ *  it reads as one group apart from the gifts above. */
+@Composable
+private fun PartnerPledgesGroup(
+    g: PledgeGroup,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onOpenReceipt: (String) -> Unit,
+    onOpenPartnersStatement: () -> Unit,
+) {
+    val view = LocalView.current
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(GIVE.priorityBg)
+            .border(1.dp, GIVE.border, shape),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = if (open) "Hide partner pledges" else "Show partner pledges") {
+                    Haptics.tick(view)
+                    onToggle()
+                }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("PARTNER PLEDGES", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                Text(
+                    g.summary,
+                    style = giInter(14, FontWeight.SemiBold),
+                    color = GIVE.navy,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Icon(
+                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = GIVE.navy,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        if (open) {
+            Column(
+                Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                g.days.forEach { day ->
+                    DayHeader(day.date)
+                    day.records.forEach { r -> StatementRecordRow(r, onOpenReceipt) }
+                }
+                Text(
+                    "Partners statement →",
+                    style = giInter(13, FontWeight.SemiBold),
+                    color = GIVE.goldLo,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clip(Capsule)
+                        .clickable { Haptics.tap(view); onOpenPartnersStatement() }
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                )
             }
         }
     }

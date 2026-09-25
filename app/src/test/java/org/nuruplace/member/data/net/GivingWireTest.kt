@@ -295,4 +295,83 @@ class GivingWireTest {
         assertEquals(600, s.byPledge.single().totalMinor)
         assertEquals("2026-02-01T00:00:00Z", s.payments.single().occurredAt)
     }
+
+    // ── Statement v2 (spec §3d, contract 2026-09-25) ──
+
+    @Test
+    fun `statement decodes impact, months, faithfulness, season and the per-pledge v2 fields`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"years":[2026],"year":2026,"total_minor":2200000,"currency":"KES","by_pledge":[],"by_fund":[],"payments":[],
+                "pledged_minor":2400000,"paid_minor":2200000,"remaining_minor":200000,
+                "impact":{"paid_minor":2200000,"per_disciple_minor":2000000,"disciples_carried":1,"toward_next_minor":200000},
+                "months":[{"month":1,"status":"none","due_minor":0,"paid_minor":0},
+                          {"month":7,"status":"late","due_minor":200000,"paid_minor":200000},
+                          {"month":9,"status":"kept","due_minor":200000,"paid_minor":200000},
+                          {"month":10,"status":"upcoming","due_minor":200000,"paid_minor":0}],
+                "faithfulness":{"kept_on_time":7,"late":1,"missed":1,"due_count":9},
+                "season":{"from":"2026-01-05T00:00:00Z","levels_completed":4,"modules_completed":30,"plans_finished":12},
+                "pledges":[
+                  {"pledge_id":"p1","title":"School fees","shape":"monthly","amount_minor":200000,"pledged_minor":2400000,"paid_minor":1800000,
+                   "kept":8,"due_count":9,"remaining_year_minor":600000,"church_progress_percent":null},
+                  {"pledge_id":"p2","title":"Sound desk","shape":"total","target_minor":400000,"pledged_minor":400000,"paid_minor":400000,
+                   "remaining_year_minor":0,"church_progress_percent":42.5},
+                  {"pledge_id":"p3","title":"Chairs","shape":"total","target_minor":100000,"remaining_year_minor":100000,"church_progress_percent":60}
+                ]}""",
+        )
+        val impact = s.impact!!
+        assertEquals(2_200_000, impact.paidMinor)
+        assertEquals(2_000_000, impact.perDiscipleMinor)
+        assertEquals(1, impact.disciplesCarried)
+        assertEquals(200_000, impact.towardNextMinor)
+        val months = s.months!!
+        assertEquals(listOf(1, 7, 9, 10), months.map { it.month })
+        assertEquals(listOf("none", "late", "kept", "upcoming"), months.map { it.status })
+        assertEquals(200_000, months[1].dueMinor)
+        assertEquals(200_000, months[1].paidMinor)
+        val f = s.faithfulness!!
+        assertEquals(listOf(7, 1, 1, 9), listOf(f.keptOnTime, f.late, f.missed, f.dueCount))
+        val season = s.season!!
+        assertEquals("2026-01-05T00:00:00Z", season.from)
+        assertEquals(4, season.levelsCompleted)
+        assertEquals(30, season.modulesCompleted)
+        assertEquals(12, season.plansFinished)
+        val pledges = s.pledges!!
+        assertEquals(600_000, pledges[0].remainingYearMinor)
+        assertNull(pledges[0].churchProgressPercent)
+        assertEquals(0, pledges[1].remainingYearMinor)
+        assertEquals(42.5, pledges[1].churchProgressPercent!!, 0.0)
+        // An integer percent decodes too.
+        assertEquals(60.0, pledges[2].churchProgressPercent!!, 0.0)
+    }
+
+    @Test
+    fun `older statement payload leaves every v2 block null so the screen hides it`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"years":[2026],"year":2026,"total_minor":1000,"by_pledge":[],"by_fund":[],"payments":[],
+                "pledges":[{"pledge_id":"p1","title":"Tithe","shape":"monthly","pledged_minor":1,"paid_minor":1,"kept":1,"due_count":1}]}""",
+        )
+        assertNull(s.impact)
+        assertNull(s.months)
+        assertNull(s.faithfulness)
+        assertNull(s.season)
+        assertNull(s.pledges!!.single().remainingYearMinor)
+        assertNull(s.pledges!!.single().churchProgressPercent)
+        // Explicit nulls read the same as absent (coerceInputValues), including season: null.
+        val nulled = json.decodeFromString<GivingStatement>("""{"year":2026,"impact":null,"months":null,"faithfulness":null,"season":null}""")
+        assertNull(nulled.impact)
+        assertNull(nulled.months)
+        assertNull(nulled.faithfulness)
+        assertNull(nulled.season)
+    }
+
+    @Test
+    fun `partial v2 blocks fall back to their defaults`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"year":2026,"impact":{"paid_minor":600000},"months":[{"month":3}],"faithfulness":{},"season":{}}""",
+        )
+        assertEquals(StatementImpact(paidMinor = 600_000), s.impact)
+        assertEquals(StatementMonthStatus(month = 3, status = "none"), s.months!!.single())
+        assertEquals(StatementFaithfulness(), s.faithfulness)
+        assertEquals(PartnerSeason(), s.season)
+    }
 }
