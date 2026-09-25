@@ -138,7 +138,7 @@ fun ksh(minor: Int): String = "KSh " + "%,d".format(minor / 100)
 fun money(minor: Int, currency: String?): String = when (currency?.uppercase()) {
     null, "", "KES" -> ksh(minor)
     "USD" -> "$" + "%,.2f".format(minor / 100.0)
-    else -> "${'$'}{currency.uppercase()} " + "%,.2f".format(minor / 100.0)
+    else -> currency.uppercase() + " " + "%,.2f".format(minor / 100.0)
 }
 
 /** "KSh 1,000" from major units. */

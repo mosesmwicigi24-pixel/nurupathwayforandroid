@@ -755,7 +755,14 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 "receipt/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
             ) { entry ->
-                GivingReceiptScreen(transactionId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                GivingReceiptScreen(
+                    transactionId = entry.arguments?.getString("id") ?: "",
+                    onBack = { nav.popBackStack() },
+                    // "View statement": back down to the statement when it is
+                    // below us (one of its rows opened this receipt), else push
+                    // it — never two statements on the stack.
+                    onOpenStatement = { nav.navigate("statement") { popUpTo("statement"); launchSingleTop = true } },
+                )
             }
             composable("profile") {
                 YouScreen(

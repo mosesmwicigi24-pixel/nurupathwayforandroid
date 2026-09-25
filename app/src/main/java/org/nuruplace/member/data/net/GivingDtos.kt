@@ -56,6 +56,10 @@ data class FundRef(val code: String = "", val name: String = "")
 @Serializable
 data class IntentPledge(val pledgeId: String = "", val title: String = "")
 
+/** The department need a gift went to (`need` on GET /giving/transactions/{id}). */
+@Serializable
+data class ReceiptNeed(val needId: String = "", val title: String = "")
+
 @Serializable
 data class GivingLedgerEntry(
     val side: String = "",       // debit | credit
@@ -81,6 +85,21 @@ data class GivingDetail(
     val settledAt: String? = null,
     val scheduleId: String? = null,
     val ledger: List<GivingLedgerEntry> = emptyList(),
+    // Receipt v2 (contract 2026-09-25): the server resolves what the receipt
+    // shows so the client never guesses. All optional — an older server sends
+    // none of them and GiveReceiptCopy.kt falls back to the local tables.
+    /** The fund's display name ("Discipleship"). */
+    val fundName: String? = null,
+    /** The pledge this gift counts toward, by name. Null off-pledge. */
+    val pledge: IntentPledge? = null,
+    /** The department need this gift went to. Null otherwise. */
+    val need: ReceiptNeed? = null,
+    /** "M-Pesa" | "Airtel Money" | "Card" | "PayPal" | "Manual". */
+    val methodLabel: String? = null,
+    /** The giver's name as Finance holds it. */
+    val memberName: String? = null,
+    /** The giver's congregation, when known. */
+    val congregation: String? = null,
 )
 
 @Serializable
