@@ -260,12 +260,20 @@ private fun GiveTab(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<GivingIntentResult?>(null) }
+    // What the intent charged (fee inside), so the ceremony can say "KSh 1,000".
+    var resultAmountMinor by remember { mutableIntStateOf(0) }
     var scheduled by remember { mutableStateOf<GivingSchedule?>(null) }
     var sheetSchedule by remember { mutableStateOf<GivingSchedule?>(null) }
 
-    // Full-screen generosity ceremony once an intent is created.
+    // Full-screen generosity ceremony once an intent is created. The copy
+    // reads the RESULT (GiveCeremonyCopy.kt): the server names the fund it
+    // routed the gift to and the pledge it counts toward; the chip label is
+    // only the fallback for a result that carries neither.
     result?.let { r ->
-        GiveResult(r, fundLabel = giveFund(fundId).name, giftName = accountName.trim().ifBlank { null }, onDone = { result = null })
+        GiveResult(
+            r, amountMinor = resultAmountMinor, chipFundLabel = giveFund(fundId).name,
+            giftName = accountName.trim().ifBlank { null }, onDone = { result = null },
+        )
         return
     }
     // …or once the server really created a schedule (never faked here).
@@ -296,7 +304,10 @@ private fun GiveTab(
         scope.launch {
             try {
                 when (plan) {
-                    is GiveSubmission.Intent -> result = Net.client.api.giving(plan.body)
+                    is GiveSubmission.Intent -> {
+                        resultAmountMinor = plan.body.amountMinor
+                        result = Net.client.api.giving(plan.body)
+                    }
                     is GiveSubmission.Schedule -> scheduled = Net.client.api.createSchedule(plan.body)
                     is GiveSubmission.Blocked -> error = plan.message
                 }
@@ -340,6 +351,12 @@ private fun GiveTab(
                             Text(f.tagline, style = giInter(10), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
+                }
+                // A pledge gift lands in the pledge's fund whatever tile is
+                // chosen (the server decides, contract 2026-09-25) — say so,
+                // and keep the chooser so the screen never rearranges.
+                if (preset?.pledgeId != null) {
+                    Text("Routed to the pledge's fund by the church", style = giInter(11), color = GIVE.sub)
                 }
 
                 // Amount card
@@ -742,9 +759,18 @@ private fun ScheduledResult(s: GivingSchedule, fundLabel: String, onDone: () -> 
     }
 }
 
-/** Full-screen generosity ceremony once an intent is created. */
+/** Full-screen generosity ceremony once an intent is created. Its words come
+ *  from GiveCeremonyCopy.kt: "Enter your PIN to complete KSh 1,000 toward your
+ *  Building pledge." / "… to Tithe." — the RESULT's pledge and fund, never the
+ *  chip, which is only the fallback when the result carries no fund. */
 @Composable
-private fun GiveResult(r: GivingIntentResult, fundLabel: String? = null, giftName: String? = null, onDone: () -> Unit) {
+private fun GiveResult(
+    r: GivingIntentResult,
+    amountMinor: Int,
+    chipFundLabel: String? = null,
+    giftName: String? = null,
+    onDone: () -> Unit,
+) {
     val context = LocalContext.current
     // PayPal is a two-step settle: approve in the browser, then POST
     // /giving/paypal/capture with the order id (the intent's provider_ref) —
@@ -783,19 +809,15 @@ private fun GiveResult(r: GivingIntentResult, fundLabel: String? = null, giftNam
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))
-            val sub = when {
-                captured -> "Gift confirmed — receipt on its way. 🎉"
-                r.provider == "mpesa" -> "Check your phone to approve the M-Pesa prompt."
-                r.approveUrl != null -> "Continue on PayPal, then confirm below."
-                else -> "Your gift is being processed."
-            }
+            val sub = if (captured) "Gift confirmed — receipt on its way. 🎉" else giveCeremonyLine(r, amountMinor, chipFundLabel)
             Text(sub, style = giInter(13), color = if (captured) GIVE.successText else GIVE.sub, textAlign = TextAlign.Center)
-            // "Named giving" (custom sheet, optional): the member's own label
-            // for this gift, shown alongside the fund it went to.
-            if (!fundLabel.isNullOrBlank()) {
+            // Where it went — the pledge by name and the fund the church
+            // routed it to, else the fund — with the member's own gift name
+            // ("named giving") when they gave one. Stays through success.
+            giveDestinationLabel(r, chipFundLabel, giftName)?.let { label ->
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    giftName?.let { "$fundLabel — “$it”" } ?: fundLabel,
+                    label,
                     style = giInter(12, FontWeight.SemiBold),
                     color = GIVE.eyebrow,
                     textAlign = TextAlign.Center,

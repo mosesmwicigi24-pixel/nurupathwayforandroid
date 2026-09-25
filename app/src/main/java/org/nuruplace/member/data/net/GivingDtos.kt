@@ -8,6 +8,9 @@ package org.nuruplace.member.data.net
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable
 data class GivingRecord(
@@ -35,7 +38,23 @@ data class GivingIntentResult(
     val providerRef: String? = null,
     val approveUrl: String? = null,
     val reused: Boolean = false,
+    // Pledge names (contract 2026-09-25): the SERVER says where the gift went.
+    // A gift carrying pledge_id lands in the pledge's fund whatever fund the
+    // client sent, so the ceremony reads these — never the client's chip —
+    // and falls back to the chip only when an older server sends neither.
+    /** The fund the gift was routed to. */
+    val fund: FundRef? = null,
+    /** The pledge it counts toward, by name. Null off-pledge. */
+    val pledge: IntentPledge? = null,
 )
+
+/** A fund by code and display name (`fund` on POST /giving/intents' result). */
+@Serializable
+data class FundRef(val code: String = "", val name: String = "")
+
+/** The pledge a gift counts toward (`pledge` on POST /giving/intents' result). */
+@Serializable
+data class IntentPledge(val pledgeId: String = "", val title: String = "")
 
 @Serializable
 data class GivingLedgerEntry(
@@ -141,10 +160,27 @@ data class Partnership(
     val tier: PartnerTier? = null,
     val pledges: List<Pledge> = emptyList(),
     val due: List<DueItem> = emptyList(),
+    /** What a new pledge may be for, server-ordered: General partnership
+     *  first, then funds, campaigns, approved department needs. Empty from
+     *  an older server — the flow then falls back to General + the funds. */
+    val pledgeOptions: List<PledgeOption> = emptyList(),
 ) {
     /** Joined the programme (spec §1: `partner_memberships.status` active|paused|left). */
     val isMember: Boolean get() = membership?.status in setOf("active", "paused")
 }
+
+/** One thing a pledge may be for (`pledge_options` on GET /giving/partnership).
+ *  `key` is the picker's identity; exactly one of fund / campaignId / needId
+ *  is set for the non-general kinds and is copied onto POST /giving/pledges. */
+@Serializable
+data class PledgeOption(
+    val key: String = "",
+    val title: String = "",
+    val kind: String = "general",           // general | fund | campaign | need
+    val fund: String? = null,
+    val campaignId: String? = null,
+    val needId: String? = null,
+)
 
 /** `partner_memberships` — one per member. */
 @Serializable
@@ -182,10 +218,21 @@ data class Pledge(
      *  partner statement rule counts a monthly pledge's due dates from here
      *  (PartnerStatementMath.kt) — a March pledge was never owed January. */
     val createdAt: String? = null,
+    /** The pledge's name as the server shows it: the custom name when set,
+     *  else the derived one (campaign → fund → need → "Partnership"). */
+    val title: String? = null,
+    /** The member's own name for it; null when `title` is derived. */
+    val customTitle: String? = null,
 ) {
-    /** What the pledge is for, in the member's words. */
+    /** What the pledge is for, derived client-side from its target — the
+     *  fallback when an older server sends no `title`. */
     val targetTitle: String?
         get() = campaign?.title?.takeIf { it.isNotBlank() } ?: fund?.name?.takeIf { it.isNotBlank() }
+
+    /** The name every card, row and sheet shows: the server's `title`, else
+     *  the derived target, else the programme itself. */
+    val displayTitle: String
+        get() = title?.takeIf { it.isNotBlank() } ?: targetTitle ?: "General partnership"
 
     /** The headline amount — monthly amount or total target. */
     val headlineMinor: Int get() = if (shape == "total") (targetMinor ?: 0) else (amountMinor ?: 0)
@@ -238,6 +285,10 @@ data class CreatePledgeBody(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val needId: String? = null,
     /** "Charge me automatically" — creates a schedule bound to the pledge. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val autoSchedule: AutoScheduleBody? = null,
+    /** The member's own name for the pledge (2–60), sent ONLY for a custom
+     *  name; a picked option travels as its target and the server derives
+     *  the name (PledgeRequestLogic.kt). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val title: String? = null,
 )
 
 @Serializable
@@ -250,7 +301,21 @@ data class UpdatePledgeBody(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val amountMinor: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dueDay: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val remindersEnabled: Boolean? = null,
+    /** The name, tri-state: absent (Kotlin null) leaves it alone; JsonNull
+     *  travels as `"title": null` and CLEARS the custom name so the server
+     *  falls back to its derived one; a string sets it. Build it with
+     *  [pledgeTitlePatch] — a plain `String?` cannot say "clear". */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val title: JsonElement? = null,
 )
+
+/** The `title` a PATCH should carry for a Name field that was prefilled with
+ *  `prefill` and now reads `entered`: untouched → null (nothing travels);
+ *  cleared → JsonNull (clear the custom name); changed → the trimmed name. */
+fun pledgeTitlePatch(prefill: String, entered: String): JsonElement? {
+    val now = entered.trim()
+    if (now == prefill.trim()) return null
+    return if (now.isEmpty()) JsonNull else JsonPrimitive(now)
+}
 
 /** GET /giving/pledges/{id} → the pledge plus its payments. Tolerant of the
  *  pledge arriving flat (spread into the object) or nested under `pledge`. */
@@ -271,11 +336,15 @@ data class PledgeDetail(
     val progress: PledgeProgress = PledgeProgress(),
     val scheduleId: String? = null,
     val remindersEnabled: Boolean = true,
+    val createdAt: String? = null,
+    val title: String? = null,
+    val customTitle: String? = null,
     val payments: List<PledgePayment> = emptyList(),
 ) {
     fun asPledge(): Pledge = pledge ?: Pledge(
         pledgeId, shape, amountMinor, targetMinor, currency, dueDay, dueOn, fund, campaign,
         needId, status, progress, scheduleId, remindersEnabled,
+        createdAt = createdAt, title = title, customTitle = customTitle,
     )
 }
 

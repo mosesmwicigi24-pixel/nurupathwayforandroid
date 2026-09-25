@@ -10,8 +10,9 @@ package org.nuruplace.member.feature.give
 //              ONLY gold-filled button on the page) · Statement
 //   DUE        one row per upcoming due, Pay / Resume — only when there is one;
 //              a failed or paused schedule is a compact amber row under it
-//   PLEDGES    one card per live pledge: title, state chip, target + due line,
-//              gold progress, "N of M kept this year" or "paid · to go", next
+//   PLEDGES    one card per live pledge: its NAME (the member's own, or the
+//              server's derived one), state chip, amount + due line, gold
+//              progress, "N of M kept this year" or "paid · to go", next
 //   STATEMENT  year chips · Pledged / Paid / Remaining · pledge-tied payments
 //              only · "Full statement and PDF →"
 //
@@ -97,6 +98,7 @@ import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeDetail
 import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.UpdatePledgeBody
+import org.nuruplace.member.data.net.pledgeTitlePatch
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
@@ -178,7 +180,7 @@ class PartnersViewModel : ViewModel() {
         }
     }
 
-    /** PATCH /giving/pledges/{id} — pause/resume/cancel, amount, due day, reminders. */
+    /** PATCH /giving/pledges/{id} — pause/resume/cancel, amount, due day, reminders, name. */
     fun update(pledgeId: String, body: UpdatePledgeBody, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             busyPledgeId = pledgeId; actionError = null
@@ -373,7 +375,7 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                 val what = if (d.kind == "schedule") {
                     "Recurring gift" + (p.rhythm?.method?.takeIf { it.isNotBlank() }?.let { " · ${giveMethodLabel(it)}" } ?: "")
                 } else {
-                    d.title.ifBlank { null } ?: pledge?.targetTitle ?: "Pledge"
+                    d.title.ifBlank { null } ?: pledge?.displayTitle ?: "Pledge"
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -396,7 +398,7 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                                     fundId = pledge?.fund?.code,
                                     amountMinor = d.amountMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
                                     pledgeId = if (d.kind == "pledge") d.id else pledge?.pledgeId,
-                                    title = d.title.ifBlank { null } ?: pledge?.targetTitle,
+                                    title = d.title.ifBlank { null } ?: pledge?.displayTitle,
                                 ),
                             )
                         }
@@ -464,8 +466,10 @@ private fun PledgesSection(
         EditPledgeSheet(
             pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
             onDismiss = { editing = null },
-            onSave = { amountMinor, dueDay ->
-                vm.update(pl.pledgeId, UpdatePledgeBody(amountMinor = amountMinor, dueDay = dueDay)) { editing = null }
+            onSave = { amountMinor, dueDay, titlePatch ->
+                // `title` travels only when the Name field changed: a string
+                // sets the custom name, JsonNull clears it (pledgeTitlePatch).
+                vm.update(pl.pledgeId, UpdatePledgeBody(amountMinor = amountMinor, dueDay = dueDay, title = titlePatch)) { editing = null }
             },
         )
     }
@@ -500,7 +504,7 @@ private fun PledgesSection(
             onOpenReceipt = onOpenReceipt,
             onPayNow = {
                 detailId = null
-                onPayNow(GivePreset(fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.targetTitle))
+                onPayNow(GivePreset(fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.displayTitle))
             },
             onPauseResume = { vm.update(pl.pledgeId, UpdatePledgeBody(status = if (pl.status == "paused") "active" else "paused")) },
             onEdit = { detailId = null; editing = pl },
@@ -531,11 +535,14 @@ private fun stateChip(pl: Pledge): Triple<String, Color, Color> = when {
     else -> Triple("On track", GIVE.successBg, GIVE.successText)
 }
 
+/** The card leads with the pledge's NAME (pledge names: `title` is the
+ *  member's own when set, else the server's derived one); the amount and
+ *  due line sit under it, so a member with three pledges can tell them apart. */
 @Composable
 private fun PledgeCard(pl: Pledge, busy: Boolean, yearPayments: List<StatementPayment>, today: LocalDate, onOpen: () -> Unit) {
     val total = pl.shape == "total"
     val (chipText, chipBg, chipFg) = stateChip(pl)
-    val title = if (total) {
+    val amountLine = if (total) {
         "${ksh(pl.targetMinor ?: 0)} by ${partnerDate(pl.dueOn)?.format(PartnerFormat.MONTH) ?: "a date"}"
     } else {
         "${ksh(pl.amountMinor ?: 0)} monthly"
@@ -552,9 +559,9 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearPayments: List<StatementPa
     Column(Modifier.partnerCard(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(title, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy)
+                Text(pl.displayTitle, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2)
                 Text(
-                    listOfNotNull(pl.targetTitle ?: "General partnership", dueLine).joinToString(" · "),
+                    listOfNotNull(amountLine, dueLine).joinToString(" · "),
                     style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -591,17 +598,48 @@ private fun ordinal(n: Int): String {
     return "$n$suffix"
 }
 
-/** Edit amount / due day (spec §5 PATCH). Due day only for monthly pledges. */
+/** Edit name / amount / due day (spec §5 PATCH + pledge names). Due day only
+ *  for monthly pledges. The Name field is prefilled with the custom name, or
+ *  the derived one when there is none; only a CHANGE travels (a cleared field
+ *  sends null so the server falls back to its derived name). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditPledgeSheet(pl: Pledge, busy: Boolean, onDismiss: () -> Unit, onSave: (amountMinor: Int?, dueDay: Int?) -> Unit) {
+private fun EditPledgeSheet(
+    pl: Pledge,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (amountMinor: Int?, dueDay: Int?, titlePatch: kotlinx.serialization.json.JsonElement?) -> Unit,
+) {
     var amountText by remember { mutableStateOf(((pl.amountMinor ?: pl.targetMinor ?: 0) / 100).toString()) }
     var dueDay by remember { mutableStateOf(pl.dueDay ?: 1) }
+    val namePrefill = remember(pl.pledgeId) { pl.customTitle?.takeIf { it.isNotBlank() } ?: pl.displayTitle }
+    var name by remember(pl.pledgeId) { mutableStateOf(namePrefill) }
     val parsed = amountText.filter { it.isDigit() }.take(8).toIntOrNull() ?: 0
-    val valid = parsed in 1..5_000_000
+    // A blank name is a valid CLEAR; anything else must be 2–60.
+    val nameValid = name.isBlank() || pledgeTitleValid(name)
+    val valid = parsed in 1..5_000_000 && nameValid
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Edit pledge", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
+            Text("NAME", style = NuruType.micro, color = Nuru.goldLo)
+            OutlinedTextField(
+                value = name,
+                onValueChange = { v -> name = v.take(PLEDGE_TITLE_MAX) },
+                singleLine = true,
+                placeholder = { Text(pl.displayTitle, style = NuruType.body, color = Nuru.ink400) },
+                supportingText = {
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(
+                            if (!nameValid) "$PLEDGE_TITLE_MIN–$PLEDGE_TITLE_MAX characters, or clear it to use the church's name" else "",
+                            style = NuruType.caption, color = Nuru.danger, modifier = Modifier.weight(1f),
+                        )
+                        Text("${name.length}/$PLEDGE_TITLE_MAX", style = NuruType.caption, color = Nuru.ink400)
+                    }
+                },
+                isError = !nameValid,
+                textStyle = nuruSans(16, FontWeight.Medium).copy(color = Nuru.ink),
+                modifier = Modifier.fillMaxWidth(),
+            )
             Text(if (pl.shape == "total") "TARGET" else "AMOUNT EACH MONTH", style = NuruType.micro, color = Nuru.goldLo)
             OutlinedTextField(
                 value = amountText,
@@ -617,7 +655,7 @@ private fun EditPledgeSheet(pl: Pledge, busy: Boolean, onDismiss: () -> Unit, on
                 DueDayPicker(dueDay) { dueDay = it }
             }
             Button(
-                onClick = { if (valid) onSave(parsed * 100, if (pl.shape != "total") dueDay else null) },
+                onClick = { if (valid) onSave(parsed * 100, if (pl.shape != "total") dueDay else null, pledgeTitlePatch(namePrefill, name)) },
                 enabled = valid && !busy,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Nuru.navyDeep, contentColor = Color.White),
@@ -681,7 +719,7 @@ private fun PledgeDetailSheet(
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(pl.targetTitle ?: "General partnership", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
+                    Text(pl.displayTitle, style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
                     Text(
                         "${money(pl.headlineMinor, pl.currency)} ${if (pl.shape == "total") "target" else "each month"} · ${money(pl.progress.paidMinor, pl.currency)} paid",
                         style = NuruType.caption, color = Nuru.ink600,

@@ -70,6 +70,92 @@ class GivingWireTest {
         assertEquals("{}", json.encodeToString(JoinPartnersBody()))
     }
 
+    // ── Pledge names (contract 2026-09-25) ──
+
+    @Test
+    fun `create pledge body carries title only when given`() {
+        val custom = json.parseToJsonElement(json.encodeToString(CreatePledgeBody(shape = "monthly", amountMinor = 100, dueDay = 1, title = "Mum's house"))).jsonObject
+        assertEquals(setOf("shape", "amount_minor", "currency", "due_day", "title"), custom.keys)
+        assertEquals("Mum's house", custom["title"]!!.jsonPrimitive.content)
+        val plain = json.parseToJsonElement(json.encodeToString(CreatePledgeBody(shape = "monthly", amountMinor = 100, dueDay = 1, fund = "tithe"))).jsonObject
+        assertFalse("title" in plain)
+    }
+
+    @Test
+    fun `patch title sets, clears with an explicit null, or stays away`() {
+        val set = json.parseToJsonElement(json.encodeToString(UpdatePledgeBody(title = pledgeTitlePatch("Tithe", "School fees")))).jsonObject
+        assertEquals(setOf("title"), set.keys)
+        assertEquals("School fees", set["title"]!!.jsonPrimitive.content)
+        // Cleared → `"title": null` on the wire (the server falls back to its derived name).
+        val cleared = json.encodeToString(UpdatePledgeBody(amountMinor = 500, title = pledgeTitlePatch("School fees", "   ")))
+        assertEquals("""{"amount_minor":500,"title":null}""", cleared)
+        // Untouched → no title key at all.
+        val untouched = json.parseToJsonElement(json.encodeToString(UpdatePledgeBody(dueDay = 5, title = pledgeTitlePatch("Tithe", " Tithe ")))).jsonObject
+        assertEquals(setOf("due_day"), untouched.keys)
+    }
+
+    @Test
+    fun `partnership decodes pledge_options and a pledge's title and custom_title`() {
+        val p = json.decodeFromString<Partnership>(
+            """{"is_partner":true,"membership":{"status":"active"},
+                "pledges":[
+                  {"pledge_id":"p1","shape":"monthly","amount_minor":300000,"fund":{"code":"tithe","name":"Tithe"},"title":"School fees","custom_title":"School fees"},
+                  {"pledge_id":"p2","shape":"total","target_minor":500000,"fund":{"code":"gift","name":"Gift"},"title":"Gift","custom_title":null}
+                ],
+                "pledge_options":[
+                  {"key":"general","title":"General partnership","kind":"general"},
+                  {"key":"fund:tithe","title":"Tithe","kind":"fund","fund":"tithe"},
+                  {"key":"campaign:c1","title":"New roof","kind":"campaign","campaign_id":"c1"},
+                  {"key":"need:n1","title":"Sound desk","kind":"need","need_id":"n1"}
+                ]}""",
+        )
+        assertEquals(listOf("general", "fund", "campaign", "need"), p.pledgeOptions.map { it.kind })
+        assertEquals("tithe", p.pledgeOptions[1].fund)
+        assertEquals("c1", p.pledgeOptions[2].campaignId)
+        assertEquals("n1", p.pledgeOptions[3].needId)
+        val named = p.pledges[0]
+        assertEquals("School fees", named.title)
+        assertEquals("School fees", named.customTitle)
+        assertEquals("School fees", named.displayTitle)
+        val derived = p.pledges[1]
+        assertEquals("Gift", derived.title)
+        assertNull(derived.customTitle)
+        assertEquals("Gift", derived.displayTitle)
+    }
+
+    @Test
+    fun `pledge detail carries the name through asPledge`() {
+        val flat = json.decodeFromString<PledgeDetail>("""{"pledge_id":"p1","shape":"monthly","amount_minor":100,"title":"Mum's house","custom_title":"Mum's house","created_at":"2026-03-01T00:00:00Z"}""")
+        assertEquals("Mum's house", flat.asPledge().customTitle)
+        assertEquals("Mum's house", flat.asPledge().displayTitle)
+        assertEquals("2026-03-01T00:00:00Z", flat.asPledge().createdAt)
+    }
+
+    @Test
+    fun `intent result decodes the server's fund and pledge`() {
+        val r = json.decodeFromString<GivingIntentResult>(
+            """{"transaction_id":"t1","status":"pending","provider":"mpesa","fund":{"code":"gift","name":"Gift"},"pledge":{"pledge_id":"p1","title":"School fees"}}""",
+        )
+        assertEquals("gift", r.fund?.code)
+        assertEquals("Gift", r.fund?.name)
+        assertEquals("p1", r.pledge?.pledgeId)
+        assertEquals("School fees", r.pledge?.title)
+    }
+
+    @Test
+    fun `older payloads without the new fields still decode to the defaults`() {
+        val r = json.decodeFromString<GivingIntentResult>("""{"transaction_id":"t1","status":"pending","provider":"mpesa"}""")
+        assertNull(r.fund)
+        assertNull(r.pledge)
+        val p = json.decodeFromString<Partnership>("""{"is_partner":true,"pledges":[{"pledge_id":"p1","shape":"monthly","amount_minor":1,"fund":{"code":"tithe","name":"Tithe"}}]}""")
+        assertTrue(p.pledgeOptions.isEmpty())
+        assertNull(p.pledges.single().title)
+        assertNull(p.pledges.single().customTitle)
+        // The derived target still names the card when the server sends no title.
+        assertEquals("Tithe", p.pledges.single().displayTitle)
+        assertEquals("General partnership", Pledge(pledgeId = "x").displayTitle)
+    }
+
     @Test
     fun `partnership decodes the spec shape and keeps the existing fields`() {
         val p = json.decodeFromString<Partnership>(
