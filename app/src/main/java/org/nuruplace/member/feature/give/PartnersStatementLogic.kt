@@ -258,13 +258,27 @@ internal fun faithfulnessLine(marks: List<MonthMark>, nextDue: LocalDate?, today
     return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
 }
 
-/** The soonest pledge due on or after `today`: the partnership's `due`
- *  pledge rows, else its live pledges' own next_due. Null when none. */
+/** FAITHFULNESS' "next due": the earliest server `progress.next_due` on or
+ *  after `today` across ACTIVE MONTHLY pledges. The server's instalment
+ *  ledger advances it once an instalment is paid (26 Sep paid → 26 Oct; a
+ *  pre-payment → 26 Nov), so a paid instalment is never shown as still due —
+ *  the DUE list is NOT read (it holds an instalment until its payment
+ *  settles). `due_day` stands in only for a pledge whose next_due is absent
+ *  (an older server). Null when none. */
 internal fun nextPledgeDue(p: Partnership?, today: LocalDate): LocalDate? {
     if (p == null) return null
-    val fromDue = p.due.filter { it.kind == "pledge" }.mapNotNull { partnerDate(it.dueOn) }
-    val fromPledges = p.pledges.filter { it.status == "active" }.mapNotNull { partnerDate(it.progress.nextDue) }
-    return (fromDue + fromPledges).filter { !it.isBefore(today) }.minOrNull()
+    return p.pledges
+        .filter { it.status == "active" && it.shape != "total" }
+        .mapNotNull { pl -> partnerDate(pl.progress.nextDue) ?: pl.dueDay?.let { nextDueDayDate(it, today) } }
+        .filter { !it.isBefore(today) }
+        .minOrNull()
+}
+
+/** The first `dueDay`-of-the-month date on or after `today` (days 1–28,
+ *  spec §1) — the fallback for a pledge the server sent no next_due for. */
+internal fun nextDueDayDate(dueDay: Int, today: LocalDate): LocalDate {
+    val thisMonth = today.withDayOfMonth(dueDay.coerceIn(1, 28))
+    return if (thisMonth.isBefore(today)) thisMonth.plusMonths(1) else thisMonth
 }
 
 /** COMMITMENTS' header figure: Σ remaining_year_minor, or null (hidden) when

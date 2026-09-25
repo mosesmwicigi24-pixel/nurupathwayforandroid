@@ -6,7 +6,8 @@ package org.nuruplace.member.feature.give
 // One cream band (the GIVE · PARTNERS control, "Walk with the church", one
 // muted line), then white cards in this order and nothing more:
 //
-//   STANDING   partner since · gifts kept · tier chip · Make a pledge (the
+//   STANDING   partner since · commitments (or gifts) kept · tier chip ·
+//              Make a pledge (the
 //              ONLY gold-filled button on the page) · Statement
 //   DUE        one row per upcoming due, Pay / Resume — only when there is one;
 //              a failed or paused schedule is a compact amber row under it
@@ -35,7 +36,9 @@ package org.nuruplace.member.feature.give
 // from the Give segment is already counted when the member switches back.
 //
 // Two rules from the original design still carry into the copy:
-//   · `kept` is cycles COLLECTED, never scheduled — "N gifts kept".
+//   · `kept` is cycles COLLECTED, never scheduled — "N gifts kept", said
+//     only for a schedule-only partner; with a monthly pledge the line
+//     counts this year's kept commitments (PartnerStatementMath.standingKeptLine).
 //   · nothing here says "your giving produced this"; we cannot trace a
 //     shilling to a disciple.
 
@@ -276,7 +279,7 @@ fun PartnersScreen(
                     action = "Try again" to { vm.load() },
                 )
                 p.isMember || p.isPartner -> {
-                    StandingCard(p, onAddPledge, openStatement)
+                    StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
                     if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
                     // Only when there is something to say — a partner whose
                     // giving is collecting cleanly never sees an amber row.
@@ -346,7 +349,7 @@ internal fun StateChip(text: String, bg: Color, fg: Color) {
 // ── 1. Standing / Join ───────────────────────────────────────────────────────
 
 @Composable
-private fun StandingCard(p: Partnership, onAddPledge: () -> Unit, onOpenStatement: () -> Unit) {
+private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddPledge: () -> Unit, onOpenStatement: () -> Unit) {
     val view = LocalView.current
     val since = (p.membership?.joinedAt ?: p.since)?.let { PartnerFormat.monthYear(it) }
     val paused = p.membership?.status == "paused" || p.status == "paused" || p.trouble?.paused == true
@@ -355,9 +358,10 @@ private fun StandingCard(p: Partnership, onAddPledge: () -> Unit, onOpenStatemen
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(since?.let { "Partner since $it" } ?: "Partner", style = giInter(16, FontWeight.SemiBold), color = GIVE.navy)
-                // "kept" is cycles collected, never scheduled.
+                // Commitments kept this year (a monthly pledge), else gifts
+                // collected (a schedule) — PartnerStatementMath.standingKeptLine.
                 Text(
-                    "${p.kept} ${if (p.kept == 1) "gift" else "gifts"} kept · ${if (paused) "paused" else "on track"}",
+                    standingKeptLine(p, yearStatement, paused),
                     style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
                 )
             }

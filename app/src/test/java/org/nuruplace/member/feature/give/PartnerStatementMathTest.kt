@@ -12,8 +12,11 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
+import org.nuruplace.member.data.net.PartnerRhythm
+import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeProgress
+import org.nuruplace.member.data.net.StatementFaithfulness
 import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
@@ -219,5 +222,47 @@ class PartnerStatementMathTest {
         assertNull(pendingMethodFor("p3", s))
         assertNull(pendingMethodFor("p1", null))
         assertNull(pendingMethodFor("p1", GivingStatement(year = 2026)))
+    }
+
+    // ── STANDING line (owner, 2026-09-26) ──
+
+    private fun year(keptOnTime: Int, late: Int, missed: Int = 0, dueCount: Int) =
+        GivingStatement(year = 2026, faithfulness = StatementFaithfulness(keptOnTime = keptOnTime, late = late, missed = missed, dueCount = dueCount))
+
+    private val pledgeOnly = Partnership(isPartner = true, kept = 0, pledges = listOf(monthly(id = "p1")))
+    private val scheduleOnly = Partnership(isPartner = true, kept = 3, scheduleId = "s1", rhythm = PartnerRhythm(method = "mpesa", amountMinor = 100_000))
+
+    @Test
+    fun `a pledge partner's standing counts this year's kept commitments, never schedule cycles`() {
+        // partnership.kept is 0 (no schedule) while the pledge card says "2 of 2 kept".
+        assertEquals("2 commitments kept this year · on track", standingKeptLine(pledgeOnly, year(1, 1, dueCount = 2), paused = false))
+        assertEquals("1 commitment kept this year · on track", standingKeptLine(pledgeOnly, year(1, 0, dueCount = 1), paused = false))
+        // A schedule as well: the pledge ledger still speaks.
+        assertEquals("2 commitments kept this year · on track", standingKeptLine(scheduleOnly.copy(pledges = pledgeOnly.pledges), year(2, 0, dueCount = 2), false))
+    }
+
+    @Test
+    fun `behind comes from the pledges, paused from the partnership`() {
+        val behind = pledgeOnly.copy(pledges = listOf(monthly(id = "p1").copy(progress = PledgeProgress(label = "behind"))))
+        assertEquals("0 commitments kept this year · behind", standingKeptLine(behind, year(0, 0, missed = 1, dueCount = 1), false))
+        assertEquals("1 commitment kept this year · paused", standingKeptLine(behind, year(1, 0, dueCount = 1), paused = true))
+    }
+
+    @Test
+    fun `the count is left out while nothing is due yet, or before the statement answers`() {
+        assertEquals("On track", standingKeptLine(pledgeOnly, year(0, 0, dueCount = 0), false))
+        assertEquals("On track", standingKeptLine(pledgeOnly, null, false))
+        assertEquals("On track", standingKeptLine(pledgeOnly, GivingStatement(year = 2026), false)) // no faithfulness block
+    }
+
+    @Test
+    fun `gifts kept is said only for a schedule-only partner`() {
+        assertEquals("3 gifts kept · on track", standingKeptLine(scheduleOnly, year(0, 0, dueCount = 0), false))
+        assertEquals("1 gift kept · paused", standingKeptLine(scheduleOnly.copy(kept = 1), null, paused = true))
+        // A cancelled monthly pledge does not make a pledge partner.
+        assertEquals("3 gifts kept · on track", standingKeptLine(scheduleOnly.copy(pledges = listOf(monthly(status = "cancelled"))), null, false))
+        // Neither a schedule nor a monthly pledge (a total pledge only, or just joined): the state alone.
+        assertEquals("On track", standingKeptLine(Partnership(isPartner = true, pledges = listOf(total(dueOn = "2026-12-15"))), null, false))
+        assertEquals("On track", standingKeptLine(Partnership(isPartner = true), null, false))
     }
 }

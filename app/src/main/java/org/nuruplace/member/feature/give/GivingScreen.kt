@@ -14,7 +14,11 @@
 // GiveSubmitLogic.giftSpendsBinding): cleared upstream the moment the intent
 // answers, and the form back to the ordinary one when the ceremony closes.
 // Every gift that moves money raises GivingEvents so Partners and its
-// statement refetch (GivingEvents.kt). The ceremony watches the real
+// statement refetch (GivingEvents.kt). The segment's own server data — the
+// year pill, the schedules rail — lives in GiveViewModel, held by the tab's
+// destination: shown at once on every showing while it refetches (entry,
+// segment switch, ON_RESUME, GivingEvents), so money that lands without a
+// ceremony (a scheduled charge, another device) appears. The ceremony watches the real
 // transaction until it is final (GiveCeremonyCopy.kt); a Pay tap replays the
 // previous idempotency key only after an attempt that got no server answer
 // (GiveSubmitLogic.giveKeyFor). All shared tokens/tables live in
@@ -82,15 +86,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.GivingIntentResult
+import org.nuruplace.member.data.net.GivingRecord
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PayPalCaptureBody
-import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.Moment
@@ -125,6 +134,56 @@ private fun firstChargeDate(freq: Int): String =
     LocalDate.now().plusDays(if (freq == 1) 7L else 30L)
         .format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
 
+/** What the Give segment shows from the server: the history (the year
+ *  pill), the schedules (the rail) and the phone the STK push goes to. */
+data class GiveSegmentData(val history: List<GivingRecord>, val schedules: List<GivingSchedule>, val phone: String)
+
+/**
+ * The Give segment's server data, held by the tab's DESTINATION (viewModel())
+ * rather than the segment, which leaves composition on every GIVE · PARTNERS
+ * switch: the last values show at once while they refetch — on every showing,
+ * on ON_RESUME and on GivingEvents — so a scheduled charge or a gift from
+ * another device lands in "given this year" without a ceremony.
+ */
+class GiveViewModel : ViewModel() {
+    var data by mutableStateOf<GiveSegmentData?>(null); private set
+    private val freshness = GivingFreshness()
+    private var seq = 0
+
+    init {
+        viewModelScope.launch {
+            GivingEvents.changed.debouncedGivingReloads().collect {
+                // Only once the segment has asked for its data.
+                if (seq > 0 && freshness.shouldRefetchAfterEvent()) load()
+            }
+        }
+    }
+
+    /** Entry / resume: refetch unless a fetch has just started. */
+    fun refresh() {
+        if (freshness.shouldRefetchOnEntry()) load()
+    }
+
+    /** Refetch now. A part that fails keeps what is on screen (the very
+     *  first load falls back to empty, as before); the latest request wins. */
+    fun load() {
+        freshness.fetchStarted()
+        val mine = ++seq
+        viewModelScope.launch {
+            val hist = runCatching { Net.client.api.givingHistory().data }
+            val sched = runCatching { Net.client.api.schedules().data }
+            val phone = runCatching { Net.client.api.me().profile.phoneNumber.orEmpty() }
+            if (mine != seq) return@launch
+            val shown = data
+            data = GiveSegmentData(
+                history = hist.getOrElse { shown?.history ?: emptyList() },
+                schedules = sched.getOrElse { shown?.schedules ?: emptyList() },
+                phone = phone.getOrElse { shown?.phone ?: "" },
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GivingScreen(
@@ -143,36 +202,26 @@ fun GivingScreen(
     /** A binding spent on the intent's answer comes back: the ceremony's
      *  watch found the payment failed, so the member can retry at once. */
     onRebind: (GivePreset) -> Unit = {},
+    /** Scoped to the tab's destination, so it outlives the segment. */
+    vm: GiveViewModel = viewModel(),
 ) {
-    // The year pill + schedules rail refetch (in place — AsyncContent keeps
-    // the content) when a gift or schedule changes giving elsewhere, or here:
-    // the ceremony's own gift lands in "given this year" once it settles.
-    val freshness = remember { GivingFreshness() }
-    AsyncContent(
-        load = {
-            freshness.fetchStarted()
-            val hist = runCatching { Net.client.api.givingHistory().data }.getOrDefault(emptyList())
-            val sched = runCatching { Net.client.api.schedules().data }.getOrDefault(emptyList())
-            val phone = runCatching { Net.client.api.me().profile.phoneNumber }.getOrNull().orEmpty()
-            Triple(hist, sched, phone)
-        },
-        loading = {
-            Column(Modifier.fillMaxSize().background(GIVE.paper)) {
-                GiveHeaderBand(segmentControl, yearTotalMinor = null, onOpenStatement = onOpenStatement)
-                Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = GIVE.gold)
-                }
-            }
-        },
-    ) { (history, schedules, phone), reload ->
-        val reloadNow by rememberUpdatedState(reload)
-        LaunchedEffect(Unit) {
-            GivingEvents.changed.debouncedGivingReloads().collect {
-                if (freshness.shouldRefetchAfterEvent()) reloadNow()
+    // Stale-while-revalidate on every showing of the segment (entry, a
+    // GIVE · PARTNERS switch, a Pay handoff) and every return to the
+    // foreground; the two can land together — refresh() fetches once.
+    LaunchedEffect(Unit) { vm.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
+    val d = vm.data
+    if (d == null) {
+        // First load only — every later refetch keeps the values on screen.
+        Column(Modifier.fillMaxSize().background(GIVE.paper)) {
+            GiveHeaderBand(segmentControl, yearTotalMinor = null, onOpenStatement = onOpenStatement)
+            Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = GIVE.gold)
             }
         }
-        GiveTab(history, schedules, phone, reload, onOpenStatement, onOpenSchedules, preset, segmentControl, onUnbind, onRebind)
+        return
     }
+    GiveTab(d.history, d.schedules, d.phone, vm::load, onOpenStatement, onOpenSchedules, preset, segmentControl, onUnbind, onRebind)
 }
 
 /** The ONE cream band over the Give segment: the segment control, the title,
@@ -267,7 +316,7 @@ private fun GiveTargetCard(copy: GiveTargetCopy, onGiveToFund: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GiveTab(
-    history: List<org.nuruplace.member.data.net.GivingRecord>,
+    history: List<GivingRecord>,
     schedules: List<GivingSchedule>,
     phone: String,
     reload: () -> Unit,

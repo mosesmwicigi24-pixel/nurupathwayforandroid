@@ -282,21 +282,54 @@ class PartnersStatementLogicTest {
     }
 
     @Test
-    fun `next pledge due is the soonest pledge date from today on`() {
+    fun `next pledge due is the earliest server next_due across active monthly pledges`() {
         val p = Partnership(
             due = listOf(
-                DueItem(kind = "schedule", id = "s", dueOn = "2026-09-28"),     // a schedule is not a pledge
-                DueItem(kind = "pledge", id = "a", dueOn = "2026-09-20"),       // behind us
-                DueItem(kind = "pledge", id = "b", dueOn = "2026-10-05"),
+                DueItem(kind = "schedule", id = "s", dueOn = "2026-09-28"),     // the DUE list is not read
+                DueItem(kind = "pledge", id = "b", dueOn = "2026-09-26"),
             ),
             pledges = listOf(
                 Pledge(pledgeId = "c", status = "active", progress = PledgeProgress(nextDue = "2026-10-01")),
-                Pledge(pledgeId = "d", status = "paused", progress = PledgeProgress(nextDue = "2026-09-26")),
+                Pledge(pledgeId = "d", status = "paused", progress = PledgeProgress(nextDue = "2026-09-26")),   // not active
+                Pledge(pledgeId = "t", shape = "total", status = "active", dueOn = "2026-09-27",
+                    progress = PledgeProgress(nextDue = "2026-09-27")),                                         // not monthly
+                Pledge(pledgeId = "o", status = "active", progress = PledgeProgress(nextDue = "2026-09-20")),   // behind us
             ),
         )
         assertEquals(LocalDate.of(2026, 10, 1), nextPledgeDue(p, today))
         assertNull(nextPledgeDue(null, today))
         assertNull(nextPledgeDue(Partnership(), today))
+    }
+
+    @Test
+    fun `a pledge paid today is next due next month, not today`() {
+        // today = 25 Sep. The instalment due today was paid: the server's ledger
+        // moved next_due to 25 Oct, though a DUE row for today may linger until
+        // the payment settles.
+        val paidToday = Partnership(
+            due = listOf(DueItem(kind = "pledge", id = "p1", dueOn = "2026-09-25", amountMinor = 100_000)),
+            pledges = listOf(Pledge(pledgeId = "p1", status = "active", dueDay = 25, progress = PledgeProgress(nextDue = "2026-10-25"))),
+        )
+        assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(paidToday, today))
+        assertEquals(
+            "Kept on time 1 month · next due 25 Oct",
+            faithfulnessLine(List(8) { MonthMark.None } + MonthMark.Kept + List(3) { MonthMark.None }, nextPledgeDue(paidToday, today), today),
+        )
+        // Paid ahead as well: the ledger is already at November.
+        val prepaid = paidToday.copy(pledges = listOf(paidToday.pledges.single().copy(progress = PledgeProgress(nextDue = "2026-11-25"))))
+        assertEquals(LocalDate.of(2026, 11, 25), nextPledgeDue(prepaid, today))
+    }
+
+    @Test
+    fun `due_day stands in only when the server sent no next_due`() {
+        fun on(dueDay: Int, nextDue: String? = null) =
+            Partnership(pledges = listOf(Pledge(pledgeId = "p", status = "active", dueDay = dueDay, progress = PledgeProgress(nextDue = nextDue))))
+        assertEquals(LocalDate.of(2026, 10, 5), nextPledgeDue(on(5), today))     // the 5th has passed this month
+        assertEquals(LocalDate.of(2026, 9, 25), nextPledgeDue(on(25), today))    // due today, no ledger to say otherwise
+        assertEquals(LocalDate.of(2026, 9, 28), nextPledgeDue(on(30), today))    // days are 1–28
+        // A next_due from the server always wins over the day.
+        assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(on(25, nextDue = "2026-10-25"), today))
+        assertEquals(LocalDate.of(2026, 10, 25), nextDueDayDate(25, LocalDate.of(2026, 9, 26)))
     }
 
     @Test

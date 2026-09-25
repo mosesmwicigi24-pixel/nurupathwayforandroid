@@ -17,6 +17,7 @@ package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
+import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.StatementPayment
 import java.time.Instant
@@ -155,3 +156,38 @@ internal fun pendingMethodFor(pledgeId: String, currentYearStatement: GivingStat
     currentYearStatement?.let { pendingPaymentRows(it) }
         ?.firstOrNull { it.pledgeId == pledgeId }
         ?.method?.takeIf { it.isNotBlank() }
+
+/**
+ * The STANDING card's second line.
+ *
+ *  · Any live MONTHLY pledge → "3 commitments kept this year · on track",
+ *    the count being this year's statement `faithfulness` (kept on time +
+ *    late) — the same ledger as the pledge cards' "N of M kept". Never
+ *    `partnership.kept`: that counts recurring-schedule cycles only, so a
+ *    pledge-only partner read "0 gifts kept" beside a card saying "2 of 2
+ *    kept". The count is left out while it is 0 with nothing due yet, and
+ *    while the statement has not answered.
+ *  · Schedule-only → "N gifts kept · on track" (cycles COLLECTED).
+ *  · Neither → the state alone ("On track").
+ *
+ * The state: "paused" when the partnership is, else "behind" when any
+ * active pledge is (the server's label), else "on track".
+ */
+internal fun standingKeptLine(p: Partnership, currentYearStatement: GivingStatement?, paused: Boolean): String {
+    val state = when {
+        paused -> "paused"
+        p.pledges.any { it.status == "active" && it.progress.label == "behind" } -> "behind"
+        else -> "on track"
+    }
+    val hasMonthlyPledge = p.pledges.any { it.status != "cancelled" && it.shape != "total" }
+    val hasSchedule = p.scheduleId != null || p.rhythm != null
+    val count = when {
+        hasMonthlyPledge -> currentYearStatement?.faithfulness?.let { f ->
+            val kept = maxOf(f.keptOnTime + f.late, 0)
+            if (kept == 0 && f.dueCount <= 0) null else "$kept ${if (kept == 1) "commitment" else "commitments"} kept this year"
+        }
+        hasSchedule -> "${p.kept} ${if (p.kept == 1) "gift" else "gifts"} kept"
+        else -> null
+    }
+    return listOfNotNull(count, state).joinToString(" · ").replaceFirstChar { it.uppercase() }
+}
