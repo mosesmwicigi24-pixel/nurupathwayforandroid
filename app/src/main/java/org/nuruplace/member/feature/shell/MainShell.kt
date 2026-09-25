@@ -109,9 +109,13 @@ private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile", "departme
 private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE)
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
 
+/** The partners statement for one year (docs/PARTNERS_PROGRAMME.md §3; owner
+ *  2026-09-25) — built by feature/give/PartnersStatementScreen.partnersStatementRoute. */
+private const val PARTNERS_STATEMENT_ROUTE = "partners-statement?year={year}"
+
 /** Pushed sub-routes that belong to a tab for HIGHLIGHTING (they carry their
  *  own back button and no bottom bar, exactly as before — see `onTab`). */
-private val GIVE_SUB_ROUTES = setOf("statement", "schedules", "receipt/{id}")
+private val GIVE_SUB_ROUTES = setOf("statement", "schedules", "receipt/{id}", PARTNERS_STATEMENT_ROUTE)
 private val EVENTS_SUB_ROUTES = setOf("events-calendar", "event/{id}?end={end}", "checkin/{id}", "announcements", "announcement/{id}", "attendance", "service-checkin")
 
 /** Which bottom tab a NavHost route belongs to, or null for none. */
@@ -719,6 +723,21 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
             composable("statement") {
                 GivingStatementScreen(onBack = { nav.popBackStack() }, onOpenReceipt = { nav.navigate("receipt/$it") })
+            }
+            // The PARTNERS statement (owner 2026-09-25: "have the statement
+            // separate for partners") — Pledged / Paid / Remaining, the
+            // pledges, pledge-tied payments by month and its own PDF, for the
+            // year the Partners tab was showing. Its foot opens "statement".
+            composable(
+                PARTNERS_STATEMENT_ROUTE,
+                arguments = listOf(navArgument("year") { type = NavType.IntType; defaultValue = 0 }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.PartnersStatementScreen(
+                    initialYear = entry.arguments?.getInt("year")?.takeIf { it > 0 },
+                    onBack = { nav.popBackStack() },
+                    onOpenReceipt = { nav.navigate("receipt/$it") },
+                    onOpenGivingStatement = { nav.navigate("statement") },
+                )
             }
             // Partners — the Give tab opened on its Partners segment (the
             // Home invite's "Become a partner", pledge nudges and pushes land

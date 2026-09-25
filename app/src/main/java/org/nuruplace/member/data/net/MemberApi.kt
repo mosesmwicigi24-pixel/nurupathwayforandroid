@@ -505,6 +505,13 @@ interface MemberApi {
     @GET("giving/transactions/{id}/receipt.pdf")
     suspend fun givingReceiptPdf(@Path("id") txId: String): okhttp3.ResponseBody
 
+    // The partners statement for one year as a PDF (contract 2026-09-25) —
+    // pledges and pledge-tied payments only; 404 for a member who was never a
+    // partner. Same authed fetch → FileProvider plumbing as the two above.
+    @retrofit2.http.Streaming
+    @GET("giving/partners/statement.pdf")
+    suspend fun partnersStatementPdf(@Query("year") year: Int): okhttp3.ResponseBody
+
     @GET("me/achievements")
     suspend fun achievements(): Achievements
 

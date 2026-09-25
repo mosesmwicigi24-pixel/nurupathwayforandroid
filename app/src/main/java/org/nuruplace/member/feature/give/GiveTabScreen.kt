@@ -155,7 +155,8 @@ fun GiveTabScreen(
                         segment = GiveSegment.Give
                     },
                     onOpenReceipt = { onNavigate("receipt/$it") },
-                    onOpenStatement = { onNavigate("statement") },
+                    // The PARTNERS statement, not the giving one (owner 2026-09-25).
+                    onOpenPartnersStatement = { year -> onNavigate(partnersStatementRoute(year)) },
                     onAddPledge = { newPledge = true },
                     segmentControl = segmentControl,
                 )

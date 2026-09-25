@@ -28,7 +28,7 @@ internal data class StatementSummary(val pledgedMinor: Int, val paidMinor: Int, 
 
 /** Every monthly pledge has a due day 1..28 (spec §1); a row without one is
  *  malformed, and the 1st is the least-surprising day to count from. */
-private const val DEFAULT_DUE_DAY = 1
+internal const val DEFAULT_DUE_DAY = 1
 
 /** ISO instant / offset timestamp / bare date → the calendar date, or null. */
 internal fun partnerDate(iso: String?): LocalDate? {
