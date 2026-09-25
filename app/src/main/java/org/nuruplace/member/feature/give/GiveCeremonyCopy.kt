@@ -7,6 +7,13 @@
 //   result.pledge  → "toward your <pledge.title> pledge"
 //   result.fund    → "to <fund.name>"
 //   neither        → "to <chip label>"   (an older server), else nothing
+//
+// The ceremony then WATCHES the real transaction (iOS parity, 2026-09-26):
+// GET /giving/transactions/{id} every 3 s, at most 20 times, until it is
+// final — and says so. The intent's answer is its first reading, read the
+// same way whether fresh or a replay of the same idempotency key (`reused`
+// is never consulted): a replay of a gift that already went through shows
+// "confirmed", one that failed shows "didn't complete".
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.GivingIntentResult
@@ -45,4 +52,46 @@ fun giveDestinationLabel(r: GivingIntentResult, chipFundLabel: String?, giftName
         else -> return null
     }
     return giftName?.trim()?.takeIf { it.isNotEmpty() }?.let { "$base — “$it”" } ?: base
+}
+
+/** Where a gift stands, from its transaction status (txn_status:
+ *  requires_action · processing · succeeded · failed · refunded; older
+ *  spellings settled / completed / cancelled read the same way). */
+enum class GiftOutcome { Processing, Succeeded, Failed }
+
+fun giftOutcome(status: String?): GiftOutcome = when (status?.trim()?.lowercase()) {
+    "succeeded", "settled", "completed" -> GiftOutcome.Succeeded
+    "failed", "cancelled", "canceled" -> GiftOutcome.Failed
+    else -> GiftOutcome.Processing
+}
+
+/** The ceremony's watch: one GET /giving/transactions/{id} every 3 s… */
+const val CEREMONY_WATCH_INTERVAL_MS = 3_000L
+
+/** …at most 20 times (~60 s), as iOS. */
+const val CEREMONY_WATCH_MAX = 20
+
+/** Watch again only while the gift is still processing and the watch has
+ *  readings left. */
+fun keepWatchingGift(outcome: GiftOutcome, readingsDone: Int): Boolean =
+    outcome == GiftOutcome.Processing && readingsDone < CEREMONY_WATCH_MAX
+
+/** The ceremony's title for where the gift stands. */
+fun giveCeremonyTitle(outcome: GiftOutcome): String =
+    if (outcome == GiftOutcome.Failed) "Your gift didn't go through" else "Thank you for your generosity"
+
+/** The ceremony's one line for where the gift stands: confirmed, didn't
+ *  complete, still out of reach of the watch, or — while processing — the
+ *  instruction line ([giveCeremonyLine]). */
+fun giveCeremonyStatusLine(
+    r: GivingIntentResult,
+    amountMinor: Int,
+    chipFundLabel: String?,
+    outcome: GiftOutcome,
+    watchLapsed: Boolean,
+): String = when (outcome) {
+    GiftOutcome.Succeeded -> "Gift confirmed — receipt on its way. 🎉"
+    GiftOutcome.Failed -> "The payment didn't complete — no charge was made."
+    GiftOutcome.Processing ->
+        if (watchLapsed) "Still processing — your gift will show once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel)
 }

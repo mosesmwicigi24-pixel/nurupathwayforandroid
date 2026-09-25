@@ -202,6 +202,8 @@ fun NewPledgeFlow(
             try {
                 Net.client.api.createPledge(body)
                 Haptics.confirm(view)
+                // Partners, its statement and the DUE rows count this pledge now.
+                GivingEvents.emit()
                 onCreated()
             } catch (e: Exception) {
                 error = ApiException.message(e)

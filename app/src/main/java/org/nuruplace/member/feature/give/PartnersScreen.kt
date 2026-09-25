@@ -6,7 +6,8 @@ package org.nuruplace.member.feature.give
 // One cream band (the GIVE · PARTNERS control, "Walk with the church", one
 // muted line), then white cards in this order and nothing more:
 //
-//   STANDING   partner since · gifts kept · tier chip · Make a pledge (the
+//   STANDING   partner since · commitments (or gifts) kept · tier chip ·
+//              Make a pledge (the
 //              ONLY gold-filled button on the page) · Statement
 //   DUE        one row per upcoming due, Pay / Resume — only when there is one;
 //              a failed or paused schedule is a compact amber row under it
@@ -29,8 +30,15 @@ package org.nuruplace.member.feature.give
 // statement numbers are the ONE client-side derivation and live as pure
 // functions in PartnerStatementMath.kt so iOS and Android cannot disagree.
 //
+// Freshness (GivingEvents.kt): the standing and the statement refetch every
+// time the segment is shown and on every resume, keeping what is on screen
+// while they do; the ViewModel also reloads on GivingEvents, so a pledge paid
+// from the Give segment is already counted when the member switches back.
+//
 // Two rules from the original design still carry into the copy:
-//   · `kept` is cycles COLLECTED, never scheduled — "N gifts kept".
+//   · `kept` is cycles COLLECTED, never scheduled — "N gifts kept", said
+//     only for a schedule-only partner; with a monthly pledge the line
+//     counts this year's kept commitments (PartnerStatementMath.standingKeptLine).
 //   · nothing here says "your giving produced this"; we cannot trace a
 //     shilling to a disciple.
 
@@ -87,12 +95,18 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.DueItem
@@ -135,13 +149,43 @@ class PartnersViewModel : ViewModel() {
     var statements by mutableStateOf<Map<Int, GivingStatement>>(emptyMap()); private set
     /** The tapped year chip; null = the current year. */
     var statementYear by mutableStateOf<Int?>(null); private set
+    /** True while ANY statement fetch is in flight — two years loading at
+     *  once must not flash the "couldn't load" card when one lands first. */
     var statementLoading by mutableStateOf(false); private set
+    private var statementsInFlight = 0
     var statementError by mutableStateOf<String?>(null); private set
 
+    private val freshness = GivingFreshness()
+    // Latest request wins: a slower, older answer never overwrites a newer
+    // one (an entry fetch and an event-driven one can overlap).
+    private var partnershipSeq = 0
+    private val statementSeq = mutableMapOf<Int, Int>()
+
+    init {
+        // Money moved somewhere (a gift, a pledge change) — refetch, even
+        // while the Partners segment is not the one showing. Only once the
+        // standing has been asked for: a member who never opens Partners
+        // costs no fetch (its first showing loads anyway).
+        viewModelScope.launch {
+            GivingEvents.changed.debouncedGivingReloads().collect {
+                if (partnershipSeq > 0 && freshness.shouldRefetchAfterEvent()) load()
+            }
+        }
+    }
+
+    /** Entry / resume (stale-while-revalidate): refetch unless a fetch has
+     *  just started — what is on screen stays while it runs. */
+    fun refresh() {
+        if (freshness.shouldRefetchOnEntry()) load()
+    }
+
     fun load() {
+        freshness.fetchStarted()
+        val seq = ++partnershipSeq
         viewModelScope.launch {
             loading = true; error = null
             val r = runCatching { Net.client.api.partnership() }
+            if (seq != partnershipSeq) return@launch // a newer fetch owns the state
             r.getOrNull()?.let { partnership = it }
             if (r.isFailure) error = ApiException.message(r.exceptionOrNull() ?: Exception())
             loading = false
@@ -158,12 +202,16 @@ class PartnersViewModel : ViewModel() {
     }
 
     fun loadStatement(year: Int) {
+        val seq = (statementSeq[year] ?: 0) + 1
+        statementSeq[year] = seq
         viewModelScope.launch {
-            statementLoading = true; statementError = null
-            runCatching { Net.client.api.statements(year) }
-                .onSuccess { statements = statements + (year to it) }
-                .onFailure { statementError = ApiException.message(it) }
-            statementLoading = false
+            statementsInFlight++; statementLoading = true; statementError = null
+            val r = runCatching { Net.client.api.statements(year) }
+            if (statementSeq[year] == seq) {
+                r.onSuccess { statements = statements + (year to it) }
+                    .onFailure { statementError = ApiException.message(it) }
+            }
+            statementsInFlight--; statementLoading = statementsInFlight > 0
         }
     }
 
@@ -172,7 +220,7 @@ class PartnersViewModel : ViewModel() {
             resuming = true
             val ok = runCatching { Net.client.api.resumeSchedule(scheduleId) }.isSuccess
             resuming = false
-            if (ok) load() else actionError = "That didn't go through. Your giving is unchanged."
+            if (ok) { GivingEvents.emit(); load() } else actionError = "That didn't go through. Your giving is unchanged."
         }
     }
 
@@ -182,7 +230,7 @@ class PartnersViewModel : ViewModel() {
             joining = true; actionError = null
             val r = runCatching { Net.client.api.joinPartners() }
             joining = false
-            if (r.isSuccess) { load(); onJoined() } else actionError = ApiException.message(r.exceptionOrNull() ?: Exception())
+            if (r.isSuccess) { GivingEvents.emit(); load(); onJoined() } else actionError = ApiException.message(r.exceptionOrNull() ?: Exception())
         }
     }
 
@@ -192,14 +240,16 @@ class PartnersViewModel : ViewModel() {
             busyPledgeId = pledgeId; actionError = null
             val r = runCatching { Net.client.api.updatePledge(pledgeId, body) }
             busyPledgeId = null
-            if (r.isSuccess) { load(); onDone() } else actionError = ApiException.message(r.exceptionOrNull() ?: Exception())
+            // Emit BEFORE load(): this VM's own collector then sees a fetch
+            // that started after the event and skips; everyone else reloads.
+            if (r.isSuccess) { GivingEvents.emit(); load(); onDone() } else actionError = ApiException.message(r.exceptionOrNull() ?: Exception())
         }
     }
 }
 
 @Composable
 fun PartnersScreen(
-    vm: PartnersViewModel = remember { PartnersViewModel() },
+    vm: PartnersViewModel = viewModel(),
     onPayNow: (GivePreset) -> Unit = {},
     onOpenReceipt: (String) -> Unit = {},
     /** Open the partners statement on this year (the STATEMENT card's chip). */
@@ -208,7 +258,11 @@ fun PartnersScreen(
     /** The tab's GIVE · PARTNERS control (GiveTabScreen) — first row of the band. */
     segmentControl: @Composable () -> Unit = {},
 ) {
-    LaunchedEffect(Unit) { if (vm.partnership == null) vm.load() }
+    // Stale-while-revalidate on every showing of the segment, and on every
+    // return to the foreground (the M-Pesa PIN prompt is its own activity).
+    // The two can land together — refresh() fetches once for both.
+    LaunchedEffect(Unit) { vm.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
     val p = vm.partnership
     val openStatement = { onOpenPartnersStatement(vm.statementYear ?: LocalDate.now().year) }
 
@@ -228,7 +282,7 @@ fun PartnersScreen(
                     action = "Try again" to { vm.load() },
                 )
                 p.isMember || p.isPartner -> {
-                    StandingCard(p, onAddPledge, openStatement)
+                    StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
                     if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
                     // Only when there is something to say — a partner whose
                     // giving is collecting cleanly never sees an amber row.
@@ -298,7 +352,7 @@ internal fun StateChip(text: String, bg: Color, fg: Color) {
 // ── 1. Standing / Join ───────────────────────────────────────────────────────
 
 @Composable
-private fun StandingCard(p: Partnership, onAddPledge: () -> Unit, onOpenStatement: () -> Unit) {
+private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddPledge: () -> Unit, onOpenStatement: () -> Unit) {
     val view = LocalView.current
     val since = (p.membership?.joinedAt ?: p.since)?.let { PartnerFormat.monthYear(it) }
     val paused = p.membership?.status == "paused" || p.status == "paused" || p.trouble?.paused == true
@@ -307,9 +361,10 @@ private fun StandingCard(p: Partnership, onAddPledge: () -> Unit, onOpenStatemen
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(since?.let { "Partner since $it" } ?: "Partner", style = giInter(16, FontWeight.SemiBold), color = GIVE.navy)
-                // "kept" is cycles collected, never scheduled.
+                // Commitments kept this year (a monthly pledge), else gifts
+                // collected (a schedule) — PartnerStatementMath.standingKeptLine.
                 Text(
-                    "${p.kept} ${if (p.kept == 1) "gift" else "gifts"} kept · ${if (paused) "paused" else "on track"}",
+                    standingKeptLine(p, yearStatement, paused),
                     style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -379,7 +434,12 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
             due.sortedBy { it.dueOn }.forEachIndexed { i, d ->
                 if (i > 0) Hairline()
                 val pledge = p.pledges.firstOrNull { it.pledgeId == d.id }
-                val whenLabel = partnerDate(d.dueOn)?.let { dueRelativeLabel(it, today, PartnerFormat::dayMonth) } ?: "soon"
+                // pending_minor: the part of this instalment already on its
+                // way — Processing instead of Pay once it covers the amount.
+                val shown = dueRowView(d, pendingMethodFor(d.id, vm.statements[today.year]))
+                // "today" · "in 3 days" · "5 Oct" — or, already past,
+                // "overdue since 10 Aug" / "2 overdue since 10 Aug" in amber.
+                val dueWhen = dueWhen(d, today)
                 val what = if (d.kind == "schedule") {
                     "Recurring gift" + (p.rhythm?.method?.takeIf { it.isNotBlank() }?.let { " · ${giveMethodLabel(it)}" } ?: "")
                 } else {
@@ -390,23 +450,40 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("${ksh(d.amountMinor)} · $whenLabel", style = giInter(15, FontWeight.SemiBold), color = GIVE.navy)
-                        Text(what, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
+                        Text(
+                            buildAnnotatedString {
+                                append("${ksh(shown.leadMinor)} · ")
+                                if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
+                            },
+                            style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
+                        )
+                        Text(
+                            listOfNotNull(what, shown.processingNote).joinToString(" · "),
+                            style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
+                        )
                     }
                     if (d.action == "resume") {
                         NavyPill("Resume", enabled = !vm.resuming && vm.busyPledgeId == null) {
                             Haptics.tap(view)
                             if (d.kind == "schedule") vm.resume(d.id) else vm.update(d.id, UpdatePledgeBody(status = "active"))
                         }
+                    } else if (shown.processingChip != null) {
+                        // Already paid and on its way: no Pay to tap twice.
+                        StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
                     } else {
                         NavyPill("Pay") {
                             Haptics.tap(view)
                             onPayNow(
                                 GivePreset(
                                     fundId = pledge?.fund?.code,
-                                    amountMinor = d.amountMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
+                                    // The uncovered remainder when part is already on its way.
+                                    amountMinor = shown.leadMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
                                     pledgeId = if (d.kind == "pledge") d.id else pledge?.pledgeId,
                                     title = d.title.ifBlank { null } ?: pledge?.displayTitle,
+                                    // Where the server will route it, for the
+                                    // PAYING YOUR PLEDGE card (GiveTargetCopy).
+                                    paysTo = d.paysTo ?: pledge?.paysTo,
+                                    terms = pledge?.let { pledgeTermsLine(it, today) },
                                 ),
                             )
                         }
@@ -448,7 +525,10 @@ private fun PledgesSection(
     val live = p.pledges.filter { it.status != "cancelled" }
     val active = live.count { it.status == "active" }
     val today = LocalDate.now()
-    val yearPayments = vm.statements[today.year]?.payments.orEmpty()
+    // This year's statement: its pledges[] carry the server's kept/due per
+    // pledge (PartnerStatementMath.pledgeKeptThisYear), its payments the
+    // local fallback.
+    val yearStatement = vm.statements[today.year]
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -463,7 +543,7 @@ private fun PledgesSection(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 live.forEach { pl ->
-                    PledgeCard(pl, busy = vm.busyPledgeId == pl.pledgeId, yearPayments = yearPayments, today = today) { detailId = pl.pledgeId }
+                    PledgeCard(pl, busy = vm.busyPledgeId == pl.pledgeId, yearStatement = yearStatement, today = today) { detailId = pl.pledgeId }
                 }
             }
         }
@@ -512,7 +592,12 @@ private fun PledgesSection(
             onOpenReceipt = onOpenReceipt,
             onPayNow = {
                 detailId = null
-                onPayNow(GivePreset(fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.displayTitle))
+                onPayNow(
+                    GivePreset(
+                        fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.displayTitle,
+                        paysTo = pl.paysTo, terms = pledgeTermsLine(pl, today),
+                    ),
+                )
             },
             onPauseResume = { vm.update(pl.pledgeId, UpdatePledgeBody(status = if (pl.status == "paused") "active" else "paused")) },
             onEdit = { detailId = null; editing = pl },
@@ -547,7 +632,7 @@ private fun stateChip(pl: Pledge): Triple<String, Color, Color> = when {
  *  member's own when set, else the server's derived one); the amount and
  *  due line sit under it, so a member with three pledges can tell them apart. */
 @Composable
-private fun PledgeCard(pl: Pledge, busy: Boolean, yearPayments: List<StatementPayment>, today: LocalDate, onOpen: () -> Unit) {
+private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement?, today: LocalDate, onOpen: () -> Unit) {
     val total = pl.shape == "total"
     val (chipText, chipBg, chipFg) = stateChip(pl)
     val amountLine = if (total) {
@@ -561,8 +646,9 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearPayments: List<StatementPa
         val toGo = maxOf((pl.targetMinor ?: 0) - paid, 0)
         "${ksh(paid)} paid · ${PartnerFormat.grouped(toGo / 100)} to go"
     } else {
-        val (kept, elapsed) = keptThisYear(pl, yearPayments, today)
-        if (elapsed == 0) "Nothing due yet this year" else "$kept of $elapsed kept this year"
+        // The server's "N of M" when this year's statement names the pledge,
+        // else the local estimate; nothing at all while nothing is due.
+        pledgeKeptLine(pl, yearStatement, today)
     }
     Column(Modifier.partnerCard(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -579,9 +665,18 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearPayments: List<StatementPa
         Box(Modifier.fillMaxWidth().height(6.dp).clip(Capsule).background(GIVE.mutedBg)) {
             Box(Modifier.fillMaxWidth(progressFraction(pl)).fillMaxHeight().clip(Capsule).background(GIVE.gold))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(left, style = giInter(11), color = GIVE.sub)
-            pl.progress.nextDue?.let { partnerDate(it) }?.let { Text("Next ${PartnerFormat.dayMonth(it)}", style = giInter(11), color = GIVE.sub) }
+        Row(Modifier.fillMaxWidth()) {
+            left?.let { Text(it, style = giInter(11), color = GIVE.sub) }
+            Spacer(Modifier.weight(1f))
+            // "Next 5 Oct" — or "Overdue since 10 Aug" in amber once its
+            // next instalment is already past.
+            pledgeNextLabel(pl, today)?.let {
+                Text(
+                    it.text,
+                    style = giInter(11, if (it.overdue) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (it.overdue) GIVE.goldChipText else GIVE.sub,
+                )
+            }
         }
     }
 }

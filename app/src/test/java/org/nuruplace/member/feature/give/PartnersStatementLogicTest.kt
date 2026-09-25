@@ -6,11 +6,21 @@
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
+import org.nuruplace.member.data.net.PartnerSeason
+import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
+import org.nuruplace.member.data.net.PledgeProgress
+import org.nuruplace.member.data.net.StatementFaithfulness
+import org.nuruplace.member.data.net.StatementImpact
+import org.nuruplace.member.data.net.StatementMonthStatus
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
 
@@ -167,5 +177,272 @@ class PartnersStatementLogicTest {
     fun `no pledge payments means no months`() {
         assertTrue(paymentsByMonth(emptyList()).isEmpty())
         assertTrue(paymentsByMonth(listOf(payment(5, null, "2026-01-01T00:00:00Z"))).isEmpty())
+    }
+
+    // ── Statement v2: the impact-led top (spec §3d) ──
+
+    @Test
+    fun `disciples tile shows the count from one disciple up`() {
+        assertEquals(DisciplesTile.Carried(1), disciplesTile(StatementImpact(paidMinor = 2_000_000, perDiscipleMinor = 2_000_000, disciplesCarried = 1, towardNextMinor = 0)))
+        assertEquals(DisciplesTile.Carried(3), disciplesTile(StatementImpact(paidMinor = 6_600_000, perDiscipleMinor = 2_000_000, disciplesCarried = 3, towardNextMinor = 600_000)))
+    }
+
+    @Test
+    fun `disciples tile never says zero - below the first it is progress toward it`() {
+        val t = disciplesTile(StatementImpact(paidMinor = 600_000, perDiscipleMinor = 2_000_000, disciplesCarried = 0, towardNextMinor = 600_000))
+        assertTrue(t is DisciplesTile.Toward)
+        t as DisciplesTile.Toward
+        assertEquals("KSh 6,000 of 20,000 toward carrying one disciple through a level", t.text)
+        assertEquals(0.3f, t.fraction, 0.0001f)
+        assertFalse(t.text.startsWith("0"))
+        // Nothing paid yet still reads as progress, never "0 disciples".
+        val none = disciplesTile(StatementImpact(perDiscipleMinor = 2_000_000)) as DisciplesTile.Toward
+        assertEquals("KSh 0 of 20,000 toward carrying one disciple through a level", none.text)
+        assertEquals(0f, none.fraction, 0f)
+    }
+
+    @Test
+    fun `disciples tile tolerates a missing per-disciple cost and a missing toward_next`() {
+        // per_disciple 0 → the tier costing (KSh 20,000), so no divide-by-zero.
+        val noCost = disciplesTile(StatementImpact(paidMinor = 500_000, perDiscipleMinor = 0, disciplesCarried = 0, towardNextMinor = 500_000)) as DisciplesTile.Toward
+        assertEquals(DISCIPLE_COST_MINOR, noCost.perDiscipleMinor)
+        assertEquals("KSh 5,000 of 20,000 toward carrying one disciple through a level", noCost.text)
+        // toward_next absent while money was paid → the paid amount's remainder.
+        val noToward = disciplesTile(StatementImpact(paidMinor = 800_000, perDiscipleMinor = 2_000_000)) as DisciplesTile.Toward
+        assertEquals(800_000, noToward.towardMinor)
+        // Never past the goal, whatever the wire says.
+        val over = disciplesTile(StatementImpact(perDiscipleMinor = 2_000_000, towardNextMinor = 9_000_000)) as DisciplesTile.Toward
+        assertEquals(2_000_000, over.towardMinor)
+        assertEquals(1f, over.fraction, 0f)
+    }
+
+    @Test
+    fun `kept tile is kept on time plus late of due, hidden before anything is due`() {
+        assertEquals("5 of 6", keptTileValue(StatementFaithfulness(keptOnTime = 4, late = 1, missed = 1, dueCount = 6)))
+        assertNull(keptTileValue(StatementFaithfulness(dueCount = 0)))
+        assertNull(keptTileValue(null))
+    }
+
+    @Test
+    fun `compact amount rounds down and never overstates`() {
+        assertEquals("950", compactAmount(95_000))
+        assertEquals("1k", compactAmount(100_000))
+        assertEquals("9.5k", compactAmount(959_900))
+        assertEquals("22k", compactAmount(2_200_000))
+        assertEquals("22k", compactAmount(2_299_900))
+        assertEquals("999k", compactAmount(99_999_900))
+        assertEquals("1.5M", compactAmount(159_000_000))
+        assertEquals("12M", compactAmount(1_250_000_000))
+        assertEquals("0", compactAmount(0))
+        assertEquals("0", compactAmount(-500))
+    }
+
+    @Test
+    fun `faithfulness strip is twelve months Jan to Dec whatever the wire order`() {
+        val wire = listOf(
+            StatementMonthStatus(month = 9, status = "kept"),
+            StatementMonthStatus(month = 7, status = "late"),
+            StatementMonthStatus(month = 8, status = "MISSED"),
+            StatementMonthStatus(month = 10, status = "upcoming"),
+            StatementMonthStatus(month = 11, status = "something new"),
+        )
+        val marks = faithfulnessMarks(wire)!!
+        assertEquals(12, marks.size)
+        assertEquals(MonthMark.None, marks[0])
+        assertEquals(MonthMark.Late, marks[6])
+        assertEquals(MonthMark.Missed, marks[7])
+        assertEquals(MonthMark.Kept, marks[8])
+        assertEquals(MonthMark.Upcoming, marks[9])
+        assertEquals(MonthMark.None, marks[10]) // unknown status reads as none
+        assertEquals(MonthMark.None, marks[11]) // left out reads as none
+    }
+
+    @Test
+    fun `faithfulness strip hides without months or with nothing but none`() {
+        assertNull(faithfulnessMarks(null))
+        assertNull(faithfulnessMarks(emptyList()))
+        assertNull(faithfulnessMarks((1..12).map { StatementMonthStatus(month = it, status = "none") }))
+    }
+
+    @Test
+    fun `faithfulness line reads the statement's counts, each part only when it is not zero`() {
+        val marks = listOf("kept", "kept", "kept", "kept", "kept", "kept", "late", "kept", "kept", "upcoming", "upcoming", "upcoming").map(::monthMark)
+        // The statement's counts — the ledger the hero's Kept tile reads —
+        // even where the strip's months would count differently.
+        assertEquals(
+            "6 kept on time · 1 late · next due 5 Oct",
+            faithfulnessLine(StatementFaithfulness(keptOnTime = 6, late = 1, missed = 0, dueCount = 7), marks, LocalDate.of(2026, 10, 5), today),
+        )
+        assertEquals("2 missed", faithfulnessLine(StatementFaithfulness(missed = 2, dueCount = 2), marks, null, today))
+        // No faithfulness block: the strip's months stand in, same wording.
+        val twoLate = listOf("kept", "none", "none", "none", "none", "none", "late", "late", "missed", "none", "none", "none").map(::monthMark)
+        assertEquals("1 kept on time · 2 late · 1 missed", faithfulnessLine(null, twoLate, null, today))
+        // A new partner with nothing behind them: just the next due.
+        val fresh = List(9) { MonthMark.None } + List(3) { MonthMark.Upcoming }
+        assertEquals("Next due 5 Oct", faithfulnessLine(StatementFaithfulness(), fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due 5 Oct", faithfulnessLine(null, fresh, LocalDate.of(2026, 10, 5), today))
+        // Next year's date carries its year.
+        assertEquals("Next due 5 Jan 2027", faithfulnessLine(null, fresh, LocalDate.of(2027, 1, 5), today))
+        assertNull(faithfulnessLine(StatementFaithfulness(), fresh, null, today))
+        assertNull(faithfulnessLine(null, fresh, null, today))
+    }
+
+    @Test
+    fun `next pledge due is the earliest server next_due across active monthly pledges`() {
+        val p = Partnership(
+            due = listOf(
+                DueItem(kind = "schedule", id = "s", dueOn = "2026-09-28"),     // the DUE list is not read
+                DueItem(kind = "pledge", id = "b", dueOn = "2026-09-26"),
+            ),
+            pledges = listOf(
+                Pledge(pledgeId = "c", status = "active", progress = PledgeProgress(nextDue = "2026-10-01")),
+                Pledge(pledgeId = "d", status = "paused", progress = PledgeProgress(nextDue = "2026-09-26")),   // not active
+                Pledge(pledgeId = "t", shape = "total", status = "active", dueOn = "2026-09-27",
+                    progress = PledgeProgress(nextDue = "2026-09-27")),                                         // not monthly
+                Pledge(pledgeId = "o", status = "active", progress = PledgeProgress(nextDue = "2026-09-20")),   // overdue, no due_day to go on
+            ),
+        )
+        assertEquals(LocalDate.of(2026, 10, 1), nextPledgeDue(p, today))
+        assertNull(nextPledgeDue(null, today))
+        assertNull(nextPledgeDue(Partnership(), today))
+    }
+
+    @Test
+    fun `a pledge paid today is next due next month, not today`() {
+        // today = 25 Sep. The instalment due today was paid: the server's ledger
+        // moved next_due to 25 Oct, though a DUE row for today may linger until
+        // the payment settles.
+        val paidToday = Partnership(
+            due = listOf(DueItem(kind = "pledge", id = "p1", dueOn = "2026-09-25", amountMinor = 100_000)),
+            pledges = listOf(Pledge(pledgeId = "p1", status = "active", dueDay = 25, progress = PledgeProgress(nextDue = "2026-10-25"))),
+        )
+        assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(paidToday, today))
+        assertEquals(
+            "1 kept on time · next due 25 Oct",
+            faithfulnessLine(
+                StatementFaithfulness(keptOnTime = 1, dueCount = 1),
+                List(8) { MonthMark.None } + MonthMark.Kept + List(3) { MonthMark.None }, nextPledgeDue(paidToday, today), today,
+            ),
+        )
+        // Paid ahead as well: the ledger is already at November.
+        val prepaid = paidToday.copy(pledges = listOf(paidToday.pledges.single().copy(progress = PledgeProgress(nextDue = "2026-11-25"))))
+        assertEquals(LocalDate.of(2026, 11, 25), nextPledgeDue(prepaid, today))
+    }
+
+    @Test
+    fun `an overdue pledge still contributes its next upcoming date, and the line says what was missed`() {
+        // today = 25 Sep. Two instalments behind (10 Aug, 10 Sep): next_due is
+        // the oldest, 10 Aug — but the next one coming is 10 Oct.
+        val behind = Pledge(pledgeId = "o", status = "active", dueDay = 10, progress = PledgeProgress(label = "behind", nextDue = "2026-08-10"))
+        assertEquals(LocalDate.of(2026, 10, 10), nextPledgeDue(Partnership(pledges = listOf(behind)), today))
+        // …and it wins when it comes first.
+        val behind27 = behind.copy(pledgeId = "o2", dueDay = 27, progress = PledgeProgress(label = "behind", nextDue = "2026-08-27"))
+        val onTime = Pledge(pledgeId = "c", status = "active", dueDay = 1, progress = PledgeProgress(nextDue = "2026-10-01"))
+        val p = Partnership(pledges = listOf(onTime, behind27))
+        assertEquals(LocalDate.of(2026, 9, 27), nextPledgeDue(p, today))
+        val marks = List(7) { MonthMark.Kept } + List(2) { MonthMark.Missed } + List(3) { MonthMark.Upcoming }
+        assertEquals(
+            "3 kept on time · 2 missed · next due 27 Sep",
+            faithfulnessLine(StatementFaithfulness(keptOnTime = 3, missed = 2, dueCount = 5), marks, nextPledgeDue(p, today), today),
+        )
+    }
+
+    @Test
+    fun `due_day stands in only when the server sent no next_due`() {
+        fun on(dueDay: Int, nextDue: String? = null) =
+            Partnership(pledges = listOf(Pledge(pledgeId = "p", status = "active", dueDay = dueDay, progress = PledgeProgress(nextDue = nextDue))))
+        assertEquals(LocalDate.of(2026, 10, 5), nextPledgeDue(on(5), today))     // the 5th has passed this month
+        assertEquals(LocalDate.of(2026, 9, 25), nextPledgeDue(on(25), today))    // due today, no ledger to say otherwise
+        assertEquals(LocalDate.of(2026, 9, 28), nextPledgeDue(on(30), today))    // days are 1–28
+        // A next_due from the server always wins over the day.
+        assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(on(25, nextDue = "2026-10-25"), today))
+        assertEquals(LocalDate.of(2026, 10, 25), nextDueDayDate(25, LocalDate.of(2026, 9, 26)))
+    }
+
+    @Test
+    fun `remaining this year sums the server's per-pledge remaining, hidden without it`() {
+        val rows = listOf(
+            StatementPledge(pledgeId = "a", remainingYearMinor = 600_000),
+            StatementPledge(pledgeId = "b", remainingYearMinor = 0),
+            StatementPledge(pledgeId = "c", remainingYearMinor = 1_000_000),
+        )
+        assertEquals(1_600_000, remainingThisYear(rows))
+        assertNull(remainingThisYear(listOf(StatementPledge(pledgeId = "a", pledgedMinor = 5, paidMinor = 1))))
+        assertNull(remainingThisYear(emptyList()))
+    }
+
+    @Test
+    fun `church raised shows on a need pledge only, rounded down and held to 100`() {
+        assertEquals("Church raised 42%", churchRaisedLine(StatementPledge(churchProgressPercent = 42.9)))
+        assertEquals("Church raised 100%", churchRaisedLine(StatementPledge(churchProgressPercent = 130.0)))
+        assertEquals("Church raised 0%", churchRaisedLine(StatementPledge(churchProgressPercent = -3.0)))
+        assertNull(churchRaisedLine(StatementPledge()))
+    }
+
+    @Test
+    fun `season line is church-wide, drops a zero half and hides with nothing to say`() {
+        assertEquals(
+            "4 levels completed and 12 plans finished across the church while you have partnered.",
+            seasonLine(PartnerSeason(from = "2026-01-05", levelsCompleted = 4, modulesCompleted = 30, plansFinished = 12)),
+        )
+        assertEquals(
+            "1 level completed and 1 plan finished across the church while you have partnered.",
+            seasonLine(PartnerSeason(levelsCompleted = 1, plansFinished = 1)),
+        )
+        assertEquals("3 plans finished across the church while you have partnered.", seasonLine(PartnerSeason(plansFinished = 3)))
+        assertNull(seasonLine(PartnerSeason()))
+        assertNull(seasonLine(null))
+    }
+
+    // ── Pending rows (freshness fix, owner 2026-09-26) ──
+
+    private fun pending(id: String, amount: Int = 100_000, method: String? = "mpesa", at: String? = "2026-09-26T19:04:00Z", pledgeId: String? = "p1") =
+        StatementPendingPayment(transactionId = id, amountMinor = amount, method = method, at = at, pledgeId = pledgeId, pledgeTitle = "General partnership")
+
+    @Test
+    fun `pending chip says what the payment is waiting for`() {
+        assertEquals("Waiting for M-Pesa", pendingChipText("mpesa"))
+        assertEquals("Waiting for M-Pesa", pendingChipText(" MPESA "))
+        assertEquals("Waiting for Airtel Money", pendingChipText("airtel"))
+        assertEquals("Processing", pendingChipText("card"))
+        assertEquals("Processing", pendingChipText("paypal"))
+        assertEquals("Processing", pendingChipText(null))
+        assertEquals("Processing", pendingChipText(""))
+    }
+
+    @Test
+    fun `pending rows are pledge-tied, newest first, and never repeat a row that has settled`() {
+        val s = GivingStatement(
+            year = 2026,
+            payments = listOf(payment(200_000, "p1", "2026-09-05T09:00:00Z", id = "settled")),
+            pending = listOf(
+                pending("older", at = "2026-09-20T08:00:00Z"),
+                pending("settled"),                         // settled between the reads — shown once, as settled
+                pending("gift", pledgeId = null),           // not a pledge payment — never on this statement
+                pending("newer", method = "airtel", at = "2026-09-26T19:04:00Z"),
+            ),
+        )
+        assertEquals(listOf("newer", "older"), pendingPaymentRows(s).map { it.transactionId })
+        assertTrue(pendingPaymentRows(GivingStatement(year = 2026)).isEmpty())
+    }
+
+    @Test
+    fun `pending never enters any total`() {
+        val settled = listOf(payment(200_000, "p1", "2026-09-05T09:00:00Z"))
+        val without = GivingStatement(year = 2026, payments = settled)
+        val with = without.copy(pending = listOf(pending("t9", amount = 100_000), pending("t10", amount = 50_000, method = "card")))
+        val pledges = listOf(monthly(id = "p1", amount = 200_000, dueDay = 5, createdAt = "2026-01-01T00:00:00Z"))
+
+        // The summary (local rule), the months, their subtotals and the foot are the settled money only.
+        assertEquals(partnerStatementSummary(2026, without, pledges), partnerStatementSummary(2026, with, pledges))
+        assertEquals(200_000, partnerStatementSummary(2026, with, pledges).paidMinor)
+        assertEquals(paymentsByMonth(without.payments), paymentsByMonth(with.payments))
+        assertEquals(200_000, statementYearTotal(paymentsByMonth(with.payments)))
+        assertEquals(
+            partnerStatementPledges(2026, without, pledges, today),
+            partnerStatementPledges(2026, with, pledges, today),
+        )
+        // …while the rows themselves are still there to be seen.
+        assertEquals(2, pendingPaymentRows(with).size)
     }
 }

@@ -4,7 +4,7 @@
 //
 //   · a picked OPTION travels as its target — fund / campaign_id / need_id
 //     copied from the option — and NO title: the server derives the name
-//     (campaign → fund → need → "Partnership");
+//     (campaign → fund → need → "General partnership");
 //   · General partnership travels as nothing at all — no target, no title;
 //   · a CUSTOM name travels as `title` ONLY (2–60, trimmed), no target.
 //

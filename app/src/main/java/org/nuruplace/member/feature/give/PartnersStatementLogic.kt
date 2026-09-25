@@ -13,15 +13,32 @@
 //             the giving statement), grouped by month newest first, each month
 //             subtotalled. A row whose date cannot be read keeps its money in
 //             a trailing "undated" group rather than vanishing.
+//   Pending   the server's `pending` rows (started, not settled) sit above
+//             them as PROCESSING with a "Waiting for M-Pesa" chip — and are
+//             counted in NO total: every figure here reads `payments` only.
 //   Years     the chips: this year back to the join year, at most four —
 //             the same list the Partners tab shows.
+//
+// Statement v2 (docs/PARTNERS_PROGRAMME.md §3d, 2026-09-25) adds the
+// impact-led top: the hero's three tiles, the FAITHFULNESS strip and its
+// line, COMMITMENTS' "Remaining this year", "Church raised N%" and the
+// SINCE YOU BEGAN line. Each reads a server block and answers null when the
+// block is absent, so the screen hides it — never a zero, and never
+// "0 disciples": below the first, the tile shows progress toward it.
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.GivingStatement
+import org.nuruplace.member.data.net.PartnerSeason
+import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
+import org.nuruplace.member.data.net.StatementFaithfulness
+import org.nuruplace.member.data.net.StatementImpact
+import org.nuruplace.member.data.net.StatementMonthStatus
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
+import java.util.Locale
 
 /** One month of pledge-tied payments, newest first, with its subtotal. A
  *  `month` of 0 is the trailing group for rows without a readable date. */
@@ -124,3 +141,174 @@ internal fun paymentsByMonth(payments: List<StatementPayment>): List<StatementMo
 
 /** What the payments list adds up to — the year's total at its foot. */
 internal fun statementYearTotal(months: List<StatementMonth>): Int = months.sumOf { it.subtotalMinor }
+
+/** The PROCESSING rows above PAYMENTS: the server's `pending` list,
+ *  pledge-tied only (as every row here), newest first, minus any row that
+ *  has meanwhile settled into `payments` (the two are read in one answer,
+ *  but a row is never shown twice). Never summed anywhere. */
+internal fun pendingPaymentRows(s: GivingStatement): List<StatementPendingPayment> {
+    val settled = s.payments.map { it.transactionId }.filter { it.isNotBlank() }.toSet()
+    return s.pending.orEmpty()
+        .filter { !it.pledgeId.isNullOrBlank() && (it.transactionId.isBlank() || it.transactionId !in settled) }
+        .sortedByDescending { it.at ?: "" }
+}
+
+/** The amber chip on a PROCESSING row: what the payment is waiting for. */
+internal fun pendingChipText(method: String?): String = when (method?.trim()?.lowercase(Locale.ROOT)) {
+    "mpesa" -> "Waiting for M-Pesa"
+    "airtel" -> "Waiting for Airtel Money"
+    else -> "Processing"
+}
+
+// ── Statement v2: the impact-led top (spec §3d) ──────────────────────────────
+
+/** What one disciple through a level costs (giving-tier economics, tiers.ts:
+ *  KSh 20,000). Used ONLY when the server's `per_disciple_minor` is missing
+ *  or non-positive, so the progress tile never divides by zero. */
+internal const val DISCIPLE_COST_MINOR = 2_000_000
+
+/** The hero's first tile. Never "0 disciples": at one or more it is the
+ *  count; below the first it is progress toward it. */
+internal sealed interface DisciplesTile {
+    /** `count` ≥ 1 disciples carried through a level. */
+    data class Carried(val count: Int) : DisciplesTile
+
+    /** Below the first: `towardMinor` of `perDiscipleMinor`, and the bar's
+     *  fill 0..1. */
+    data class Toward(val towardMinor: Int, val perDiscipleMinor: Int, val fraction: Float) : DisciplesTile {
+        /** "KSh 6,000 of 20,000 toward carrying one disciple through a level". */
+        val text: String
+            get() = "${ksh(towardMinor)} of ${PartnerFormat.grouped(perDiscipleMinor / 100)} toward carrying one disciple through a level"
+    }
+}
+
+internal fun disciplesTile(impact: StatementImpact): DisciplesTile {
+    if (impact.disciplesCarried >= 1) return DisciplesTile.Carried(impact.disciplesCarried)
+    val per = impact.perDiscipleMinor.takeIf { it > 0 } ?: DISCIPLE_COST_MINOR
+    // The server's toward_next; an older or partial answer that left it at 0
+    // while money was paid reads the paid amount's remainder instead.
+    val toward = (impact.towardNextMinor.takeIf { it > 0 } ?: (maxOf(impact.paidMinor, 0) % per)).coerceIn(0, per)
+    return DisciplesTile.Toward(toward, per, toward.toFloat() / per)
+}
+
+/** The Kept tile's "5 of 6" (kept = on time + late), or null to hide it —
+ *  no faithfulness block, or nothing has come due yet. */
+internal fun keptTileValue(f: StatementFaithfulness?): String? {
+    if (f == null || f.dueCount <= 0) return null
+    return "${f.keptOnTime + f.late} of ${f.dueCount}"
+}
+
+/** A compact amount in major units for a narrow tile — "950", "9.5k",
+ *  "22k", "1.5M". Always rounded DOWN so the short form never overstates;
+ *  the tile's content description carries the full figure. */
+internal fun compactAmount(minor: Int): String {
+    val major = maxOf(minor, 0) / 100
+    fun tenths(n: Int, unit: Int, suffix: String): String {
+        val t = n / (unit / 10) // floor to one decimal of `unit`
+        return if (t % 10 == 0) "${t / 10}$suffix" else "${t / 10}.${t % 10}$suffix"
+    }
+    return when {
+        major < 1_000 -> "$major"
+        major < 10_000 -> tenths(major, 1_000, "k")
+        major < 1_000_000 -> "${major / 1_000}k"
+        major < 10_000_000 -> tenths(major, 1_000_000, "M")
+        else -> "${major / 1_000_000}M"
+    }
+}
+
+/** One square of the FAITHFULNESS strip. */
+internal enum class MonthMark { Kept, Late, Missed, Upcoming, None }
+
+internal fun monthMark(status: String?): MonthMark = when (status?.trim()?.lowercase(Locale.ROOT)) {
+    "kept" -> MonthMark.Kept
+    "late" -> MonthMark.Late
+    "missed" -> MonthMark.Missed
+    "upcoming" -> MonthMark.Upcoming
+    else -> MonthMark.None
+}
+
+/** Jan..Dec, exactly twelve, whatever order or gaps the wire has (a month
+ *  the server left out reads as none). Null — hide the card — when there is
+ *  no `months` block, or no month carries anything but none (a partner with
+ *  only total pledges has no monthly rhythm to show). */
+internal fun faithfulnessMarks(months: List<StatementMonthStatus>?): List<MonthMark>? {
+    if (months.isNullOrEmpty()) return null
+    val marks = (1..12).map { m -> monthMark(months.firstOrNull { it.month == m }?.status) }
+    return marks.takeIf { list -> list.any { it != MonthMark.None } }
+}
+
+/** "3 kept on time · 1 late · 2 missed · next due 5 Oct" under the strip.
+ *  The counts are the statement's own `faithfulness` (the ledger the hero's
+ *  Kept tile reads); the strip's month marks stand in only when the
+ *  statement sends no faithfulness block. Each part appears only when it is
+ *  not zero, and `nextDue` only for the year being lived. Null when nothing
+ *  is left to say. */
+internal fun faithfulnessLine(f: StatementFaithfulness?, marks: List<MonthMark>, nextDue: LocalDate?, today: LocalDate): String? {
+    val onTime = maxOf(f?.keptOnTime ?: marks.count { it == MonthMark.Kept }, 0)
+    val late = maxOf(f?.late ?: marks.count { it == MonthMark.Late }, 0)
+    val missed = maxOf(f?.missed ?: marks.count { it == MonthMark.Missed }, 0)
+    val parts = buildList {
+        if (onTime > 0) add("$onTime kept on time")
+        if (late > 0) add("$late late")
+        if (missed > 0) add("$missed missed")
+        nextDue?.let { d ->
+            add("next due ${if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())}")
+        }
+    }
+    if (parts.isEmpty()) return null
+    return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
+}
+
+/** FAITHFULNESS' "next due": the earliest, across ACTIVE MONTHLY pledges,
+ *  of each pledge's next upcoming date — its server `progress.next_due` when
+ *  that is today or later (the ledger advances it once an instalment is paid:
+ *  26 Sep paid → 26 Oct; a pre-payment → 26 Nov), else the next `due_day`
+ *  on or after today: an OVERDUE pledge (next_due already past) still has
+ *  an instalment coming, and a pledge the server sent no next_due for (an
+ *  older server) has its day. The DUE list is not read (it holds an
+ *  instalment until its payment settles). Null when none. */
+internal fun nextPledgeDue(p: Partnership?, today: LocalDate): LocalDate? {
+    if (p == null) return null
+    return p.pledges
+        .filter { it.status == "active" && it.shape != "total" }
+        .mapNotNull { pl ->
+            partnerDate(pl.progress.nextDue)?.takeIf { !it.isBefore(today) }
+                ?: pl.dueDay?.let { nextDueDayDate(it, today) }
+        }
+        .minOrNull()
+}
+
+/** The first `dueDay`-of-the-month date on or after `today` (days 1–28,
+ *  spec §1) — the fallback for a pledge the server sent no next_due for. */
+internal fun nextDueDayDate(dueDay: Int, today: LocalDate): LocalDate {
+    val thisMonth = today.withDayOfMonth(dueDay.coerceIn(1, 28))
+    return if (thisMonth.isBefore(today)) thisMonth.plusMonths(1) else thisMonth
+}
+
+/** COMMITMENTS' header figure: Σ remaining_year_minor, or null (hidden) when
+ *  no row carries it — an older server, or rows derived locally. */
+internal fun remainingThisYear(rows: List<StatementPledge>): Int? {
+    if (rows.none { it.remainingYearMinor != null }) return null
+    return rows.sumOf { it.remainingYearMinor ?: maxOf(it.pledgedMinor - it.paidMinor, 0) }
+}
+
+/** "Church raised 42%" under a department-need pledge; null otherwise.
+ *  Rounded down and held to 0..100 — never more than the need. */
+internal fun churchRaisedLine(e: StatementPledge): String? {
+    val pct = e.churchProgressPercent ?: return null
+    if (pct.isNaN()) return null
+    return "Church raised ${pct.toInt().coerceIn(0, 100)}%"
+}
+
+/** SINCE YOU BEGAN: "4 levels completed and 12 plans finished across the
+ *  church while you have partnered." A zero half is left out; with nothing
+ *  to say at all (or no season block) the card is hidden. */
+internal fun seasonLine(season: PartnerSeason?): String? {
+    if (season == null) return null
+    val parts = listOfNotNull(
+        season.levelsCompleted.takeIf { it > 0 }?.let { "$it level${if (it == 1) "" else "s"} completed" },
+        season.plansFinished.takeIf { it > 0 }?.let { "$it plan${if (it == 1) "" else "s"} finished" },
+    )
+    if (parts.isEmpty()) return null
+    return "${parts.joinToString(" and ")} across the church while you have partnered."
+}

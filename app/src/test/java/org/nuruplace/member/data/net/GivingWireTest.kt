@@ -295,4 +295,192 @@ class GivingWireTest {
         assertEquals(600, s.byPledge.single().totalMinor)
         assertEquals("2026-02-01T00:00:00Z", s.payments.single().occurredAt)
     }
+
+    // ── Statement v2 (spec §3d, contract 2026-09-25) ──
+
+    @Test
+    fun `statement decodes impact, months, faithfulness, season and the per-pledge v2 fields`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"years":[2026],"year":2026,"total_minor":2200000,"currency":"KES","by_pledge":[],"by_fund":[],"payments":[],
+                "pledged_minor":2400000,"paid_minor":2200000,"remaining_minor":200000,
+                "impact":{"paid_minor":2200000,"per_disciple_minor":2000000,"disciples_carried":1,"toward_next_minor":200000},
+                "months":[{"month":1,"status":"none","due_minor":0,"paid_minor":0},
+                          {"month":7,"status":"late","due_minor":200000,"paid_minor":200000},
+                          {"month":9,"status":"kept","due_minor":200000,"paid_minor":200000},
+                          {"month":10,"status":"upcoming","due_minor":200000,"paid_minor":0}],
+                "faithfulness":{"kept_on_time":7,"late":1,"missed":1,"due_count":9},
+                "season":{"from":"2026-01-05T00:00:00Z","levels_completed":4,"modules_completed":30,"plans_finished":12},
+                "pledges":[
+                  {"pledge_id":"p1","title":"School fees","shape":"monthly","amount_minor":200000,"pledged_minor":2400000,"paid_minor":1800000,
+                   "kept":8,"due_count":9,"remaining_year_minor":600000,"church_progress_percent":null},
+                  {"pledge_id":"p2","title":"Sound desk","shape":"total","target_minor":400000,"pledged_minor":400000,"paid_minor":400000,
+                   "remaining_year_minor":0,"church_progress_percent":42.5},
+                  {"pledge_id":"p3","title":"Chairs","shape":"total","target_minor":100000,"remaining_year_minor":100000,"church_progress_percent":60}
+                ]}""",
+        )
+        val impact = s.impact!!
+        assertEquals(2_200_000, impact.paidMinor)
+        assertEquals(2_000_000, impact.perDiscipleMinor)
+        assertEquals(1, impact.disciplesCarried)
+        assertEquals(200_000, impact.towardNextMinor)
+        val months = s.months!!
+        assertEquals(listOf(1, 7, 9, 10), months.map { it.month })
+        assertEquals(listOf("none", "late", "kept", "upcoming"), months.map { it.status })
+        assertEquals(200_000, months[1].dueMinor)
+        assertEquals(200_000, months[1].paidMinor)
+        val f = s.faithfulness!!
+        assertEquals(listOf(7, 1, 1, 9), listOf(f.keptOnTime, f.late, f.missed, f.dueCount))
+        val season = s.season!!
+        assertEquals("2026-01-05T00:00:00Z", season.from)
+        assertEquals(4, season.levelsCompleted)
+        assertEquals(30, season.modulesCompleted)
+        assertEquals(12, season.plansFinished)
+        val pledges = s.pledges!!
+        assertEquals(600_000, pledges[0].remainingYearMinor)
+        assertNull(pledges[0].churchProgressPercent)
+        assertEquals(0, pledges[1].remainingYearMinor)
+        assertEquals(42.5, pledges[1].churchProgressPercent!!, 0.0)
+        // An integer percent decodes too.
+        assertEquals(60.0, pledges[2].churchProgressPercent!!, 0.0)
+    }
+
+    @Test
+    fun `older statement payload leaves every v2 block null so the screen hides it`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"years":[2026],"year":2026,"total_minor":1000,"by_pledge":[],"by_fund":[],"payments":[],
+                "pledges":[{"pledge_id":"p1","title":"Tithe","shape":"monthly","pledged_minor":1,"paid_minor":1,"kept":1,"due_count":1}]}""",
+        )
+        assertNull(s.impact)
+        assertNull(s.months)
+        assertNull(s.faithfulness)
+        assertNull(s.season)
+        assertNull(s.pledges!!.single().remainingYearMinor)
+        assertNull(s.pledges!!.single().churchProgressPercent)
+        // Explicit nulls read the same as absent (coerceInputValues), including season: null.
+        val nulled = json.decodeFromString<GivingStatement>("""{"year":2026,"impact":null,"months":null,"faithfulness":null,"season":null}""")
+        assertNull(nulled.impact)
+        assertNull(nulled.months)
+        assertNull(nulled.faithfulness)
+        assertNull(nulled.season)
+    }
+
+    @Test
+    fun `partial v2 blocks fall back to their defaults`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"year":2026,"impact":{"paid_minor":600000},"months":[{"month":3}],"faithfulness":{},"season":{}}""",
+        )
+        assertEquals(StatementImpact(paidMinor = 600_000), s.impact)
+        assertEquals(StatementMonthStatus(month = 3, status = "none"), s.months!!.single())
+        assertEquals(StatementFaithfulness(), s.faithfulness)
+        assertEquals(PartnerSeason(), s.season)
+    }
+
+    // ── Freshness fix (owner, 2026-09-26): pending rows + pays_to ──
+
+    @Test
+    fun `statement decodes pending rows, and an older server leaves pending null`() {
+        val s = json.decodeFromString<GivingStatement>(
+            """{"year":2026,"payments":[],
+                "pending":[{"transaction_id":"t9","amount_minor":100000,"currency":"KES","at":"2026-09-26T19:04:00Z",
+                            "status":"pending","method":"mpesa","receipt_code":null,"pledge_id":"p1","pledge_title":"General partnership"}]}""",
+        )
+        val row = s.pending!!.single()
+        assertEquals("t9", row.transactionId)
+        assertEquals(100_000, row.amountMinor)
+        assertEquals("KES", row.currency)
+        assertEquals("2026-09-26T19:04:00Z", row.at)
+        assertEquals("pending", row.status)
+        assertEquals("mpesa", row.method)
+        assertNull(row.receiptCode)
+        assertEquals("p1", row.pledgeId)
+        assertEquals("General partnership", row.pledgeTitle)
+
+        // Optional keys may be absent entirely.
+        val bare = json.decodeFromString<GivingStatement>("""{"year":2026,"pending":[{"transaction_id":"t1","amount_minor":5,"pledge_id":"p1"}]}""")
+        assertNull(bare.pending!!.single().method)
+        assertNull(bare.pending!!.single().at)
+        assertEquals("pending", bare.pending!!.single().status)
+
+        assertNull(json.decodeFromString<GivingStatement>("""{"year":2026,"payments":[]}""").pending)
+        assertNull(json.decodeFromString<GivingStatement>("""{"year":2026,"pending":null}""").pending)
+        assertTrue(json.decodeFromString<GivingStatement>("""{"year":2026,"pending":[]}""").pending!!.isEmpty())
+    }
+
+    @Test
+    fun `pledges and pledge due items decode pays_to, null when absent`() {
+        val p = json.decodeFromString<Partnership>(
+            """{"is_partner":true,
+                "pledges":[{"pledge_id":"p1","shape":"monthly","amount_minor":100000,"due_day":25,"title":"General partnership",
+                            "pays_to":{"code":"discipleship","name":"Discipleship"}},
+                           {"pledge_id":"p2","shape":"total","target_minor":5000000,"due_on":"2026-12-15"}],
+                "due":[{"kind":"pledge","id":"p1","title":"General partnership","amount_minor":100000,"due_on":"2026-10-25","action":"pay",
+                        "pays_to":{"code":"discipleship","name":"Discipleship"}},
+                       {"kind":"schedule","id":"s1","title":"Recurring gift","amount_minor":50000,"due_on":"2026-10-01","action":"pay"}]}""",
+        )
+        assertEquals(FundRef("discipleship", "Discipleship"), p.pledges[0].paysTo)
+        assertNull(p.pledges[1].paysTo)
+        assertEquals(FundRef("discipleship", "Discipleship"), p.due[0].paysTo)
+        assertNull(p.due[1].paysTo)
+        // An explicit null reads as absent.
+        assertNull(json.decodeFromString<Pledge>("""{"pledge_id":"p","pays_to":null}""").paysTo)
+    }
+
+    @Test
+    fun `pledge detail carries pays_to into asPledge, flat or nested`() {
+        val flat = json.decodeFromString<PledgeDetail>(
+            """{"pledge_id":"p1","shape":"monthly","amount_minor":100,"pays_to":{"code":"tithe","name":"Tithe"},"payments":[]}""",
+        )
+        assertEquals(FundRef("tithe", "Tithe"), flat.asPledge().paysTo)
+        val nested = json.decodeFromString<PledgeDetail>(
+            """{"pledge":{"pledge_id":"p2","shape":"monthly","amount_minor":100,"pays_to":{"code":"gift","name":"Gift"}},"payments":[]}""",
+        )
+        assertEquals(FundRef("gift", "Gift"), nested.asPledge().paysTo)
+        assertNull(json.decodeFromString<PledgeDetail>("""{"pledge_id":"p3","payments":[]}""").asPledge().paysTo)
+    }
+
+    @Test
+    fun `due items decode pending_minor, 0 when absent or null`() {
+        val p = json.decodeFromString<Partnership>(
+            """{"due":[
+                 {"kind":"pledge","id":"p1","title":"General partnership","amount_minor":100000,"currency":"KES","due_on":"2026-09-25",
+                  "action":"pay","overdue":true,"pays_to":{"code":"discipleship","name":"Discipleship"},"pending_minor":100000},
+                 {"kind":"pledge","id":"p2","title":"Roof","amount_minor":50000,"due_on":"2026-10-01","action":"pay","pending_minor":null},
+                 {"kind":"schedule","id":"s1","title":"Recurring gift","amount_minor":20000,"due_on":"2026-10-01","action":"pay"}]}""",
+        )
+        assertEquals(100_000, p.due[0].pendingMinor)
+        assertEquals(0, p.due[1].pendingMinor)
+        assertEquals(0, p.due[2].pendingMinor)
+        // amount_minor is nullable on the wire now; null reads as 0.
+        assertEquals(0, json.decodeFromString<DueItem>("""{"kind":"pledge","id":"p","amount_minor":null}""").amountMinor)
+    }
+
+    @Test
+    fun `a replayed intent decodes like a fresh one, reused and without provider`() {
+        val r = json.decodeFromString<GivingIntentResult>(
+            """{"transaction_id":"t1","status":"processing","idempotency_key":"k","reused":true,
+                "fund":{"code":"discipleship","name":"Discipleship"},"pledge":{"pledge_id":"p1","title":"General partnership"}}""",
+        )
+        assertTrue(r.reused)
+        assertEquals("processing", r.status)
+        assertNull(r.provider)
+        assertNull(r.approveUrl)
+        assertEquals("General partnership", r.pledge?.title)
+    }
+
+    @Test
+    fun `due items decode overdue_count and overdue_since, defaulting to none`() {
+        val p = json.decodeFromString<Partnership>(
+            """{"due":[
+                 {"kind":"pledge","id":"p1","title":"General partnership","amount_minor":200000,"due_on":"2026-08-10","action":"pay",
+                  "overdue":true,"overdue_count":2,"overdue_since":"2026-08-10","pending_minor":0},
+                 {"kind":"pledge","id":"p2","title":"Roof","amount_minor":50000,"due_on":"2026-10-01","action":"pay","overdue_count":null,"overdue_since":null},
+                 {"kind":"schedule","id":"s1","title":"Recurring gift","amount_minor":20000,"due_on":"2026-10-01","action":"pay"}]}""",
+        )
+        assertEquals(2, p.due[0].overdueCount)
+        assertEquals("2026-08-10", p.due[0].overdueSince)
+        assertEquals(0, p.due[1].overdueCount)
+        assertNull(p.due[1].overdueSince)
+        assertEquals(0, p.due[2].overdueCount)
+        assertNull(p.due[2].overdueSince)
+    }
 }
