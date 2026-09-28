@@ -1,5 +1,6 @@
 // Giving statement (history) + receipt (receipt v2 — the green hero, details,
-// where it went, share; no ledger).
+// where it went, share; no ledger). A failed gift says why on both — the
+// server's failure.reason + failure.hint, verbatim (Giving Cycle 1).
 // Port of the iOS GivingStatementView + GivingReceiptView. Uses the shared GIVE
 // palette / helpers from GiveShared.kt (same package — no import needed).
 package org.nuruplace.member.feature.give
@@ -451,6 +452,12 @@ private fun StatementRecordRow(r: GivingRecord, onOpenReceipt: (String) -> Unit)
             r.receiptCode?.takeIf { it.isNotBlank() }?.let {
                 Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow)
             }
+            // A gift that did not go through says why (Giving Cycle 1) — the
+            // server's reason, then its hint, verbatim.
+            shownFailure(r.status, r.failure)?.let { f ->
+                Text(f.reason, style = giInter(11, FontWeight.SemiBold), color = GIVE.danger, modifier = Modifier.padding(top = 2.dp))
+                f.hint.takeIf { it.isNotBlank() }?.let { Text(it, style = giInter(11), color = GIVE.sub) }
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(money(r.amountMinor, r.currency), style = giInter(14, FontWeight.Bold), color = GIVE.navy)
@@ -732,14 +739,28 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                     ReceiptRow("Reference", receiptShortId(d), mono = true, copied = copied == "id", last = true) { copy("id", d.transactionId) }
                 }
 
-                // ── Where it went ──
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = RECEIPT_GREEN, modifier = Modifier.size(16.dp))
-                    Text(receiptWhereItWent(d), style = giInter(12), color = GIVE.sub)
+                // ── Where it went — or, for a gift that did not go through,
+                // why: the server's reason and hint (Giving Cycle 1). A
+                // failed gift reached no fund, so it never says it did. ──
+                val failure = receiptFailure(d)
+                if (failure != null) {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RECEIPT_RED_BG.copy(alpha = 0.5f))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(failure.reason, style = giInter(13, FontWeight.SemiBold), color = RECEIPT_RED)
+                        failure.hint.takeIf { it.isNotBlank() }?.let { Text(it, style = giInter(12), color = GIVE.sub) }
+                    }
+                } else if (chip?.tone != ReceiptTone.NotCompleted) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = RECEIPT_GREEN, modifier = Modifier.size(16.dp))
+                        Text(receiptWhereItWent(d), style = giInter(12), color = GIVE.sub)
+                    }
                 }
 
                 // ── Actions ──

@@ -1,8 +1,14 @@
 // The Android money fix (docs/PARTNERS_PROGRAMME.md §0): a Weekly/Monthly
-// choice creates a schedule, a one-time gift creates an intent, recurring is
-// mobile-money only, and the cover-fee choice rides inside amount_minor the
-// way iOS sends it. Pinned here because the bug this fixes — every frequency
-// silently creating a one-off intent — was invisible on the screen.
+// choice creates a schedule, a one-time gift creates an intent, and the
+// cover-fee choice rides inside amount_minor the way iOS sends it. Pinned here
+// because the bug this fixes — every frequency silently creating a one-off
+// intent — was invisible on the screen.
+//
+// Giving Cycle 1: the form starts on One-time; whether a method can take a
+// gift — or a recurring one — is the server's word (GET /giving/methods), so a
+// card or a switched-off rail is never sent; a phone rail needs a Kenyan
+// mobile number; and a refusal either follows the prompt already waiting
+// (409 GIFT_IN_PROGRESS) or says the server's own message.
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
@@ -13,7 +19,11 @@ import kotlinx.serialization.SerializationException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Test
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.FundRef
+import org.nuruplace.member.data.net.GivingDetail
+import org.nuruplace.member.data.net.IntentPledge
+import org.nuruplace.member.data.net.ReceiptNeed
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
@@ -23,15 +33,36 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 
 class GiveSubmitLogicTest {
-    private fun plan(freq: Int, provider: String?, coverFee: Boolean = false, amount: Int = 1000, pledgeId: String? = null) =
-        planGiveSubmission(
-            freq = freq, provider = provider, fundId = "tithe", amountMajor = amount, coverFee = coverFee,
-            phone = "+254700000000", accountName = " Tithe ", idempotencyKey = "idem-1", pledgeId = pledgeId,
-        )
+    // The rails as a live server describes them (FinancialService.RAILS).
+    private val mpesa = FALLBACK_MPESA
+    private val airtelLive = GiveMethodOption(
+        "airtel", "Airtel Money", enabled = true, currency = "KES",
+        minMinor = 100, maxMinor = 15_000_000, recurring = true, needsPhone = true,
+    )
+    private val airtelSoon = airtelLive.copy(enabled = false, unavailableReason = "coming_soon", recurring = false)
+    private val paypalLive = GiveMethodOption(
+        "paypal", "PayPal", enabled = true, currency = "USD",
+        minMinor = 100, maxMinor = 1_000_000, wholeUnits = false,
+    )
+    private val cardLive = GiveMethodOption("card", "Card", enabled = true, currency = null, minMinor = 100, maxMinor = 100_000_000, wholeUnits = false)
+
+    private fun plan(
+        freq: Int,
+        method: GiveMethodOption?,
+        coverFee: Boolean = false,
+        amount: Int = 1000,
+        pledgeId: String? = null,
+        phone: String? = "+254700000000",
+        phoneOnFile: String? = null,
+    ) = planGiveSubmission(
+        freq = freq, method = method, fundId = "tithe", amountMajor = amount, coverFee = coverFee,
+        phone = phone, accountName = " Tithe ", idempotencyKey = "idem-1", pledgeId = pledgeId,
+        phoneOnFile = phoneOnFile,
+    )
 
     @Test
     fun `one-time gift creates an intent with the exact body`() {
-        val s = plan(FREQ_ONCE, "mpesa")
+        val s = plan(FREQ_ONCE, mpesa)
         assertTrue(s is GiveSubmission.Intent)
         val b = (s as GiveSubmission.Intent).body
         assertEquals("tithe", b.fund)
@@ -46,41 +77,83 @@ class GiveSubmitLogicTest {
 
     @Test
     fun `monthly with mpesa creates a monthly schedule`() {
-        val s = plan(FREQ_MONTHLY, "mpesa")
+        val s = plan(FREQ_MONTHLY, mpesa)
         assertTrue(s is GiveSubmission.Schedule)
         val b = (s as GiveSubmission.Schedule).body
         assertEquals("monthly", b.frequency)
         assertEquals("mpesa", b.method)
         assertEquals(100_000, b.amountMinor)
         assertEquals("tithe", b.fund)
+        assertEquals("KES", b.currency)
         assertEquals("idem-1", b.idempotencyKey)
     }
 
     @Test
-    fun `weekly with airtel creates a weekly schedule`() {
-        val s = plan(FREQ_WEEKLY, "airtel")
+    fun `weekly on a live recurring rail creates a weekly schedule`() {
+        val s = plan(FREQ_WEEKLY, airtelLive)
         assertTrue(s is GiveSubmission.Schedule)
         assertEquals("weekly", (s as GiveSubmission.Schedule).body.frequency)
+        assertEquals("airtel", s.body.method)
     }
 
     @Test
-    fun `monthly with card is blocked, never an intent`() {
-        val s = plan(FREQ_MONTHLY, "card")
-        assertTrue(s is GiveSubmission.Blocked)
-        assertEquals(RECURRING_CARD_BLOCKED_MESSAGE, (s as GiveSubmission.Blocked).message)
+    fun `recurring is allowed only where the server says the method can run one`() {
+        // The server's flag decides, not the method's name.
+        val oneOffOnly = mpesa.copy(recurring = false)
+        listOf(FREQ_WEEKLY, FREQ_MONTHLY).forEach { f ->
+            val s = plan(f, oneOffOnly)
+            assertTrue("freq $f", s is GiveSubmission.Blocked)
+            assertEquals(RECURRING_BLOCKED_MESSAGE, (s as GiveSubmission.Blocked).message)
+        }
+        // …and the same method still takes a one-time gift.
+        assertTrue(plan(FREQ_ONCE, oneOffOnly) is GiveSubmission.Intent)
+        assertTrue(plan(FREQ_MONTHLY, mpesa) is GiveSubmission.Schedule)
     }
 
     @Test
-    fun `monthly with paypal is blocked with the mobile-money message`() {
-        val s = plan(FREQ_MONTHLY, "paypal")
-        assertTrue(s is GiveSubmission.Blocked)
-        assertEquals(RECURRING_BLOCKED_MESSAGE, (s as GiveSubmission.Blocked).message)
+    fun `a method this form cannot take is never sent, for any frequency`() {
+        // A card (no Stripe SDK here — its intents sat "processing" for ever),
+        // PayPal's dollars on a shilling form, and a switched-off rail.
+        listOf(cardLive, paypalLive, airtelSoon, mpesa.copy(enabled = false, unavailableReason = "unavailable")).forEach { m ->
+            listOf(FREQ_ONCE, FREQ_WEEKLY, FREQ_MONTHLY).forEach { f ->
+                val s = plan(f, m)
+                assertTrue("${m.key} · freq $f", s is GiveSubmission.Blocked)
+                assertEquals(METHOD_SOON_MESSAGE, (s as GiveSubmission.Blocked).message)
+            }
+        }
+        // No selectable method at all.
+        assertEquals(NO_METHOD_MESSAGE, (plan(FREQ_ONCE, null) as GiveSubmission.Blocked).message)
     }
 
     @Test
-    fun `a SOON method is blocked for every frequency`() {
-        assertTrue(plan(FREQ_ONCE, null) is GiveSubmission.Blocked)
-        assertTrue(plan(FREQ_MONTHLY, null) is GiveSubmission.Blocked)
+    fun `a phone rail needs a Kenyan mobile number, sent as E164`() {
+        assertEquals(phoneNeededMessage("M-Pesa"), (plan(FREQ_ONCE, mpesa, phone = null) as GiveSubmission.Blocked).message)
+        assertEquals(phoneNeededMessage("M-Pesa"), (plan(FREQ_ONCE, mpesa, phone = "  ") as GiveSubmission.Blocked).message)
+        assertEquals(PHONE_INVALID_MESSAGE, (plan(FREQ_ONCE, mpesa, phone = "12345") as GiveSubmission.Blocked).message)
+        assertEquals(PHONE_INVALID_MESSAGE, (plan(FREQ_MONTHLY, mpesa, phone = "020 123 4567") as GiveSubmission.Blocked).message)
+        val intent = plan(FREQ_ONCE, mpesa, phone = "0711 222 333") as GiveSubmission.Intent
+        assertEquals("+254711222333", intent.body.phoneNumber)
+    }
+
+    @Test
+    fun `the rail's own limits block before a request, fee included`() {
+        assertTrue(plan(FREQ_ONCE, mpesa, amount = 250_000) is GiveSubmission.Intent)
+        val over = plan(FREQ_ONCE, mpesa, amount = 250_001) as GiveSubmission.Blocked
+        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", over.message)
+        // Covering the fee is part of what is charged.
+        assertTrue(plan(FREQ_ONCE, mpesa, amount = 250_000, coverFee = true) is GiveSubmission.Blocked)
+        // A row with no ceiling (max 0) leaves the ceiling to the server.
+        assertTrue(plan(FREQ_ONCE, mpesa.copy(maxMinor = 0), amount = 1_000_000) is GiveSubmission.Intent)
+    }
+
+    @Test
+    fun `a schedule pins its number only when it is not the profile's`() {
+        val same = plan(FREQ_MONTHLY, mpesa, phone = "0700 000 000", phoneOnFile = "+254700000000") as GiveSubmission.Schedule
+        assertNull(same.body.phoneNumber) // follows the profile, as the server stores it
+        val other = plan(FREQ_MONTHLY, mpesa, phone = "0711222333", phoneOnFile = "+254700000000") as GiveSubmission.Schedule
+        assertEquals("+254711222333", other.body.phoneNumber)
+        val noneOnFile = plan(FREQ_MONTHLY, mpesa, phone = "0711222333", phoneOnFile = null) as GiveSubmission.Schedule
+        assertEquals("+254711222333", noneOnFile.body.phoneNumber)
     }
 
     @Test
@@ -88,9 +161,9 @@ class GiveSubmitLogicTest {
         // iOS feeFor(1000) == 13 → total 1013 → amount_minor 101300
         assertEquals(1013, chargedAmountMajor(1000, coverFee = true))
         assertEquals(1000, chargedAmountMajor(1000, coverFee = false))
-        val intent = plan(FREQ_ONCE, "mpesa", coverFee = true) as GiveSubmission.Intent
+        val intent = plan(FREQ_ONCE, mpesa, coverFee = true) as GiveSubmission.Intent
         assertEquals(101_300, intent.body.amountMinor)
-        val sched = plan(FREQ_MONTHLY, "mpesa", coverFee = true) as GiveSubmission.Schedule
+        val sched = plan(FREQ_MONTHLY, mpesa, coverFee = true) as GiveSubmission.Schedule
         assertEquals(101_300, sched.body.amountMinor)
     }
 
@@ -108,15 +181,16 @@ class GiveSubmitLogicTest {
 
     @Test
     fun `pledge id rides the intent and binds the schedule`() {
-        val intent = plan(FREQ_ONCE, "mpesa", pledgeId = "pl-1") as GiveSubmission.Intent
+        val intent = plan(FREQ_ONCE, mpesa, pledgeId = "pl-1") as GiveSubmission.Intent
         assertEquals("pl-1", intent.body.pledgeId)
-        val sched = plan(FREQ_MONTHLY, "airtel", pledgeId = "pl-1") as GiveSubmission.Schedule
+        val sched = plan(FREQ_MONTHLY, mpesa, pledgeId = "pl-1") as GiveSubmission.Schedule
         assertEquals("pl-1", sched.body.pledgeId)
     }
 
     @Test
     fun `zero amount is blocked before any method check`() {
-        assertTrue(plan(FREQ_ONCE, "mpesa", amount = 0) is GiveSubmission.Blocked)
+        assertEquals("Enter an amount to give.", (plan(FREQ_ONCE, mpesa, amount = 0) as GiveSubmission.Blocked).message)
+        assertEquals("Enter an amount to give.", (plan(FREQ_ONCE, null, amount = 0) as GiveSubmission.Blocked).message)
     }
 
     // --- Departments (docs/PARTNERS_PROGRAMME.md §4): a need is a giving target ---
@@ -124,8 +198,8 @@ class GiveSubmitLogicTest {
     @Test
     fun `need id rides a one-time intent`() {
         val intent = planGiveSubmission(
-            freq = FREQ_ONCE, provider = "mpesa", fundId = "gift", amountMajor = 5000, coverFee = false,
-            phone = "", accountName = "", idempotencyKey = "idem-2", needId = "need-1",
+            freq = FREQ_ONCE, method = mpesa, fundId = "gift", amountMajor = 5000, coverFee = false,
+            phone = "0711222333", accountName = "", idempotencyKey = "idem-2", needId = "need-1",
         ) as GiveSubmission.Intent
         assertEquals("need-1", intent.body.needId)
         assertNull(intent.body.pledgeId)
@@ -135,8 +209,8 @@ class GiveSubmitLogicTest {
     @Test
     fun `a recurring choice with a need is blocked rather than dropping the need`() {
         val s = planGiveSubmission(
-            freq = FREQ_MONTHLY, provider = "mpesa", fundId = "gift", amountMajor = 5000, coverFee = false,
-            phone = "", accountName = "", idempotencyKey = "idem-3", needId = "need-1",
+            freq = FREQ_MONTHLY, method = mpesa, fundId = "gift", amountMajor = 5000, coverFee = false,
+            phone = "0711222333", accountName = "", idempotencyKey = "idem-3", needId = "need-1",
         )
         assertTrue(s is GiveSubmission.Blocked)
         assertEquals(NEED_RECURRING_BLOCKED_MESSAGE, (s as GiveSubmission.Blocked).message)
@@ -150,8 +224,8 @@ class GiveSubmitLogicTest {
         assertEquals("need-1", p.needId)
         assertEquals("gift", p.fundId)
         val intent = planGiveSubmission(
-            freq = FREQ_ONCE, provider = "card", fundId = p.fundId!!, amountMajor = p.amountMinor!! / 100, coverFee = false,
-            phone = "", accountName = "", idempotencyKey = "idem-4", pledgeId = p.pledgeId, needId = p.needId,
+            freq = FREQ_ONCE, method = mpesa, fundId = p.fundId!!, amountMajor = p.amountMinor!! / 100, coverFee = false,
+            phone = "0711222333", accountName = "", idempotencyKey = "idem-4", pledgeId = p.pledgeId, needId = p.needId,
         ) as GiveSubmission.Intent
         assertEquals("need-1", intent.body.needId)
         assertEquals(3_750_000, intent.body.amountMinor)
@@ -198,16 +272,31 @@ class GiveSubmitLogicTest {
     }
 
     @Test
-    fun `the form seeds from a bound preset on one-time, and resets to the ordinary form`() {
+    fun `the form seeds from a bound preset, and resets to the ordinary form`() {
         assertEquals(GiveFormSeed("tithe", 1_000, FREQ_ONCE), giveFormSeed(pledgePay)) // a General partnership pledge has no fund of its own
         assertEquals(GiveFormSeed("discipleship", 1_000, FREQ_ONCE), giveFormSeed(pledgePay.copy(fundId = "discipleship")))
         assertEquals(GiveFormSeed(NEED_GIFT_FUND, 2_500, FREQ_ONCE), giveFormSeed(needGive))
         // What a spent binding resets to — and what an unbound screen starts on.
-        val ordinary = GiveFormSeed(DEFAULT_GIVE_FUND, DEFAULT_GIVE_AMOUNT_MAJOR, FREQ_MONTHLY)
+        val ordinary = GiveFormSeed(DEFAULT_GIVE_FUND, DEFAULT_GIVE_AMOUNT_MAJOR, FREQ_ONCE)
         assertEquals(ordinary, giveFormSeed(null))
-        assertEquals(GiveFormSeed("tithe", 1_000, FREQ_MONTHLY), ordinary)
-        // A plain preset (no pledge, no need) keeps the ordinary frequency.
-        assertEquals(GiveFormSeed("offering", 500, FREQ_MONTHLY), giveFormSeed(GivePreset(fundId = "offering", amountMinor = 50_000)))
+        assertEquals(GiveFormSeed("tithe", 1_000, FREQ_ONCE), ordinary)
+        assertEquals(GiveFormSeed("offering", 500, FREQ_ONCE), giveFormSeed(GivePreset(fundId = "offering", amountMinor = 50_000)))
+    }
+
+    @Test
+    fun `every form starts on One-time, so a tap on Give never sets up a monthly charge`() {
+        // Giving Cycle 1: a Monthly start turned "tap Give" into a real
+        // monthly M-Pesa schedule. No seed, bound or not, starts recurring.
+        listOf(null, pledgePay, needGive, GivePreset(fundId = "offering", amountMinor = 50_000), GivePreset()).forEach { p ->
+            assertEquals("seed for $p", FREQ_ONCE, giveFormSeed(p).freq)
+        }
+        // …so the ordinary form, submitted untouched, is an intent — never a schedule.
+        val seed = giveFormSeed(null)
+        val s = planGiveSubmission(
+            freq = seed.freq, method = FALLBACK_MPESA, fundId = seed.fundId, amountMajor = seed.amountMajor,
+            coverFee = false, phone = "0711222333", accountName = "", idempotencyKey = "k",
+        )
+        assertTrue(s is GiveSubmission.Intent)
     }
 
     // ── Idempotent retry: keep vs rotate the key (owner, 2026-09-26) ──
@@ -279,5 +368,83 @@ class GiveSubmitLogicTest {
         val held = giveKeyFor(null, gift, fresh)
         // 1,000 → 2,000 → 1,000: the tap sends exactly the lost request again.
         assertEquals(held.key, giveKeyFor(held, gift.copy(amountMajor = 2_000).copy(amountMajor = 1_000), fresh).key)
+    }
+
+    // ── A refused gift (Giving Cycle 1) ──
+
+    private fun refusal(status: Int, code: String, message: String, details: String? = null) =
+        ApiException.parseServerError(
+            status,
+            """{"error":{"code":"$code","message":"$message","request_id":"r1"${details?.let { ",\"details\":$it" } ?: ""}}}""",
+        )
+
+    @Test
+    fun `GIFT_IN_PROGRESS follows the waiting prompt with the server's words`() {
+        val err = refusal(409, "GIFT_IN_PROGRESS", "A prompt from a moment ago is still waiting on your phone.", """{"transaction_id":"t9"}""")
+        assertEquals(
+            GiveErrorAction.FollowPrompt("t9", "A prompt from a moment ago is still waiting on your phone."),
+            giveErrorAction(err, fallback = "fallback"),
+        )
+        // Without a transaction to follow, it is only said.
+        assertEquals(
+            GiveErrorAction.Say("A prompt from a moment ago is still waiting on your phone."),
+            giveErrorAction(refusal(409, "GIFT_IN_PROGRESS", "A prompt from a moment ago is still waiting on your phone."), "fallback"),
+        )
+        assertEquals(
+            GiveErrorAction.Say("Waiting."),
+            giveErrorAction(refusal(409, "GIFT_IN_PROGRESS", "Waiting.", """{"transaction_id":""}"""), "fallback"),
+        )
+    }
+
+    @Test
+    fun `the 422s and SCHEDULE_EXISTS say the server's message as-is`() {
+        listOf(
+            refusal(422, "METHOD_UNAVAILABLE", "Card giving is coming soon. Please give with M-Pesa for now.", """{"method":"card"}"""),
+            refusal(422, "METHOD_CURRENCY", "PayPal gifts are in US dollars. Enter the amount in dollars.", """{"method":"paypal","currency":"USD"}"""),
+            refusal(422, "AMOUNT_OUT_OF_RANGE", "M-Pesa gifts are from KSh 1 to KSh 250,000.", """{"method":"mpesa","min_minor":100,"max_minor":25000000}"""),
+            refusal(422, "AMOUNT_OUT_OF_RANGE", "M-Pesa takes whole shillings — no cents.", """{"method":"mpesa","step_minor":100}"""),
+            refusal(422, "PHONE_REQUIRED", "That doesn't look like a Kenyan mobile number. Use 07XX XXX XXX or 01XX XXX XXX.", """{"method":"mpesa"}"""),
+            refusal(409, "SCHEDULE_EXISTS", "You already give KSh 1,000 every month to Tithe. Change that gift instead of adding a second one.", """{"schedule_id":"s1","status":"active"}"""),
+        ).forEach { err ->
+            assertEquals(err.code, GiveErrorAction.Say(err.message!!), giveErrorAction(err, fallback = "fallback"))
+        }
+    }
+
+    @Test
+    fun `no server message falls back — a transport failure, or a body that said nothing`() {
+        assertEquals(GiveErrorAction.Say("You appear to be offline."), giveErrorAction(null, "You appear to be offline."))
+        val silent = ApiException.parseServerError(502, "<html>Bad gateway</html>")
+        assertEquals(GiveErrorAction.Say(silent.displayMessage), giveErrorAction(silent, silent.displayMessage))
+        assertEquals("Something went wrong (502).", silent.displayMessage)
+    }
+
+    private val waiting = GivingDetail(
+        transactionId = "t9", amountMinor = 50_000, status = "processing", fund = "discipleship", method = "mpesa",
+        fundName = "Discipleship", pledge = IntentPledge("p1", "General partnership"),
+    )
+
+    @Test
+    fun `a waiting prompt is followed as the server holds it, never as the form says`() {
+        val r = intentResultFromDetail(waiting)
+        assertEquals("t9", r.transactionId)
+        assertEquals("processing", r.status)
+        assertEquals("mpesa", r.provider)
+        assertEquals(FundRef("discipleship", "Discipleship"), r.fund)
+        assertEquals("General partnership", r.pledge?.title)
+        // An older server without fund_name still names the fund.
+        assertEquals("Tithe", intentResultFromDetail(waiting.copy(fund = "tithe", fundName = null)).fund?.name)
+        // Read like any intent: a PIN prompt, toward the pledge.
+        assertEquals("Enter your PIN to complete KSh 500 toward your General partnership pledge.", giveCeremonyLine(r, 50_000, "Tithe"))
+    }
+
+    @Test
+    fun `a waiting prompt spends the binding only when it is for the same pledge or need`() {
+        assertTrue(inflightIsForTarget(pledgePay, waiting))
+        assertFalse(inflightIsForTarget(pledgePay.copy(pledgeId = "p2"), waiting))
+        assertFalse(inflightIsForTarget(pledgePay, waiting.copy(pledge = null)))
+        assertTrue(inflightIsForTarget(needGive, waiting.copy(pledge = null, need = ReceiptNeed("n1", "Sound desk"))))
+        assertFalse(inflightIsForTarget(needGive, waiting.copy(need = ReceiptNeed("n2", "Chairs"))))
+        assertFalse(inflightIsForTarget(null, waiting))
+        assertFalse(inflightIsForTarget(GivePreset(fundId = "tithe"), waiting))
     }
 }

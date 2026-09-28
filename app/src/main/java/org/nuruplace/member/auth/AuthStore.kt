@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.BroadcastLock
 import org.nuruplace.member.data.PastoralLock
 import org.nuruplace.member.data.PastorEligibility
@@ -69,6 +70,9 @@ class AuthStore : ViewModel() {
         // The eligibility probe (Chat Redesign C4) is per-account too — never
         // let "yes" for one member carry over to whoever signs in next.
         PastorEligibility.reset()
+        // The Give screen's remembered M-Pesa number (Giving Cycle 1) is this
+        // member's — the next one must never prompt it by default.
+        AppPrefs.clearGivingPhone()
         _state.update { it.copy(authenticated = false, me = null) }
         if (rt != null) {
             viewModelScope.launch {

@@ -6,6 +6,7 @@
 // back for an older server that sends none of them.
 package org.nuruplace.member.feature.give
 
+import org.nuruplace.member.data.net.GiftFailure
 import org.nuruplace.member.data.net.GivingDetail
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -91,6 +92,11 @@ fun receiptEyebrow(chip: ReceiptChip?): String = when (chip?.tone) {
     ReceiptTone.NotCompleted -> "GIFT NOT COMPLETED"
     ReceiptTone.Refunded -> "GIFT REFUNDED"
 }
+
+/** Why a gift that did not go through failed — the server's reason and hint,
+ *  shown verbatim in place of [receiptWhereItWent] (Giving Cycle 1). Null
+ *  unless it failed and the server named why. */
+fun receiptFailure(d: GivingDetail): GiftFailure? = shownFailure(d.status, d.failure)
 
 /** "100% of this gift reaches the Discipleship fund." (+ " · counts toward your pledge"). */
 fun receiptWhereItWent(d: GivingDetail): String {

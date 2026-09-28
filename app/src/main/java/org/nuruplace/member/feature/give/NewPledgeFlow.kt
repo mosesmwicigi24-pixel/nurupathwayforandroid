@@ -424,7 +424,9 @@ fun NewPledgeFlow(
                         GIVE_METHODS.filter { it.provider in RECURRING_PROVIDERS }.forEach { m ->
                             ChoiceRow(selected = autoMethod == m.provider, title = m.label, sub = m.sub) { autoMethod = m.provider!! }
                         }
-                        Text("Recurring gifts run on M-Pesa or Airtel Money. The first charge is made by the server on the next cycle — never from this screen.", style = NuruType.caption, color = Nuru.ink400)
+                        // M-Pesa only (Giving Cycle 1): the server refuses a recurring
+                        // gift on a rail that is not live, and Airtel is not.
+                        Text("Recurring gifts run on M-Pesa. The first charge is made by the server on the next cycle — never from this screen.", style = NuruType.caption, color = Nuru.ink400)
                     } else {
                         Text("You'll pay each month yourself from Partners — with a gentle reminder before it's due, if you keep reminders on.", style = NuruType.caption, color = Nuru.ink400)
                     }

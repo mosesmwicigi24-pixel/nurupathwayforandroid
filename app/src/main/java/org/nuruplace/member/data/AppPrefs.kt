@@ -39,6 +39,10 @@ object AppPrefs {
     // member typed/picked, so the next custom gift preselects it subtly
     // (iOS @AppStorage "giving.lastAccountName" parity).
     private const val KEY_GIVING_LAST_ACCOUNT_NAME = "nuru.giving.lastAccountName"
+    // The number the last gift's M-Pesa prompt went to (Giving Cycle 1), as
+    // E.164 — the Give screen's prefill before the profile's number. Per
+    // account: cleared on sign-out so it never prompts someone else's phone.
+    private const val KEY_GIVING_LAST_PHONE = "nuru.giving.lastPhone"
     // Play Install Referrer read once per install (MainActivity) — the
     // store-then-plan path for Read with a Friend join links.
     private const val KEY_INSTALL_REFERRER_CHECKED = "install_referrer_checked"
@@ -197,6 +201,16 @@ object AppPrefs {
     var lastGivingAccountName: String
         get() = if (::prefs.isInitialized) prefs.getString(KEY_GIVING_LAST_ACCOUNT_NAME, "") ?: "" else ""
         set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_GIVING_LAST_ACCOUNT_NAME, v).apply() }
+
+    /** The number the last successful gift prompted (E.164) — empty means none yet. */
+    var lastGivingPhone: String
+        get() = if (::prefs.isInitialized) prefs.getString(KEY_GIVING_LAST_PHONE, "") ?: "" else ""
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_GIVING_LAST_PHONE, v).apply() }
+
+    /** Sign-out: the last prompt number belongs to the account that used it. */
+    fun clearGivingPhone() {
+        if (::prefs.isInitialized) prefs.edit().remove(KEY_GIVING_LAST_PHONE).apply()
+    }
 
     /** Account sign-out — these are per-device but keyed to whoever is signed
      *  in right now; never let a pastoral cache/flag from account A leak into

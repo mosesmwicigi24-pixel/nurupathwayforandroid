@@ -13,9 +13,11 @@
 // final — and says so. The intent's answer is its first reading, read the
 // same way whether fresh or a replay of the same idempotency key (`reused`
 // is never consulted): a replay of a gift that already went through shows
-// "confirmed", one that failed shows "didn't complete".
+// "confirmed", one that failed shows "didn't complete" — and, since Giving
+// Cycle 1, WHY, in the server's own words (failure.reason + failure.hint).
 package org.nuruplace.member.feature.give
 
+import org.nuruplace.member.data.net.GiftFailure
 import org.nuruplace.member.data.net.GivingIntentResult
 
 /** Providers whose gift completes with a PIN prompt on the member's phone. */
@@ -81,7 +83,8 @@ fun giveCeremonyTitle(outcome: GiftOutcome): String =
     if (outcome == GiftOutcome.Failed) "Your gift didn't go through" else "Thank you for your generosity"
 
 /** The ceremony's one line for where the gift stands: confirmed, didn't
- *  complete, still out of reach of the watch, or — while processing — the
+ *  complete — in the server's words when it named why ([failure]'s reason)
+ *  — still out of reach of the watch, or, while processing, the
  *  instruction line ([giveCeremonyLine]). */
 fun giveCeremonyStatusLine(
     r: GivingIntentResult,
@@ -89,9 +92,21 @@ fun giveCeremonyStatusLine(
     chipFundLabel: String?,
     outcome: GiftOutcome,
     watchLapsed: Boolean,
+    failure: GiftFailure? = null,
 ): String = when (outcome) {
     GiftOutcome.Succeeded -> "Gift confirmed — receipt on its way. 🎉"
-    GiftOutcome.Failed -> "The payment didn't complete — no charge was made."
+    GiftOutcome.Failed -> failure?.reason?.trim()?.takeIf { it.isNotEmpty() }
+        ?: "The payment didn't complete — no charge was made."
     GiftOutcome.Processing ->
         if (watchLapsed) "Still processing — your gift will show once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel)
 }
+
+/** The failed ceremony's second line: what to do next and whether money
+ *  moved — the server's hint, verbatim. Null otherwise. */
+fun giveCeremonyHint(outcome: GiftOutcome, failure: GiftFailure?): String? =
+    if (outcome == GiftOutcome.Failed) failure?.hint?.trim()?.takeIf { it.isNotEmpty() } else null
+
+/** The failure a gift shows — history row, receipt, ceremony: only a gift
+ *  that failed, and only when the server named why. */
+fun shownFailure(status: String?, failure: GiftFailure?): GiftFailure? =
+    failure?.takeIf { giftOutcome(status) == GiftOutcome.Failed && it.reason.isNotBlank() }
