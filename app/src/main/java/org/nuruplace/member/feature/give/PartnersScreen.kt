@@ -1639,8 +1639,15 @@ internal fun SummaryColumn(label: String, value: String, color: Color, modifier:
 internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(label, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
-        Text(values.firstOrNull().orEmpty(), style = giInter(16, FontWeight.SemiBold), color = color, modifier = Modifier.padding(top = 4.dp))
-        values.drop(1).forEach { Text("+ $it", style = giInter(12, FontWeight.SemiBold), color = color) }
+        // One line each, shrunk to the column (iOS minimumScaleFactor 0.7) —
+        // "KSh 1,250,000" never splits mid-figure in a third of the card.
+        Text(
+            values.firstOrNull().orEmpty(), style = giInter(16, FontWeight.SemiBold), color = color,
+            maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 4.dp).shrinkToFit(0.7f),
+        )
+        values.drop(1).forEach {
+            Text("+ $it", style = giInter(12, FontWeight.SemiBold), color = color, maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.7f))
+        }
     }
 }
 

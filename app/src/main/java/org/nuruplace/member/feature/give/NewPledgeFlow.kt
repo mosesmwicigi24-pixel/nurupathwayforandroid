@@ -544,7 +544,8 @@ private fun PledgeForCard(
                 Icon(icon, null, tint = iconTint, modifier = Modifier.size(19.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(title, style = giInter(15, FontWeight.SemiBold), color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Two lines for a long campaign or need name, as iOS allows.
+                Text(title, style = giInter(15, FontWeight.SemiBold), color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, style = giInter(12), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (selected) {

@@ -69,4 +69,26 @@ class FairSplitTest {
         assertEquals(0 to 0, fairSplit(-5, 100, 100))
         assertEquals(0 to 0, fairSplit(0, 100, 100))
     }
+
+    // ── one value on one line, shrunk to fit (iOS minimumScaleFactor) ──
+
+    @Test
+    fun `a value that fits keeps its size, a wider one shrinks to the room`() {
+        assertEquals(1f, fitScale(natural = 90, available = 120, floor = 0.6f), 0f)
+        assertEquals(1f, fitScale(natural = 120, available = 120, floor = 0.6f), 0f)
+        // "11 of 12" at 1.3× (~87dp) on a 55dp tile: shrunk to 0.63, whole.
+        assertEquals(55f / 87f, fitScale(natural = 87, available = 55, floor = 0.6f), 0.0001f)
+        // Too wide even at the floor: held at the floor (and clipped there).
+        assertEquals(0.6f, fitScale(natural = 200, available = 55, floor = 0.6f), 0f)
+        assertEquals(0.7f, fitScale(natural = 200, available = 55, floor = 0.7f), 0f)
+    }
+
+    @Test
+    fun `an unmeasured or unbounded width is never scaled, and no room is the floor`() {
+        // An intrinsic pass reports no width; an unbounded row has room for all.
+        assertEquals(1f, fitScale(natural = Int.MIN_VALUE, available = 100, floor = 0.6f), 0f)
+        assertEquals(1f, fitScale(natural = 0, available = 0, floor = 0.6f), 0f)
+        assertEquals(1f, fitScale(natural = 500, available = Int.MAX_VALUE, floor = 0.6f), 0f)
+        assertEquals(0.6f, fitScale(natural = 50, available = 0, floor = 0.6f), 0f)
+    }
 }

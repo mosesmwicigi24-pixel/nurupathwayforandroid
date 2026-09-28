@@ -8,15 +8,23 @@
 // the rest; when both need more than half, each gets half and wraps inside
 // it. Neither is ever starved, at any font scale. The rule is [fairSplit],
 // pinned by FairSplitTest; the layout only measures and places.
+//
+// And one value that must stay on one line — an amount on a narrow tile —
+// shrinks to its width as iOS's minimumScaleFactor does ([shrinkToFit],
+// [fitScale]) instead of splitting mid-figure or being cut.
 package org.nuruplace.member.feature.give
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 /**
  * The widths two side-by-side children get out of [available] (px, the gap
@@ -87,3 +95,41 @@ internal fun FairSplitRow(
         }
     }
 }
+
+/**
+ * How far a one-line value shrinks to fit its width, as SwiftUI's
+ * `.lineLimit(1).minimumScaleFactor(floor)` does: 1 when its [natural] width
+ * fits in [available] (px), else the ratio — never below [floor], where it
+ * is clipped rather than shrunk further. An unmeasured width (≤ 0) is 1.
+ */
+internal fun fitScale(natural: Int, available: Int, floor: Float): Float {
+    if (natural <= 0 || natural <= available) return 1f
+    if (available <= 0) return floor
+    return (available.toFloat() / natural).coerceIn(floor, 1f)
+}
+
+/**
+ * A one-line value shrunk to the width it is given ([fitScale]) — the iOS
+ * tiles' and summary columns' `.lineLimit(1).minimumScaleFactor(…)`, so an
+ * amount is never split mid-figure nor cut while it can still shrink. Put it
+ * on a Text with `maxLines = 1, softWrap = false` (or a Row of them): it is
+ * measured at its natural width, then drawn scaled from its leading top
+ * corner inside the room it has.
+ */
+internal fun Modifier.shrinkToFit(floor: Float): Modifier = this
+    .clipToBounds()
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+        val scale = fitScale(placeable.width, constraints.maxWidth, floor)
+        val w = (placeable.width * scale).roundToInt().coerceIn(constraints.minWidth, constraints.maxWidth)
+        val h = (placeable.height * scale).roundToInt().coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(w, h) {
+            // Absolute, not mirrored: the unscaled child is wider than the
+            // room, so a mirrored x would push it off its own edge.
+            placeable.placeWithLayer(0, 0) {
+                scaleX = scale
+                scaleY = scale
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
+        }
+    }

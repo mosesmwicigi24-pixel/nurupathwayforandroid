@@ -240,12 +240,15 @@ internal fun disciplesTile(impact: StatementImpact): DisciplesTile {
     return DisciplesTile.Toward(toward, per, toward.toFloat() / per)
 }
 
-/** The Kept tile's "5 of 6" (kept = on time + late), or null to hide it —
- *  no faithfulness block, or nothing has come due yet. */
-internal fun keptTileValue(f: StatementFaithfulness?): String? {
+/** The Kept tile's counts — kept (on time + late) and due — or null to hide
+ *  it: no faithfulness block, or nothing has come due yet. */
+internal fun keptTileCounts(f: StatementFaithfulness?): Pair<Int, Int>? {
     if (f == null || f.dueCount <= 0) return null
-    return "${f.keptOnTime + f.late} of ${f.dueCount}"
+    return (f.keptOnTime + f.late) to f.dueCount
 }
+
+/** The Kept tile's "5 of 6", as TalkBack reads it; null hides the tile. */
+internal fun keptTileValue(f: StatementFaithfulness?): String? = keptTileCounts(f)?.let { (kept, due) -> "$kept of $due" }
 
 /** A compact amount in major units for a narrow tile — "950", "9.5k",
  *  "22k", "1.5M". Always rounded DOWN so the short form never overstates;

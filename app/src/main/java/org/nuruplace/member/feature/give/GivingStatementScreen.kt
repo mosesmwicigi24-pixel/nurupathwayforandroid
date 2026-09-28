@@ -897,18 +897,18 @@ private fun ReceiptRow(
                 .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, style = giInter(13), color = RECEIPT_LABEL)
+            Text(label, style = giInter(13), color = RECEIPT_LABEL, modifier = Modifier.alignByBaseline())
             Spacer(Modifier.width(16.dp))
+            // Wraps at the trailing edge, as iOS does — a long date or
+            // "… · covered by you" is never cut to an ellipsis.
             Text(
                 value,
                 style = giInter(14, FontWeight.SemiBold).let {
                     if (mono) it.copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp) else it
                 },
                 color = GIVE.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).alignByBaseline(),
             )
             if (onCopy != null) {
                 Spacer(Modifier.width(8.dp))

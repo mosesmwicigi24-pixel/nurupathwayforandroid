@@ -98,14 +98,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -433,7 +429,10 @@ private fun ImpactTiles(impact: StatementImpact, given: List<CurrencyAmount>, fa
                 "${disciples.count} disciple${if (disciples.count == 1) "" else "s"} carried through a level",
                 Modifier.weight(1f),
             ) {
-                Text("${disciples.count}", style = giSerif(26, FontWeight.SemiBold), color = HERO_GOLD)
+                Text(
+                    "${disciples.count}", style = giSerif(26, FontWeight.SemiBold), color = HERO_GOLD,
+                    maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.6f),
+                )
                 TileCaption("through a level")
             }
             is DisciplesTile.Toward -> HeroTile("Disciples carried", disciples.text, Modifier.weight(1.5f)) {
@@ -446,22 +445,40 @@ private fun ImpactTiles(impact: StatementImpact, given: List<CurrencyAmount>, fa
                 TileCaption(disciples.text)
             }
         }
-        kept?.let {
-            HeroTile("Kept", "Kept $it commitments", Modifier.weight(1f)) {
-                Text(it, style = giSerif(22, FontWeight.SemiBold), color = Color.White, maxLines = 1)
+        keptTileCounts(faithfulness)?.let { (keptCount, due) ->
+            HeroTile("Kept", "Kept $kept commitments", Modifier.weight(1f)) {
+                // As iOS: the count large and "of 6" small beside it, on one
+                // line shrunk to the tile — never cut on a narrow phone.
+                Row(Modifier.shrinkToFit(0.6f)) {
+                    Text(
+                        "$keptCount", style = giSerif(26, FontWeight.SemiBold), color = Color.White,
+                        maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
+                    )
+                    Text(
+                        "of $due", style = giInter(12, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
+                        maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 4.dp).alignByBaseline(),
+                    )
+                }
                 TileCaption("commitments")
             }
         }
         val shown = given.ifEmpty { listOf(CurrencyAmount(GIVE_FORM_CURRENCY, impact.paidMinor.toLong())) }
         val first = shown.first()
         HeroTile("Given", "Given ${moneyTotals(shown)} toward pledges", Modifier.weight(1f)) {
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 12.sp)) { append(if (first.currency == USD_CURRENCY) "US$ " else if (first.currency == GIVE_FORM_CURRENCY) "KSh " else "${first.currency} ") }
-                    append(compactAmount(first.minor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
-                },
-                style = giSerif(22, FontWeight.SemiBold), color = Color.White, maxLines = 1,
-            )
+            // As iOS: the currency small, the amount large, one line shrunk
+            // to the tile.
+            Row(Modifier.shrinkToFit(0.6f)) {
+                Text(
+                    if (first.currency == USD_CURRENCY) "US$" else if (first.currency == GIVE_FORM_CURRENCY) "KSh" else first.currency,
+                    style = giInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
+                    maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
+                )
+                Text(
+                    compactAmount(first.minor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()),
+                    style = giSerif(26, FontWeight.SemiBold), color = Color.White,
+                    maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 3.dp).alignByBaseline(),
+                )
+            }
             shown.drop(1).forEach { TileCaption("+ ${money(it.minor, it.currency)}") }
             TileCaption("toward pledges")
         }
