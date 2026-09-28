@@ -15,6 +15,7 @@ import org.junit.Test
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.PartnerRhythm
+import org.nuruplace.member.data.net.PartnerTier
 import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
@@ -281,6 +282,20 @@ class PartnerStatementMathTest {
         assertEquals("KSh 25,000 paid · 0 to go", totalPledgeLeftLine(roof(2_500_000)))
         // Dollars keep their cents.
         assertEquals("US$ 12.50 paid · 87.50 to go", totalPledgeLeftLine(roof(1_250, currency = "USD", target = 10_000)))
+    }
+
+    // ── What TalkBack reads on the list (iOS accessibility labels) ──
+
+    @Test
+    fun `the tier chip and the progress bar speak as iOS does`() {
+        assertEquals(
+            "Builder partner — KSh 20,000 a month. KSh 20,000 carries one disciple through a level.",
+            tierSpoken(PartnerTier(name = "Builder", monthlyMinor = 2_000_000), "KES"),
+        )
+        assertEquals("0 percent", progressSpoken(0f))
+        assertEquals("40 percent", progressSpoken(0.4f))
+        assertEquals("67 percent", progressSpoken(2f / 3f))
+        assertEquals("100 percent", progressSpoken(1.3f)) // never past the whole
     }
 
     // ── The amber trouble row (iOS TroubleRow) ──

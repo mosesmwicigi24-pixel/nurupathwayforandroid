@@ -26,6 +26,7 @@ package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
+import org.nuruplace.member.data.net.PartnerTier
 import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
@@ -210,6 +211,14 @@ internal fun pledgeKeptThisYear(pl: Pledge, currentYearStatement: GivingStatemen
     }
     return keptThisYear(pl, currentYearStatement?.payments.orEmpty(), today)
 }
+
+/** What TalkBack reads for the tier chip (iOS accessibilityLabel): the
+ *  tier, what it gives a month, and the costing it is measured by. */
+internal fun tierSpoken(tier: PartnerTier, currency: String?): String =
+    "${tier.name} partner — ${money(tier.monthlyMinor, currency)} a month. KSh 20,000 carries one disciple through a level."
+
+/** A pledge card's progress bar to TalkBack (iOS): "40 percent". */
+internal fun progressSpoken(fraction: Float): String = "${Math.round(fraction.coerceIn(0f, 1f) * 100)} percent"
 
 /** A total pledge's card foot (iOS PledgeCard.leftLine): "KSh 20,000 paid
  *  · 30,000 to go" — what is left said as a bare figure, the currency once.

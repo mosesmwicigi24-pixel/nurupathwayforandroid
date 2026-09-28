@@ -359,6 +359,9 @@ fun PartnersScreen(
     var collector by remember { mutableStateOf<GivingSchedule?>(null) }
     // Held here, so the list keeps its place under an open page.
     val listScroll = rememberScrollState()
+    // The member pulled the list down; its spinner shows until the reads end.
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(vm.loading, vm.statementLoading) { if (!vm.loading && !vm.statementLoading) pulled = false }
 
     fun openPage(id: String, notice: String? = null) {
         vm.clearActionError(); openError = null
@@ -422,39 +425,47 @@ fun PartnersScreen(
             onOpenCollector = { s -> collector = s },
         )
     } else {
-        Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(listScroll)) {
-            PartnersHeaderBand(segmentControl)
-            Column(
-                Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                when {
-                    p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
-                        CircularProgressIndicator(color = GIVE.gold)
+        // Pull down to read the standing and the statement again (iOS).
+        NuruRefreshBox(
+            refreshing = pulled && (vm.loading || vm.statementLoading),
+            onRefresh = { pulled = true; vm.load() },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(listScroll)) {
+                PartnersHeaderBand(segmentControl)
+                Column(
+                    Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (vm.error != null && p != null) {
+                        // A refresh failed but we still have a standing to show — said
+                        // quietly, at the top (iOS).
+                        Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     }
-                    p == null -> PartnerNotice(
-                        "We couldn't load this just now",
-                        vm.error ?: "Your giving is unaffected.",
-                        action = "Try again" to { vm.load() },
-                    )
-                    // iOS's rule: the membership decides; an older server's is_partner otherwise.
-                    p.isProgrammeMember -> {
-                        StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
-                        if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
-                        // Only when there is something to say — a partner whose
-                        // giving is collecting cleanly never sees an amber row.
-                        p.trouble?.let { t -> TroubleRow(t, vm.resuming, onResume = p.scheduleId?.let { id -> { vm.resume(id) } }) }
-                        PledgesSection(p, vm, openError) { id -> openPage(id) }
-                        StatementSection(p, vm, onOpenReceipt, openStatement)
+                    when {
+                        p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
+                            CircularProgressIndicator(color = GIVE.gold)
+                        }
+                        p == null -> PartnerNotice(
+                            "We couldn't load this just now",
+                            vm.error ?: "Your giving is unaffected.",
+                            action = "Try again" to { vm.load() },
+                        )
+                        // iOS's rule: the membership decides; an older server's is_partner otherwise.
+                        p.isProgrammeMember -> {
+                            StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
+                            if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
+                            // Only when there is something to say — a partner whose
+                            // giving is collecting cleanly never sees an amber row.
+                            p.trouble?.let { t -> TroubleRow(t, vm.resuming, onResume = p.scheduleId?.let { id -> { vm.resume(id) } }) }
+                            PledgesSection(p, vm, openError) { id -> openPage(id) }
+                            StatementSection(p, vm, onOpenReceipt, openStatement)
+                        }
+                        else -> {
+                            JoinCard(vm.joining, onJoin = { vm.join() })
+                            vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                        }
                     }
-                    else -> {
-                        JoinCard(vm.joining, onJoin = { vm.join() })
-                        vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
-                    }
-                }
-                if (vm.error != null && p != null) {
-                    // A refresh failed but we still have a standing to show — say so quietly.
-                    Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -582,7 +593,7 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
                     )
                 }
             },
-            second = p.tier?.name?.takeIf { it.isNotBlank() }?.let { name -> { TierChip(name) } },
+            second = p.tier?.takeIf { it.name.isNotBlank() }?.let { tier -> { TierChip(tier.name, tierSpoken(tier, p.currency)) } },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // The ONLY gold-filled button on the page. At least 44dp tall, and
@@ -611,11 +622,13 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
 
 /** The partner's tier as iOS shows it: award icon, 11 bold, gold chip — the
  *  name wrapping inside the chip when it is a sentence ("carries one
- *  disciple through a level, every year"), the icon centred on it. */
+ *  disciple through a level, every year"), the icon centred on it. TalkBack
+ *  reads the tier's whole sentence ([spoken], iOS's accessibility label). */
 @Composable
-private fun TierChip(name: String) {
+private fun TierChip(name: String, spoken: String) {
     Row(
-        Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp),
+        Modifier.clip(Capsule).background(GIVE.goldChipBg).clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Icon(Icons.Filled.WorkspacePremium, null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
@@ -641,6 +654,10 @@ private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
             }
             Text(if (joining) "Joining…" else "Join the programme", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+            if (!joining) {
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }
@@ -701,7 +718,9 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                             }
                         } else if (shown.processingChip != null) {
                             // Already paid and on its way: no Pay to tap twice.
-                            StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
+                            Box(Modifier.clearAndSetSemantics { contentDescription = "${shown.processingChip} — this payment is already on its way" }) {
+                                StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
+                            }
                         } else {
                             NavyPill("Pay") {
                                 Haptics.tap(view)
@@ -841,7 +860,11 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
             if (busy) CircularProgressIndicator(color = GIVE.gold, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
             StateChip(chipText, chipBg, chipFg)
         }
-        Box(Modifier.fillMaxWidth().height(6.dp).clip(Capsule).background(GIVE.mutedBg)) {
+        // "40 percent" to TalkBack (iOS).
+        Box(
+            Modifier.fillMaxWidth().height(6.dp).clip(Capsule).background(GIVE.mutedBg)
+                .clearAndSetSemantics { contentDescription = progressSpoken(progressFraction(pl)) },
+        ) {
             Box(Modifier.fillMaxWidth(progressFraction(pl)).fillMaxHeight().clip(Capsule).background(GIVE.gold))
         }
         // "KSh 20,000 paid · KSh 30,000 to go" at the leading edge and "Next
