@@ -28,6 +28,8 @@ inline fun <reified T> queuePayload(body: T): JsonObject =
 /**
  * Try [direct] online; if it fails at the transport layer, enqueue [domain]:[op]
  * with [payload] for replay and return null. HTTP errors propagate unchanged.
+ * A money write is refused up front with [MoneyNeverQueued] — before [direct]
+ * runs, so wrapping one here fails on its first use, online or not (§5.6).
  */
 suspend fun <T> OfflineQueue.runOrQueue(
     domain: String,
@@ -35,6 +37,7 @@ suspend fun <T> OfflineQueue.runOrQueue(
     payload: JsonObject,
     direct: suspend () -> T,
 ): T? = try {
+    requireQueueable(domain, op, payload)
     direct()
 } catch (e: IOException) {
     // Transport failure only (Retrofit throws HttpException — NOT an IOException —

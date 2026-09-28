@@ -10,7 +10,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.nuruplace.member.data.net.MemberApi
 import org.nuruplace.member.data.net.SyncPushBody
@@ -147,5 +149,91 @@ class OfflineQueueTest {
         queue(dao, FakeNet(online = true), api).drain()
         assertEquals(0, dao.rows.size)      // everything flushed
         assertEquals(2, api.pushes)         // 100 + 50 — two pages, not one
+    }
+
+    // ── Money is never queued (§5.6) — a hard block since Giving Cycle 1 ──
+
+    private val j = Json { ignoreUnknownKeys = true }
+    private fun obj(text: String) = j.parseToJsonElement(text) as JsonObject
+
+    /** Enqueue, expecting the refusal; returns whether it was refused. */
+    private suspend fun refused(q: OfflineQueue, domain: String, op: String, payload: JsonObject = obj("{}")): Boolean =
+        try {
+            q.enqueue(domain, op, payload)
+            false
+        } catch (e: MoneyNeverQueued) {
+            true
+        }
+
+    @Test fun `giving, payments, schedules and pledges are refused before anything is stored`() = runTest {
+        val dao = FakeDao()
+        val api = FakeApi { SyncPushResult(emptyList()) }
+        val q = queue(dao, FakeNet(online = true), api)
+        listOf(
+            "giving" to "intent",
+            "giving_intents" to "create",
+            "giving.schedules" to "create",
+            "givingSchedules" to "cancel",
+            "payments" to "create",
+            "payment" to "capture",
+            "schedules" to "create",
+            "giving_schedules" to "cancel",
+            "pledges" to "create",
+            "Pledges" to "update",
+            "mpesa" to "stk",
+            "partners" to "pay",
+            "transactions" to "upsert",
+        ).forEach { (domain, op) -> assertTrue("$domain:$op", refused(q, domain, op)) }
+        // A money amount in the payload is money, whatever the domain says.
+        assertTrue(refused(q, "misc", "upsert", obj("""{"amount_minor":100000}""")))
+        assertTrue(refused(q, "misc", "upsert", obj("""{"targetMinor":5}""")))
+        assertEquals(0, dao.rows.size)   // nothing stored…
+        assertEquals(0, api.pushes)      // …and nothing sent
+    }
+
+    @Test fun `the refusal is loud and is never a transport failure`() = runTest {
+        val q = queue(FakeDao(), FakeNet(online = false), FakeApi { SyncPushResult(emptyList()) })
+        try {
+            q.enqueue("giving", "intent", obj("{}"))
+            fail("a money write must not be queued")
+        } catch (e: MoneyNeverQueued) {
+            assertTrue(e.message!!.contains("giving:intent"))
+            // runOrQueue only catches IOException — this can never slip into the queue.
+            assertFalse(e is java.io.IOException)
+        }
+    }
+
+    @Test fun `runOrQueue refuses a money write before even trying it`() = runTest {
+        val dao = FakeDao()
+        val q = queue(dao, FakeNet(online = true), FakeApi { SyncPushResult(emptyList()) })
+        var called = false
+        try {
+            q.runOrQueue("giving_schedules", "create", obj("{}")) { called = true; "sent" }
+            fail("a money write must not go through runOrQueue")
+        } catch (e: MoneyNeverQueued) {
+            assertFalse(called)
+            assertEquals(0, dao.rows.size)
+        }
+    }
+
+    @Test fun `ordinary writes still queue — including spiritual gifts and prayer intentions`() = runTest {
+        val dao = FakeDao()
+        val q = queue(dao, FakeNet(online = false), FakeApi { SyncPushResult(emptyList()) })
+        listOf(
+            "prayer_entries" to "upsert", "prayer_entries" to "delete", "saved_verses" to "save",
+            "event_rsvps" to "set", "member_thoughts" to "upsert", "gifts" to "submit",
+            "prayer_intentions" to "upsert", "display_prefs" to "set",
+        ).forEach { (domain, op) -> assertFalse("$domain:$op", refused(q, domain, op, obj("""{"body":"x"}"""))) }
+        assertEquals(8, dao.rows.size)
+    }
+
+    @Test fun `isMoneyMutation matches whole money words, not their letters inside innocent ones`() {
+        assertTrue(isMoneyMutation("partners", "pay"))
+        assertTrue(isMoneyMutation("giving", "anything"))
+        assertTrue(isMoneyMutation("x", "y", obj("""{"amount_minor":1}""")))
+        assertFalse(isMoneyMutation("display_prefs", "set"))       // "pay" inside "display"
+        assertFalse(isMoneyMutation("prayer_intentions", "upsert")) // "intent" inside "intentions"
+        assertFalse(isMoneyMutation("gifts", "submit"))             // the spiritual-gifts assessment
+        assertFalse(isMoneyMutation("x", "y", obj("""{"amount":1}""")))
     }
 }
