@@ -123,7 +123,6 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.Moment
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -536,7 +535,8 @@ private fun GiveTab(
     fun retry(failed: GivingIntentResult) {
         if (retrying) return
         val phone = retryPhoneFor(failed.provider, promptPhone)
-        val attempt = retryKeyFor(heldRetry, failed.transactionId, phone) { UUID.randomUUID().toString() }
+        // The key: GiveSubmitLogic.newGivingKey's, replayed only after no answer.
+        val attempt = retryKeyFor(heldRetry, failed.transactionId, phone)
         val boundTo = ceremonyBoundTo
         heldRetry = attempt
         retrying = true; retryError = null
@@ -569,7 +569,10 @@ private fun GiveTab(
                 }
             } finally {
                 // No server answer: hold the key so the same retry replays it.
-                if (!keepGiveKeyAfter(failure)) heldRetry = null
+                // Any answer spends it (Giving Cycle 6): after a 409 CONFLICT
+                // the next Try again is this same failed gift with a fresh
+                // key; a 429 RATE_LIMITED is said above, never resent.
+                if (heldRetryAfter(attempt, failure) == null) heldRetry = null
                 retrying = false
             }
         }
@@ -750,8 +753,11 @@ private fun GiveTab(
                 }
             } finally {
                 // No server answer (transport failure / timeout): hold the key
-                // so an identical retry replays it. Any answer releases it.
-                if (!keepGiveKeyAfter(failure)) heldKey = null
+                // so an identical retry replays it. Any answer releases it — a
+                // 409 CONFLICT (the key is another gift's) then goes through on
+                // the next tap, and a 429 RATE_LIMITED is said, never resent
+                // (Giving Cycle 6).
+                if (heldKeyAfter(attempt, failure) == null) heldKey = null
                 busy = false
             }
         }
@@ -774,7 +780,7 @@ private fun GiveTab(
                 giftName = accountName, coverFee = coverFee && !inDollars, phone = promptPhone.orEmpty(),
                 usdCents = if (inDollars) usdCents else 0,
             ),
-        ) { UUID.randomUUID().toString() }
+        )
         // The method's currency picks the amount: dollars (with cents) for
         // PayPal, shillings otherwise — never a KSh number with PayPal.
         val plan = planGiveSubmission(

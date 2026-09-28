@@ -26,6 +26,15 @@
 // (Giving Cycle 3): POST /giving/transactions/{id}/retry with a fresh key —
 // replayed, like a gift's, only after an attempt that got no answer
 // (retryKeyFor) — so a retry never loses the failed gift's pledge or need.
+//
+// Safe to give (Giving Cycle 6): every key comes from ONE place
+// (newGivingKey — a UUID, never in the server's own namespaces sched: claim:
+// pledge: web: website: office:, which it refuses with 400); any answer spends
+// a key (heldKeyAfter / heldRetryAfter), so a 409 CONFLICT — the key is
+// another gift's — goes through on the member's next tap with a fresh one,
+// and Try again stays on the SAME failed gift; a 429 RATE_LIMITED (several
+// prompts to a number that is not the member's own) is said in the server's
+// words, which name the minutes. Nothing is ever sent again without a tap.
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.CreateScheduleBody
@@ -35,6 +44,7 @@ import org.nuruplace.member.data.net.GivingDetail
 import org.nuruplace.member.data.net.GivingIntentResult
 import org.nuruplace.member.data.net.ServerError
 import java.io.IOException
+import java.util.UUID
 
 /** Frequency indices as the segmented control lays them out. */
 const val FREQ_ONCE = 0
@@ -120,6 +130,27 @@ data class GiveRequestShape(
 /** The idempotency key held for one submission, and the gift it was minted for. */
 data class HeldGiveKey(val key: String, val shape: GiveRequestShape)
 
+// ── Request keys (Giving Cycle 6) ──
+
+/** The server's own key namespaces (FinancialService.RESERVED_KEY): its
+ *  schedule cycles, confirmed claims, pledge collections, website and office
+ *  rows. A member's key in one is refused (400 VALIDATION_FAILED) — shaped
+ *  like a schedule cycle's it could make the scheduler skip that cycle. */
+val RESERVED_GIVING_KEY_PREFIXES = listOf("sched:", "claim:", "pledge:", "web:", "website:", "office:")
+
+/** [key] is in one of the server's namespaces — matched without regard to
+ *  case, as the server's /i matches it. */
+fun isReservedGivingKey(key: String): Boolean {
+    val k = key.lowercase()
+    return RESERVED_GIVING_KEY_PREFIXES.any { k.startsWith(it) }
+}
+
+/** A new idempotency key for a gift, a recurring gift or a Try again — the
+ *  ONLY way the app makes one: a random UUID, 36 characters (the server
+ *  takes 8–255) with no colon, so never in the server's namespaces, and
+ *  never another gift's. */
+fun newGivingKey(): String = UUID.randomUUID().toString()
+
 /**
  * The idempotency key a Pay tap sends. The held key — kept only when the
  * last attempt got NO server answer ([keepGiveKeyAfter]) — is replayed when
@@ -130,7 +161,7 @@ data class HeldGiveKey(val key: String, val shape: GiveRequestShape)
  * fresh key. A gift changed and then changed BACK is that same request
  * again, and replays: that is exactly the case the key protects.
  */
-fun giveKeyFor(held: HeldGiveKey?, shape: GiveRequestShape, freshKey: () -> String): HeldGiveKey =
+fun giveKeyFor(held: HeldGiveKey?, shape: GiveRequestShape, freshKey: () -> String = ::newGivingKey): HeldGiveKey =
     if (held != null && held.shape == shape) held else HeldGiveKey(freshKey(), shape)
 
 /**
@@ -142,6 +173,12 @@ fun giveKeyFor(held: HeldGiveKey?, shape: GiveRequestShape, freshKey: () -> Stri
  * out of trying again.
  */
 fun keepGiveKeyAfter(failure: Throwable?): Boolean = failure is IOException
+
+/** The key still held once an attempt with [held] is over: kept only when no
+ *  answer came ([keepGiveKeyAfter]). Any answer spends it — a 409 CONFLICT
+ *  (the key is another gift's) or a 429 RATE_LIMITED included — so the next
+ *  tap mints a fresh one; nothing is ever resent by itself. */
+fun heldKeyAfter(held: HeldGiveKey, failure: Throwable?): HeldGiveKey? = held.takeIf { keepGiveKeyAfter(failure) }
 
 /** iOS `total = amount + fee`: the charged amount in MAJOR units. */
 fun chargedAmountMajor(amountMajor: Int, coverFee: Boolean): Int =
@@ -269,10 +306,13 @@ sealed interface GiveErrorAction {
  * What a refused gift does next. 409 GIFT_IN_PROGRESS carries the waiting
  * prompt's `details.transaction_id`, and the ceremony watches it exactly like
  * a fresh intent. Everything else — 422 METHOD_UNAVAILABLE, METHOD_CURRENCY,
- * AMOUNT_OUT_OF_RANGE, PHONE_REQUIRED, 409 SCHEDULE_EXISTS, any other code —
- * says the server's message as-is (it is written for the member). [fallback]
- * speaks when there is no server message: a transport failure (err == null)
- * or a body that said nothing.
+ * AMOUNT_OUT_OF_RANGE, PHONE_REQUIRED, CURRENCY_MISMATCH, 409 SCHEDULE_EXISTS
+ * and CONFLICT (the key is another gift's), 429 RATE_LIMITED (several prompts
+ * to a number not the member's own — its words name the minutes; Giving
+ * Cycle 6), any other code — says the server's message as-is (it is written
+ * for the member) and is never sent again by itself. [fallback] speaks when
+ * there is no server message: a transport failure (err == null) or a body
+ * that said nothing.
  */
 fun giveErrorAction(err: ServerError?, fallback: String): GiveErrorAction {
     val message = err?.message ?: fallback
@@ -328,5 +368,10 @@ data class HeldRetryKey(val key: String, val retryOf: String, val phone: String?
  * same failed gift and number, so a lost reply can never become a second
  * prompt. Another gift, or another number, is another request.
  */
-fun retryKeyFor(held: HeldRetryKey?, retryOf: String, phone: String?, freshKey: () -> String): HeldRetryKey =
+fun retryKeyFor(held: HeldRetryKey?, retryOf: String, phone: String?, freshKey: () -> String = ::newGivingKey): HeldRetryKey =
     if (held != null && held.retryOf == retryOf && held.phone == phone) held else HeldRetryKey(freshKey(), retryOf, phone)
+
+/** A Try-again key once its attempt is over — [heldKeyAfter]'s rule. The
+ *  failed gift stays the ceremony's, so after a 409 CONFLICT the member's
+ *  next Try again retries the SAME gift with a fresh key (Giving Cycle 6). */
+fun heldRetryAfter(held: HeldRetryKey, failure: Throwable?): HeldRetryKey? = held.takeIf { keepGiveKeyAfter(failure) }
