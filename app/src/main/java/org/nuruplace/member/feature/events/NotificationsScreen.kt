@@ -121,10 +121,21 @@ private fun bodyOf(n: NotificationRow): String? =
     n.payload?.body?.takeIf { it.isNotEmpty() }
         ?: org.nuruplace.member.feature.give.givingNotificationBody(n.template, n.payload)
 
-/** The four backend notification categories → (glyph, foreground, tint). §B2. */
-private data class Tone(val glyph: String, val fg: Color, val bg: Color, val reward: Boolean = false)
+/** The four backend notification categories → (glyph, foreground, tint). §B2.
+ *  Internal so NotificationToneTest pins the rules' order. */
+internal data class Tone(val glyph: String, val fg: Color, val bg: Color, val reward: Boolean = false)
 
-private fun toneFor(template: String): Tone {
+/** A giving or Partners notice — giving_* · pledge_* · payment_*. They wear
+ *  the Give tab's one tone (iOS: its hand-and-heart on gold), checked BEFORE
+ *  the event/reminder rule — pledge_reminder_manual read as a calendar
+ *  reminder — and the "give" rule, which "giving_…" never matched, so every
+ *  other giving notice fell to the default bell. */
+internal fun isGivingNotice(template: String): Boolean {
+    val t = template.lowercase()
+    return t.startsWith("giving") || t.startsWith("pledge") || t.startsWith("payment")
+}
+
+internal fun toneFor(template: String): Tone {
     val t = template.lowercase()
     return when {
         "badge" in t -> Tone("🏅", Nuru.navy, Nuru.gold, reward = true)
@@ -132,6 +143,8 @@ private fun toneFor(template: String): Tone {
         "level" in t || "advanced" in t -> Tone("📈", Nuru.navy, Nuru.gold, reward = true)
         "reflection" in t && ("return" in t || "revis" in t) -> Tone("✍️", Nuru.warning, Nuru.warningBg)     // warning
         "department" in t || "serve_request" in t -> Tone("🤝", Nuru.info, Nuru.infoBg)                        // departments
+        // The giving hands Home's Give card wears, on the Give tab's gold.
+        isGivingNotice(t) -> Tone("🤲", org.nuruplace.member.feature.give.GIVE.overline, Nuru.goldChipBg)    // giving
         "event" in t || "reminder" in t -> Tone("📅", Nuru.info, Nuru.infoBg)                                 // info
         "announcement" in t || "announce" in t -> Tone("📣", Nuru.info, Nuru.infoBg)                          // info
         "system" in t || "security" in t || "login" in t || "password" in t -> Tone("⚙️", Nuru.ink600, Nuru.inputBg) // security
