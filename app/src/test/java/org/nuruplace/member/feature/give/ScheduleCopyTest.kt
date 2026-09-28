@@ -270,6 +270,28 @@ class ScheduleCopyTest {
     }
 
     @Test
+    fun `Give lists running gifts, then paused ones, never a cancelled one`() {
+        val paused = sched.copy(scheduleId = "p", status = "paused")
+        val cancelled = sched.copy(scheduleId = "c", status = "cancelled")
+        val odd = sched.copy(scheduleId = "o", status = "stopping")
+        // Server order was paused, running, cancelled, running.
+        assertEquals(listOf("s1", "w1", "p"), listedSchedules(listOf(paused, sched, cancelled, weekly, odd)).map { it.scheduleId })
+        assertEquals(emptyList<GivingSchedule>(), listedSchedules(listOf(cancelled)))
+    }
+
+    @Test
+    fun `a paused card says when it comes back, else that nothing is owed`() {
+        val paused = sched.copy(status = "paused")
+        assertEquals("Resumes 12 Oct", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "2026-10-12")))
+        // Paused by the member until resumed, after failures, or with its pledge: nothing is owed.
+        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = null)))
+        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "failures", consecutiveFailures = 3)))
+        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "pledge")))
+        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = null)))
+        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "someday")))
+    }
+
+    @Test
     fun `a Give card says its next prompt short — the year only when it isn't this one`() {
         // Seen on screen: "Next 5 Oct 2026" where iOS says "Next 5 Oct".
         val today = LocalDate.of(2026, 9, 28)

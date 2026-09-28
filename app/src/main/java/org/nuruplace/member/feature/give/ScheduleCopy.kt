@@ -89,6 +89,23 @@ fun nairobiDayOf(iso: String?): String? = parseNairobi(iso)?.toLocalDate()?.form
 /** Today in Nairobi. */
 fun nairobiToday(now: Instant): LocalDate = now.atZone(NAIROBI_ZONE).toLocalDate()
 
+/** What Give lists under RECURRING GIFTS (iOS GiveSchedules.listed): the
+ *  running gifts, then the paused ones — never a cancelled one, which is
+ *  history, nor a status this app does not know. */
+fun listedSchedules(all: List<GivingSchedule>): List<GivingSchedule> =
+    all.filter { it.status.trim().lowercase() == "active" } + all.filter { it.status.trim().lowercase() == "paused" }
+
+/** A paused gift's card line (iOS PauseCopy.cardLine): when it comes back
+ *  on its own — "Resumes 12 Oct", a member's pause with a date — else
+ *  "Nothing is owed". */
+fun pauseCardLine(s: GivingSchedule): String {
+    if (s.pauseReason?.trim()?.lowercase() == "member") {
+        s.resumeOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+            ?.let { return "Resumes ${it.format(CARD_DAY_FMT)}" }
+    }
+    return "Nothing is owed"
+}
+
 /** A Give card's next prompt (iOS): "Next 5 Oct" — the year only when it
  *  isn't this one ("Next 5 Jan 2027") — on the Nairobi calendar; "Next —"
  *  when there is no date to read. */

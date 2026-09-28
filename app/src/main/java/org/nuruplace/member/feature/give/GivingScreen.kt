@@ -859,8 +859,9 @@ private fun GiveTab(
     // The one settled rule (succeeded / settled / completed), as iOS GiveMoney.
     val yearTotals = currencySums(history.filter { giftSettled(it.status) && givingYear(it) == thisYear })
 
-    // Running or paused — a paused schedule still stands until it is cancelled.
-    val liveSchedules = schedules.filter { scheduleCancellable(it.status) }
+    // Running, then paused (a paused schedule still stands until it is
+    // cancelled) — iOS GiveSchedules.listed.
+    val liveSchedules = listedSchedules(schedules)
 
     // The gift in its rail's money, and what it charges (the covered fee
     // inside). An amount the rail cannot take is said under the amount and
@@ -1353,7 +1354,7 @@ private fun GiveTab(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             liveSchedules.forEach { s ->
-                                val status = scheduleStatusLabel(s.status)
+                                val paused = s.status.trim().lowercase() == "paused"
                                 Column(
                                     Modifier.width(cardWidth).clip(RoundedCornerShape(16.dp)).background(GIVE.white)
                                         .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
@@ -1362,10 +1363,24 @@ private fun GiveTab(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(12.dp))
-                                        Text(s.frequency.uppercase(), style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.overline)
+                                        Text(
+                                            if (freqOf(s.frequency) == FREQ_WEEKLY) "WEEKLY" else "MONTHLY",
+                                            style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.overline,
+                                        )
+                                        // A paused gift says so at a glance (iOS).
+                                        if (paused) {
+                                            Spacer(Modifier.weight(1f))
+                                            Text(
+                                                "Paused", style = giInter(11, FontWeight.Medium), color = GIVE.ink600,
+                                                modifier = Modifier.clip(Capsule).background(GIVE.mutedBg).padding(horizontal = 8.dp, vertical = 3.dp),
+                                            )
+                                        }
                                     }
-                                    Text(ksh(s.amountMinor), style = giInter(15, FontWeight.Bold, -0.15f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
-                                    Text(giveFund(s.fund).name, style = giInter(13), color = GIVE.sub)
+                                    Text(
+                                        money(s.amountMinor, s.currency), style = giInter(15, FontWeight.Bold, -0.15f), color = GIVE.navy,
+                                        maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 5.dp).shrinkToFit(0.8f),
+                                    )
+                                    Text(giveFund(s.fund).name, style = giInter(13), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     // The pledge it collects, in gold (iOS): "Collects your pledge “Kenya trip”".
                                     schedulePledgeLine(s)?.let {
                                         Text(
@@ -1373,11 +1388,20 @@ private fun GiveTab(
                                             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
                                         )
                                     }
-                                    if (status != null) {
-                                        Text(status, style = giInter(11, FontWeight.SemiBold), color = GIVE.danger, modifier = Modifier.padding(top = 4.dp))
-                                    } else {
-                                        // "Next 5 Oct" — the year only when it isn't this one.
-                                        Text(scheduleCardNextLine(s.nextRunAt, today), style = giInter(11), color = GIVE.tertiary, modifier = Modifier.padding(top = 4.dp))
+                                    // A paused gift charges nothing — its old next date is not
+                                    // a promise: when it comes back, else that nothing is owed.
+                                    // Running: "Next 5 Oct", the year only when it isn't this one.
+                                    Text(
+                                        if (paused) pauseCardLine(s) else scheduleCardNextLine(s.nextRunAt, today),
+                                        style = giInter(11), color = GIVE.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 5.dp),
+                                    )
+                                    // Why its last prompt failed, while it still fails — the server's words.
+                                    s.lastFailure?.reason?.takeIf { it.isNotBlank() }?.let {
+                                        Text(
+                                            it, style = giInter(10, FontWeight.SemiBold), color = GIVE.goldChipText,
+                                            maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp),
+                                        )
                                     }
                                 }
                             }
