@@ -154,6 +154,50 @@ class GivingNotificationCopyTest {
         )
     }
 
+    // ── the office changed a recurring gift at the member's request (Giving Cycle 7) ──
+
+    @Test
+    fun `the office's change to a recurring gift says what it did, and opens that gift`() {
+        // workers/dispatch.ts giving_schedule_office_change, word for word.
+        val row = json.decodeFromString<NotificationRow>(
+            """{"notification_id":"n4","template":"giving_schedule_office_change","status":"sent","scheduled_for":"x",
+               "payload":{"schedule_id":"s1","action":"pause","resume_on":"2026-10-12","amount_minor":100000,
+                          "currency":"KES","frequency":"weekly","fund_name":"Tithe"}}""",
+        )
+        val paused = row.payload!!
+        assertEquals("pause", paused.action)
+        assertEquals("2026-10-12", paused.resumeOn)
+        assertEquals("Your recurring gift is paused", title(row.template, paused))
+        assertEquals(
+            "The church office paused your weekly gift of KSh 1,000 to Tithe, as you asked — it starts again on 12 October.",
+            body(row.template, paused),
+        )
+        // Paused with no day to start again.
+        assertEquals(
+            "The church office paused your weekly gift of KSh 1,000 to Tithe, as you asked.",
+            body(row.template, paused.copy(resumeOn = null)),
+        )
+        // A tap opens that gift, by its schedule_id — a cancelled one shows
+        // its record there, with nothing left to act on.
+        assertEquals(
+            scheduleRoute("s1"),
+            givingDest(transactionId = null, failureCode = null, scheduleId = paused.scheduleId, promptAt = null, pledgeId = null),
+        )
+
+        val resumed = NotifPayload(scheduleId = "s1", action = "resume", amountMinor = 500_000, currency = "KES", frequency = "monthly")
+        assertEquals("Your recurring gift is back on", title("giving_schedule_office_change", resumed))
+        assertEquals("The church office resumed your monthly gift of KSh 5,000, as you asked.", body("giving_schedule_office_change", resumed))
+
+        val cancelled = NotifPayload(
+            scheduleId = "s1", action = "cancel", amountMinor = 100_000, currency = "KES", frequency = "weekly", fundName = "Tithe",
+        )
+        assertEquals("Your recurring gift was cancelled", title("giving_schedule_office_change", cancelled))
+        assertEquals(
+            "The church office cancelled your weekly gift of KSh 1,000 to Tithe, as you asked. Nothing more will be prompted.",
+            body("giving_schedule_office_change", cancelled),
+        )
+    }
+
     @Test
     fun `any other template has no giving words`() {
         assertNull(title("badge_awarded", NotifPayload(title = "Faithful")))

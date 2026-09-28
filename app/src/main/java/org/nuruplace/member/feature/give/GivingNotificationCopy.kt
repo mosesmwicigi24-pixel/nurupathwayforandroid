@@ -1,7 +1,8 @@
 // The words on a giving notification in the notification centre — the
 // server's push copy (workers/dispatch.ts PUSH_TEMPLATE_COPY), so the tray,
-// the centre and iOS say the same thing (Giving Cycles 3–5). Kept pure so
-// GivingNotificationCopyTest pins it against dispatch.ts.
+// the centre and iOS say the same thing (Giving Cycles 3–5, and Cycle 7's
+// office change to a recurring gift). Kept pure so GivingNotificationCopyTest
+// pins it against dispatch.ts.
 //
 // Checked BEFORE the payload's own `title`: on the Partners notices that key
 // is the PLEDGE's name ("Kenya trip"), not a headline. One deliberate
@@ -45,6 +46,12 @@ internal fun givingNotificationTitle(template: String, p: NotifPayload?): String
         }
         "giving_schedule_heads_up" -> "Your ${if (weekly) "weekly" else "monthly"} gift is ready"
         "giving_schedule_paused" -> "Your recurring gift is paused"
+        // Giving Cycle 7 — the church office changed it at the member's request.
+        "giving_schedule_office_change" -> when (p?.action) {
+            "cancel" -> "Your recurring gift was cancelled"
+            "resume" -> "Your recurring gift is back on"
+            else -> "Your recurring gift is paused"
+        }
         "giving_schedule_covered" -> "Nothing to pay this ${if (weekly) "week" else "month"}"
         "giving_schedule_stopped" -> when (p?.reason) {
             "pledge_fulfilled" -> "Your pledge is complete"
@@ -92,6 +99,18 @@ internal fun givingNotificationBody(template: String, p: NotifPayload?): String?
         }
         "giving_schedule_paused" ->
             "${p?.reason.said()?.let { "$it " } ?: ""}We've stopped sending prompts for now. Open Give to resume it whenever you're ready."
+        "giving_schedule_office_change" -> {
+            val gift = "${if (p?.frequency == "weekly") "weekly" else "monthly"} gift of $amount" +
+                (p?.fundName.said()?.let { " to $it" } ?: "")
+            when (p?.action) {
+                "cancel" -> "The church office cancelled your $gift, as you asked. Nothing more will be prompted."
+                "resume" -> "The church office resumed your $gift, as you asked."
+                else -> {
+                    val until = p?.resumeOn.said()?.let { " — it starts again on ${dayWords(it)}" } ?: ""
+                    "The church office paused your $gift, as you asked$until."
+                }
+            }
+        }
         "giving_schedule_covered" -> {
             val through = p?.coveredThrough.said()?.let { " through ${dayWords(it)}" } ?: ""
             "$pledgeQuoted is already paid$through, so no M-Pesa prompt is coming this time. Thank you."

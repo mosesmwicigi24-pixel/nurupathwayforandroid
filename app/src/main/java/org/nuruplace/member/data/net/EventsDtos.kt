@@ -105,6 +105,11 @@ data class NotifPayload(
     val retryAt: String? = null,
     val scheduleStopped: Boolean? = null,
     val message: String? = null,
+    // The church office changed a recurring gift at the member's request
+    // (Giving Cycle 7, giving_schedule_office_change): pause · resume ·
+    // cancel, and the day a pause ends (YYYY-MM-DD) when it has one.
+    val action: String? = null,
+    val resumeOn: String? = null,
 )
 
 @Serializable
