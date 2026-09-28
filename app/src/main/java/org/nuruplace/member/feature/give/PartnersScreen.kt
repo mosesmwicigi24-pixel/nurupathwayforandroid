@@ -118,6 +118,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.DueItem
@@ -172,6 +173,15 @@ class PartnersViewModel : ViewModel() {
     private var statementsInFlight = 0
     var statementError by mutableStateOf<String?>(null); private set
 
+    // GET /giving/methods and GET /giving/schedules, read WITH the standing —
+    // never per pledge — so a pledge shows the recurring gift that collects
+    // it (monthly or total), or the offer to collect it at its pace, the
+    // moment it opens. Null until each has answered once; a failed read keeps
+    // what was there, and with either unknown nothing is offered (never a
+    // second collector on a guess).
+    var methods by mutableStateOf<GivingMethodsRes?>(null); private set
+    var schedules by mutableStateOf<List<GivingSchedule>?>(null); private set
+
     private val freshness = GivingFreshness()
     // Latest request wins: a slower, older answer never overwrites a newer
     // one (an entry fetch and an event-driven one can overlap).
@@ -206,6 +216,17 @@ class PartnersViewModel : ViewModel() {
             r.getOrNull()?.let { partnership = it }
             if (r.isFailure) error = ApiException.message(r.exceptionOrNull() ?: Exception())
             loading = false
+        }
+        // What collects each pledge, and whether M-Pesa can take a new
+        // recurring gift — side by side, beside the standing.
+        viewModelScope.launch {
+            val rails = async { runCatching { Net.client.api.givingMethods() } }
+            val gifts = async { runCatching { Net.client.api.schedules().data } }
+            val m = rails.await()
+            val s = gifts.await()
+            if (seq != partnershipSeq) return@launch // a newer fetch owns the state
+            m.getOrNull()?.let { methods = it }
+            s.getOrNull()?.let { schedules = it }
         }
         // Payments may have changed with whatever prompted this reload.
         val current = LocalDate.now().year
@@ -677,6 +698,10 @@ private fun PledgesSection(
             pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
             actionError = vm.actionError,
             notice = notice,
+            // Read with the standing, so the collector (or the pace offer)
+            // is there the moment the sheet opens.
+            methods = vm.methods,
+            schedules = vm.schedules,
             onDismiss = { detailId = null; notice = null },
             onOpenReceipt = onOpenReceipt,
             onPayNow = {
@@ -927,6 +952,10 @@ private fun PledgeDetailSheet(
     actionError: String?,
     /** Said first: why a pledge just made has no automatic collection. */
     notice: String?,
+    /** GET /giving/methods and /giving/schedules, from the screen's
+     *  ViewModel — null while unknown (then nothing is shown or offered). */
+    methods: GivingMethodsRes?,
+    schedules: List<GivingSchedule>?,
     onDismiss: () -> Unit,
     onOpenReceipt: (String) -> Unit,
     onPayNow: () -> Unit,
@@ -962,22 +991,13 @@ private fun PledgeDetailSheet(
             .onSuccess { claims = it }
             .onFailure { claimsError = ApiException.message(it, context) }
     }
-    // A pledge with a pace (Giving Cycle 9): whether M-Pesa can take money
-    // and what already collects it — read with the sheet, and only then. A
-    // failed read offers nothing (never a second collector on a guess).
-    var methodsRes by remember(pl.pledgeId) { mutableStateOf<GivingMethodsRes?>(null) }
-    var schedules by remember(pl.pledgeId) { mutableStateOf<List<GivingSchedule>?>(null) }
+    // "Collect it automatically at this pace" (Giving Cycle 9): in flight,
+    // its refusal in the server's words, and its key.
     var startingPace by remember(pl.pledgeId) { mutableStateOf(false) }
     var paceError by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
     // Held only after a request that got no answer, so tapping again finds
     // the gift that request may have made (newGivingKey otherwise).
     var paceKey by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
-    val hasPace = pl.pace != null
-    LaunchedEffect(pl.pledgeId, hasPace, attempt) {
-        if (!hasPace) return@LaunchedEffect
-        runCatching { Net.client.api.givingMethods() }.onSuccess { methodsRes = it }
-        runCatching { Net.client.api.schedules().data }.onSuccess { schedules = it }
-    }
 
     /** "Collect it automatically at this pace": a monthly M-Pesa gift bound
      *  to the pledge at its pace, its first prompt now (PledgePaceLogic). */
@@ -1035,18 +1055,21 @@ private fun PledgeDetailSheet(
                     ActionPill("Edit", enabled = !busy) { onEdit() }
                     ActionPill("Cancel", enabled = !busy, danger = true) { onCancel() }
                 }
-                // A total pledge's pace, and collecting it at that pace — or
-                // the recurring gift that already does (Giving Cycle 9).
+                // The recurring gift that collects this pledge — ANY pledge,
+                // a monthly one as much as a total one — or, for a total
+                // pledge with a pace, collecting it at that pace (Giving
+                // Cycle 9, PledgePaceLogic.pledgeCollection).
+                val collection = pledgeCollection(pl, methods, schedules)
+                if (collection is PledgeCollection.Collected) {
+                    CollectorRow(collection.schedule, today) { onOpenCollector(collection.schedule) }
+                }
                 paceLine(pl, today)?.let { line ->
                     PaceBlock(
                         line = line,
-                        collector = schedules?.let { pledgeCollector(pl, it) },
-                        offer = paceOfferAvailable(pl, methodsRes, schedules),
+                        offer = collection == PledgeCollection.Offer,
                         starting = startingPace,
                         error = paceError,
-                        today = today,
                         onStart = { Haptics.tap(view); startPace() },
-                        onOpenCollector = onOpenCollector,
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1129,21 +1152,34 @@ private fun PledgeDetailSheet(
     }
 }
 
+/** The recurring gift that collects a pledge — "Collected automatically —
+ *  next KSh 5,000 on 5 Oct" — on every pledge it collects, monthly or total;
+ *  it opens that gift's sheet. */
+@Composable
+private fun CollectorRow(collector: GivingSchedule, today: LocalDate, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GIVE.white)
+            .border(1.dp, GIVE.border, RoundedCornerShape(12.dp))
+            .clickable { onOpen() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(collectedLine(collector, today), style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+    }
+}
+
 /** A total pledge's pace — "To reach KSh 20,000 by 31 Dec: KSh 5,000 a month
- *  — 4 collections" — then either the recurring gift already collecting it
- *  ("Collected automatically — next KSh 5,000 on 28 Oct", which opens it) or,
- *  when it may be set up here, "Collect it automatically at this pace" with
- *  its one-line promise. Its refusal is said in the server's words. */
+ *  — 4 collections" — then, when it may be set up here, "Collect it
+ *  automatically at this pace" with its one-line promise. Its refusal is
+ *  said in the server's words. */
 @Composable
 private fun PaceBlock(
     line: String,
-    collector: GivingSchedule?,
     offer: Boolean,
     starting: Boolean,
     error: String?,
-    today: LocalDate,
     onStart: () -> Unit,
-    onOpenCollector: (GivingSchedule) -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GIVE.priorityBg)
@@ -1151,32 +1187,20 @@ private fun PaceBlock(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(line, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-        when {
-            collector != null -> Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(GIVE.white)
-                    .border(1.dp, GIVE.border, RoundedCornerShape(10.dp))
-                    .clickable { onOpenCollector(collector) }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        if (offer) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(Capsule).background(GIVE.navy)
+                    .clickable(enabled = !starting) { onStart() }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                Text(collectedLine(collector, today), style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.weight(1f))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
-            }
-            offer -> {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(Capsule).background(GIVE.navy)
-                        .clickable(enabled = !starting) { onStart() }
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
-                ) {
-                    if (starting) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text("Collect it automatically at this pace", style = giInter(13, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
+                if (starting) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
                 }
-                Text(PACE_OFFER_NOTE, style = giInter(11), color = GIVE.sub)
+                Text("Collect it automatically at this pace", style = giInter(13, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
             }
+            Text(PACE_OFFER_NOTE, style = giInter(11), color = GIVE.sub)
         }
         error?.let { Text(it, style = giInter(12), color = GIVE.danger) }
     }

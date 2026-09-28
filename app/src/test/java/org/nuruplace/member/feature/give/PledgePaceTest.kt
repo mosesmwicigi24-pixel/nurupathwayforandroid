@@ -144,6 +144,35 @@ class PledgePaceTest {
     }
 
     @Test
+    fun `a monthly pledge shows the gift that collects it — not only a total pledge with a pace`() {
+        // The Kenya trip case (seen on screen 2026-09-28): monthly, collected
+        // by a bound schedule, no pace — iOS says "Collected automatically",
+        // Android said nothing.
+        val kenya = Pledge(
+            pledgeId = "p-kenya", shape = "monthly", amountMinor = 500_000, dueDay = 5, currency = "KES",
+            status = "active", title = "Kenya trip",
+        )
+        val bound = collector(pledgeId = "p-kenya")
+        assertEquals(PledgeCollection.Collected(bound), pledgeCollection(kenya, methods(), listOf(bound)))
+        // Paused, it still collects once resumed — still shown.
+        val paused = collector(status = "paused", pledgeId = "p-kenya")
+        assertEquals(PledgeCollection.Collected(paused), pledgeCollection(kenya, methods(), listOf(paused)))
+        // The collector needs only the gifts: the methods unknown, still shown.
+        assertEquals(PledgeCollection.Collected(bound), pledgeCollection(kenya, null, listOf(bound)))
+        // Nothing collecting a monthly pledge: nothing to offer (it has no pace).
+        assertEquals(PledgeCollection.None, pledgeCollection(kenya, methods(), emptyList()))
+        assertEquals(PledgeCollection.None, pledgeCollection(kenya, methods(), listOf(collector(status = "cancelled", pledgeId = "p-kenya"))))
+        // A total pledge with a pace and nothing collecting it: the offer…
+        assertEquals(PledgeCollection.Offer, pledgeCollection(roof, methods(), emptyList()))
+        // …its collector instead once there is one; no offer without the methods.
+        assertEquals(PledgeCollection.Collected(collector()), pledgeCollection(roof, methods(), listOf(collector())))
+        assertEquals(PledgeCollection.None, pledgeCollection(roof, null, emptyList()))
+        // The gifts not known yet (or the read failed): nothing, never a guess.
+        assertEquals(PledgeCollection.None, pledgeCollection(kenya, methods(), null))
+        assertEquals(PledgeCollection.None, pledgeCollection(roof, methods(), null))
+    }
+
+    @Test
     fun `a gift already collecting the pledge is shown instead, with what it asks next`() {
         assertEquals("Collected automatically — next KSh 5,000 on 28 Oct", collectedLine(collector(), today))
         assertEquals("Collected automatically — next KSh 3,000 on 28 Oct", collectedLine(collector(next = 300_000), today))

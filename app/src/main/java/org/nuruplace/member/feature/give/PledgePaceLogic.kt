@@ -12,7 +12,10 @@
 // pledge at that amount, its first prompt today (the pace counts today's
 // collection). A gift bound to a pledge asks only what is left (Cycle 5), so
 // it lands exactly on the target and stops there. A recurring gift already
-// collecting the pledge is shown instead — never a second one.
+// collecting the pledge is shown instead — never a second one — and it is
+// shown on EVERY pledge it collects, a monthly one included
+// (pledgeCollection): a member must be able to see that a pledge is paid
+// automatically.
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.CreateScheduleBody
@@ -60,6 +63,27 @@ fun paceOfferAvailable(pl: Pledge, methods: GivingMethodsRes?, schedules: List<G
     if (methods == null || methods.methods.none { it.key == "mpesa" && it.enabled }) return false
     if (schedules == null) return false
     return pledgeCollector(pl, schedules) == null
+}
+
+/** What a pledge says about collecting it automatically (iOS
+ *  PledgePace.Offer): the recurring gift that already collects it — ANY
+ *  pledge, a monthly one as much as a total one ("Collected automatically —
+ *  next KSh 5,000 on 5 Oct") — else "Collect it automatically at this pace"
+ *  when [paceOfferAvailable], else nothing. */
+sealed interface PledgeCollection {
+    data class Collected(val schedule: GivingSchedule) : PledgeCollection
+    data object Offer : PledgeCollection
+    data object None : PledgeCollection
+}
+
+/** [PledgeCollection] from what the server said. Nothing while the recurring
+ *  gifts are not known (not read yet, or the read failed): a collector is
+ *  never guessed at, and neither is the offer. The collector needs only the
+ *  gifts; the offer needs the methods too. */
+fun pledgeCollection(pl: Pledge, methods: GivingMethodsRes?, schedules: List<GivingSchedule>?): PledgeCollection {
+    val known = schedules ?: return PledgeCollection.None
+    pledgeCollector(pl, known)?.let { return PledgeCollection.Collected(it) }
+    return if (paceOfferAvailable(pl, methods, known)) PledgeCollection.Offer else PledgeCollection.None
 }
 
 /** POST /giving/schedules for "Collect it automatically at this pace": the
