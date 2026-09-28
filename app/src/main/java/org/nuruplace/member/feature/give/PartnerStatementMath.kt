@@ -211,6 +211,17 @@ internal fun pledgeKeptThisYear(pl: Pledge, currentYearStatement: GivingStatemen
     return keptThisYear(pl, currentYearStatement?.payments.orEmpty(), today)
 }
 
+/** A total pledge's card foot (iOS PledgeCard.leftLine): "KSh 20,000 paid
+ *  · 30,000 to go" — what is left said as a bare figure, the currency once.
+ *  Dollars keep their cents ("US$ 12.50 paid · 87.50 to go"); iOS drops
+ *  them there. */
+internal fun totalPledgeLeftLine(pl: Pledge): String {
+    val paid = pl.progress.paidMinor
+    val toGo = maxOf((pl.targetMinor ?: 0) - paid, 0)
+    val bare = if (currencyCode(pl.currency) == GIVE_FORM_CURRENCY) "%,d".format(toGo / 100) else "%,.2f".format(toGo / 100.0)
+    return "${money(paid, pl.currency)} paid · $bare to go"
+}
+
 /** "3 of 4 kept this year" — or null, saying nothing, while nothing has
  *  come due (M = 0), whichever source answered. */
 internal fun pledgeKeptLine(pl: Pledge, currentYearStatement: GivingStatement?, today: LocalDate): String? {

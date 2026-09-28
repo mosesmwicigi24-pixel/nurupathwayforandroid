@@ -823,9 +823,8 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
     val total = pl.shape == "total"
     val (chipText, chipBg, chipFg) = stateChip(pl)
     val left = if (total) {
-        val paid = pl.progress.paidMinor
-        val toGo = maxOf((pl.targetMinor ?: 0) - paid, 0)
-        "${money(paid, pl.currency)} paid · ${money(toGo, pl.currency)} to go"
+        // "KSh 0 paid · 20,000 to go" — the currency once (iOS).
+        totalPledgeLeftLine(pl)
     } else {
         // The server's "N of M" when this year's statement names the pledge,
         // else the local estimate; nothing at all while nothing is due.

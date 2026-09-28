@@ -194,6 +194,11 @@ class PledgePaceTest {
         assertEquals("Collected automatically — paused", collectedLine(collector(status = "paused", next = null), today))
         // Nothing coming (stopping with its pledge), or an older server's row.
         assertEquals("Collected automatically", collectedLine(collector(next = null), today))
+        // The year only when the next prompt is not this year (parity list B14).
+        assertEquals(
+            "Collected automatically — next KSh 5,000 on 5 Jan 2027",
+            collectedLine(collector().copy(nextRunAt = "2027-01-05T06:00:00Z"), today),
+        )
         // The running one is the one shown when both exist.
         val both = listOf(collector(status = "paused").copy(scheduleId = "s-old"), collector())
         assertEquals("s1", pledgeCollector(roof, both)?.scheduleId)

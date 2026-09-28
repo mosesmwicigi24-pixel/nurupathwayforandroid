@@ -269,6 +269,20 @@ class PartnerStatementMathTest {
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true), null, false))
     }
 
+    // ── A total pledge's card foot (iOS leftLine) ──
+
+    @Test
+    fun `a total pledge's card says what is paid and a bare figure to go`() {
+        fun roof(paid: Int, currency: String = "KES", target: Int = 2_000_000) =
+            Pledge(pledgeId = "p", shape = "total", targetMinor = target, currency = currency, progress = PledgeProgress(paidMinor = paid))
+        assertEquals("KSh 0 paid · 20,000 to go", totalPledgeLeftLine(roof(0)))
+        assertEquals("KSh 5,000 paid · 15,000 to go", totalPledgeLeftLine(roof(500_000)))
+        // Paid past the target: nothing to go, never negative.
+        assertEquals("KSh 25,000 paid · 0 to go", totalPledgeLeftLine(roof(2_500_000)))
+        // Dollars keep their cents.
+        assertEquals("US$ 12.50 paid · 87.50 to go", totalPledgeLeftLine(roof(1_250, currency = "USD", target = 10_000)))
+    }
+
     // ── The amber trouble row (iOS TroubleRow) ──
 
     @Test
