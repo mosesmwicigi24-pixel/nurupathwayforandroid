@@ -40,16 +40,23 @@ import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
 import java.util.Locale
 
-/** One month of pledge-tied payments, newest first, with its subtotal. A
- *  `month` of 0 is the trailing group for rows without a readable date. */
+/** One month of pledge-tied payments, newest first, with its subtotal per
+ *  currency (Giving Cycle 5: never one sum across currencies). A `month` of
+ *  0 is the trailing group for rows without a readable date. */
 internal data class StatementMonth(
     val year: Int,
     val month: Int,
     val payments: List<StatementPayment>,
-    val subtotalMinor: Int,
+    val subtotals: List<CurrencyAmount>,
 ) {
     val undated: Boolean get() = month == 0
 }
+
+/** Payment rows summed per currency, shillings first. */
+internal fun paymentSums(rows: List<StatementPayment>): List<CurrencyAmount> =
+    rows.groupBy { currencyCode(it.currency) }
+        .map { (c, rs) -> CurrencyAmount(c, rs.sumOf { it.amountMinor.toLong() }) }
+        .let { sums -> shillingsFirst(sums.map { it.currency }).map { c -> sums.first { it.currency == c } } }
 
 /** The year chips: `currentYear` back to `joinYear`, never more than `max`,
  *  and never fewer than the current year (a join date in the future, or none
@@ -60,8 +67,10 @@ internal fun partnerStatementYears(currentYear: Int, joinYear: Int?, max: Int = 
 }
 
 /** Pledged / Paid / Remaining for `year`: the server's numbers when it sends
- *  pledged AND paid (remaining derived if it left that one out), else the
- *  local rule over the statement's payments and the partnership's pledges. */
+ *  pledged AND paid (remaining derived from those two if it left that one
+ *  out — it never does; the server's remaining is owed per pledge), else the
+ *  local rule over the statement's payments and the partnership's pledges.
+ *  One currency's worth — see [partnerStatementSummaries] for more than one. */
 internal fun partnerStatementSummary(year: Int, s: GivingStatement, pledges: List<Pledge>): StatementSummary {
     val pledged = s.pledgedMinor
     val paid = s.paidMinor
@@ -71,10 +80,22 @@ internal fun partnerStatementSummary(year: Int, s: GivingStatement, pledges: Lis
     return statementSummary(year, pledges, s.payments)
 }
 
+/** The summary per currency (Giving Cycle 5). The server's three numbers are
+ *  one sum, so they are used only when everything in play — the pledges
+ *  owed or paid this year and the payments — is in ONE currency; with more
+ *  than one, each currency is summed on its own by the local rule
+ *  ([statementSummaries]). */
+internal fun partnerStatementSummaries(year: Int, s: GivingStatement, pledges: List<Pledge>): List<CurrencyStatementSummary> {
+    val local = statementSummaries(year, pledges, s.payments)
+    if (local.size > 1) return local
+    val one = partnerStatementSummary(year, s, pledges)
+    return listOf(CurrencyStatementSummary(local.firstOrNull()?.currency ?: GIVE_FORM_CURRENCY, one.pledgedMinor, one.paidMinor, one.remainingMinor))
+}
+
 /** "k of d kept" for a monthly pledge in `year`: d = its due dates in that
  *  year that have come (all of them once the year is past, none of a year yet
- *  to come); k = payments attributed to it, capped at d. A total pledge has
- *  no cycle to keep: 0 of 0. */
+ *  to come) — from its start, none after its until_on; k = payments
+ *  attributed to it, capped at d. A total pledge has no cycle to keep: 0 of 0. */
 internal fun keptInYear(pl: Pledge, paymentCount: Int, year: Int, today: LocalDate): Pair<Int, Int> {
     if (pl.shape == "total") return 0 to 0
     val through = when {
@@ -82,7 +103,13 @@ internal fun keptInYear(pl: Pledge, paymentCount: Int, year: Int, today: LocalDa
         year == today.year -> today
         else -> return 0 to 0
     }
-    val due = dueDatesInYear(year, pl.dueDay ?: DEFAULT_DUE_DAY, partnerDate(pl.createdAt), through)
+    val until = partnerDate(pl.untilOn)
+    val end = when {
+        until == null -> through
+        through == null -> until
+        else -> minOf(until, through)
+    }
+    val due = dueDatesInYear(year, pl.dueDay ?: DEFAULT_DUE_DAY, pledgeStart(pl), end)
     return minOf(paymentCount, due) to due
 }
 
@@ -108,16 +135,17 @@ internal fun partnerStatementPledges(year: Int, s: GivingStatement, pledges: Lis
 }
 
 /** "KSh 6,000 paid · 3 of 4 kept" for a monthly pledge with due dates behind
- *  it; "KSh 20,000 paid" for a total pledge, or one nothing has come due on. */
+ *  it; "KSh 20,000 paid" for a total pledge, or one nothing has come due on.
+ *  In the pledge's own currency. */
 internal fun pledgeProgressLine(e: StatementPledge): String {
-    val paid = "${ksh(e.paidMinor)} paid"
+    val paid = "${money(e.paidMinor, e.currency)} paid"
     return if (e.shape == "total" || e.dueCount <= 0) paid else "$paid · ${e.kept} of ${e.dueCount} kept"
 }
 
 /** "KSh 2,000 monthly · due on the 5th" · "KSh 50,000 by Dec 2026". */
 internal fun pledgeAmountLine(e: StatementPledge): String = when (e.shape) {
-    "total" -> "${ksh(e.targetMinor ?: 0)} by ${e.dueOn?.let(PartnerFormat::monthYear) ?: "a date"}"
-    else -> "${ksh(e.amountMinor ?: 0)} monthly" + (e.dueDay?.let { " · due on the ${ordinal(it)}" } ?: "")
+    "total" -> "${money(e.targetMinor ?: 0, e.currency)} by ${e.dueOn?.let(PartnerFormat::monthYear) ?: "a date"}"
+    else -> "${money(e.amountMinor ?: 0, e.currency)} monthly" + (e.dueDay?.let { " · due on the ${ordinal(it)}" } ?: "")
 }
 
 /** Pledge-tied payments by month, newest month first and newest row first
@@ -134,13 +162,14 @@ internal fun paymentsByMonth(payments: List<StatementPayment>): List<StatementMo
             val ordered = rows
                 .sortedWith(compareByDescending<Pair<LocalDate, StatementPayment>> { it.first }.thenByDescending { it.second.occurredAt ?: "" })
                 .map { it.second }
-            StatementMonth(key / 100, key % 100, ordered, ordered.sumOf { it.amountMinor })
+            StatementMonth(key / 100, key % 100, ordered, paymentSums(ordered))
         }
-    return if (undated.isEmpty()) months else months + StatementMonth(0, 0, undated, undated.sumOf { it.amountMinor })
+    return if (undated.isEmpty()) months else months + StatementMonth(0, 0, undated, paymentSums(undated))
 }
 
-/** What the payments list adds up to — the year's total at its foot. */
-internal fun statementYearTotal(months: List<StatementMonth>): Int = months.sumOf { it.subtotalMinor }
+/** What the payments list adds up to, per currency — the year's total at its foot. */
+internal fun statementYearTotals(months: List<StatementMonth>): List<CurrencyAmount> =
+    paymentSums(months.flatMap { it.payments })
 
 /** The PROCESSING rows above PAYMENTS: the server's `pending` list,
  *  pledge-tied only (as every row here), newest first, minus any row that
@@ -285,11 +314,14 @@ internal fun nextDueDayDate(dueDay: Int, today: LocalDate): LocalDate {
     return if (thisMonth.isBefore(today)) thisMonth.plusMonths(1) else thisMonth
 }
 
-/** COMMITMENTS' header figure: Σ remaining_year_minor, or null (hidden) when
- *  no row carries it — an older server, or rows derived locally. */
-internal fun remainingThisYear(rows: List<StatementPledge>): Int? {
+/** COMMITMENTS' header figure: Σ remaining_year_minor PER CURRENCY (the
+ *  rows' own), or null (hidden) when no row carries it — an older server, or
+ *  rows derived locally. */
+internal fun remainingThisYear(rows: List<StatementPledge>): List<CurrencyAmount>? {
     if (rows.none { it.remainingYearMinor != null }) return null
-    return rows.sumOf { it.remainingYearMinor ?: maxOf(it.pledgedMinor - it.paidMinor, 0) }
+    return shillingsFirst(rows.map { currencyCode(it.currency) }).map { c ->
+        CurrencyAmount(c, rows.filter { currencyCode(it.currency) == c }.sumOf { (it.remainingYearMinor ?: maxOf(it.pledgedMinor - it.paidMinor, 0)).toLong() })
+    }
 }
 
 /** "Church raised 42%" under a department-need pledge; null otherwise.

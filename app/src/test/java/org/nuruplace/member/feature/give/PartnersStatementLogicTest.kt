@@ -157,10 +157,10 @@ class PartnersStatementLogicTest {
         assertEquals(listOf(2026, 2026), months.map { it.year })
         // Newest first inside the month, the later same-day gift ahead of the earlier.
         assertEquals(listOf("sep20pm", "sep20", "sep3"), months[0].payments.map { it.transactionId })
-        assertEquals(900_000, months[0].subtotalMinor)
+        assertEquals(listOf(CurrencyAmount("KES", 900_000)), months[0].subtotals)
         assertEquals(listOf("jul5"), months[1].payments.map { it.transactionId })
-        assertEquals(100_000, months[1].subtotalMinor)
-        assertEquals(1_000_000, statementYearTotal(months))
+        assertEquals(listOf(CurrencyAmount("KES", 100_000)), months[1].subtotals)
+        assertEquals(listOf(CurrencyAmount("KES", 1_000_000)), statementYearTotals(months))
         assertTrue(months.none { it.undated })
     }
 
@@ -169,8 +169,8 @@ class PartnersStatementLogicTest {
         val months = paymentsByMonth(listOf(payment(100_000, "m1", "2026-02-05T09:00:00Z"), payment(70_000, "m1", null), payment(30_000, "m1", "not a date")))
         assertEquals(listOf(2, 0), months.map { it.month })
         assertTrue(months.last().undated)
-        assertEquals(100_000, months.last().subtotalMinor)
-        assertEquals(200_000, statementYearTotal(months))
+        assertEquals(listOf(CurrencyAmount("KES", 100_000)), months.last().subtotals)
+        assertEquals(listOf(CurrencyAmount("KES", 200_000)), statementYearTotals(months))
     }
 
     @Test
@@ -366,7 +366,7 @@ class PartnersStatementLogicTest {
             StatementPledge(pledgeId = "b", remainingYearMinor = 0),
             StatementPledge(pledgeId = "c", remainingYearMinor = 1_000_000),
         )
-        assertEquals(1_600_000, remainingThisYear(rows))
+        assertEquals(listOf(CurrencyAmount("KES", 1_600_000)), remainingThisYear(rows))
         assertNull(remainingThisYear(listOf(StatementPledge(pledgeId = "a", pledgedMinor = 5, paidMinor = 1))))
         assertNull(remainingThisYear(emptyList()))
     }
@@ -437,7 +437,7 @@ class PartnersStatementLogicTest {
         assertEquals(partnerStatementSummary(2026, without, pledges), partnerStatementSummary(2026, with, pledges))
         assertEquals(200_000, partnerStatementSummary(2026, with, pledges).paidMinor)
         assertEquals(paymentsByMonth(without.payments), paymentsByMonth(with.payments))
-        assertEquals(200_000, statementYearTotal(paymentsByMonth(with.payments)))
+        assertEquals(listOf(CurrencyAmount("KES", 200_000)), statementYearTotals(paymentsByMonth(with.payments)))
         assertEquals(
             partnerStatementPledges(2026, without, pledges, today),
             partnerStatementPledges(2026, with, pledges, today),

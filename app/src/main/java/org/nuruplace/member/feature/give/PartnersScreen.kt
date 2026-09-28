@@ -452,7 +452,7 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                     Column(Modifier.weight(1f)) {
                         Text(
                             buildAnnotatedString {
-                                append("${ksh(shown.leadMinor)} · ")
+                                append("${money(shown.leadMinor, d.currency)} · ")
                                 if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
                             },
                             style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
@@ -636,15 +636,15 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
     val total = pl.shape == "total"
     val (chipText, chipBg, chipFg) = stateChip(pl)
     val amountLine = if (total) {
-        "${ksh(pl.targetMinor ?: 0)} by ${partnerDate(pl.dueOn)?.format(PartnerFormat.MONTH) ?: "a date"}"
+        "${money(pl.targetMinor ?: 0, pl.currency)} by ${partnerDate(pl.dueOn)?.format(PartnerFormat.MONTH) ?: "a date"}"
     } else {
-        "${ksh(pl.amountMinor ?: 0)} monthly"
+        "${money(pl.amountMinor ?: 0, pl.currency)} monthly"
     }
     val dueLine = if (total) partnerDate(pl.dueOn)?.let { "due ${PartnerFormat.dayMonth(it)}" } else pl.dueDay?.let { "due on the ${ordinal(it)}" }
     val left = if (total) {
         val paid = pl.progress.paidMinor
         val toGo = maxOf((pl.targetMinor ?: 0) - paid, 0)
-        "${ksh(paid)} paid · ${PartnerFormat.grouped(toGo / 100)} to go"
+        "${money(paid, pl.currency)} paid · ${money(toGo, pl.currency)} to go"
     } else {
         // The server's "N of M" when this year's statement names the pledge,
         // else the local estimate; nothing at all while nothing is due.
@@ -926,11 +926,12 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                     }
                 }
                 else -> {
-                    val sum = statementSummary(shownYear, p.pledges, s.payments)
+                    // One line per currency — never one sum across them (Cycle 5).
+                    val sums = statementSummaries(shownYear, p.pledges, s.payments)
                     Row(Modifier.fillMaxWidth()) {
-                        SummaryColumn("PLEDGED", ksh(sum.pledgedMinor), GIVE.navy, Modifier.weight(1f))
-                        SummaryColumn("PAID", ksh(sum.paidMinor), GIVE.successText, Modifier.weight(1f))
-                        SummaryColumn("REMAINING", ksh(sum.remainingMinor), GIVE.goldLo, Modifier.weight(1f))
+                        SummaryColumn("PLEDGED", sums.map { money(it.pledgedMinor, it.currency) }, GIVE.navy, Modifier.weight(1f))
+                        SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f))
+                        SummaryColumn("REMAINING", sums.map { money(it.remainingMinor, it.currency) }, GIVE.goldLo, Modifier.weight(1f))
                     }
                     Hairline()
                     val rows = pledgePayments(s.payments).sortedByDescending { it.occurredAt ?: "" }
@@ -957,9 +958,17 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
 
 @Composable
 internal fun SummaryColumn(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    SummaryColumn(label, listOf(value), color, modifier)
+}
+
+/** A summary figure per currency: the first large, any other under it as
+ *  "+ US$ 50.00" — never added together. */
+@Composable
+internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(label, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
-        Text(value, style = giInter(16, FontWeight.SemiBold), color = color, modifier = Modifier.padding(top = 4.dp))
+        Text(values.firstOrNull().orEmpty(), style = giInter(16, FontWeight.SemiBold), color = color, modifier = Modifier.padding(top = 4.dp))
+        values.drop(1).forEach { Text("+ $it", style = giInter(12, FontWeight.SemiBold), color = color) }
     }
 }
 
@@ -983,7 +992,7 @@ private fun StatementPaymentRow(pay: StatementPayment, onOpenReceipt: (String) -
             Text(listOfNotNull(date, what).joinToString(" · "), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
             if (via.isNotBlank()) Text(via, style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
         }
-        Text(ksh(pay.amountMinor), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
     }
 }
 

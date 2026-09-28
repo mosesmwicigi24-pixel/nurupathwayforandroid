@@ -323,7 +323,7 @@ fun PartnersStatementScreen(
                 }
                 else -> {
                     val pledges = p?.pledges.orEmpty()
-                    SummaryCard(partnerStatementSummary(year, s, pledges))
+                    SummaryCard(partnerStatementSummaries(year, s, pledges))
                     faithfulnessMarks(s.months)?.let { marks ->
                         val nextDue = if (year == today.year) nextPledgeDue(p, today) else null
                         FaithfulnessCard(marks, faithfulnessLine(s.faithfulness, marks, nextDue, today))
@@ -556,12 +556,14 @@ private fun YearChip(year: Int, on: Boolean, onClick: () -> Unit) {
     )
 }
 
+/** Pledged / Paid / Remaining — one line per currency under each, never
+ *  one sum across them (Giving Cycle 5). */
 @Composable
-private fun SummaryCard(sum: StatementSummary) {
+private fun SummaryCard(sums: List<CurrencyStatementSummary>) {
     Row(Modifier.partnerCard()) {
-        SummaryColumn("PLEDGED", ksh(sum.pledgedMinor), GIVE.navy, Modifier.weight(1f))
-        SummaryColumn("PAID", ksh(sum.paidMinor), GIVE.successText, Modifier.weight(1f))
-        SummaryColumn("REMAINING", ksh(sum.remainingMinor), GIVE.goldLo, Modifier.weight(1f))
+        SummaryColumn("PLEDGED", sums.map { money(it.pledgedMinor, it.currency) }, GIVE.navy, Modifier.weight(1f))
+        SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f))
+        SummaryColumn("REMAINING", sums.map { money(it.remainingMinor, it.currency) }, GIVE.goldLo, Modifier.weight(1f))
     }
 }
 
@@ -575,7 +577,7 @@ private fun CommitmentsCard(rows: List<StatementPledge>) {
             Eyebrow("COMMITMENTS")
             Spacer(Modifier.weight(1f))
             remaining?.let {
-                Text("Remaining this year ${ksh(it)}", style = giInter(11, FontWeight.SemiBold), color = GIVE.goldLo)
+                Text("Remaining this year ${moneyTotals(it)}", style = giInter(11, FontWeight.SemiBold), color = GIVE.goldLo)
             }
         }
         Column(Modifier.partnerCard()) {
@@ -635,7 +637,7 @@ private fun PaymentsSection(
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("TOTAL PAID $year", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.navy)
                 Spacer(Modifier.weight(1f))
-                Text(ksh(statementYearTotal(months)), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
+                Text(moneyTotals(statementYearTotals(months)), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
             }
         }
     }
@@ -651,7 +653,7 @@ private fun MonthCard(m: StatementMonth, onOpenReceipt: (String) -> Unit) {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(monthLabel(m), style = giInter(11, FontWeight.Bold, 1.1f), color = GIVE.overline)
             Spacer(Modifier.weight(1f))
-            Text(ksh(m.subtotalMinor), style = giInter(12, FontWeight.SemiBold), color = GIVE.sub)
+            Text(moneyTotals(m.subtotals), style = giInter(12, FontWeight.SemiBold), color = GIVE.sub)
         }
         m.payments.forEachIndexed { i, pay ->
             if (i > 0) Hairline()
@@ -683,7 +685,7 @@ private fun PaymentRow(pay: StatementPayment, onOpenReceipt: (String) -> Unit) {
             Text(what, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (via.isNotBlank()) Text(via, style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
         }
-        Text(ksh(pay.amountMinor), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
     }
 }
 

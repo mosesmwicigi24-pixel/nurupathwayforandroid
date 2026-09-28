@@ -7,9 +7,18 @@
 //   Paid      = Σ statement payments[].amount_minor where pledge_id is set
 //   Pledged   = Σ over pledges not cancelled:
 //                 monthly → amount_minor × number of due_day dates in the year
-//                           from max(pledge created_at, 1 Jan) through 31 Dec
+//                           from max(pledge start, 1 Jan) through
+//                           min(until_on, 31 Dec) — the start is the later of
+//                           starts_on and the creation day (Nairobi)
 //                 total   → target_minor if due_on falls in the year, else 0
-//   Remaining = max(Pledged − Paid, 0)
+//   Remaining = Σ per pledge max(Pledged_i − Paid_i, 0)
+//
+// Giving Cycle 5 mirrors the server's partnerStatementMath.ts exactly: a
+// pledge starts on its starts_on when that is later than its creation day,
+// its instalments end at until_on, remaining is owed PER PLEDGE (netting the
+// year's totals let money beyond one pledge hide what another still owed),
+// dates are the church's (Africa/Nairobi) calendar — and nothing is summed
+// across currencies: statementSummaries gives one summary per currency.
 //
 // Gifts without a pledge are never counted or shown on the Partners tab; they
 // stay in the full statement (GivingStatementScreen).
@@ -33,12 +42,69 @@ internal data class StatementSummary(val pledgedMinor: Int, val paidMinor: Int, 
  *  malformed, and the 1st is the least-surprising day to count from. */
 internal const val DEFAULT_DUE_DAY = 1
 
-/** ISO instant / offset timestamp / bare date → the calendar date, or null. */
+/** The church's calendar (UTC+3 all year, no DST). */
+private val PARTNER_ZONE: ZoneId = ZoneId.of("Africa/Nairobi")
+
+private val BARE_DATE = Regex("\\d{4}-\\d{2}-\\d{2}")
+
+/** ISO instant / offset timestamp / bare date → the church's calendar date
+ *  (Africa/Nairobi), or null. A bare date is already a calendar day and is
+ *  returned as-is, never shifted — the server's partnerDate. */
 internal fun partnerDate(iso: String?): LocalDate? {
     if (iso.isNullOrBlank()) return null
-    return runCatching { OffsetDateTime.parse(iso).toLocalDate() }.getOrNull()
-        ?: runCatching { Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
-        ?: runCatching { LocalDate.parse(iso.take(10)) }.getOrNull()
+    val s = iso.trim()
+    if (BARE_DATE.matches(s)) return runCatching { LocalDate.parse(s) }.getOrNull()
+    return runCatching { OffsetDateTime.parse(s).atZoneSameInstant(PARTNER_ZONE).toLocalDate() }.getOrNull()
+        ?: runCatching { Instant.parse(s).atZone(PARTNER_ZONE).toLocalDate() }.getOrNull()
+        ?: runCatching { LocalDate.parse(s.take(10)) }.getOrNull()
+}
+
+/** Today on the church's calendar. */
+internal fun partnerToday(now: Instant = Instant.now()): LocalDate = now.atZone(PARTNER_ZONE).toLocalDate()
+
+/** The first day a pledge's instalments can fall due: the later of its
+ *  starts_on and its creation day (Nairobi) — the server's pledgeStart. */
+internal fun pledgeStart(pl: Pledge): LocalDate? {
+    val created = partnerDate(pl.createdAt)
+    val starts = partnerDate(pl.startsOn)
+    return when {
+        created == null -> starts
+        starts == null -> created
+        else -> maxOf(starts, created)
+    }
+}
+
+/** The first `day`-of-the-month date on or after `from` (day 1..28). */
+internal fun firstDueOnOrAfter(from: LocalDate, day: Int): LocalDate {
+    val same = from.withDayOfMonth(day.coerceIn(1, 28))
+    return if (!same.isBefore(from)) same else same.plusMonths(1)
+}
+
+/** The first `day`-of-the-month date strictly AFTER `from` — a pledge's
+ *  first automatic collection, which is never today (the server's
+ *  firstDueAfter; the day held to 1..28). */
+internal fun firstDueAfter(from: LocalDate, day: Int): LocalDate {
+    val first = firstDueOnOrAfter(from, day)
+    return if (first == from) first.plusMonths(1) else first
+}
+
+/** A monthly pledge's instalment due dates, oldest first: its due day from
+ *  its start ([pledgeStart]) through `through`, none after its until_on —
+ *  the dates the server's instalment ledger holds. A total pledge, or one
+ *  without a start or a positive amount, has none. */
+internal fun instalmentDueDates(pl: Pledge, through: LocalDate): List<LocalDate> {
+    if (pl.shape == "total" || (pl.amountMinor ?: 0) <= 0) return emptyList()
+    val start = pledgeStart(pl) ?: return emptyList()
+    val until = partnerDate(pl.untilOn)
+    val end = if (until != null && until.isBefore(through)) until else through
+    val day = (pl.dueDay ?: DEFAULT_DUE_DAY).coerceIn(1, 28)
+    val out = mutableListOf<LocalDate>()
+    var due = firstDueOnOrAfter(start, day)
+    while (!due.isAfter(end) && out.size < 2_400) {
+        out += due
+        due = due.plusMonths(1).withDayOfMonth(day)
+    }
+    return out
 }
 
 /** How many `dueDay`-of-the-month dates fall in `year` on or after `from`
@@ -61,7 +127,7 @@ internal fun pledgedInYear(pl: Pledge, year: Int): Int {
     if (pl.status == "cancelled") return 0
     return when (pl.shape) {
         "total" -> if (partnerDate(pl.dueOn)?.year == year) (pl.targetMinor ?: 0) else 0
-        else -> (pl.amountMinor ?: 0) * dueDatesInYear(year, pl.dueDay ?: DEFAULT_DUE_DAY, partnerDate(pl.createdAt))
+        else -> (pl.amountMinor ?: 0) * dueDatesInYear(year, pl.dueDay ?: DEFAULT_DUE_DAY, pledgeStart(pl), partnerDate(pl.untilOn))
     }
 }
 
@@ -69,18 +135,55 @@ internal fun pledgedInYear(pl: Pledge, year: Int): Int {
 internal fun pledgePayments(payments: List<StatementPayment>): List<StatementPayment> =
     payments.filter { !it.pledgeId.isNullOrBlank() }
 
+/** The three numbers for ONE currency's pledges and payments (the caller
+ *  groups by currency — [statementSummaries]). Remaining is what is still
+ *  owed on EACH pledge, added up: money beyond one pledge (a cancelled one
+ *  paid this year, one paid ahead) never hides what another still owes. */
 internal fun statementSummary(year: Int, pledges: List<Pledge>, payments: List<StatementPayment>): StatementSummary {
+    val paidBy = pledgePayments(payments).groupBy { it.pledgeId!! }.mapValues { (_, rows) -> rows.sumOf { it.amountMinor } }
     val pledged = pledges.sumOf { pledgedInYear(it, year) }
-    val paid = pledgePayments(payments).sumOf { it.amountMinor }
-    return StatementSummary(pledgedMinor = pledged, paidMinor = paid, remainingMinor = maxOf(pledged - paid, 0))
+    val paid = paidBy.values.sum()
+    val remaining = pledges.sumOf { maxOf(pledgedInYear(it, year) - (paidBy[it.pledgeId] ?: 0), 0) }
+    return StatementSummary(pledgedMinor = pledged, paidMinor = paid, remainingMinor = remaining)
+}
+
+/** One currency's Pledged / Paid / Remaining. */
+internal data class CurrencyStatementSummary(
+    val currency: String,
+    val pledgedMinor: Int,
+    val paidMinor: Int,
+    val remainingMinor: Int,
+)
+
+/** A pledge's or payment's currency code, upper-case; blank reads as shillings. */
+internal fun currencyCode(c: String?): String = c?.trim()?.uppercase()?.ifEmpty { null } ?: GIVE_FORM_CURRENCY
+
+/** Shillings first, then by code — the server's totals[] order. */
+internal fun shillingsFirst(codes: Collection<String>): List<String> =
+    codes.distinct().sortedWith(compareBy<String> { it != GIVE_FORM_CURRENCY }.thenBy { it })
+
+/** The summary PER CURRENCY — never one sum across currencies (Giving Cycle
+ *  5): each currency's pledges with that currency's pledge-tied payments.
+ *  Only currencies with something pledged or paid in `year`, shillings
+ *  first; nothing at all → one zero summary in shillings. */
+internal fun statementSummaries(year: Int, pledges: List<Pledge>, payments: List<StatementPayment>): List<CurrencyStatementSummary> {
+    val tied = pledgePayments(payments)
+    val codes = pledges.filter { pledgedInYear(it, year) > 0 }.map { currencyCode(it.currency) } + tied.map { currencyCode(it.currency) }
+    return shillingsFirst(codes).ifEmpty { listOf(GIVE_FORM_CURRENCY) }.map { c ->
+        val sum = statementSummary(year, pledges.filter { currencyCode(it.currency) == c }, tied.filter { currencyCode(it.currency) == c })
+        CurrencyStatementSummary(c, sum.pledgedMinor, sum.paidMinor, sum.remainingMinor)
+    }
 }
 
 /** "N of M kept this year" for a monthly pledge: N = payments this year
  *  attributed to it (capped at M, so an early or doubled gift never reads
- *  "13 of 12"); M = its due dates elapsed this year through `today`. The
- *  LOCAL estimate — [pledgeKeptThisYear] prefers the server's figures. */
+ *  "13 of 12"); M = its due dates elapsed this year through `today` — from
+ *  its start, none after its until_on. The LOCAL estimate —
+ *  [pledgeKeptThisYear] prefers the server's figures. */
 internal fun keptThisYear(pl: Pledge, payments: List<StatementPayment>, today: LocalDate): Pair<Int, Int> {
-    val elapsed = dueDatesInYear(today.year, pl.dueDay ?: DEFAULT_DUE_DAY, partnerDate(pl.createdAt), through = today)
+    val until = partnerDate(pl.untilOn)
+    val through = if (until != null && until.isBefore(today)) until else today
+    val elapsed = dueDatesInYear(today.year, pl.dueDay ?: DEFAULT_DUE_DAY, pledgeStart(pl), through = through)
     val kept = payments.count { it.pledgeId == pl.pledgeId && it.pledgeId?.isNotBlank() == true }
     return minOf(kept, elapsed) to elapsed
 }
@@ -145,7 +248,7 @@ internal fun dueRowView(d: DueItem, pendingMethod: String?): DueRowView {
     return when {
         pending == 0 -> DueRowView(d.amountMinor)
         pending >= d.amountMinor -> DueRowView(d.amountMinor, processingChip = pendingChipText(pendingMethod))
-        else -> DueRowView(d.amountMinor - pending, processingNote = "${ksh(pending)} processing")
+        else -> DueRowView(d.amountMinor - pending, processingNote = "${money(pending, d.currency)} processing")
     }
 }
 

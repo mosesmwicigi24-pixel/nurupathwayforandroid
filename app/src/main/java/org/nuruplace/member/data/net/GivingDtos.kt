@@ -384,6 +384,20 @@ data class Pledge(
      *  pledge money, whatever fund the client sends (wire `pays_to`). Null
      *  from an older server; the Give screen then says "Routed by the church". */
     val paysTo: FundRef? = null,
+    // Giving Cycle 5 — all null/false from an older server.
+    /** Monthly: the first day an instalment can fall due when later than the
+     *  creation day (YYYY-MM-DD) — a pledge collected automatically starts
+     *  with its first collection. Null = the creation day. */
+    val startsOn: String? = null,
+    /** Monthly: the last day an instalment can fall due (YYYY-MM-DD); none
+     *  after it is pledged, owed or missed. Null = open-ended. */
+    val untilOn: String? = null,
+    /** Create only: the same pledge made a moment ago (a double tap, a
+     *  retried request) — no second pledge was created. */
+    val reused: Boolean = false,
+    /** Create only: the pledge WAS made, but its automatic collection could
+     *  not be set up — said to the member, who pays with Pay now. */
+    val autoScheduleError: String? = null,
 ) {
     /** What the pledge is for, derived client-side from its target — the
      *  fallback when an older server sends no `title`. */
@@ -516,12 +530,15 @@ data class PledgeDetail(
     val title: String? = null,
     val customTitle: String? = null,
     val paysTo: FundRef? = null,
+    val startsOn: String? = null,
+    val untilOn: String? = null,
     val payments: List<PledgePayment> = emptyList(),
 ) {
     fun asPledge(): Pledge = pledge ?: Pledge(
         pledgeId, shape, amountMinor, targetMinor, currency, dueDay, dueOn, fund, campaign,
         needId, status, progress, scheduleId, remindersEnabled,
         createdAt = createdAt, title = title, customTitle = customTitle, paysTo = paysTo,
+        startsOn = startsOn, untilOn = untilOn,
     )
 }
 
