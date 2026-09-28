@@ -15,6 +15,7 @@ import org.junit.Test
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.PartnerRhythm
+import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeProgress
@@ -266,6 +267,14 @@ class PartnerStatementMathTest {
         // Neither a schedule nor a monthly pledge (a total pledge only, or just joined): the state alone.
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true, pledges = listOf(total(dueOn = "2026-12-15"))), null, false))
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true), null, false))
+    }
+
+    // ── The amber trouble row (iOS TroubleRow) ──
+
+    @Test
+    fun `the trouble row says nothing is owed, in iOS's words`() {
+        assertEquals("One gift didn't go through — nothing is owed.", troubleLine(PartnerTrouble(paused = false, consecutiveFailures = 1)))
+        assertEquals("Your giving is paused — nothing is owed.", troubleLine(PartnerTrouble(paused = true, consecutiveFailures = 3)))
     }
 
     // ── Overdue wording (owner, 2026-09-26) ──

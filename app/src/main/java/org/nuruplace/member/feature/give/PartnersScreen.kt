@@ -439,7 +439,7 @@ fun PartnersScreen(
                         if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
                         // Only when there is something to say — a partner whose
                         // giving is collecting cleanly never sees an amber row.
-                        p.trouble?.let { t -> TroubleRow(t, vm.resuming) { p.scheduleId?.let(vm::resume) } }
+                        p.trouble?.let { t -> TroubleRow(t, vm.resuming, onResume = p.scheduleId?.let { id -> { vm.resume(id) } }) }
                         PledgesSection(p, vm, openError) { id -> openPage(id) }
                         StatementSection(p, vm, onOpenReceipt, openStatement)
                     }
@@ -725,19 +725,30 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
     }
 }
 
-/** A failed or paused schedule, said once and plainly: nothing is owed. */
+/** A failed or paused schedule, said once and plainly: nothing is owed
+ *  (iOS TroubleRow). Resume only for a paused one the standing names a
+ *  schedule for ([onResume] null otherwise) — a spinner beside it while it
+ *  works. */
 @Composable
-private fun TroubleRow(t: PartnerTrouble, resuming: Boolean, onResume: () -> Unit) {
+private fun TroubleRow(t: PartnerTrouble, resuming: Boolean, onResume: (() -> Unit)?) {
+    val view = LocalView.current
     Row(
-        Modifier.fillMaxWidth().clip(CardShape).background(Nuru.warningBg).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.warningBg).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Outlined.Info, null, tint = Nuru.answeredText, modifier = Modifier.size(16.dp))
-        Text(
-            if (t.paused) "Your giving is paused — nothing is owed." else "One gift didn't go through — we'll try again. Nothing is owed.",
-            style = giInter(12, FontWeight.Medium), color = Nuru.answeredText, modifier = Modifier.weight(1f),
-        )
-        if (t.paused) NavyPill(if (resuming) "Starting…" else "Resume", enabled = !resuming) { onResume() }
+        Icon(Icons.Filled.Warning, null, tint = Nuru.answeredText, modifier = Modifier.size(14.dp))
+        Text(troubleLine(t), style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText, modifier = Modifier.weight(1f))
+        if (t.paused && onResume != null) {
+            Row(
+                Modifier.heightIn(min = 32.dp).alpha(if (resuming) 0.7f else 1f).clip(Capsule).background(GIVE.navy)
+                    .clickable(enabled = !resuming) { Haptics.tap(view); onResume() }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (resuming) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
+                Text("Resume", style = giInter(12, FontWeight.Bold), color = Color.White)
+            }
+        }
     }
 }
 

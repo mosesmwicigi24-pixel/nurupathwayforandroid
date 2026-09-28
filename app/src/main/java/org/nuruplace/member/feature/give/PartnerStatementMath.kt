@@ -26,6 +26,7 @@ package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
+import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.StatementPayment
@@ -300,6 +301,11 @@ internal fun standingKeptLine(p: Partnership, currentYearStatement: GivingStatem
     }
     return listOfNotNull(count, state).joinToString(" · ").replaceFirstChar { it.uppercase() }
 }
+
+/** The amber trouble row's words (iOS TroubleRow): a paused recurring gift,
+ *  or one that did not go through — nothing is owed either way. */
+internal fun troubleLine(t: PartnerTrouble): String =
+    if (t.paused) "Your giving is paused — nothing is owed." else "One gift didn't go through — nothing is owed."
 
 /** A "when" as the row or card says it, and whether it is overdue (said in
  *  amber, GIVE.goldChipText 0xFF7A5A14). */
