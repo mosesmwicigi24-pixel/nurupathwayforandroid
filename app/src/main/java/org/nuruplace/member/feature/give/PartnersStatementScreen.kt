@@ -299,6 +299,8 @@ fun PartnersStatementScreen(
             firstName = receiptFirstName(memberName, null),
             standing = standingLine(p),
             impact = s?.impact,
+            // Paid toward pledges per currency — never dollars in shillings (Cycle 9).
+            given = s?.let(::givenTileAmounts).orEmpty(),
             faithfulness = s?.faithfulness,
             onBack = onBack,
             onShare = { Haptics.tap(view); vm.sharePdf(context) },
@@ -366,6 +368,7 @@ private fun PartnersHero(
     firstName: String?,
     standing: String?,
     impact: StatementImpact?,
+    given: List<CurrencyAmount>,
     faithfulness: StatementFaithfulness?,
     onBack: () -> Unit,
     onShare: () -> Unit,
@@ -396,7 +399,7 @@ private fun PartnersHero(
             standing?.let {
                 Text(it, style = giInter(12), color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
             }
-            impact?.let { ImpactTiles(it, faithfulness, Modifier.padding(top = 16.dp)) }
+            impact?.let { ImpactTiles(it, given, faithfulness, Modifier.padding(top = 16.dp)) }
         }
     }
 }
@@ -416,9 +419,11 @@ private fun HeroButton(icon: ImageVector, contentDescription: String, onClick: (
 }
 
 /** Disciples carried · Kept · Given. The disciples tile widens while it holds
- *  the progress sentence (below the first disciple) so the row stays level. */
+ *  the progress sentence (below the first disciple) so the row stays level.
+ *  Disciples count shillings only (the costing is in shillings); Given says
+ *  every currency paid, the first large and the rest as "+ US$ 299.99". */
 @Composable
-private fun ImpactTiles(impact: StatementImpact, faithfulness: StatementFaithfulness?, modifier: Modifier = Modifier) {
+private fun ImpactTiles(impact: StatementImpact, given: List<CurrencyAmount>, faithfulness: StatementFaithfulness?, modifier: Modifier = Modifier) {
     val disciples = disciplesTile(impact)
     val kept = keptTileValue(faithfulness)
     Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -447,14 +452,17 @@ private fun ImpactTiles(impact: StatementImpact, faithfulness: StatementFaithful
                 TileCaption("commitments")
             }
         }
-        HeroTile("Given", "Given ${ksh(impact.paidMinor)} toward pledges", Modifier.weight(1f)) {
+        val shown = given.ifEmpty { listOf(CurrencyAmount(GIVE_FORM_CURRENCY, impact.paidMinor.toLong())) }
+        val first = shown.first()
+        HeroTile("Given", "Given ${moneyTotals(shown)} toward pledges", Modifier.weight(1f)) {
             Text(
                 buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 12.sp)) { append("KSh ") }
-                    append(compactAmount(impact.paidMinor))
+                    withStyle(SpanStyle(fontSize = 12.sp)) { append(if (first.currency == USD_CURRENCY) "US$ " else if (first.currency == GIVE_FORM_CURRENCY) "KSh " else "${first.currency} ") }
+                    append(compactAmount(first.minor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
                 },
                 style = giSerif(22, FontWeight.SemiBold), color = Color.White, maxLines = 1,
             )
+            shown.drop(1).forEach { TileCaption("+ ${money(it.minor, it.currency)}") }
             TileCaption("toward pledges")
         }
     }

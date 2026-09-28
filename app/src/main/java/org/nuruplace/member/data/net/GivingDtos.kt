@@ -604,6 +604,14 @@ data class GivingStatement(
     val pledgedMinor: Int? = null,
     val paidMinor: Int? = null,
     val remainingMinor: Int? = null,
+    /** Giving Cycle 9: the currency pledged / paid / remaining above are in —
+     *  shillings whenever any pledge money is in shillings (they used to add
+     *  every currency's minor units together). Null from an older server. */
+    val summaryCurrency: String? = null,
+    /** Giving Cycle 9: pledged / paid / remaining for EACH currency — that
+     *  currency's pledges against that currency's payments, shillings first.
+     *  Null from an older server (the lines are then summed locally). */
+    val summaryByCurrency: List<StatementCurrencySummary>? = null,
     val pledges: List<StatementPledge>? = null,
     // Statement v2 (docs/PARTNERS_PROGRAMME.md §3d, owner-delegated
     // 2026-09-25): the impact-led blocks. Each is null from an older server
@@ -622,6 +630,15 @@ data class GivingStatement(
      *  total — `payments` and the server's figures are settled money only.
      *  Null from an older server. */
     val pending: List<StatementPendingPayment>? = null,
+)
+
+/** One currency's Pledged / Paid / Remaining (`summary_by_currency[]`). */
+@Serializable
+data class StatementCurrencySummary(
+    val currency: String = "KES",
+    val pledgedMinor: Int = 0,
+    val paidMinor: Int = 0,
+    val remainingMinor: Int = 0,
 )
 
 /** One unsettled pledge payment (`pending[]` on GET /giving/statements). */

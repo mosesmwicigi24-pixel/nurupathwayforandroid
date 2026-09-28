@@ -140,10 +140,15 @@ internal fun pledgePayments(payments: List<StatementPayment>): List<StatementPay
  *  owed on EACH pledge, added up: money beyond one pledge (a cancelled one
  *  paid this year, one paid ahead) never hides what another still owes. */
 internal fun statementSummary(year: Int, pledges: List<Pledge>, payments: List<StatementPayment>): StatementSummary {
-    val paidBy = pledgePayments(payments).groupBy { it.pledgeId!! }.mapValues { (_, rows) -> rows.sumOf { it.amountMinor } }
+    val tied = pledgePayments(payments)
+    // What each pledge still owes counts only money in ITS currency (the
+    // server's rule since Giving Cycle 9: a wrong-currency gift is not that
+    // pledge's shillings). Summed per currency, the payments are one currency
+    // already; this holds even when they are not.
+    val paidBy = tied.groupBy { it.pledgeId!! to currencyCode(it.currency) }.mapValues { (_, rows) -> rows.sumOf { it.amountMinor } }
     val pledged = pledges.sumOf { pledgedInYear(it, year) }
-    val paid = paidBy.values.sum()
-    val remaining = pledges.sumOf { maxOf(pledgedInYear(it, year) - (paidBy[it.pledgeId] ?: 0), 0) }
+    val paid = tied.sumOf { it.amountMinor }
+    val remaining = pledges.sumOf { maxOf(pledgedInYear(it, year) - (paidBy[it.pledgeId to currencyCode(it.currency)] ?: 0), 0) }
     return StatementSummary(pledgedMinor = pledged, paidMinor = paid, remainingMinor = remaining)
 }
 
@@ -184,7 +189,8 @@ internal fun keptThisYear(pl: Pledge, payments: List<StatementPayment>, today: L
     val until = partnerDate(pl.untilOn)
     val through = if (until != null && until.isBefore(today)) until else today
     val elapsed = dueDatesInYear(today.year, pl.dueDay ?: DEFAULT_DUE_DAY, pledgeStart(pl), through = through)
-    val kept = payments.count { it.pledgeId == pl.pledgeId && it.pledgeId?.isNotBlank() == true }
+    // Only a payment in the pledge's own currency keeps one (Giving Cycle 9).
+    val kept = payments.count { it.pledgeId == pl.pledgeId && it.pledgeId?.isNotBlank() == true && currencyCode(it.currency) == currencyCode(pl.currency) }
     return minOf(kept, elapsed) to elapsed
 }
 

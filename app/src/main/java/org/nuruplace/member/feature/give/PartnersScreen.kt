@@ -1222,8 +1222,9 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                     }
                 }
                 else -> {
-                    // One line per currency — never one sum across them (Cycle 5).
-                    val sums = statementSummaries(shownYear, p.pledges, s.payments)
+                    // One line per currency — never one sum across them: the
+                    // server's summary_by_currency (Cycle 9), else summed here.
+                    val sums = partnerStatementSummaries(shownYear, s, p.pledges)
                     Row(Modifier.fillMaxWidth()) {
                         SummaryColumn("PLEDGED", sums.map { money(it.pledgedMinor, it.currency) }, GIVE.navy, Modifier.weight(1f))
                         SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f))

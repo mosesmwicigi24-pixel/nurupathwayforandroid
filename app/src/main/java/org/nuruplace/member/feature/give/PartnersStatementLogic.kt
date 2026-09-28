@@ -80,16 +80,34 @@ internal fun partnerStatementSummary(year: Int, s: GivingStatement, pledges: Lis
     return statementSummary(year, pledges, s.payments)
 }
 
-/** The summary per currency (Giving Cycle 5). The server's three numbers are
- *  one sum, so they are used only when everything in play — the pledges
- *  owed or paid this year and the payments — is in ONE currency; with more
- *  than one, each currency is summed on its own by the local rule
+/** The summary per currency. The server's own `summary_by_currency` (Giving
+ *  Cycle 9: each currency's pledges against that currency's payments,
+ *  shillings first) whenever it sends it — an empty list is an answer:
+ *  nothing pledged or paid, KSh 0. From an older server (Giving Cycle 5's
+ *  rule): its three numbers were one sum across currencies, so they stand
+ *  only while everything in play is in ONE currency; with more than one,
+ *  each currency is summed on its own by the local rule
  *  ([statementSummaries]). */
 internal fun partnerStatementSummaries(year: Int, s: GivingStatement, pledges: List<Pledge>): List<CurrencyStatementSummary> {
+    s.summaryByCurrency?.let { server ->
+        return server.map { CurrencyStatementSummary(currencyCode(it.currency), it.pledgedMinor, it.paidMinor, it.remainingMinor) }
+            .ifEmpty { listOf(CurrencyStatementSummary(currencyCode(s.summaryCurrency), 0, 0, 0)) }
+    }
     val local = statementSummaries(year, pledges, s.payments)
     if (local.size > 1) return local
     val one = partnerStatementSummary(year, s, pledges)
     return listOf(CurrencyStatementSummary(local.firstOrNull()?.currency ?: GIVE_FORM_CURRENCY, one.pledgedMinor, one.paidMinor, one.remainingMinor))
+}
+
+/** The hero's Given tile: what was paid toward pledges, per currency, the
+ *  server's order (shillings first) — never one sum. The server's per-currency
+ *  paid when it sends it; else the impact's paid, in shillings (its costing
+ *  is in shillings — Giving Cycle 9: it counts shillings only). Currencies
+ *  with nothing paid are left out; nothing at all is KSh 0. */
+internal fun givenTileAmounts(s: GivingStatement): List<CurrencyAmount> {
+    val perCurrency = s.summaryByCurrency?.filter { it.paidMinor != 0 }?.map { CurrencyAmount(currencyCode(it.currency), it.paidMinor.toLong()) }
+    return perCurrency?.takeIf { it.isNotEmpty() }
+        ?: listOf(CurrencyAmount(GIVE_FORM_CURRENCY, (s.impact?.paidMinor ?: 0).toLong()))
 }
 
 /** "k of d kept" for a monthly pledge in `year`: d = its due dates in that
@@ -121,7 +139,9 @@ internal fun partnerStatementPledges(year: Int, s: GivingStatement, pledges: Lis
     val tied = pledgePayments(s.payments)
     return pledges.filter { it.status != "cancelled" }.mapNotNull { pl ->
         val pledged = pledgedInYear(pl, year)
-        val mine = tied.filter { it.pledgeId == pl.pledgeId }
+        // Only money in the pledge's own currency counts toward it (the
+        // server's rule since Giving Cycle 9).
+        val mine = tied.filter { it.pledgeId == pl.pledgeId && currencyCode(it.currency) == currencyCode(pl.currency) }
         val paid = mine.sumOf { it.amountMinor }
         if (pledged == 0 && paid == 0) return@mapNotNull null
         val (kept, due) = keptInYear(pl, mine.size, year, today)
