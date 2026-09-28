@@ -68,6 +68,20 @@ class GivingWireTest {
     }
 
     @Test
+    fun `schedule body carries phone_number only when one was chosen`() {
+        val pinned = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "monthly", "mpesa", "k", phoneNumber = "+254722000111"))).jsonObject
+        assertEquals("+254722000111", pinned["phone_number"]!!.jsonPrimitive.content)
+        val follows = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "monthly", "mpesa", "k"))).jsonObject
+        assertFalse("phone_number" in follows) // absent = every cycle follows the profile number
+    }
+
+    @Test
+    fun `intent body carries the prompt number as phone_number`() {
+        val i = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 100_000, "KES", "mpesa", phoneNumber = "+254711222333", idempotencyKey = "k"))).jsonObject
+        assertEquals("+254711222333", i["phone_number"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `schedule and intent bodies carry pledge_id when bound`() {
         val s = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 1, "KES", "weekly", "airtel", "k", pledgeId = "pl"))).jsonObject
         assertEquals("pl", s["pledge_id"]!!.jsonPrimitive.content)

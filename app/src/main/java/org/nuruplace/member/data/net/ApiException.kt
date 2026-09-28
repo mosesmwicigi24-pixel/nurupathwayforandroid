@@ -6,6 +6,8 @@ package org.nuruplace.member.data.net
 
 import android.content.Context
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import retrofit2.HttpException
@@ -28,10 +30,7 @@ object ApiException {
     fun message(e: Throwable, context: Context? = null): String = when (e) {
         is HttpException -> {
             val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
-            parseEnvelope(body) ?: when (e.code()) {
-                401 -> "Your session has expired. Please sign in again."
-                else -> "Something went wrong (${e.code()})."
-            }
+            parseEnvelope(body) ?: statusMessage(e.code())
         }
         is IOException -> transportMessage(e, context)
         else -> e.message ?: "Something went wrong."
@@ -72,4 +71,57 @@ object ApiException {
                 ?: obj["message"]?.jsonPrimitive?.content
         }.getOrNull()
     }
+
+    /**
+     * The server's error envelope — `{ error: { code, message, request_id,
+     * details? } }` — off a failed call, for a caller that must act on the
+     * CODE (Give: 409 GIFT_IN_PROGRESS follows `details.transaction_id`).
+     * Null when no HTTP answer came back. An error body is a one-shot
+     * stream: read it here ONCE and use [ServerError.displayMessage], never
+     * [message] on the same exception afterwards.
+     */
+    fun serverError(e: Throwable): ServerError? {
+        if (e !is HttpException) return null
+        val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
+        return parseServerError(e.code(), body)
+    }
+
+    /** [serverError]'s parse, pure: an unreadable or absent body leaves
+     *  code, message and details null — the status still stands. */
+    fun parseServerError(status: Int, body: String?): ServerError {
+        val obj = body?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+        val err = obj?.get("error") as? JsonObject
+        fun str(o: JsonObject?, key: String): String? =
+            ((o?.get(key)) as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        return ServerError(
+            status = status,
+            code = str(err, "code"),
+            message = str(err, "message") ?: str(obj, "message"),
+            details = err?.get("details") as? JsonObject,
+        )
+    }
+
+    /** What [message] says for an HTTP status when the body says nothing. */
+    internal fun statusMessage(status: Int): String = when (status) {
+        401 -> "Your session has expired. Please sign in again."
+        else -> "Something went wrong ($status)."
+    }
+}
+
+/** A server refusal, as [ApiException.serverError] read it. */
+data class ServerError(
+    val status: Int,
+    /** The envelope's machine code (e.g. GIFT_IN_PROGRESS); null when absent. */
+    val code: String?,
+    /** Member-facing — shown as-is. Null when the body carried none. */
+    val message: String?,
+    val details: JsonObject?,
+) {
+    /** The server's words, else the status line [ApiException.message] gives. */
+    val displayMessage: String get() = message ?: ApiException.statusMessage(status)
+
+    /** A string detail (`details.transaction_id`), null when absent or blank. */
+    fun detail(key: String): String? =
+        (details?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 }

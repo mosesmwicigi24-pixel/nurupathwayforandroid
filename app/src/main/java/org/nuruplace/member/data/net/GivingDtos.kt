@@ -32,6 +32,64 @@ data class GivingRecord(
     // giving statement tags a row "<title> pledge" when it is set.
     val pledgeId: String? = null,
     val pledgeTitle: String? = null,
+    /** Why a failed gift failed (Giving Cycle 1). Null unless it failed, and
+     *  from an older server. */
+    val failure: GiftFailure? = null,
+)
+
+/**
+ * Why a gift did not go through (Giving Cycle 1) — from M-Pesa's own result
+ * code, in words the member can act on. `reason` says what happened, `hint`
+ * what to do next and whether money moved; both are shown VERBATIM (the
+ * server's one table, financial/giftFailure.ts, so the apps, receipts and the
+ * office never word it differently). `code` is cancelled | unreachable |
+ * expired | insufficient_funds | wrong_pin | busy | limit_exceeded | declined
+ * | system | no_answer | no_phone — carried, never rendered.
+ */
+@Serializable
+data class GiftFailure(
+    val code: String = "",
+    val reason: String = "",
+    val hint: String = "",
+    /** The member never had a chance to answer — a recurring gift may try once more on its own. */
+    val retryable: Boolean = false,
+)
+
+/**
+ * GET /giving/methods (Giving Cycle 1) — the rails this member can give with
+ * here, and the number on file for a prompt. The Give form draws its method
+ * list from this instead of hard-coding one, so a rail that cannot take money
+ * (Airtel, cards) is never offered as if it could. GiveMethodsLogic.kt turns
+ * it into what the form may select.
+ */
+@Serializable
+data class GivingMethodsRes(
+    val methods: List<GivingMethodInfo> = emptyList(),
+    /** The profile number as E.164 when it is a Kenyan mobile number, else null. */
+    val phoneOnFile: String? = null,
+    /** The first enabled rail — where the form starts. Null when none is. */
+    val defaultMethod: String? = null,
+)
+
+/** One rail on GET /giving/methods. Every field defaults so a partial row
+ *  still decodes — and a row that does not say it is enabled is not. */
+@Serializable
+data class GivingMethodInfo(
+    val key: String = "",                    // mpesa | airtel | paypal | card
+    val label: String = "",
+    /** Can take a member's money on this server right now. */
+    val enabled: Boolean = false,
+    /** coming_soon | unavailable | null (enabled). */
+    val unavailableReason: String? = null,
+    /** The rail's own currency (M-Pesa KES, PayPal USD); null = any. */
+    val currency: String? = null,
+    val minMinor: Long = 0,
+    val maxMinor: Long = 0,
+    /** Whole shillings only (no cents). */
+    val wholeUnits: Boolean = false,
+    /** A recurring gift can run on it here. */
+    val recurring: Boolean = false,
+    val needsPhone: Boolean = false,
 )
 
 @Serializable
@@ -105,6 +163,8 @@ data class GivingDetail(
     val memberName: String? = null,
     /** The giver's congregation, when known. */
     val congregation: String? = null,
+    /** Why it failed (status failed), else null — Giving Cycle 1. */
+    val failure: GiftFailure? = null,
 )
 
 @Serializable
@@ -139,9 +199,13 @@ data class CreateScheduleBody(
     val amountMinor: Int,
     val currency: String,
     val frequency: String,   // weekly | monthly
-    val method: String,      // mpesa | airtel
+    val method: String,      // mpesa (the one recurring rail, Giving Cycle 1)
     val idempotencyKey: String,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val pledgeId: String? = null,
+    /** The number every cycle prompts, sent only when the member chose one
+     *  other than their profile's; absent, each cycle follows the profile
+     *  number, so a changed number is used (GiveMethodsLogic.schedulePhoneFor). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: String? = null,
 )
 
 /** POST /giving/paypal/capture — settles an approved PayPal order (money §5.6: online-only). */

@@ -408,6 +408,12 @@ interface MemberApi {
     @GET("giving/history")
     suspend fun givingHistory(): Envelope<GivingRecord>
 
+    /** The rails this member can give with here, their limits, and the
+     *  number on file for a prompt (Giving Cycle 1). The Give form draws its
+     *  method list from this — never offering a rail the server cannot take. */
+    @GET("giving/methods")
+    suspend fun givingMethods(): GivingMethodsRes
+
     @POST("giving/intents")
     suspend fun giving(@Body body: GiveBody): GivingIntentResult
 

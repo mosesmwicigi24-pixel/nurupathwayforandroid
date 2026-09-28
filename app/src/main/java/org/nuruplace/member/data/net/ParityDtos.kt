@@ -21,6 +21,9 @@ data class ForgotRes(val sent: Boolean = false, val devToken: String? = null)
 data class ResetBody(val token: String, val newPassword: String)
 
 // --- Recurring giving schedules ---
+// POST /giving/schedules answers with the id, status and next_run_at only —
+// the rest default here, so a created schedule is shown from what the member
+// confirmed (GivingScreen), never from these defaults.
 @Serializable
 data class GivingSchedule(
     val scheduleId: String,
@@ -29,9 +32,16 @@ data class GivingSchedule(
     val currency: String = "KES",
     val frequency: String = "monthly",   // weekly | monthly
     val method: String = "",
-    val status: String = "active",       // active | cancelled
+    val status: String = "active",       // active | paused | cancelled
     val nextRunAt: String = "",
     val createdAt: String = "",
+    // Giving Cycle 1 — all null from an older server.
+    /** The schedule's own number; null = every cycle prompts the profile's. */
+    val phoneNumber: String? = null,
+    /** A retry of the current cycle, when one is armed. */
+    val retryAt: String? = null,
+    /** The last charge's reason while the schedule is failing, else null. */
+    val lastFailure: GiftFailure? = null,
 )
 
 // --- Announcements ---
