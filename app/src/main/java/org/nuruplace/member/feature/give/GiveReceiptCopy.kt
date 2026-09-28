@@ -25,12 +25,19 @@ fun receiptPledgeTitle(d: GivingDetail): String? = d.pledge?.title.clean()
 
 /** Where the gift went — the hero's line under the amount:
  *  pledge → "toward your School fees pledge" · need → "to Sound desk" ·
- *  else "to the Discipleship fund". A pledge outranks a need. */
+ *  else "to the Discipleship fund". A pledge outranks a need. A name that
+ *  already ends in the word is not doubled (iOS destinationPhrase):
+ *  "toward your Building pledge", "to the Building Fund". */
 fun receiptDestinationLine(d: GivingDetail): String {
-    receiptPledgeTitle(d)?.let { return "toward your $it pledge" }
+    receiptPledgeTitle(d)?.let { return "toward your ${pledgeTag(it)}" }
     d.need?.title.clean()?.let { return "to $it" }
-    return "to the ${receiptFundName(d)} fund"
+    return "to the ${fundWord(receiptFundName(d))}"
 }
+
+/** "Discipleship fund"; a name that already ends in "fund" (any case) is
+ *  not doubled — "Building Fund". */
+internal fun fundWord(name: String): String =
+    if (name.trim().lowercase(Locale.ROOT).endsWith("fund")) name.trim() else "${name.trim()} fund"
 
 /** "Thank you, Moses." — the first word of the server's member_name, else of
  *  the signed-in profile's name, else null (the line is omitted). */
@@ -113,7 +120,7 @@ fun receiptFailure(d: GivingDetail): GiftFailure? = shownFailure(d.status, d.fai
 
 /** "100% of this gift reaches the Discipleship fund." (+ " · counts toward your pledge"). */
 fun receiptWhereItWent(d: GivingDetail): String {
-    val base = "100% of this gift reaches the ${receiptFundName(d)} fund."
+    val base = "100% of this gift reaches the ${fundWord(receiptFundName(d))}."
     val onPledge = receiptPledgeTitle(d) != null || d.pledge?.pledgeId.clean() != null
     return if (onPledge) "$base · counts toward your pledge" else base
 }

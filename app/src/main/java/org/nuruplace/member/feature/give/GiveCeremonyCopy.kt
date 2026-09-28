@@ -24,9 +24,10 @@ import org.nuruplace.member.data.net.GivingIntentResult
 private val PIN_PROVIDERS = setOf("mpesa", "airtel")
 
 /** Where the gift went, as a phrase: "toward your Building pledge" · "to Tithe"
- *  · "to <chip>" · null when nothing is known. */
+ *  · "to <chip>" · null when nothing is known. A pledge whose name already
+ *  ends in "pledge" is not doubled ([pledgeTag], iOS GiveDestination). */
 fun giveDestinationPhrase(r: GivingIntentResult, chipFundLabel: String?): String? {
-    r.pledge?.title?.takeIf { it.isNotBlank() }?.let { return "toward your $it pledge" }
+    r.pledge?.title?.takeIf { it.isNotBlank() }?.let { return "toward your ${pledgeTag(it)}" }
     r.fund?.name?.takeIf { it.isNotBlank() }?.let { return "to $it" }
     return chipFundLabel?.takeIf { it.isNotBlank() }?.let { "to $it" }
 }
@@ -51,7 +52,7 @@ fun giveDestinationLabel(r: GivingIntentResult, chipFundLabel: String?, giftName
     val pledge = r.pledge?.title?.takeIf { it.isNotBlank() }
     val fund = r.fund?.name?.takeIf { it.isNotBlank() } ?: chipFundLabel?.takeIf { it.isNotBlank() }
     val base = when {
-        pledge != null -> listOfNotNull("$pledge pledge", r.fund?.name?.takeIf { it.isNotBlank() }).joinToString(" · ")
+        pledge != null -> listOfNotNull(pledgeTag(pledge), r.fund?.name?.takeIf { it.isNotBlank() }).joinToString(" · ")
         fund != null -> fund
         else -> return null
     }

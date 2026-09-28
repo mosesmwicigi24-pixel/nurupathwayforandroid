@@ -166,4 +166,14 @@ class GivingStatementLogicTest {
         assertEquals("Partner", pledgeTagTitle(rec("q", 1, "2026-09-01T00:00:00Z", pledgeId = "pl", pledgeTitle = " ")))
         assertEquals("Partner", pledgeTagTitle(rec("q", 1, "2026-09-01T00:00:00Z", pledgeId = "pl")))
     }
+
+    @Test
+    fun `the row's pledge tag never doubles the word`() {
+        // The tag reads pledgeTag(pledgeTagTitle(row)), as iOS pledgeTag(g).
+        assertEquals("School fees pledge", pledgeTag(pledgeTagTitle(pledge1)))
+        assertEquals("Partner pledge", pledgeTag(pledgeTagTitle(rec("q", 1, "2026-09-01T00:00:00Z", pledgeId = "pl"))))
+        listOf("Building pledge", "Building Pledge", "BUILDING PLEDGE").forEach { name ->
+            assertEquals(name, name, pledgeTag(pledgeTagTitle(rec("b", 1, "2026-09-01T00:00:00Z", pledgeId = "pl", pledgeTitle = name))))
+        }
+    }
 }

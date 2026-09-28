@@ -46,6 +46,20 @@ class GiveReceiptCopyTest {
     }
 
     @Test
+    fun `a pledge or fund name that already ends in the word is not doubled`() {
+        listOf("Building pledge", "Building Pledge", "BUILDING PLEDGE").forEach { name ->
+            assertEquals(name, "toward your $name", receiptDestinationLine(base.copy(pledge = IntentPledge("p1", name))))
+        }
+        assertEquals("to the Building Fund", receiptDestinationLine(base.copy(fundName = "Building Fund")))
+        assertEquals("to the BUILDING FUND", receiptDestinationLine(base.copy(fundName = "BUILDING FUND")))
+        assertEquals("100% of this gift reaches the Building Fund.", receiptWhereItWent(base.copy(fundName = "Building Fund")))
+        assertEquals(
+            "KSh 500 toward your Building Pledge · M-Pesa UIPJ27PBO3 · 25 Sep 2026",
+            receiptShareText(base.copy(pledge = IntentPledge("p1", "Building Pledge"))),
+        )
+    }
+
+    @Test
     fun `share text is amount, destination, method with reference, day`() {
         assertEquals("KSh 500 to the Discipleship fund · M-Pesa UIPJ27PBO3 · 25 Sep 2026", receiptShareText(base))
         assertEquals(

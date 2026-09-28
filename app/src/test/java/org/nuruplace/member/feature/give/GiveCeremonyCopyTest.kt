@@ -61,6 +61,20 @@ class GiveCeremonyCopyTest {
     }
 
     @Test
+    fun `a pledge whose name already ends in "pledge" is never doubled, in any case`() {
+        // "Building pledge" read "Building pledge pledge" (parity list, 2026-09-28).
+        listOf("Building pledge", "Building Pledge", "BUILDING PLEDGE", " Building pledge ").forEach { name ->
+            val r = withPledge.copy(pledge = IntentPledge("p1", name))
+            assertEquals(name, "toward your ${name.trim()}", giveDestinationPhrase(r, "Tithe"))
+            assertEquals(name, "Enter your PIN to complete KSh 1,000 toward your ${name.trim()}.", giveCeremonyLine(r, 100_000, "Tithe"))
+            assertEquals(name, "${name.trim()} · Gift", giveDestinationLabel(r, "Tithe"))
+        }
+        // A name that only CONTAINS the word keeps its "pledge".
+        val mid = withPledge.copy(pledge = IntentPledge("p1", "Pledge for the roof"))
+        assertEquals("toward your Pledge for the roof pledge", giveDestinationPhrase(mid, null))
+    }
+
+    @Test
     fun `destination label prefers the pledge with its routed fund, then the fund, then the chip, and carries the gift name`() {
         assertEquals("School fees pledge · Gift", giveDestinationLabel(withPledge, "Tithe"))
         assertEquals("School fees pledge", giveDestinationLabel(withPledge.copy(fund = null), "Tithe"))

@@ -853,7 +853,8 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
 @Composable
 internal fun PledgeTag(title: String) {
     Text(
-        "$title pledge",
+        // "Building pledge" — a name that already ends in the word is not doubled.
+        pledgeTag(title),
         style = giInter(10, FontWeight.SemiBold),
         color = GIVE.goldChipText,
         maxLines = 1,
