@@ -1,8 +1,8 @@
 // The words on a giving notification in the notification centre — the
 // server's push copy (workers/dispatch.ts PUSH_TEMPLATE_COPY), so the tray,
-// the centre and iOS say the same thing (Giving Cycles 3–5, and Cycle 7's
-// office change to a recurring gift). Kept pure so GivingNotificationCopyTest
-// pins it against dispatch.ts.
+// the centre and iOS say the same thing (Giving Cycles 3–5, Cycle 7's office
+// change to a recurring gift, and a department need's notices). Kept pure so
+// GivingNotificationCopyTest pins it against dispatch.ts.
 //
 // Checked BEFORE the payload's own `title`: on the Partners notices that key
 // is the PLEDGE's name ("Kenya trip"), not a headline. One deliberate
@@ -72,6 +72,12 @@ internal fun givingNotificationTitle(template: String, p: NotifPayload?): String
         "pledge_fulfilled" -> "Pledge fulfilled — thank you"
         "pledge_claim_confirmed" -> "Your payment is recorded"
         "pledge_claim_rejected" -> "We couldn't match that payment"
+        // A department need — a giving target (PARTNERS_PROGRAMME §4). Its
+        // payload `title` is the NEED's name, so these words come first.
+        "department_need_open" -> "${p?.title.said() ?: "A need"} — giving is open"
+        "department_need_approved" -> "Your need was approved"
+        "department_need_rejected" -> "About the need you submitted"
+        "department_need_closed" -> "Need closed"
         else -> null
     }
 }
@@ -134,6 +140,10 @@ internal fun givingNotificationBody(template: String, p: NotifPayload?): String?
         }
         "pledge_claim_confirmed" -> "$amount toward ${p?.title.said() ?: "your pledge"} has been confirmed by the office. Thank you."
         "pledge_claim_rejected" -> "The office could not find $amount toward ${p?.title.said() ?: "your pledge"}. Reply in Community or give again from Partners."
+        "department_need_open" -> "Your department has a need you can help carry. Open Departments to give."
+        "department_need_approved" -> "${p?.title.said() ?: "The need"} is open for giving."
+        "department_need_rejected" -> p?.note.said() ?: "${p?.title.said() ?: "The need"} was not approved this time."
+        "department_need_closed" -> "${p?.title.said() ?: "The need"} has been closed. Thank you."
         else -> null
     }
 }

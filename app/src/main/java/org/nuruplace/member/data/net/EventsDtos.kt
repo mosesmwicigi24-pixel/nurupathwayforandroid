@@ -110,6 +110,9 @@ data class NotifPayload(
     // cancel, and the day a pause ends (YYYY-MM-DD) when it has one.
     val action: String? = null,
     val resumeOn: String? = null,
+    // A department need's notices (department_need_*): the office's note
+    // when it was not approved. Their `title` is the NEED's name.
+    val note: String? = null,
 )
 
 @Serializable

@@ -198,6 +198,36 @@ class GivingNotificationCopyTest {
         )
     }
 
+    // ── a department need (PARTNERS_PROGRAMME §4) — its `title` is the NEED's name ──
+
+    @Test
+    fun `a department need's notices say what happened, not only the need's name`() {
+        // workers/dispatch.ts department_need_*, word for word.
+        val row = json.decodeFromString<NotificationRow>(
+            """{"notification_id":"n7","template":"department_need_rejected","status":"sent","scheduled_for":"x",
+               "payload":{"need_id":"nd1","department_id":"d1","title":"Roof repairs","note":"We covered this from the building fund."}}""",
+        )
+        val need = row.payload!!
+        assertEquals("We covered this from the building fund.", need.note)
+        assertEquals("About the need you submitted", title(row.template, need))
+        // The office's note when it gave one — else the need, by name.
+        assertEquals("We covered this from the building fund.", body(row.template, need))
+        assertEquals("Roof repairs was not approved this time.", body(row.template, need.copy(note = null)))
+        assertEquals("The need was not approved this time.", body(row.template, need.copy(note = "", title = null)))
+
+        assertEquals("Roof repairs — giving is open", title("department_need_open", need))
+        assertEquals("A need — giving is open", title("department_need_open", NotifPayload()))
+        assertEquals("Your department has a need you can help carry. Open Departments to give.", body("department_need_open", need))
+
+        assertEquals("Your need was approved", title("department_need_approved", need))
+        assertEquals("Roof repairs is open for giving.", body("department_need_approved", need))
+        assertEquals("The need is open for giving.", body("department_need_approved", NotifPayload()))
+
+        assertEquals("Need closed", title("department_need_closed", need))
+        assertEquals("Roof repairs has been closed. Thank you.", body("department_need_closed", need))
+        assertEquals("The need has been closed. Thank you.", body("department_need_closed", NotifPayload()))
+    }
+
     @Test
     fun `any other template has no giving words`() {
         assertNull(title("badge_awarded", NotifPayload(title = "Faithful")))
