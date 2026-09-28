@@ -15,7 +15,15 @@
 //
 // Nothing here moves money. A pledge is a promise; "charge me automatically"
 // asks the server to bind a schedule to it, and the server makes the charges
-// on its own cycle boundaries (money §5.6 — never faked client-side).
+// on its own cycle boundaries (money §5.6 — never faked client-side). The
+// first one falls on the due day strictly after today, never today (Giving
+// Cycle 5): the toggle and the review say which day ("First collection: 5
+// October", PledgeClaimLogic.firstCollectionLine). The server checks the
+// collection BEFORE writing anything — no number, M-Pesa off, an amount
+// M-Pesa can't take — and its words are shown; a pledge made whose
+// collection still failed (auto_schedule_error) is made, and GiveTabScreen
+// lands on it with the reason. The same pledge a moment ago (`reused`) is
+// that pledge, not a second one — success either way.
 package org.nuruplace.member.feature.give
 
 import androidx.compose.foundation.background
@@ -143,7 +151,8 @@ fun NewPledgeFlow(
      *  the gap meanwhile so the picker is never blank). */
     pledgeOptions: List<PledgeOption> = emptyList(),
     onClose: () -> Unit,
-    onCreated: () -> Unit,
+    /** The pledge as the server made it (or found it made, `reused`). */
+    onCreated: (org.nuruplace.member.data.net.Pledge) -> Unit,
 ) {
     val view = LocalView.current
     val scope = rememberCoroutineScope()
@@ -155,7 +164,10 @@ fun NewPledgeFlow(
     var target by remember { mutableStateOf<PledgeFor>(PledgeFor.Option(GENERAL_PLEDGE_OPTION)) }
     var customName by remember { mutableStateOf("") }
     var serverOptions by remember { mutableStateOf(pledgeOptions) }
-    var dueDay by remember { mutableIntStateOf(LocalDate.now().dayOfMonth.coerceIn(1, 28)) }
+    // The church's today (Nairobi) — the server's own default due day and
+    // the day the first collection is counted from.
+    val today = remember { partnerToday() }
+    var dueDay by remember { mutableIntStateOf(today.dayOfMonth.coerceIn(1, 28)) }
     var dueOn by remember { mutableStateOf<LocalDate?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
     var autoCharge by remember { mutableStateOf(false) }
@@ -200,12 +212,14 @@ fun NewPledgeFlow(
         )
         scope.launch {
             try {
-                Net.client.api.createPledge(body)
+                val created = Net.client.api.createPledge(body)
                 Haptics.confirm(view)
                 // Partners, its statement and the DUE rows count this pledge now.
                 GivingEvents.emit()
-                onCreated()
+                onCreated(created)
             } catch (e: Exception) {
+                // PHONE_REQUIRED / METHOD_UNAVAILABLE / AMOUNT_OUT_OF_RANGE are
+                // refused before anything is written: the server's words.
                 error = ApiException.message(e)
                 Haptics.reject(view)
             } finally {
@@ -420,13 +434,16 @@ fun NewPledgeFlow(
                         )
                     }
                     if (autoCharge) {
+                        // The real day, never "the next cycle": the due day
+                        // strictly after today (Nairobi) — never today.
+                        Text(firstCollectionLine(today, dueDay), style = NuruType.label, color = Nuru.ink)
                         Text("WITH", style = NuruType.micro, color = Nuru.goldLo)
                         GIVE_METHODS.filter { it.provider in RECURRING_PROVIDERS }.forEach { m ->
                             ChoiceRow(selected = autoMethod == m.provider, title = m.label, sub = m.sub) { autoMethod = m.provider!! }
                         }
                         // M-Pesa only (Giving Cycle 1): the server refuses a recurring
                         // gift on a rail that is not live, and Airtel is not.
-                        Text("Recurring gifts run on M-Pesa. The first charge is made by the server on the next cycle — never from this screen.", style = NuruType.caption, color = Nuru.ink400)
+                        Text("Recurring gifts run on M-Pesa. Each charge is made by the server on its day — never from this screen.", style = NuruType.caption, color = Nuru.ink400)
                     } else {
                         Text("You'll pay each month yourself from Partners — with a gentle reminder before it's due, if you keep reminders on.", style = NuruType.caption, color = Nuru.ink400)
                     }
@@ -451,6 +468,9 @@ fun NewPledgeFlow(
                             "Charged automatically",
                             if (shape == "monthly" && autoCharge) (if (autoMethod == "airtel") "Yes · Airtel Money" else "Yes · M-Pesa") else "No — I'll pay myself",
                         )
+                        if (shape == "monthly" && autoCharge) {
+                            ReviewRow("First collection", firstCollectionDay(today, dueDay))
+                        }
                     }
                     Text(
                         "A pledge is a promise, not a charge. You can pause, change or cancel it from Partners at any time, and nothing is ever owed.",

@@ -22,6 +22,12 @@
 // and back — the standing stays on screen while it refetches — and so its
 // GivingEvents collector is cancelled with the destination, never leaked.
 //
+// A pledge opens here too (Giving Cycle 5): a Partners notice or a pledge's
+// collector lands on "partners-pledge/{id}" (MainShell → openPledgeId), and a
+// pledge made without its automatic collection lands on itself with the
+// server's reason — the pledge stands; nothing blocks. Each opens once: a
+// saveable flag keeps a return to the tab from opening it again.
+//
 // The double-pay guard's upstream half lives here too: when a bound gift goes
 // through (or the member picks "Give to a fund instead") GivingScreen calls
 // onUnbind and the preset is forgotten at once — WITHOUT re-keying the giving
@@ -115,6 +121,9 @@ fun GiveTabScreen(
     /** A gift to open on its result — a giving_gift_failed push (MainShell's
      *  give-gift route, Giving Cycle 3): its reason, hint and Try again. */
     followTransactionId: String? = null,
+    /** A pledge to open on Partners — a Partners notice or "Change it on the
+     *  pledge" (MainShell's partners-pledge route, Giving Cycle 5). */
+    openPledgeId: String? = null,
 ) {
     val view = LocalView.current
     // rememberSaveable so rotation / process death restore the segment; landing
@@ -135,6 +144,11 @@ fun GiveTabScreen(
     // a ceremony on screen is never torn down.
     var presetSeq by remember { mutableIntStateOf(0) }
     var newPledge by remember { mutableStateOf(false) }
+    // Set once the pledge this destination opened with has been shown.
+    var pledgeOpened by rememberSaveable { mutableStateOf(false) }
+    // A pledge just made whose automatic collection could not be set up:
+    // opened, with the server's reason (auto_schedule_error), once.
+    var landing by remember { mutableStateOf<PledgeLanding?>(null) }
 
     if (newPledge) {
         BackHandler { newPledge = false }
@@ -143,9 +157,12 @@ fun GiveTabScreen(
             // the picker's options ride along instead of a second fetch.
             pledgeOptions = partnersVm.partnership?.pledgeOptions.orEmpty(),
             onClose = { newPledge = false },
-            onCreated = {
+            onCreated = { created ->
                 newPledge = false
                 partnersVm.load()
+                // The pledge WAS made — a replay (`reused`) is the same pledge.
+                // Only its collection failed: land on it and say why.
+                pledgeLandingAfterCreate(created)?.let { landing = it; segment = GiveSegment.Partners }
             },
         )
         return
@@ -198,6 +215,8 @@ fun GiveTabScreen(
                     onOpenPartnersStatement = { year -> onNavigate(partnersStatementRoute(year)) },
                     onAddPledge = { newPledge = true },
                     segmentControl = segmentControl,
+                    openPledge = landing ?: openPledgeId?.takeIf { !pledgeOpened }?.let { PledgeLanding(it) },
+                    onPledgeOpened = { landing = null; pledgeOpened = true },
                 )
             }
         }

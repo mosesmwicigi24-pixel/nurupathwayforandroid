@@ -108,8 +108,13 @@ private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={t
 /** The Give tab on one gift's result — a giving_gift_failed push (Giving
  *  Cycle 3), built by feature/give/GivingRoutes.giftRoute. */
 private const val GIVE_GIFT_ROUTE = "give-gift/{id}"
+/** The Give tab on Partners with one pledge open — a Partners notice, a
+ *  pledge's collector saying "Change it on the pledge", or a pledge made
+ *  without its automatic collection (Giving Cycle 5); built by
+ *  feature/give/GivingRoutes.pledgeRoute. */
+private const val PARTNERS_PLEDGE_ROUTE = "partners-pledge/{pledgeId}"
 private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile", "departments")
-private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE, GIVE_GIFT_ROUTE)
+private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE, GIVE_GIFT_ROUTE, PARTNERS_PLEDGE_ROUTE)
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
 
 /** The partners statement for one year (docs/PARTNERS_PROGRAMME.md §3; owner
@@ -774,6 +779,18 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.give.GiveTabScreen(
                     initial = org.nuruplace.member.feature.give.GiveSegment.Partners,
                     onNavigate = { nav.navigate(it) },
+                )
+            }
+            // Partners with one pledge open (Giving Cycle 5): its payments,
+            // what the member told the office, and its actions.
+            composable(
+                PARTNERS_PLEDGE_ROUTE,
+                arguments = listOf(navArgument("pledgeId") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Partners,
+                    onNavigate = { nav.navigate(it) },
+                    openPledgeId = entry.arguments?.getString("pledgeId")?.takeIf { it.isNotBlank() },
                 )
             }
             // Give, preset for a department need (spec §4): fund "gift", the

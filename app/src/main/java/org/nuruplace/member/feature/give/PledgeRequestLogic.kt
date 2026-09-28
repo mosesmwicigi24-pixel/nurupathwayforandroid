@@ -109,3 +109,56 @@ internal fun buildPledgeBody(
         title = custom,
     )
 }
+
+/** A pledge to open on Partners, and what to say at the top of it — for a
+ *  pledge just made whose automatic collection could not be set up, the
+ *  server's reason (Giving Cycle 5). */
+data class PledgeLanding(val pledgeId: String, val notice: String? = null)
+
+/** After POST /giving/pledges: land on the pledge only when it came back
+ *  with `auto_schedule_error` — the pledge WAS made, only its collection
+ *  failed, and the member should see which pledge and why without being
+ *  blocked. A plain success, or the same pledge replayed (`reused`), just
+ *  returns to Partners as before. */
+fun pledgeLandingAfterCreate(created: org.nuruplace.member.data.net.Pledge): PledgeLanding? {
+    val why = created.autoScheduleError?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val id = created.pledgeId.trim().takeIf { it.isNotEmpty() } ?: return null
+    return PledgeLanding(id, why)
+}
+
+/** The edit field's text for a pledge amount, in its currency: whole
+ *  shillings ("1000"), or dollars with their cents ("25" / "25.50"). */
+fun pledgeAmountInput(minor: Int, currency: String?): String =
+    if (currencyCode(currency) == USD_CURRENCY) usdInput(minor) else (minor / 100).toString()
+
+/** The typed pledge amount in minor units of its currency — whole shillings
+ *  up to KSh 5,000,000, or dollars and cents up to the same figure — null
+ *  when it is not one (empty, zero, a third decimal). */
+fun pledgeAmountMinor(text: String, currency: String?): Int? {
+    val minor = if (currencyCode(currency) == USD_CURRENCY) usdCentsOf(text)
+    else text.filter { it.isDigit() }.take(8).toIntOrNull()?.let { it * 100 }
+    return minor?.takeIf { it in 1..500_000_000 }
+}
+
+/** The PATCH an edit makes — only what changed travels; null when nothing
+ *  did. A monthly pledge's amount is `amount_minor` (its collector follows
+ *  it, and the server refuses one M-Pesa can't take); a total pledge's is
+ *  `target_minor` — an amount_minor sent for a total pledge used to change
+ *  nothing the member could see. The due day is a monthly pledge's only. */
+fun pledgeEditPatch(
+    pl: org.nuruplace.member.data.net.Pledge,
+    amountMinor: Int?,
+    dueDay: Int?,
+    titlePatch: kotlinx.serialization.json.JsonElement?,
+): org.nuruplace.member.data.net.UpdatePledgeBody? {
+    val total = pl.shape == "total"
+    val newAmount = amountMinor?.takeIf { it != pl.headlineMinor }
+    val newDay = if (total) null else dueDay?.takeIf { it != pl.dueDay }
+    if (newAmount == null && newDay == null && titlePatch == null) return null
+    return org.nuruplace.member.data.net.UpdatePledgeBody(
+        amountMinor = if (total) null else newAmount,
+        targetMinor = if (total) newAmount else null,
+        dueDay = newDay,
+        title = titlePatch,
+    )
+}

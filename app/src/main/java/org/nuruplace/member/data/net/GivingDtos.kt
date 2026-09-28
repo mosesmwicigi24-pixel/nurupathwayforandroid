@@ -488,7 +488,10 @@ data class AutoScheduleBody(val method: String, val frequency: String = "monthly
 @Serializable
 data class UpdatePledgeBody(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val status: String? = null,        // paused | active | cancelled
+    /** A monthly pledge's amount (its collector follows it). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val amountMinor: Int? = null,
+    /** A total pledge's target — its amount_minor means nothing. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val targetMinor: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dueDay: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val remindersEnabled: Boolean? = null,
     /** The name, tri-state: absent (Kotlin null) leaves it alone; JsonNull
@@ -541,6 +544,35 @@ data class PledgeDetail(
         startsOn = startsOn, untilOn = untilOn,
     )
 }
+
+/** "I paid another way" (POST /giving/pledges/{id}/claims): in the pledge's
+ *  own currency, the day it was paid (Nairobi, today or within the last
+ *  year), an optional note — the office confirms before it counts. */
+@Serializable
+data class ClaimBody(
+    val amountMinor: Int,
+    val currency: String,
+    val paidOn: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val note: String? = null,
+)
+
+/** One claim on a pledge (GET /giving/pledges/{id}/claims → `data[]`, and
+ *  the POST's answer). The list sends amount_minor as TEXT (a Postgres
+ *  bigint cast) and the create as a number; both decode. status is
+ *  pending | confirmed | rejected. */
+@Serializable
+data class PledgeClaim(
+    val claimId: String = "",
+    val pledgeId: String = "",
+    val amountMinor: Long = 0,
+    val currency: String = "KES",
+    val paidOn: String? = null,
+    val note: String? = null,
+    val status: String = "pending",
+    val decidedAt: String? = null,
+    val transactionId: String? = null,
+    val createdAt: String? = null,
+)
 
 @Serializable
 data class PledgePayment(

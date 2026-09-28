@@ -79,13 +79,32 @@ data class NotifPayload(
     val departmentId: String? = null,
     val needId: String? = null,
     val department: String? = null,
-    // Giving (feature/give/GivingRoutes.kt): giving_gift_failed carries the
-    // gift and why it failed; the schedule notices carry the schedule (and
-    // the heads-up its prompt time).
+    // Giving (feature/give/GivingRoutes.kt, GivingNotificationCopy.kt):
+    // giving_gift_failed carries the gift and why it failed; the schedule
+    // notices the schedule (the heads-up its prompt time); the pledge
+    // notices the pledge — `title` is then the PLEDGE's name — and what the
+    // push said is rebuilt from these (Giving Cycles 3–5).
     val transactionId: String? = null,
     val failureCode: String? = null,
     val scheduleId: String? = null,
     val promptAt: String? = null,
+    val pledgeId: String? = null,
+    val amountMinor: Long? = null,
+    val targetMinor: Long? = null,
+    val currency: String? = null,
+    val reason: String? = null,
+    val hint: String? = null,
+    val frequency: String? = null,
+    val fundName: String? = null,
+    val pledgeTitle: String? = null,
+    val partial: Boolean? = null,
+    val coveredThrough: String? = null,
+    val untilOn: String? = null,
+    val dueOn: String? = null,
+    val daysAway: Int? = null,
+    val retryAt: String? = null,
+    val scheduleStopped: Boolean? = null,
+    val message: String? = null,
 )
 
 @Serializable

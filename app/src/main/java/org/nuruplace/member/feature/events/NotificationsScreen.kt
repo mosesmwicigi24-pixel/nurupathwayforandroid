@@ -80,10 +80,12 @@ private fun routeFor(n: NotificationRow): String? {
     // serve_request_* / department_post / department_need_* (departments/
     // service.ts) all carry department_id → the department page itself.
     n.payload?.departmentId?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
-    // Giving: the same place the push itself opens (feature/give/GivingRoutes.kt).
+    // Giving: the same place the push itself opens (feature/give/GivingRoutes.kt)
+    // — a Partners notice opens its pledge.
     org.nuruplace.member.feature.give.givingDest(
         transactionId = n.payload?.transactionId, failureCode = n.payload?.failureCode,
         scheduleId = n.payload?.scheduleId, promptAt = n.payload?.promptAt,
+        pledgeId = n.payload?.pledgeId,
     )?.let { return it }
     val t = n.template.lowercase()
     // Level notifications land on the EXACT level (was the bare hub).
@@ -103,6 +105,21 @@ private fun routeFor(n: NotificationRow): String? {
         else -> null
     }
 }
+
+/** A row's headline: a giving notice's own words (feature/give/
+ *  GivingNotificationCopy.kt — the push's, from dispatch.ts) ahead of the
+ *  payload's `title`, which on the Partners notices is the pledge's NAME;
+ *  else the payload's title; else the template, humanised. */
+private fun titleOf(n: NotificationRow): String =
+    org.nuruplace.member.feature.give.givingNotificationTitle(n.template, n.payload)
+        ?: n.payload?.title
+        ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+/** A row's line: the payload's own body when it carries one (dispatch.ts
+ *  prefers it too), else a giving notice's words; null when neither. */
+private fun bodyOf(n: NotificationRow): String? =
+    n.payload?.body?.takeIf { it.isNotEmpty() }
+        ?: org.nuruplace.member.feature.give.givingNotificationBody(n.template, n.payload)
 
 /** The four backend notification categories → (glyph, foreground, tint). §B2. */
 private data class Tone(val glyph: String, val fg: Color, val bg: Color, val reward: Boolean = false)
@@ -244,9 +261,8 @@ private fun NotifDetailPopup(n: NotificationRow, onContinue: () -> Unit, onDismi
                     .border(1.dp, Nuru.border, RoundedCornerShape(Radii.control)).padding(Spacing.base),
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs),
             ) {
-                Text(n.payload?.title ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() },
-                    style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
-                n.payload?.body?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
+                Text(titleOf(n), style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+                bodyOf(n)?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
             }
             stats?.let { s ->
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -335,13 +351,13 @@ private fun NotifRow(n: NotificationRow, unread: Boolean, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
                     Text(
-                        n.payload?.title ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                        titleOf(n),
                         style = NuruType.rowTitle, color = titleColor, modifier = Modifier.weight(1f),
                         fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
                     )
                     Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = timeColor)
                 }
-                n.payload?.body?.let { Text(it, style = NuruType.caption, color = bodyColor, maxLines = 2) }
+                bodyOf(n)?.let { Text(it, style = NuruType.caption, color = bodyColor, maxLines = 2) }
                 if (tone.reward && unread) {
                     Spacer(Modifier.height(Spacing.xs))
                     Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint).padding(horizontal = 8.dp, vertical = 2.dp)) {

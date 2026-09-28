@@ -644,6 +644,16 @@ interface MemberApi {
     @GET("giving/pledges/{id}")
     suspend fun pledge(@Path("id") pledgeId: String): PledgeDetail
 
+    /** "I paid another way" (Giving Cycle 5): pending until the office
+     *  confirms. 422 CURRENCY_MISMATCH | INVALID_DATE; 409 CONFLICT (already
+     *  told, or five waiting). Online only — never queued. */
+    @POST("giving/pledges/{id}/claims")
+    suspend fun createClaim(@Path("id") pledgeId: String, @Body body: ClaimBody): PledgeClaim
+
+    /** This pledge's claims, newest first. */
+    @GET("giving/pledges/{id}/claims")
+    suspend fun pledgeClaims(@Path("id") pledgeId: String): Envelope<PledgeClaim>
+
     /** By year → by pledge → by fund → payments (JSON; the PDF stays on giving/statement.pdf). */
     @GET("giving/statements")
     suspend fun statements(@Query("year") year: Int? = null): GivingStatement

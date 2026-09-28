@@ -120,7 +120,8 @@ class NuruMessagingService : FirebaseMessagingService() {
             // template, so their own keys say where — a gift that failed
             // where the member could not see it opens that gift, with Try
             // again; a failed or paused schedule opens that schedule; the
-            // heads-up before a prompt opens Give.
+            // heads-up before a prompt opens Give; a pledge's notices, and
+            // its collector's (covered / stopped), open that pledge.
             org.nuruplace.member.feature.give.givingPushRoute(data)?.let { return it }
             val t = (data["template"] ?: "").lowercase()
             return when {
@@ -149,6 +150,15 @@ class NuruMessagingService : FirebaseMessagingService() {
                 else -> null
             }
         }
+
+        /** A tap on a push the SYSTEM put in the tray — the app was in the
+         *  background or closed, so [onMessageReceived] never ran and no
+         *  `nuru.dest` was attached. FCM then hands the push's data to the
+         *  launch intent as extras, beside its own `google.*` keys, and the
+         *  same [destFor] reads them (before this, every such tap opened
+         *  Home). Null for any launch that is not a push tap. */
+        fun trayTapDest(extras: Map<String, String>): String? =
+            if ("google.message_id" in extras || "google.sent_time" in extras) destFor(extras) else null
 
         fun ensureChannel(context: Context) {
             val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

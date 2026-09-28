@@ -44,6 +44,18 @@ private fun readingJoinDest(intent: Intent?): String? {
     return "reading/join/$token"
 }
 
+/** A tray tap on a push the system rendered while the app was in the
+ *  background or closed: FCM puts the push's data on the launch intent as
+ *  string extras (NuruMessagingService.trayTapDest reads them). Never for a
+ *  relaunch from Recents — that re-delivers the original intent, and the tap
+ *  it carried has already been followed. */
+private fun pushTrayDest(intent: Intent?): String? {
+    if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+    val extras = intent.extras ?: return null
+    val data = extras.keySet().mapNotNull { k -> extras.getString(k)?.let { k to it } }.toMap()
+    return org.nuruplace.member.data.firebase.NuruMessagingService.trayTapDest(data)
+}
+
 /** A join token is opaque URL-safe text; anything else (a slash, a space)
  *  would break the `reading/join/{token}` route match, so it is refused. */
 private fun isJoinToken(s: String): Boolean =
@@ -70,7 +82,11 @@ class MainActivity : FragmentActivity() {
         installSplashScreen()   // branded TGNM splash on every cold start
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        PendingDest.set(readingJoinDest(intent) ?: intent?.getStringExtra("nuru.dest"))
+        PendingDest.set(
+            readingJoinDest(intent) ?: intent?.getStringExtra("nuru.dest")
+                // A restored activity's intent was already followed once.
+                ?: pushTrayDest(intent).takeIf { savedInstanceState == null },
+        )
         // Store-then-plan (Read with a Friend): a member who tapped a join link
         // WITHOUT the app installed lands on Play; the referrer Play hands back
         // on first launch carries `join_token=<token>` so the invite still
@@ -108,6 +124,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        PendingDest.set(readingJoinDest(intent) ?: intent.getStringExtra("nuru.dest"))
+        PendingDest.set(readingJoinDest(intent) ?: intent.getStringExtra("nuru.dest") ?: pushTrayDest(intent))
     }
 }
