@@ -67,6 +67,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -93,10 +95,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -222,7 +226,8 @@ class GiveViewModel : ViewModel() {
 fun GivingScreen(
     onBack: () -> Unit,
     onOpenStatement: () -> Unit,
-    onOpenSchedules: () -> Unit = {},
+    /** A RECENT GIVING row's receipt. */
+    onOpenReceipt: (String) -> Unit = {},
     /** A pledge's "Pay now": fund + amount preset, pledge_id carried into the intent. */
     preset: GivePreset? = null,
     /** The tab's GIVE · PARTNERS control (GiveTabScreen) — the first row of
@@ -267,7 +272,7 @@ fun GivingScreen(
         return
     }
     GiveTab(
-        d.history, d.schedules, d.methods, d.phoneOnFile, vm::load, onOpenStatement, onOpenSchedules, preset,
+        d.history, d.schedules, d.methods, d.phoneOnFile, vm::load, onOpenStatement, onOpenReceipt, preset,
         segmentControl, onUnbind, onRebind, followTransactionId, onFollowed,
         pledges = d.pledges, onOpenPledge = onOpenPledge,
         startedSchedule = startedSchedule, onStartedShown = onStartedShown,
@@ -394,6 +399,89 @@ private fun RepeatGiftCard(g: GivingRecord, onRepeat: () -> Unit) {
     }
 }
 
+/** RECENT GIVING (iOS recentSection): the three newest gifts that went
+ *  through — fund, day · rail, amount — each opening its receipt; "View
+ *  statement →" always there; before the first, what will happen. */
+@Composable
+private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> Unit, onOpenReceipt: (String) -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("RECENT GIVING", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.weight(1f))
+            Row(
+                Modifier.clip(Capsule).clickable { onOpenStatement() }.padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text("View statement", style = giInter(12, FontWeight.SemiBold), color = GIVE.gold)
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(11.dp))
+            }
+        }
+        if (recent.isEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Icons.Filled.VolunteerActivism, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                Text("No gifts yet — your first one will appear here the moment it settles.", style = giInter(13), color = GIVE.sub)
+            }
+        } else {
+            recent.forEachIndexed { i, g ->
+                if (i > 0) Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(1.dp).background(GIVE.border))
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpenReceipt(g.transactionId) }.padding(horizontal = 16.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(giveFund(g.fund).name, style = giInter(14, FontWeight.SemiBold, -0.14f), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(recentGiftMeta(g), style = giInter(11), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(money(g.amountMinor, g.currency), style = giInter(14, FontWeight.SemiBold, -0.14f), color = GIVE.navy, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+/** 2 Corinthians 9:7 on a soft gold wash (iOS scriptureStrip). */
+@Composable
+private fun ScriptureStrip() {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(GIVE.gold.copy(alpha = 0.10f), GIVE.paper)))
+            .border(1.dp, GIVE.gold.copy(alpha = 0.2f), shape)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "“Each of you should give what you have decided in your heart to give.”",
+            style = giSerif(15, FontWeight.Medium).copy(fontStyle = FontStyle.Italic, lineHeight = 23.sp), color = GIVE.navy,
+        )
+        Text("2 Corinthians 9:7", style = giInter(11, FontWeight.SemiBold), color = GIVE.overline)
+    }
+}
+
+/** The footer's promise (iOS secureNote): a shield and "Secure · M-Pesa ·
+ *  Receipt sent instantly" — only the rails that can take money here. */
+@Composable
+private fun SecureNote(text: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Outlined.VerifiedUser, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(13.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text, style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center)
+    }
+}
+
 /** A Weekly / Monthly gift waiting on the member's Confirm: the exact
  *  request, the key it will carry, and the number its prompts go to. */
 private data class ScheduleToConfirm(val plan: GiveSubmission.Schedule, val attempt: HeldGiveKey, val phone: String?)
@@ -418,7 +506,7 @@ private fun GiveTab(
     phoneOnFile: String?,
     reload: () -> Unit,
     onOpenStatement: () -> Unit,
-    onOpenSchedules: () -> Unit = {},
+    onOpenReceipt: (String) -> Unit = {},
     preset: GivePreset? = null,
     segmentControl: @Composable () -> Unit = {},
     onUnbind: () -> Unit = {},
@@ -771,8 +859,6 @@ private fun GiveTab(
 
     // Running or paused — a paused schedule still stands until it is cancelled.
     val liveSchedules = schedules.filter { scheduleCancellable(it.status) }
-    val activeCount = liveSchedules.count { scheduleStatusLabel(it.status) == null }
-    val pausedCount = liveSchedules.size - activeCount
 
     /** Send a planned request: an intent, or a schedule the member confirmed. */
     fun send(plan: GiveSubmission, attempt: HeldGiveKey) {
@@ -1272,31 +1358,16 @@ private fun GiveTab(
                     }
                 }
 
-                // Manage schedules — the recurring-gifts list (route "schedules")
-                // was unreachable before the Partners programme (spec §0).
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp)).background(GIVE.white)
-                        .border(1.dp, GIVE.border, RoundedCornerShape(14.dp))
-                        .clickable { onOpenSchedules() }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Manage schedules", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
-                        Text(
-                            when {
-                                liveSchedules.isEmpty() -> "No recurring gifts yet"
-                                pausedCount == 0 -> "$activeCount active · review or cancel"
-                                else -> "$activeCount active · $pausedCount paused · review or cancel"
-                            },
-                            style = giInter(11), color = GIVE.sub,
-                        )
-                    }
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
-                }
+                // No separate "Manage schedules" row (iOS parity): each card
+                // above opens its gift's sheet — change, pause, resume, cancel.
+
+                // RECENT GIVING (iOS): the three newest gifts that went
+                // through, each opening its receipt; the statement one tap away.
+                RecentGivingCard(recentGifts(history), onOpenStatement, onOpenReceipt)
+                // 2 Corinthians 9:7, then the footer's promise — naming only
+                // the rails that can take money here.
+                ScriptureStrip()
+                SecureNote(giveSecureNote(options))
             }
         }
 
@@ -1529,7 +1600,7 @@ private fun PromptNumberSheet(
 }
 /** Full-screen ceremony once the server really created a schedule — the first
  *  prompt is the server's next cycle boundary (`next_run_at`), shown as such;
- *  "Cancel anytime" is true because Manage schedules is one tap away. The
+ *  "Cancel anytime" is true because its card under RECURRING GIFTS opens it. The
  *  amount, cadence and fund are what the member confirmed ([body]): the
  *  server's answer carries only the id, status and first run. When the member
  *  asked to start with a gift now and today's prompt could not go out, the

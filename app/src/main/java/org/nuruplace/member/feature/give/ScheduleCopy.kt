@@ -126,10 +126,11 @@ fun scheduleConfirmText(
 /** first_charge on the wire. */
 fun firstChargeWire(giveNow: Boolean): String = if (giveNow) "now" else "next"
 
-/** The created schedule's line: nothing was taken, when the first prompt comes. */
+/** The created schedule's line: nothing was taken, when the first prompt
+ *  comes, and where it stops — its card under RECURRING GIFTS on Give. */
 fun scheduledFirstPromptLine(freq: Int, firstPromptDay: String): String =
     "Nothing was taken today. The first prompt comes on $firstPromptDay, then every ${cadenceWord(freq)}. " +
-        "Cancel anytime from Manage schedules."
+        "Cancel anytime from its card under Recurring gifts."
 
 /** Today's prompt could not go out, but the schedule stands. */
 fun scheduledSetUpLine(freq: Int, firstPromptDay: String): String =

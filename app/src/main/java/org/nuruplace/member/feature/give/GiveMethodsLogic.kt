@@ -138,6 +138,16 @@ fun methodChipLabel(option: GiveMethodOption?): String = when {
     else -> "SOON"
 }
 
+/** The Give tab's footer promise (iOS GivingMethods.secureNote): it names
+ *  only the rails that can take money here — "Secure · M-Pesa · Receipt sent
+ *  instantly", "Secure · M-Pesa & PayPal · Receipt sent instantly" — never a
+ *  card or a rail that is off; none at all: "Secure · Receipt sent
+ *  instantly". */
+fun giveSecureNote(options: List<GiveMethodOption>): String {
+    val names = options.filter { it.selectable }.map { it.label.ifBlank { giveMethodLabel(it.key) } }
+    return if (names.isEmpty()) "Secure · Receipt sent instantly" else "Secure · ${names.joinToString(" & ")} · Receipt sent instantly"
+}
+
 /** "US dollars" · "shillings" — a currency in words. */
 fun currencyWords(code: String?): String = when (currencyCode(code)) {
     GIVE_FORM_CURRENCY -> "shillings"

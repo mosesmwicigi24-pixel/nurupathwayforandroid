@@ -92,7 +92,7 @@ class ScheduleCopyTest {
             scheduleConfirmText(50_000, FREQ_WEEKLY, "Mission", null, "5 Oct 2026"),
         )
         assertEquals(
-            "Nothing was taken today. The first prompt comes on 28 Oct 2026, then every month. Cancel anytime from Manage schedules.",
+            "Nothing was taken today. The first prompt comes on 28 Oct 2026, then every month. Cancel anytime from its card under Recurring gifts.",
             scheduledFirstPromptLine(FREQ_MONTHLY, "28 Oct 2026"),
         )
     }

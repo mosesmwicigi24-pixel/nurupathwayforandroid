@@ -252,6 +252,21 @@ class GiveMethodsLogicTest {
     }
 
     @Test
+    fun `the footer names only the rails that can take money here`() {
+        // No answer from the server: M-Pesa alone, as the form offers.
+        assertEquals("Secure · M-Pesa · Receipt sent instantly", giveSecureNote(giveMethodOptions(null)))
+        val paypal = GiveMethodOption(key = "paypal", label = "PayPal", enabled = true, currency = "USD")
+        val airtelOff = GiveMethodOption(key = "airtel", label = "Airtel Money", enabled = false, currency = "KES")
+        val card = GiveMethodOption(key = "card", label = "Card", enabled = true, currency = "KES")
+        assertEquals("Secure · M-Pesa & PayPal · Receipt sent instantly", giveSecureNote(listOf(FALLBACK_MPESA, airtelOff, card, paypal)))
+        // A card (never in this app) or a rail that is off is never promised.
+        assertEquals("Secure · M-Pesa · Receipt sent instantly", giveSecureNote(listOf(FALLBACK_MPESA, airtelOff, card, paypal.copy(enabled = false))))
+        assertEquals("Secure · Receipt sent instantly", giveSecureNote(listOf(FALLBACK_MPESA.copy(enabled = false), card)))
+        // A blank label reads the rail's own name.
+        assertEquals("Secure · M-Pesa · Receipt sent instantly", giveSecureNote(listOf(FALLBACK_MPESA.copy(label = ""))))
+    }
+
+    @Test
     fun `a schedule carries a number only when it is not the profile's`() {
         assertNull(schedulePhoneFor("+254711222333", "+254711222333"))
         assertNull(schedulePhoneFor("0711 222 333", "+254711222333")) // same number, written locally

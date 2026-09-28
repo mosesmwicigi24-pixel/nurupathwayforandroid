@@ -194,7 +194,8 @@ fun GiveTabScreen(
                     GivingScreen(
                         onBack = {},
                         onOpenStatement = { onNavigate("statement") },
-                        onOpenSchedules = { onNavigate("schedules") },
+                        // A RECENT GIVING row opens its receipt.
+                        onOpenReceipt = { onNavigate("receipt/$it") },
                         preset = payPreset,
                         segmentControl = segmentControl,
                         onUnbind = {
