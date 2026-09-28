@@ -352,8 +352,12 @@ internal fun dueLeadLine(d: DueItem, view: DueRowView, whenText: String): String
 
 /** The pledge card's foot: "Next 5 Oct", or — its next instalment already
  *  past — "Overdue since 10 Aug" (amber). Null when the server names no
- *  next due. */
+ *  next due, and on a paused or fulfilled pledge, which asks for nothing
+ *  next (iOS PledgeCard.nextLine). */
 internal fun pledgeNextLabel(pl: Pledge, today: LocalDate): WhenLabel? {
+    val paused = pl.status == "paused" || pl.progress.label == "paused"
+    val fulfilled = pl.status == "fulfilled" || pl.progress.label == "fulfilled"
+    if (paused || fulfilled) return null
     val next = partnerDate(pl.progress.nextDue) ?: return null
     return if (next.isBefore(today)) WhenLabel("Overdue since ${dayMonthIn(next, today)}", overdue = true)
     else WhenLabel("Next ${PartnerFormat.dayMonth(next)}", overdue = false)

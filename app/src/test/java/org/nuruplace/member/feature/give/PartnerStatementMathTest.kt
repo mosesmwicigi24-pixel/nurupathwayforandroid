@@ -336,4 +336,16 @@ class PartnerStatementMathTest {
         assertEquals(WhenLabel("Overdue since 10 Aug", true), pledgeNextLabel(card("2026-08-10"), sep25))
         assertEquals(null, pledgeNextLabel(card(null), sep25))
     }
+
+    @Test
+    fun `a paused or fulfilled pledge's card says no Next`() {
+        fun card(status: String, label: String = "on_track") =
+            Pledge(pledgeId = "p", status = status, progress = PledgeProgress(label = label, nextDue = "2026-10-05"))
+        assertNull(pledgeNextLabel(card("paused"), sep25))
+        assertNull(pledgeNextLabel(card("active", label = "paused"), sep25))
+        assertNull(pledgeNextLabel(card("fulfilled"), sep25))
+        assertNull(pledgeNextLabel(card("active", label = "fulfilled"), sep25))
+        // Behind is still asked for: it keeps its Next.
+        assertEquals(WhenLabel("Next 5 Oct", false), pledgeNextLabel(card("active", label = "behind"), sep25))
+    }
 }
