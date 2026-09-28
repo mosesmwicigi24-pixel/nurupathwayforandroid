@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -385,45 +386,61 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
     val paused = p.membership?.status == "paused" || p.status == "paused" || p.trouble?.paused == true
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Eyebrow("STANDING")
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(since?.let { "Partner since $it" } ?: "Partner", style = giInter(16, FontWeight.SemiBold), color = GIVE.navy)
-                // Commitments kept this year (a monthly pledge), else gifts
-                // collected (a schedule) — PartnerStatementMath.standingKeptLine.
-                Text(
-                    standingKeptLine(p, yearStatement, paused),
-                    style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            p.tier?.name?.takeIf { it.isNotBlank() }?.let { name ->
-                Row(
-                    Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Icon(Icons.Filled.WorkspacePremium, null, tint = GIVE.goldChipText, modifier = Modifier.size(13.dp))
-                    Text(name, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText)
+        // iOS parity (HStack alignment .top): the standing and the tier chip
+        // share the width (FairSplitRow) — a long tier name wraps inside its
+        // chip instead of squeezing "Partner since Sep 2026" to a letter or
+        // two a line, at any font scale.
+        FairSplitRow(
+            spacing = 16.dp,
+            first = {
+                Column {
+                    Text(since?.let { "Partner since $it" } ?: "Partner", style = giInter(16, FontWeight.SemiBold), color = GIVE.navy)
+                    // Commitments kept this year (a monthly pledge), else gifts
+                    // collected (a schedule) — PartnerStatementMath.standingKeptLine.
+                    Text(
+                        standingKeptLine(p, yearStatement, paused),
+                        style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 3.dp),
+                    )
                 }
-            }
-        }
+            },
+            second = p.tier?.name?.takeIf { it.isNotBlank() }?.let { name -> { TierChip(name) } },
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // The ONLY gold-filled button on the page.
+            // The ONLY gold-filled button on the page. At least 44dp tall, and
+            // taller rather than clipped when a large font wraps its label.
             Row(
-                Modifier.weight(1f).height(44.dp).clip(Capsule).background(GIVE.gold)
-                    .clickable { Haptics.tap(view); onAddPledge() },
+                Modifier.weight(1f).heightIn(min = 44.dp).clip(Capsule).background(GIVE.gold)
+                    .clickable { Haptics.tap(view); onAddPledge() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
                 Icon(Icons.Filled.Add, null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Make a pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                Text("Make a pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
             Row(
-                Modifier.weight(1f).height(44.dp).clip(Capsule).border(1.5.dp, GIVE.navy, Capsule)
-                    .clickable { onOpenStatement() },
+                Modifier.weight(1f).heightIn(min = 44.dp).clip(Capsule).border(1.5.dp, GIVE.navy, Capsule)
+                    .clickable { onOpenStatement() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                Text("Statement", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                Text("Statement", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
         }
+    }
+}
+
+/** The partner's tier as iOS shows it: award icon, 11 bold, gold chip — the
+ *  name wrapping inside the chip when it is a sentence ("carries one
+ *  disciple through a level, every year"), the icon centred on it. */
+@Composable
+private fun TierChip(name: String) {
+    Row(
+        Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(Icons.Filled.WorkspacePremium, null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
+        Text(name, style = giInter(11, FontWeight.Bold), color = GIVE.goldChipText)
     }
 }
 
