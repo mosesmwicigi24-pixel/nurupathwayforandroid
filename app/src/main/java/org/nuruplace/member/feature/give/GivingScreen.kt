@@ -369,6 +369,31 @@ private fun GiveTargetCard(copy: GiveTargetCopy, onGiveToFund: () -> Unit) {
     }
 }
 
+/** "Repeat last gift" (iOS repeatCard): the gold tile, what the gift was —
+ *  "KSh 1,000 · Tithe · via M-Pesa" — and Give again, which puts it back on
+ *  the form. */
+@Composable
+private fun RepeatGiftCard(g: GivingRecord, onRepeat: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(GIVE.priorityBg)
+            .border(1.dp, GIVE.gold.copy(alpha = 0.25f), shape)
+            .clickable { onRepeat() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.gold), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text("Repeat last gift", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+            Text(repeatGiftLine(g), style = giInter(11), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("Give again", style = giInter(12, FontWeight.SemiBold), color = GIVE.gold)
+    }
+}
+
 /** A Weekly / Monthly gift waiting on the member's Confirm: the exact
  *  request, the key it will carry, and the number its prompts go to. */
 private data class ScheduleToConfirm(val plan: GiveSubmission.Schedule, val attempt: HeldGiveKey, val phone: String?)
@@ -513,6 +538,24 @@ private fun GiveTab(
         freq = ordinary.freq
         accountName = ""
         coverFee = false
+        error = null
+    }
+
+    /** "Give again" (iOS applyRepeat): the gift back on the form — its fund,
+     *  its rail when that can take money now, its amount in that rail's money
+     *  and its name (GiveHistoryLogic.repeatPlan). */
+    fun applyRepeat(g: GivingRecord) {
+        val plan = repeatPlan(g, options, method)
+        plan.fundId?.let { fundId = it }
+        plan.methodKey?.let { key ->
+            pickedMethod = key
+            // A rail that cannot carry a schedule turns the gift back to one-time.
+            if (options.firstOrNull { it.key == key }?.recurring != true && freq != FREQ_ONCE) freq = FREQ_ONCE
+        }
+        plan.usdCents?.let { usdCents = it }
+        plan.amountMajor?.let { amountMajor = it }
+        plan.coverFee?.let { coverFee = it }
+        accountName = plan.accountName
         error = null
     }
 
@@ -895,6 +938,9 @@ private fun GiveTab(
                 if (targetCopy != null) {
                     GiveTargetCard(targetCopy) { Haptics.tick(view); target = null; onUnbind() }
                 } else {
+                    // Repeat last gift (iOS): the newest ordinary gift that
+                    // went through — never a failed one, a pledge's or a need's.
+                    lastRepeatableGift(history)?.let { g -> RepeatGiftCard(g) { Haptics.tap(view); applyRepeat(g) } }
                     // Funds row
                     Text("CHOOSE A FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     Row(

@@ -32,6 +32,10 @@ data class GivingRecord(
     // giving statement tags a row "<title> pledge" when it is set.
     val pledgeId: String? = null,
     val pledgeTitle: String? = null,
+    /** The department need this gift was given to ("Give to this need"); null
+     *  otherwise and from an older server. With [pledgeId], what "Repeat last
+     *  gift" checks to skip pledge and need gifts (GiveHistoryLogic). */
+    val needId: String? = null,
     /** Why a failed gift failed (Giving Cycle 1). Null unless it failed, and
      *  from an older server. */
     val failure: GiftFailure? = null,
