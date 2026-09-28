@@ -337,6 +337,19 @@ class GivingWireTest {
     }
 
     @Test
+    fun `the programme's membership decides STANDING or JOIN, as iOS`() {
+        fun partnership(membership: String?, isPartner: Boolean) =
+            Partnership(isPartner = isPartner, membership = membership?.let { PartnerMembership(status = it) })
+        assertTrue(partnership("active", isPartner = false).isProgrammeMember)
+        assertTrue(partnership("paused", isPartner = false).isProgrammeMember)
+        // Left the programme: JOIN, even with a recurring gift still counted (is_partner).
+        assertFalse(partnership("left", isPartner = true).isProgrammeMember)
+        // An older server with no membership block: is_partner decides.
+        assertTrue(partnership(null, isPartner = true).isProgrammeMember)
+        assertFalse(partnership(null, isPartner = false).isProgrammeMember)
+    }
+
+    @Test
     fun `pledge detail tolerates flat or nested pledge`() {
         val flat = json.decodeFromString<PledgeDetail>("""{"pledge_id":"p1","shape":"total","target_minor":100,"payments":[{"transaction_id":"t","amount_minor":50,"at":"2026-09-01T00:00:00Z","receipt_code":"R1"}]}""")
         assertEquals("p1", flat.asPledge().pledgeId)

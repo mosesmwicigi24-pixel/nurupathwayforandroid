@@ -329,6 +329,13 @@ data class Partnership(
 ) {
     /** Joined the programme (spec §1: `partner_memberships.status` active|paused|left). */
     val isMember: Boolean get() = membership?.status in setOf("active", "paused")
+
+    /** In the programme, as iOS reads it (Partnership.isProgrammeMember): the
+     *  membership's word when there is one — active or paused; a member who
+     *  LEFT is not, even with a recurring gift still running — else, from an
+     *  older server with no membership block, `is_partner`. STANDING when
+     *  true, the invitation to JOIN when false. */
+    val isProgrammeMember: Boolean get() = membership?.let { it.status in setOf("active", "paused") } ?: isPartner
 }
 
 /** One thing a pledge may be for (`pledge_options` on GET /giving/partnership).

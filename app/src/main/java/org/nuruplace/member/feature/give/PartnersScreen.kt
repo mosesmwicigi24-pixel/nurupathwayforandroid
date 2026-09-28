@@ -434,7 +434,8 @@ fun PartnersScreen(
                         vm.error ?: "Your giving is unaffected.",
                         action = "Try again" to { vm.load() },
                     )
-                    p.isMember || p.isPartner -> {
+                    // iOS's rule: the membership decides; an older server's is_partner otherwise.
+                    p.isProgrammeMember -> {
                         StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
                         if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
                         // Only when there is something to say — a partner whose
