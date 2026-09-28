@@ -186,11 +186,16 @@ data class Moment(
 )
 
 // --- Profile: notification prefs + MFA ---
+// GET/PUT /me/notification-preferences — the PUT sends all four. Settings'
+// "Sound and vibration" is `sound_enabled` (owner request 2026-09-28; server
+// migration 223): on unless the member turns it off, so a GET that predates
+// it — or omits it — reads as on.
 @Serializable
 data class NotificationPreferences(
     val pushEnabled: Boolean = true,
     val emailEnabled: Boolean = true,
     val smsEnabled: Boolean = false,
+    val soundEnabled: Boolean = true,
 )
 
 @Serializable

@@ -1,5 +1,5 @@
 // Settings — iOS-parity layout (PREFERENCES header + carded sections). Preserves
-// all functional wiring: notification prefs (push/email/sms), text-size via
+// all functional wiring: notification prefs (push/sound/email/sms), text-size via
 // AppPrefs, approximate-location sharing, change-password, two-factor enroll/
 // verify/disable, sign-out, and the Firebase account link. Port of the iOS
 // SettingsView. Shared palette + primitives live in ProfileShared.kt (same package).
@@ -30,6 +30,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -216,6 +218,25 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
                 onCheckedChange = { onSave(prefs.copy(pushEnabled = it)) },
             )
             RowDivider()
+            // Owner request 2026-09-28: a sound and a buzz on everything that
+            // arrives, and a place to mute it. Server-side
+            // (`sound_enabled`), so every push the member's phones get says
+            // whether to sound — the app shows a muted one quietly, and a
+            // Live invite stops ringing. Off still delivers everything.
+            ToggleRow(
+                tile = {
+                    NeutralTile(if (prefs.soundEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff)
+                },
+                title = "Sound and vibration",
+                subtitle = if (prefs.soundEnabled) {
+                    "A sound and a buzz when a message or notification arrives."
+                } else {
+                    "Notifications arrive quietly."
+                },
+                checked = prefs.soundEnabled,
+                onCheckedChange = { onSave(prefs.copy(soundEnabled = it)) },
+            )
+            RowDivider()
             ToggleRow(
                 tile = { NeutralTile(Icons.Filled.MailOutline) },
                 title = "Email",
@@ -233,6 +254,9 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
             )
             RowDivider()
         }
+        // The phone's own page for this app's notifications: each channel
+        // (Messages, Updates and reminders, Live invites, Quiet) keeps its
+        // own sound and vibration there, which the member may change.
         ActionRow(
             tile = { IconTile(Icons.Filled.Notifications, TINT_NOTIF) },
             title = "Notification settings",
