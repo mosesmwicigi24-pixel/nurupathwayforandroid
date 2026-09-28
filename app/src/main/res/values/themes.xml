@@ -9,6 +9,12 @@
         <item name="android:windowBackground">@color/nuru_paper</item>
     </style>
 
+    <!-- The ringing Live invite (IncomingInviteActivity): a navy window, so
+         a phone woken by the invite never flashes paper before it draws. -->
+    <style name="Theme.NuruMember.Invite" parent="Theme.NuruMember">
+        <item name="android:windowBackground">@color/nuru_live_navy</item>
+    </style>
+
     <!-- Cold-start splash (SplashScreen compat): the round TGNM mark on its
          own paper tone, then a clean hand-off into the app. One UI, HiOS and
          stock Android each render this with their native splash motion. -->

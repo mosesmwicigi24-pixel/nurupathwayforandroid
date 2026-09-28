@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- One-shot wifi/cellular sample on device registration (normal perm, no prompt). -->
@@ -8,6 +9,16 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A ringing Live invite (feature/live/LiveInviteNotifications.kt):
+         VIBRATE for the full-screen invite's own repeating buzz (a normal
+         permission, no prompt); USE_FULL_SCREEN_INTENT to take over a locked
+         or sleeping screen. The latter is granted at install up to Android
+         13, but from Android 14 Google Play grants it by default only to
+         calling and alarm apps — elsewhere it is off until the member turns
+         it on, and the invite rings as a heads-up notification instead.
+         Play Console asks for a declaration of its use at upload. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Nuru Radio keeps playing when the screen closes / phone locks. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -90,6 +101,32 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="nuru_updates" />
+
+        <!-- The ringing Live invite, full screen, over the lock screen
+             (feature/live/IncomingInviteActivity.kt). Not exported: only the
+             invite's own notification reaches it. Its own task, out of
+             Recents, so a phone woken by an invite doesn't bring the whole
+             app up behind the lock screen; handles rotation itself, so a
+             turn of the phone never restarts the ring. showWhenLocked /
+             turnScreenOn here too (Android 8.1+; the activity also sets them
+             in code, and window flags on 8.0), so the lock screen's own
+             notification taps open it over the lock rather than behind it. -->
+        <activity
+            android:name=".feature.live.IncomingInviteActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
+            android:theme="@style/Theme.NuruMember.Invite"
+            tools:targetApi="o_mr1" />
+
+        <!-- "Not now" / "Decline" from the tray, and the ring's end. -->
+        <receiver
+            android:name=".feature.live.LiveInviteReceiver"
+            android:exported="false" />
 
         <!-- Nuru Radio background playback — Media3 foreground media service. -->
         <service

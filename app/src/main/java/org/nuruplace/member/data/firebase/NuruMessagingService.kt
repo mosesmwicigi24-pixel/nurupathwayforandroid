@@ -9,7 +9,7 @@
 // (`nuru_sound`: on / off — Settings' "Sound and vibration"). A push the
 // SYSTEM shows while the app is in the background already names its channel
 // (NotificationChannels.kt); this code shows the rest — any push while the
-// app is open, and every data-only one — on the channel the same rule picks.
+// app is open, and every ring — on the channel the same rule picks.
 package org.nuruplace.member.data.firebase
 
 import android.app.NotificationManager
@@ -32,6 +32,10 @@ import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.OpenConversation
 import org.nuruplace.member.data.net.DeviceBody
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.feature.live.LiveInviteNotifications
+import org.nuruplace.member.feature.live.isStreamId
+import org.nuruplace.member.feature.live.liveInviteFrom
+import org.nuruplace.member.feature.live.liveInviteRoute
 
 class NuruMessagingService : FirebaseMessagingService() {
 
@@ -50,6 +54,20 @@ class NuruMessagingService : FirebaseMessagingService() {
         // Already made at process start (NuruApp); cheap to confirm, and a
         // notification posted to a channel that doesn't exist is dropped.
         NotificationChannels.ensure(this)
+
+        // A Live guest invite RINGS. It is data-only, so this runs for it
+        // even while the app is closed, and nothing shows it unless this does.
+        if (kind == PushKind.RING) {
+            // A signed-out phone never rings anyone's invite (its token can
+            // outlive the session it was registered under).
+            if (!Net.client.vault.hasSession) return
+            val invite = liveInviteFrom(data)
+            if (invite != null) {
+                LiveInviteNotifications.post(this, invite)
+                return
+            }
+            // No stream to join: fall through and show its words plainly.
+        }
 
         // Pastoral privacy (Chat Redesign C3b): a push about the member's
         // pastoral thread never shows a content preview — generic copy only,
@@ -90,8 +108,7 @@ class NuruMessagingService : FirebaseMessagingService() {
             this, System.identityHashCode(message), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        // A Live invite's ring (data-only) is shown as an update: its words,
-        // on the updates channel.
+        // A ring that got this far has no stream to join — shown as an update.
         val channel = channelFor(kind?.takeIf { it != PushKind.RING }, sound)
         val notif = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_notification)
@@ -158,6 +175,14 @@ class NuruMessagingService : FirebaseMessagingService() {
             // its collector's (covered / stopped), open that pledge.
             org.nuruplace.member.feature.give.givingPushRoute(data)?.let { return it }
             val t = (data["template"] ?: "").lowercase()
+            // A Live guest invite (live/service.ts inviteGuest, payload
+            // { stream_id, title }) opens ITS stream, not whichever is newest
+            // — only a ring without a usable stream_id reaches the plain
+            // "live" rule below. (A ring is normally shown by
+            // LiveInviteNotifications, never through here.)
+            if (t == "live_guest_invite") {
+                data["stream_id"]?.trim()?.takeIf { isStreamId(it) }?.let { return liveInviteRoute(it) }
+            }
             return when {
                 "department" in t || "serve_request" in t -> "departments"
                 // live_stream_started (packages/backend/src/modules/live/service.ts)

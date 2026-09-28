@@ -16,6 +16,20 @@ class PushTemplateRoutingTest {
     private fun push(template: String, kind: String, vararg payload: Pair<String, String>) =
         mapOf("template" to template, "nuru_kind" to kind, "nuru_sound" to "on") + payload
 
+    @Test fun `a Live invite opens its own stream, not the newest`() {
+        val invite = push(
+            "live_guest_invite", "ring",
+            "stream_id" to "5f0c7a52-2d7e-4a8b-9c1d-0e5b8f3a6d21", "title" to "Sunday service",
+            "alert_title" to "You're invited to go live", "alert_body" to "…", "body" to "…",
+        )
+        assertEquals("live-now?streamId=5f0c7a52-2d7e-4a8b-9c1d-0e5b8f3a6d21", NuruMessagingService.destFor(invite))
+    }
+
+    @Test fun `a Live invite with no usable stream falls back to the newest`() {
+        assertEquals("live-now", NuruMessagingService.destFor(push("live_guest_invite", "ring")))
+        assertEquals("live-now", NuruMessagingService.destFor(push("live_guest_invite", "ring", "stream_id" to "x/y")))
+    }
+
     @Test fun `a stream starting still opens the newest live stream`() {
         // live/service.ts notifyStreamStarted: { stream_id, scope, cell_id, title }
         val started = push("live_stream_started", "update", "stream_id" to "s-1", "scope" to "church", "title" to "Sunday service")
