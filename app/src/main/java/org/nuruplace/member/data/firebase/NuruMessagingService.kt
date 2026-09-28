@@ -116,6 +116,10 @@ class NuruMessagingService : FirebaseMessagingService() {
             // _approved / _declined, department_post, department_need_* all
             // carry department_id → the department page (spec §4).
             data["department_id"]?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
+            // Giving (feature/give/GivingRoutes.kt): these payloads carry no
+            // template, so their own keys say where — a gift that failed
+            // where the member could not see it opens that gift, with Try again.
+            org.nuruplace.member.feature.give.givingPushRoute(data)?.let { return it }
             val t = (data["template"] ?: "").lowercase()
             return when {
                 "department" in t || "serve_request" in t -> "departments"

@@ -105,8 +105,11 @@ private const val EVENTS_TAB_ROUTE = "events"
 /** The Give tab opened on Give with a department need preset (docs/
  *  PARTNERS_PROGRAMME.md §4) — built by feature/give/GiveShared.giveToNeedRoute. */
 private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={title}"
+/** The Give tab on one gift's result — a giving_gift_failed push (Giving
+ *  Cycle 3), built by feature/give/GivingRoutes.giftRoute. */
+private const val GIVE_GIFT_ROUTE = "give-gift/{id}"
 private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile", "departments")
-private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE)
+private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE, GIVE_GIFT_ROUTE)
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
 
 /** The partners statement for one year (docs/PARTNERS_PROGRAMME.md §3; owner
@@ -781,6 +784,19 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         needId = needId.ifBlank { null },
                         title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() },
                     ),
+                )
+            }
+            // Give, opened on one gift's result (Giving Cycle 3): a
+            // giving_gift_failed push lands here — the reason, the hint and
+            // Try again — and the member stays on the Give tab after.
+            composable(
+                GIVE_GIFT_ROUTE,
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Give,
+                    onNavigate = { nav.navigate(it) },
+                    followTransactionId = entry.arguments?.getString("id")?.takeIf { it.isNotBlank() },
                 )
             }
             composable(

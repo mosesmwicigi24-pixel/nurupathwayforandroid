@@ -112,6 +112,19 @@ data class GivingIntentResult(
     val fund: FundRef? = null,
     /** The pledge it counts toward, by name. Null off-pledge. */
     val pledge: IntentPledge? = null,
+    /** On a "Try again" answer (Giving Cycle 3): the failed gift this one
+     *  retries. Null on an ordinary intent. */
+    val retryOf: String? = null,
+)
+
+/** POST /giving/transactions/{id}/retry (Giving Cycle 3): the server carries
+ *  everything the failed gift did — fund, amount, currency, method, pledge or
+ *  need, name, fee cover — so only the key and, for mobile money, the number
+ *  to prompt this time travel (absent = the profile's number). */
+@Serializable
+data class RetryGiftBody(
+    val idempotencyKey: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: String? = null,
 )
 
 /** A fund by code and display name (`fund` on POST /giving/intents' result). */

@@ -22,7 +22,10 @@
 //
 // And what a refused gift does next (giveErrorAction): 409 GIFT_IN_PROGRESS
 // follows the prompt already on the member's phone; every other refusal says
-// the server's own member-facing message.
+// the server's own member-facing message. And "Try again" on a failed gift
+// (Giving Cycle 3): POST /giving/transactions/{id}/retry with a fresh key —
+// replayed, like a gift's, only after an attempt that got no answer
+// (retryKeyFor) — so a retry never loses the failed gift's pledge or need.
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.CreateScheduleBody
@@ -286,3 +289,30 @@ fun inflightIsForTarget(target: GivePreset?, d: GivingDetail): Boolean {
     target.needId?.let { return d.need?.needId == it }
     return false
 }
+
+// ── Try again (Giving Cycle 3) ──
+
+/** Rails a failed gift can be tried again on from here — the ones this app
+ *  can carry to the end (a card needs the Stripe step it does not have). */
+private val RETRY_FLOWS = setOf("mpesa", "airtel", "paypal")
+
+/** Whether a failed gift on [provider] offers Try again. */
+fun canRetryGift(provider: String?): Boolean = provider?.trim()?.lowercase() in RETRY_FLOWS
+
+/** The number a retry prompts: mobile money only — the form's prompt number
+ *  (the one the member is using now) — else none, and the server prompts the
+ *  profile's. PayPal prompts no phone. */
+fun retryPhoneFor(provider: String?, promptPhone: String?): String? =
+    if (provider?.trim()?.lowercase() in setOf("mpesa", "airtel")) kenyanMobileE164(promptPhone) else null
+
+/** The key a Try-again tap sends, and the failed gift and number it was minted for. */
+data class HeldRetryKey(val key: String, val retryOf: String, val phone: String?)
+
+/**
+ * The idempotency key a Try-again tap sends: fresh for every retry — except
+ * the replay of one that got NO server answer ([keepGiveKeyAfter]) for the
+ * same failed gift and number, so a lost reply can never become a second
+ * prompt. Another gift, or another number, is another request.
+ */
+fun retryKeyFor(held: HeldRetryKey?, retryOf: String, phone: String?, freshKey: () -> String): HeldRetryKey =
+    if (held != null && held.retryOf == retryOf && held.phone == phone) held else HeldRetryKey(freshKey(), retryOf, phone)

@@ -80,6 +80,8 @@ private fun routeFor(n: NotificationRow): String? {
     // serve_request_* / department_post / department_need_* (departments/
     // service.ts) all carry department_id → the department page itself.
     n.payload?.departmentId?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
+    // Giving: the same place the push itself opens (feature/give/GivingRoutes.kt).
+    org.nuruplace.member.feature.give.givingDest(n.payload?.transactionId, n.payload?.failureCode)?.let { return it }
     val t = n.template.lowercase()
     // Level notifications land on the EXACT level (was the bare hub).
     n.payload?.levelNumber?.let { return "level/$it" }

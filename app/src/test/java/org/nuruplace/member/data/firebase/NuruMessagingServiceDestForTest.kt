@@ -67,6 +67,21 @@ class NuruMessagingServiceDestForTest {
         assertEquals("departments", NuruMessagingService.destFor(mapOf("department_id" to "", "template" to "department_need_approved")))
     }
 
+    // --- giving (Giving Cycle 3): no template in the data, the keys say where ---
+
+    @Test fun `a gift that failed where the member could not see it opens that gift`() {
+        // financial/service.ts giving_gift_failed: { transaction_id, amount_minor, currency, fund, failure_code, reason, hint }
+        assertEquals(
+            "give-gift/t-9",
+            NuruMessagingService.destFor(
+                mapOf(
+                    "transaction_id" to "t-9", "amount_minor" to "100000", "currency" to "KES", "fund" to "tithe",
+                    "failure_code" to "no_answer", "reason" to "M-Pesa never told us how this prompt ended.", "hint" to "If money left your account, the office will match it.",
+                ),
+            ),
+        )
+    }
+
     // --- regression guard: the OLD camelCase keys must NOT be honoured ---
 
     @Test fun `stale camelCase keys do not match`() {

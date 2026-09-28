@@ -108,12 +108,14 @@ import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CreateScheduleBody
 import org.nuruplace.member.data.net.GiftFailure
+import org.nuruplace.member.data.net.GivingDetail
 import org.nuruplace.member.data.net.GivingIntentResult
 import org.nuruplace.member.data.net.GivingMethodsRes
 import org.nuruplace.member.data.net.GivingRecord
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PayPalCaptureBody
+import org.nuruplace.member.data.net.RetryGiftBody
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.Moment
@@ -221,6 +223,10 @@ fun GivingScreen(
     /** A binding spent on the intent's answer comes back: the ceremony's
      *  watch found the payment failed, so the member can retry at once. */
     onRebind: (GivePreset) -> Unit = {},
+    /** A gift to open on its result — a giving_gift_failed push (Giving
+     *  Cycle 3) — and the call that marks it opened, so it opens once. */
+    followTransactionId: String? = null,
+    onFollowed: () -> Unit = {},
     /** Scoped to the tab's destination, so it outlives the segment. */
     vm: GiveViewModel = viewModel(),
 ) {
@@ -240,7 +246,10 @@ fun GivingScreen(
         }
         return
     }
-    GiveTab(d.history, d.schedules, d.methods, d.phoneOnFile, vm::load, onOpenStatement, onOpenSchedules, preset, segmentControl, onUnbind, onRebind)
+    GiveTab(
+        d.history, d.schedules, d.methods, d.phoneOnFile, vm::load, onOpenStatement, onOpenSchedules, preset,
+        segmentControl, onUnbind, onRebind, followTransactionId, onFollowed,
+    )
 }
 
 /** The ONE cream band over the Give segment: the segment control, the title,
@@ -357,6 +366,9 @@ private fun GiveTab(
     segmentControl: @Composable () -> Unit = {},
     onUnbind: () -> Unit = {},
     onRebind: (GivePreset) -> Unit = {},
+    /** A gift to open on its result (a giving_gift_failed push), once. */
+    followTransactionId: String? = null,
+    onFollowed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -426,6 +438,14 @@ private fun GiveTab(
     var resultPhone by remember { mutableStateOf<String?>(null) }
     // The server's words when the ceremony follows a prompt already waiting.
     var ceremonyNote by remember { mutableStateOf<String?>(null) }
+    // Why the ceremony's gift failed, when the server already said (a gift
+    // opened from its giving_gift_failed push, or a waiting prompt's detail).
+    var resultFailure by remember { mutableStateOf<GiftFailure?>(null) }
+    // Try again (Giving Cycle 3): in flight, what the server refused it with,
+    // and its key — held only while a retry got no answer (retryKeyFor).
+    var retrying by remember { mutableStateOf(false) }
+    var retryError by remember { mutableStateOf<String?>(null) }
+    var heldRetry by remember { mutableStateOf<HeldRetryKey?>(null) }
     var confirmSchedule by remember { mutableStateOf<ScheduleToConfirm?>(null) }
     var scheduled by remember { mutableStateOf<CreatedSchedule?>(null) }
     var sheetSchedule by remember { mutableStateOf<GivingSchedule?>(null) }
@@ -460,6 +480,90 @@ private fun GiveTab(
         kenyanMobileE164(p)?.let { AppPrefs.lastGivingPhone = it }
     }
 
+    /** Put a gift the server holds on the ceremony — a prompt already waiting
+     *  (409 GIFT_IN_PROGRESS, with the server's words in [note]) or a gift a
+     *  push opened — exactly as the server holds it: its own amount, currency,
+     *  fund, pledge and failure, never the form's. It spends [boundTo]'s
+     *  binding only when it is for that same pledge or need. */
+    fun showTransaction(d: GivingDetail, note: String?, boundTo: GivePreset?) {
+        val forThis = inflightIsForTarget(boundTo, d)
+        ceremonyBoundTo = boundTo.takeIf { forThis }
+        if (forThis && giftSpendsBinding(boundTo, d.status)) {
+            ceremonySpentBinding = true
+            onUnbind()
+        }
+        resultAmountMinor = d.amountMinor
+        resultCurrency = d.currency
+        resultGiftName = d.accountName?.trim()?.ifBlank { null }
+        resultPhone = null
+        resultFailure = d.failure
+        ceremonyNote = note
+        retryError = null
+        result = intentResultFromDetail(d)
+    }
+
+    /**
+     * Try again on the failed gift on the ceremony (Giving Cycle 3): POST
+     * /giving/transactions/{id}/retry — the server carries everything the
+     * failed gift did (fund, amount, pledge or need, name, fee cover), so a
+     * retry never loses its pledge — then the SAME ceremony follows the new
+     * transaction. A prompt still waiting is followed instead (409
+     * GIFT_IN_PROGRESS); any other refusal is said under the button.
+     */
+    fun retry(failed: GivingIntentResult) {
+        if (retrying) return
+        val phone = retryPhoneFor(failed.provider, promptPhone)
+        val attempt = retryKeyFor(heldRetry, failed.transactionId, phone) { UUID.randomUUID().toString() }
+        val boundTo = ceremonyBoundTo
+        heldRetry = attempt
+        retrying = true; retryError = null
+        scope.launch {
+            var failure: Throwable? = null
+            try {
+                val r = Net.client.api.retryGift(failed.transactionId, RetryGiftBody(attempt.key, phone))
+                rememberPromptPhone(phone)
+                // The retry is bound where the failed gift was: spend the
+                // binding again, as a fresh intent's answer does.
+                if (!ceremonySpentBinding && giftSpendsBinding(boundTo, r.status)) {
+                    ceremonySpentBinding = true
+                    onUnbind()
+                }
+                resultPhone = phone
+                resultFailure = null
+                ceremonyNote = null
+                result = r
+                if (givingIntentAnnounces(r.status)) GivingEvents.emit()
+            } catch (e: Exception) {
+                failure = e
+                // The refusal is read ONCE — an error body is a one-shot stream.
+                val refusal = ApiException.serverError(e)
+                when (val next = giveErrorAction(refusal, fallback = refusal?.displayMessage ?: ApiException.message(e))) {
+                    is GiveErrorAction.FollowPrompt -> {
+                        val waiting = runCatching { Net.client.api.givingDetail(next.transactionId) }.getOrNull()
+                        if (waiting == null) retryError = next.message else showTransaction(waiting, next.message, boundTo)
+                    }
+                    is GiveErrorAction.Say -> retryError = next.message
+                }
+            } finally {
+                // No server answer: hold the key so the same retry replays it.
+                if (!keepGiveKeyAfter(failure)) heldRetry = null
+                retrying = false
+            }
+        }
+    }
+
+    // A giving_gift_failed push (Giving Cycle 3) opens the Give tab on that
+    // gift: its result, with the reason, the hint and Try again. Read once —
+    // marked opened only AFTER the read, since marking it changes this key
+    // and would cancel a read still in flight.
+    LaunchedEffect(followTransactionId) {
+        val id = followTransactionId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        runCatching { Net.client.api.givingDetail(id) }
+            .onSuccess { d -> showTransaction(d, note = null, boundTo = null) }
+            .onFailure { error = ApiException.message(it) }
+        onFollowed()
+    }
+
     // Full-screen generosity ceremony once an intent is created. The copy
     // reads the RESULT (GiveCeremonyCopy.kt): the server names the fund it
     // routed the gift to and the pledge it counts toward; the chip label is
@@ -470,6 +574,8 @@ private fun GiveTab(
             result = null
             heldKey = null
             ceremonyNote = null
+            resultFailure = null
+            retryError = null
             if (ceremonySpentBinding) { ceremonySpentBinding = false; resetToOrdinaryGift() }
             GivingEvents.emit()
         }
@@ -481,6 +587,7 @@ private fun GiveTab(
             giftName = resultGiftName,
             promptPhone = resultPhone,
             note = ceremonyNote,
+            initialFailure = resultFailure,
             onOutcome = { outcome ->
                 // The server's final word, read by the watch: everything that
                 // counts the gift refetches (the Processing row goes).
@@ -502,10 +609,13 @@ private fun GiveTab(
             // segment control or navigation lands on a fresh, unbound form:
             // the binding was cleared upstream when the intent answered.)
             onDone = { closeCeremony() },
-            // Try again (a failed gift): back to the SAME gift — its amount,
-            // fund, method and number all still on the form (a failure hands
-            // a spent binding back first, above), ready for one more tap.
-            onRetry = { closeCeremony() },
+            // Try again (a failed gift, Giving Cycle 3): the server retries
+            // it with everything it carried, and this ceremony follows the
+            // new gift. A card gift has no Try again here.
+            canRetry = canRetryGift(r.provider),
+            retrying = retrying,
+            retryError = retryError,
+            onRetry = { retry(r) },
         )
         return
     }
@@ -560,6 +670,8 @@ private fun GiveTab(
                         resultCurrency = plan.body.currency
                         resultGiftName = plan.body.accountName
                         resultPhone = plan.body.phoneNumber
+                        resultFailure = null
+                        retryError = null
                         ceremonyNote = null
                         result = r
                         // Succeeded, or pending on a PIN / card / PayPal:
@@ -588,22 +700,7 @@ private fun GiveTab(
                         // this form's binding only when it is for the same
                         // pledge or need.
                         val waiting = runCatching { Net.client.api.givingDetail(next.transactionId) }.getOrNull()
-                        if (waiting == null) {
-                            error = next.message
-                        } else {
-                            val forThis = inflightIsForTarget(boundTo, waiting)
-                            ceremonyBoundTo = boundTo.takeIf { forThis }
-                            if (forThis && giftSpendsBinding(boundTo, waiting.status)) {
-                                ceremonySpentBinding = true
-                                onUnbind()
-                            }
-                            resultAmountMinor = waiting.amountMinor
-                            resultCurrency = waiting.currency
-                            resultGiftName = waiting.accountName?.trim()?.ifBlank { null }
-                            resultPhone = null
-                            ceremonyNote = next.message
-                            result = intentResultFromDetail(waiting)
-                        }
+                        if (waiting == null) error = next.message else showTransaction(waiting, next.message, boundTo)
                     }
                     // The 422s and SCHEDULE_EXISTS: the server's own words.
                     is GiveErrorAction.Say -> error = next.message
@@ -1384,10 +1481,17 @@ private fun GiveResult(
     /** The server's words when this follows a prompt already waiting
      *  (409 GIFT_IN_PROGRESS) rather than one this tap sent. */
     note: String? = null,
+    /** Why it failed, when already known (a gift opened from its push). */
+    initialFailure: GiftFailure? = null,
     /** The gift reached its final outcome while on screen. */
     onOutcome: (GiftOutcome) -> Unit = {},
     onDone: () -> Unit,
-    /** A failed gift's Try again: back to the same gift on the form. */
+    /** A failed gift offers Try again (Giving Cycle 3) — not a card gift. */
+    canRetry: Boolean = true,
+    /** Try again is in flight, and what the server refused it with. */
+    retrying: Boolean = false,
+    retryError: String? = null,
+    /** A failed gift's Try again: the server retries it (POST …/retry). */
     onRetry: () -> Unit = onDone,
 ) {
     val context = LocalContext.current
@@ -1402,8 +1506,9 @@ private fun GiveResult(
     // capture reports. Server truth only (§5.6).
     var status by remember(r.transactionId) { mutableStateOf(r.status) }
     var watchLapsed by remember(r.transactionId) { mutableStateOf(false) }
-    // Why it failed, as the watch read it off the transaction (Giving Cycle 1).
-    var failure by remember(r.transactionId) { mutableStateOf<GiftFailure?>(null) }
+    // Why it failed, as the watch read it off the transaction (Giving Cycle 1)
+    // — or as the server already said when the gift was opened from its push.
+    var failure by remember(r.transactionId) { mutableStateOf(initialFailure) }
     // Bumped to read the gift back after a PayPal capture settles it.
     var watchRun by remember(r.transactionId) { mutableIntStateOf(0) }
     // The member went to PayPal from here — coming back captures on its own.
@@ -1568,20 +1673,30 @@ private fun GiveResult(
             }
 
             Spacer(Modifier.height(20.dp))
-            // A failed gift offers Try again — back to the same gift — with
-            // a quiet Close beside it; anything else closes with Done.
+            // A failed gift offers Try again — the server retries it with
+            // everything it carried (Giving Cycle 3) — with a quiet Close
+            // beside it; anything else closes with Done.
+            val offerRetry = failed && canRetry
             Row(
                 Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.gold)
-                    .clickable { if (failed) onRetry() else onDone() },
+                    .clickable(enabled = !retrying) { if (offerRetry) onRetry() else onDone() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Text(if (failed) "Try again" else "Done", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+                if (retrying) {
+                    CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.navy, strokeWidth = 2.dp)
+                } else {
+                    Text(if (offerRetry) "Try again" else "Done", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+                }
             }
-            if (failed) {
+            retryError?.takeIf { failed }?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = giInter(12), color = GIVE.danger, textAlign = TextAlign.Center)
+            }
+            if (offerRetry) {
                 Text(
                     "Close", style = giInter(13, FontWeight.SemiBold), color = GIVE.sub,
-                    modifier = Modifier.padding(top = 8.dp).clip(Capsule).clickable { onDone() }
+                    modifier = Modifier.padding(top = 8.dp).clip(Capsule).clickable(enabled = !retrying) { onDone() }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }

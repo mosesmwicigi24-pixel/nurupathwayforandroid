@@ -79,6 +79,10 @@ data class NotifPayload(
     val departmentId: String? = null,
     val needId: String? = null,
     val department: String? = null,
+    // Giving (feature/give/GivingRoutes.kt): giving_gift_failed carries the
+    // gift and why it failed.
+    val transactionId: String? = null,
+    val failureCode: String? = null,
 )
 
 @Serializable

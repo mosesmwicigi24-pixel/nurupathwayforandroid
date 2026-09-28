@@ -424,6 +424,12 @@ interface MemberApi {
     @GET("giving/transactions/{id}")
     suspend fun givingDetail(@Path("id") transactionId: String): GivingDetail
 
+    /** "Try again" on one of MY failed gifts (Giving Cycle 3): a new gift with
+     *  everything the failed one carried; answered like POST /giving/intents
+     *  plus retry_of. 409 GIFT_IN_PROGRESS while a prompt is still waiting. */
+    @POST("giving/transactions/{id}/retry")
+    suspend fun retryGift(@Path("id") transactionId: String, @Body body: RetryGiftBody): GivingIntentResult
+
     // --- Profile / growth: scores, gifts, resources, assistant ---
     @GET("me/scores")
     suspend fun scores(): ScoresSummary

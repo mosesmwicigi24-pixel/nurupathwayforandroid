@@ -95,6 +95,25 @@ class GivingWireTest {
     }
 
     @Test
+    fun `a retry sends its key, and a number only when there is one`() {
+        val withPhone = json.parseToJsonElement(json.encodeToString(RetryGiftBody("k-12345678", "+254711222333"))).jsonObject
+        assertEquals(setOf("idempotency_key", "phone_number"), withPhone.keys)
+        val bare = json.parseToJsonElement(json.encodeToString(RetryGiftBody("k-12345678"))).jsonObject
+        assertEquals(setOf("idempotency_key"), bare.keys) // absent = the profile's number
+    }
+
+    @Test
+    fun `a retry answer decodes like an intent, with retry_of`() {
+        val r = json.decodeFromString<GivingIntentResult>(
+            """{"transaction_id":"t2","status":"processing","idempotency_key":"k","reused":false,"provider":"mpesa",
+                "fund":{"code":"tithe","name":"Tithe"},"pledge":null,"retry_of":"t1"}""",
+        )
+        assertEquals("t2", r.transactionId)
+        assertEquals("t1", r.retryOf)
+        assertNull(json.decodeFromString<GivingIntentResult>("""{"transaction_id":"t","status":"processing"}""").retryOf)
+    }
+
+    @Test
     fun `intent body carries the prompt number as phone_number`() {
         val i = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 100_000, "KES", "mpesa", phoneNumber = "+254711222333", idempotencyKey = "k"))).jsonObject
         assertEquals("+254711222333", i["phone_number"]!!.jsonPrimitive.content)

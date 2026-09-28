@@ -112,6 +112,9 @@ fun GiveTabScreen(
      *  this need" (MainShell's give-need route). In-tab handoffs (a pledge's
      *  Pay) set the same state from Partners below. */
     initialPreset: GivePreset? = null,
+    /** A gift to open on its result — a giving_gift_failed push (MainShell's
+     *  give-gift route, Giving Cycle 3): its reason, hint and Try again. */
+    followTransactionId: String? = null,
 ) {
     val view = LocalView.current
     // rememberSaveable so rotation / process death restore the segment; landing
@@ -124,6 +127,9 @@ fun GiveTabScreen(
     // saveable, so re-entering composition never re-seeds from initialPreset.
     var initialPresetCleared by rememberSaveable { mutableStateOf(false) }
     var payPreset by remember { mutableStateOf(if (initialPresetCleared) null else initialPreset) }
+    // Set once the gift this destination opened with has been shown; saveable,
+    // so coming back to the tab never re-opens it.
+    var followOpened by rememberSaveable { mutableStateOf(false) }
     // Bumped by each Pay handoff so the giving form re-seeds from it. NOT
     // bumped when a binding is cleared — the form resets itself in place, so
     // a ceremony on screen is never torn down.
@@ -176,6 +182,8 @@ fun GiveTabScreen(
                             payPreset = p
                             if (p == initialPreset) initialPresetCleared = false
                         },
+                        followTransactionId = followTransactionId.takeIf { !followOpened },
+                        onFollowed = { followOpened = true },
                     )
                 }
                 GiveSegment.Partners -> PartnersScreen(
