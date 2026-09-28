@@ -119,6 +119,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.DueItem
+import org.nuruplace.member.data.net.GivingMethodsRes
+import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.Partnership
@@ -279,6 +281,9 @@ fun PartnersScreen(
     openPledge: PledgeLanding? = null,
     /** [openPledge] has been opened; GiveTabScreen stops asking. */
     onPledgeOpened: () -> Unit = {},
+    /** A pledge's "Collect it automatically at this pace" set its recurring
+     *  gift up (Giving Cycle 9): the Give segment shows the result. */
+    onScheduleStarted: (StartedSchedule) -> Unit = {},
 ) {
     // Stale-while-revalidate on every showing of the segment, and on every
     // return to the foreground (the M-Pesa PIN prompt is its own activity).
@@ -309,7 +314,7 @@ fun PartnersScreen(
                     // Only when there is something to say — a partner whose
                     // giving is collecting cleanly never sees an amber row.
                     p.trouble?.let { t -> TroubleRow(t, vm.resuming) { p.scheduleId?.let(vm::resume) } }
-                    PledgesSection(p, vm, onPayNow, onOpenReceipt, openPledge, onPledgeOpened)
+                    PledgesSection(p, vm, onPayNow, onOpenReceipt, openPledge, onPledgeOpened, onScheduleStarted)
                     StatementSection(p, vm, onOpenReceipt, openStatement)
                 }
                 else -> {
@@ -544,8 +549,11 @@ private fun PledgesSection(
     onOpenReceipt: (String) -> Unit,
     openPledge: PledgeLanding?,
     onPledgeOpened: () -> Unit,
+    onScheduleStarted: (StartedSchedule) -> Unit,
 ) {
     var editing by remember { mutableStateOf<Pledge?>(null) }
+    // The recurring gift collecting a pledge, opened from its sheet.
+    var collector by remember { mutableStateOf<GivingSchedule?>(null) }
     var cancelling by remember { mutableStateOf<Pledge?>(null) }
     var detailId by remember { mutableStateOf<String?>(null) }
     // Opened from outside (Giving Cycle 5): the reason a pledge just made has
@@ -660,6 +668,21 @@ private fun PledgesSection(
             onEdit = { detailId = null; notice = null; vm.clearActionError(); editing = pl },
             onCancel = { detailId = null; notice = null; cancelling = pl },
             onReminders = { on -> vm.update(pl.pledgeId, UpdatePledgeBody(remindersEnabled = on)) },
+            // Collecting it at its pace: the Give segment shows the first prompt.
+            onScheduleStarted = { started -> detailId = null; notice = null; onScheduleStarted(started) },
+            onOpenCollector = { s -> detailId = null; notice = null; collector = s },
+        )
+    }
+    // The gift collecting a pledge — number, heads-up, pause, cancel; its
+    // amount and day follow a monthly pledge (ScheduleSheet).
+    collector?.let { s ->
+        ScheduleSheet(
+            s,
+            onClose = { collector = null },
+            onChanged = { GivingEvents.emit(); vm.load() },
+            onCancelled = { collector = null; GivingEvents.emit(); vm.load() },
+            pledges = p.pledges,
+            onOpenPledge = { id -> collector = null; vm.clearActionError(); notice = null; detailId = id },
         )
     }
 }
@@ -735,6 +758,8 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
                 )
             }
         }
+        // A total pledge's pace to reach it on time (Giving Cycle 9).
+        paceLine(pl, today)?.let { Text(it, style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText) }
     }
 }
 
@@ -876,9 +901,13 @@ private fun PledgeDetailSheet(
     onEdit: () -> Unit,
     onCancel: () -> Unit,
     onReminders: (Boolean) -> Unit,
+    onScheduleStarted: (StartedSchedule) -> Unit = {},
+    onOpenCollector: (GivingSchedule) -> Unit = {},
 ) {
     val view = LocalView.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val today = remember { partnerToday() }
     val paused = pl.status == "paused"
     val done = pl.status == "fulfilled"
     val cancelled = pl.status == "cancelled"
@@ -899,6 +928,49 @@ private fun PledgeDetailSheet(
         runCatching { Net.client.api.pledgeClaims(pl.pledgeId).data }
             .onSuccess { claims = it }
             .onFailure { claimsError = ApiException.message(it, context) }
+    }
+    // A pledge with a pace (Giving Cycle 9): whether M-Pesa can take money
+    // and what already collects it — read with the sheet, and only then. A
+    // failed read offers nothing (never a second collector on a guess).
+    var methodsRes by remember(pl.pledgeId) { mutableStateOf<GivingMethodsRes?>(null) }
+    var schedules by remember(pl.pledgeId) { mutableStateOf<List<GivingSchedule>?>(null) }
+    var startingPace by remember(pl.pledgeId) { mutableStateOf(false) }
+    var paceError by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
+    // Held only after a request that got no answer, so tapping again finds
+    // the gift that request may have made (newGivingKey otherwise).
+    var paceKey by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
+    val hasPace = pl.pace != null
+    LaunchedEffect(pl.pledgeId, hasPace, attempt) {
+        if (!hasPace) return@LaunchedEffect
+        runCatching { Net.client.api.givingMethods() }.onSuccess { methodsRes = it }
+        runCatching { Net.client.api.schedules().data }.onSuccess { schedules = it }
+    }
+
+    /** "Collect it automatically at this pace": a monthly M-Pesa gift bound
+     *  to the pledge at its pace, its first prompt now (PledgePaceLogic). */
+    fun startPace() {
+        if (startingPace) return
+        val key = paceKey ?: newGivingKey()
+        val body = paceScheduleBody(pl, key) ?: return
+        paceKey = key; startingPace = true; paceError = null
+        scope.launch {
+            var failure: Throwable? = null
+            try {
+                val created = Net.client.api.createSchedule(body)
+                Haptics.confirm(view)
+                // A schedule is the partnership's rhythm — the standing changes.
+                GivingEvents.emit()
+                onScheduleStarted(StartedSchedule(created, body))
+            } catch (e: Exception) {
+                failure = e
+                // GIFT_IN_PROGRESS, SCHEDULE_EXISTS, PHONE_REQUIRED… the server's words.
+                paceError = ApiException.message(e, context)
+                Haptics.reject(view)
+            } finally {
+                if (!keepGiveKeyAfter(failure)) paceKey = null
+                startingPace = false
+            }
+        }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
         Column(
@@ -929,6 +1001,20 @@ private fun PledgeDetailSheet(
                     ActionPill(if (paused) "Resume" else "Pause", enabled = !busy) { Haptics.tap(view); onPauseResume() }
                     ActionPill("Edit", enabled = !busy) { onEdit() }
                     ActionPill("Cancel", enabled = !busy, danger = true) { onCancel() }
+                }
+                // A total pledge's pace, and collecting it at that pace — or
+                // the recurring gift that already does (Giving Cycle 9).
+                paceLine(pl, today)?.let { line ->
+                    PaceBlock(
+                        line = line,
+                        collector = schedules?.let { pledgeCollector(pl, it) },
+                        offer = paceOfferAvailable(pl, methodsRes, schedules),
+                        starting = startingPace,
+                        error = paceError,
+                        today = today,
+                        onStart = { Haptics.tap(view); startPace() },
+                        onOpenCollector = onOpenCollector,
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -1007,6 +1093,58 @@ private fun PledgeDetailSheet(
                 told.forEach { ClaimRow(it) }
             }
         }
+    }
+}
+
+/** A total pledge's pace — "To reach KSh 20,000 by 31 Dec: KSh 5,000 a month
+ *  — 4 collections" — then either the recurring gift already collecting it
+ *  ("Collected automatically — next KSh 5,000 on 28 Oct", which opens it) or,
+ *  when it may be set up here, "Collect it automatically at this pace" with
+ *  its one-line promise. Its refusal is said in the server's words. */
+@Composable
+private fun PaceBlock(
+    line: String,
+    collector: GivingSchedule?,
+    offer: Boolean,
+    starting: Boolean,
+    error: String?,
+    today: LocalDate,
+    onStart: () -> Unit,
+    onOpenCollector: (GivingSchedule) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GIVE.priorityBg)
+            .border(1.dp, GIVE.gold.copy(alpha = 0.35f), RoundedCornerShape(12.dp)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(line, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        when {
+            collector != null -> Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(GIVE.white)
+                    .border(1.dp, GIVE.border, RoundedCornerShape(10.dp))
+                    .clickable { onOpenCollector(collector) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(collectedLine(collector, today), style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+            }
+            offer -> {
+                Row(
+                    Modifier.fillMaxWidth().height(44.dp).clip(Capsule).background(GIVE.navy)
+                        .clickable(enabled = !starting) { onStart() },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                ) {
+                    if (starting) {
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Collect it automatically at this pace", style = giInter(13, FontWeight.SemiBold), color = Color.White)
+                }
+                Text(PACE_OFFER_NOTE, style = giInter(11), color = GIVE.sub)
+            }
+        }
+        error?.let { Text(it, style = giInter(12), color = GIVE.danger) }
     }
 }
 

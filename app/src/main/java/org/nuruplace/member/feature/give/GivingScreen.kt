@@ -242,6 +242,11 @@ fun GivingScreen(
     /** Open a pledge on Partners — a pledge collector's "Change it on the
      *  pledge" (Giving Cycle 5). */
     onOpenPledge: (String) -> Unit = {},
+    /** A recurring gift just set up elsewhere — a pledge's "Collect it
+     *  automatically at this pace" (Giving Cycle 9) — shown on the same
+     *  result as the form's give-now, and the call that marks it shown. */
+    startedSchedule: StartedSchedule? = null,
+    onStartedShown: () -> Unit = {},
     /** Scoped to the tab's destination, so it outlives the segment. */
     vm: GiveViewModel = viewModel(),
 ) {
@@ -265,6 +270,7 @@ fun GivingScreen(
         d.history, d.schedules, d.methods, d.phoneOnFile, vm::load, onOpenStatement, onOpenSchedules, preset,
         segmentControl, onUnbind, onRebind, followTransactionId, onFollowed,
         pledges = d.pledges, onOpenPledge = onOpenPledge,
+        startedSchedule = startedSchedule, onStartedShown = onStartedShown,
     )
 }
 
@@ -369,6 +375,11 @@ private data class ScheduleToConfirm(val plan: GiveSubmission.Schedule, val atte
  *  could not go out), so the rest is never read off the answer's defaults. */
 private data class CreatedSchedule(val created: CreatedScheduleRes, val body: CreateScheduleBody, val phone: String?)
 
+/** A recurring gift the server really created outside the Give form — a
+ *  pledge's "Collect it automatically at this pace" (Giving Cycle 9) —
+ *  handed to the Give tab to show on the form's own give-now result. */
+data class StartedSchedule(val created: CreatedScheduleRes, val body: CreateScheduleBody)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GiveTab(
@@ -388,6 +399,8 @@ private fun GiveTab(
     onFollowed: () -> Unit = {},
     pledges: List<Pledge> = emptyList(),
     onOpenPledge: (String) -> Unit = {},
+    startedSchedule: StartedSchedule? = null,
+    onStartedShown: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -601,6 +614,29 @@ private fun GiveTab(
                 retrying = false
             }
         }
+    }
+
+    // A recurring gift set up from a pledge's pace (Giving Cycle 9): the same
+    // result as the form's give-now — today's prompt watched like any gift,
+    // or "Scheduled" with why today's could not go out. Shown once.
+    LaunchedEffect(startedSchedule) {
+        val st = startedSchedule ?: return@LaunchedEffect
+        val first = st.created.firstCharge
+        if (first != null) {
+            resultAmountMinor = st.body.amountMinor
+            resultCurrency = st.body.currency
+            resultGiftName = null
+            resultPhone = null // the profile's number: every cycle prompts it
+            resultFailure = null
+            retryError = null
+            retryToForm = false
+            ceremonyBoundTo = null
+            ceremonyNote = firstChargeNote(freqOf(st.body.frequency))
+            result = first
+        } else {
+            scheduled = CreatedSchedule(st.created, st.body, phone = null)
+        }
+        onStartedShown()
     }
 
     // A giving_gift_failed push (Giving Cycle 3) opens the Give tab on that

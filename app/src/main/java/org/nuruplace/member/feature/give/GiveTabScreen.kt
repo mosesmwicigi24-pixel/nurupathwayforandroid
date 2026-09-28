@@ -28,6 +28,11 @@
 // server's reason — the pledge stands; nothing blocks. Each opens once: a
 // saveable flag keeps a return to the tab from opening it again.
 //
+// A pledge's "Collect it automatically at this pace" (Giving Cycle 9) sets
+// its recurring gift up on Partners and hands the server's answer here: the
+// Give segment shows it on the form's own give-now result — today's prompt
+// watched, or why it could not go out.
+//
 // The double-pay guard's upstream half lives here too: when a bound gift goes
 // through (or the member picks "Give to a fund instead") GivingScreen calls
 // onUnbind and the preset is forgotten at once — WITHOUT re-keying the giving
@@ -149,6 +154,9 @@ fun GiveTabScreen(
     // A pledge just made whose automatic collection could not be set up:
     // opened, with the server's reason (auto_schedule_error), once.
     var landing by remember { mutableStateOf<PledgeLanding?>(null) }
+    // A recurring gift set up from a pledge's pace, waiting for the Give
+    // segment to show its result — once.
+    var startedSchedule by remember { mutableStateOf<StartedSchedule?>(null) }
 
     if (newPledge) {
         BackHandler { newPledge = false }
@@ -204,6 +212,8 @@ fun GiveTabScreen(
                         // A pledge collector's "Change it on the pledge": the
                         // pledge opens on Partners, in this same tab.
                         onOpenPledge = { id -> landing = PledgeLanding(id); segment = GiveSegment.Partners },
+                        startedSchedule = startedSchedule,
+                        onStartedShown = { startedSchedule = null },
                     )
                 }
                 GiveSegment.Partners -> PartnersScreen(
@@ -220,6 +230,12 @@ fun GiveTabScreen(
                     segmentControl = segmentControl,
                     openPledge = landing ?: openPledgeId?.takeIf { !pledgeOpened }?.let { PledgeLanding(it) },
                     onPledgeOpened = { landing = null; pledgeOpened = true },
+                    // Its first prompt went out (or could not): the Give
+                    // segment shows the same result as a give-now.
+                    onScheduleStarted = { started ->
+                        startedSchedule = started
+                        segment = GiveSegment.Give
+                    },
                 )
             }
         }

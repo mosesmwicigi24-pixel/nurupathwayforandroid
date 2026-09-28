@@ -399,6 +399,10 @@ data class Pledge(
     /** Create only: the pledge WAS made, but its automatic collection could
      *  not be set up — said to the member, who pays with Pay now. */
     val autoScheduleError: String? = null,
+    /** Giving Cycle 9 — an ACTIVE TOTAL pledge with money still owed and its
+     *  date not passed: the pace that reaches it on time. Null otherwise (a
+     *  monthly pledge never has one) and from an older server. */
+    val pace: PledgePace? = null,
 ) {
     /** What the pledge is for, derived client-side from its target — the
      *  fallback when an older server sends no `title`. */
@@ -413,6 +417,18 @@ data class Pledge(
     /** The headline amount — monthly amount or total target. */
     val headlineMinor: Int get() = if (shape == "total") (targetMinor ?: 0) else (amountMinor ?: 0)
 }
+
+/** A total pledge's pace (`pace` on the Pledge, Giving Cycle 9): what is
+ *  still owed spread over the monthly collections left — one today, then the
+ *  same day each month through `by` — rounded UP to whole shillings in KES
+ *  (cents stay cents) so the last is never short. */
+@Serializable
+data class PledgePace(
+    val perMonthMinor: Int = 0,
+    val collectionsLeft: Int = 0,
+    /** The pledge's due date, YYYY-MM-DD. */
+    val by: String = "",
+)
 
 @Serializable
 data class PledgeFund(val code: String = "", val name: String = "")
@@ -536,13 +552,14 @@ data class PledgeDetail(
     val paysTo: FundRef? = null,
     val startsOn: String? = null,
     val untilOn: String? = null,
+    val pace: PledgePace? = null,
     val payments: List<PledgePayment> = emptyList(),
 ) {
     fun asPledge(): Pledge = pledge ?: Pledge(
         pledgeId, shape, amountMinor, targetMinor, currency, dueDay, dueOn, fund, campaign,
         needId, status, progress, scheduleId, remindersEnabled,
         createdAt = createdAt, title = title, customTitle = customTitle, paysTo = paysTo,
-        startsOn = startsOn, untilOn = untilOn,
+        startsOn = startsOn, untilOn = untilOn, pace = pace,
     )
 }
 
