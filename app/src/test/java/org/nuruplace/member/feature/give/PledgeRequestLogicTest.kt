@@ -145,4 +145,99 @@ class PledgeRequestLogicTest {
         assertEquals(kotlinx.serialization.json.JsonNull, pledgeEditTitlePatch(named, "  "))
         assertNull(pledgeEditTitlePatch(derived, "  "))
     }
+
+    // ── The new-pledge flow's steps and words (iOS NewPledgeFlow) ──
+
+    @Test
+    fun `a total pledge walks five steps - no automatic collection, and Back from its review lands on its date`() {
+        assertEquals(PledgeStep.entries, pledgeSteps(monthly = true))
+        val total = pledgeSteps(monthly = false)
+        assertEquals(listOf(PledgeStep.Shape, PledgeStep.Amount, PledgeStep.Target, PledgeStep.Due, PledgeStep.Review), total)
+        // The step before the review is the date, never the skipped question.
+        assertEquals(PledgeStep.Due, total[total.indexOf(PledgeStep.Review) - 1])
+    }
+
+    @Test
+    fun `each step asks its question in iOS's words, by the shape of the promise`() {
+        assertEquals("What shape is the promise?", pledgeStepTitle(PledgeStep.Shape, true))
+        assertEquals("How much each month?", pledgeStepTitle(PledgeStep.Amount, true))
+        assertEquals("How much in total?", pledgeStepTitle(PledgeStep.Amount, false))
+        assertEquals("What is this pledge for?", pledgeStepTitle(PledgeStep.Target, true))
+        assertEquals("Which day of the month?", pledgeStepTitle(PledgeStep.Due, true))
+        assertEquals("By when?", pledgeStepTitle(PledgeStep.Due, false))
+        assertEquals("Collect it automatically?", pledgeStepTitle(PledgeStep.Auto, true))
+        assertEquals("Here is your pledge", pledgeStepTitle(PledgeStep.Review, true))
+        assertEquals("We'll remind you a few days before, if you'd like.", pledgeStepSubtitle(PledgeStep.Due, true))
+        assertEquals("The date you would like the total reached by.", pledgeStepSubtitle(PledgeStep.Due, false))
+        assertEquals("Read it once more. Nothing is charged by creating it.", pledgeStepSubtitle(PledgeStep.Review, false))
+    }
+
+    @Test
+    fun `the amount starts at KSh 2,000 among iOS's suggestions, a total's date three months on`() {
+        assertEquals(listOf(500, 1_000, 2_000, 5_000, 10_000, 20_000), NEW_PLEDGE_PRESETS)
+        assertEquals(2_000, NEW_PLEDGE_DEFAULT_AMOUNT)
+        val today = LocalDate.of(2026, 9, 28)
+        assertEquals(LocalDate.of(2026, 12, 28), newPledgeDefaultDueOn(today))
+        assertFalse(newPledgeDueOnAllowed(today, today))
+        assertTrue(newPledgeDueOnAllowed(today.plusDays(1), today))
+    }
+
+    @Test
+    fun `automatic collection runs on the server's recurring rails of the two a pledge takes`() {
+        // No answer yet: M-Pesa alone.
+        assertEquals(listOf("mpesa"), pledgeAutoRails(null).map { it.key })
+        val res = org.nuruplace.member.data.net.GivingMethodsRes(
+            methods = listOf(
+                org.nuruplace.member.data.net.GivingMethodInfo(key = "mpesa", label = "M-Pesa", enabled = true, currency = "KES", recurring = true),
+                org.nuruplace.member.data.net.GivingMethodInfo(key = "airtel", label = "Airtel Money", enabled = true, currency = "KES", recurring = false),
+                org.nuruplace.member.data.net.GivingMethodInfo(key = "paypal", label = "PayPal", enabled = true, currency = "USD", recurring = true),
+            ),
+        )
+        assertEquals(listOf("mpesa"), pledgeAutoRails(res).map { it.key })
+        // M-Pesa switched off: nothing can collect it — the toggle holds.
+        val off = res.copy(methods = res.methods.map { if (it.key == "mpesa") it.copy(enabled = false) else it })
+        assertTrue(pledgeAutoRails(off).isEmpty())
+        assertEquals("On the 5th of every month, by mobile money.", pledgeAutoCaption(5))
+        assertEquals(
+            "Never today — then on the 22nd of each month. You can stop it at any time from your recurring gifts.",
+            pledgeAutoOnNote(22),
+        )
+    }
+
+    @Test
+    fun `the review repeats every choice in iOS's words`() {
+        assertEquals(
+            listOf(
+                "Shape" to "Monthly",
+                "Each month" to "KSh 2,000",
+                "For" to "General partnership",
+                "Due day" to "The 5th of each month",
+                "Collected" to "Automatically · M-Pesa",
+                "First collection" to "5 October",
+            ),
+            pledgeReviewRows(true, 2_000, "General partnership", 5, null, "M-Pesa", "5 October"),
+        )
+        assertEquals(
+            listOf(
+                "Shape" to "A total, by a date",
+                "Total" to "KSh 50,000",
+                "For" to "School fees for Grace",
+                "By" to "28 December 2026",
+                "Collected" to "By you, with Pay now",
+            ),
+            pledgeReviewRows(false, 50_000, "School fees for Grace", 5, LocalDate.of(2026, 12, 28), null, "5 October"),
+        )
+        // A monthly pledge left to the member: no First collection row.
+        assertEquals("By you, with Pay now", pledgeReviewRows(true, 1_000, "Tithe", 1, null, null, "1 October").last().second)
+    }
+
+    @Test
+    fun `a failed create says whether the church answered`() {
+        assertEquals(
+            "We couldn't hear back from the church. Try again — if your pledge was made, it won't be made twice.",
+            pledgeCreateError(noAnswer = true, serverWords = null),
+        )
+        assertEquals("M-Pesa can't take that amount.", pledgeCreateError(noAnswer = false, serverWords = "M-Pesa can't take that amount."))
+        assertEquals("Couldn't create the pledge. Nothing has changed.", pledgeCreateError(noAnswer = false, serverWords = " "))
+    }
 }

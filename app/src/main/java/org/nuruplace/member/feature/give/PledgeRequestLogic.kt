@@ -15,8 +15,11 @@ package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.AutoScheduleBody
 import org.nuruplace.member.data.net.CreatePledgeBody
+import org.nuruplace.member.data.net.GivingMethodsRes
 import org.nuruplace.member.data.net.PledgeOption
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 const val PLEDGE_TITLE_MIN = 2
 const val PLEDGE_TITLE_MAX = 60
@@ -190,4 +193,114 @@ fun pledgeEditTitlePatch(pl: org.nuruplace.member.data.net.Pledge, entered: Stri
     val custom = pl.customTitle?.takeIf { it.isNotBlank() }
     val patch = org.nuruplace.member.data.net.pledgeTitlePatch(custom ?: pl.displayTitle, entered)
     return if (patch is kotlinx.serialization.json.JsonNull && custom == null) null else patch
+}
+
+// ── The new-pledge flow's steps and words (iOS NewPledgeFlow) ──
+
+/** The flow's steps, in order. */
+internal enum class PledgeStep { Shape, Amount, Target, Due, Auto, Review }
+
+/** The steps a pledge walks. A total pledge has no "collect it
+ *  automatically?" — automatic collection is a monthly pledge's (Giving
+ *  Cycle 5) — so it walks five, and Back from its review lands on its date. */
+internal fun pledgeSteps(monthly: Boolean): List<PledgeStep> =
+    if (monthly) PledgeStep.entries else PledgeStep.entries.filter { it != PledgeStep.Auto }
+
+/** The step's heading. */
+internal fun pledgeStepTitle(step: PledgeStep, monthly: Boolean): String = when (step) {
+    PledgeStep.Shape -> "What shape is the promise?"
+    PledgeStep.Amount -> if (monthly) "How much each month?" else "How much in total?"
+    PledgeStep.Target -> "What is this pledge for?"
+    PledgeStep.Due -> if (monthly) "Which day of the month?" else "By when?"
+    PledgeStep.Auto -> "Collect it automatically?"
+    PledgeStep.Review -> "Here is your pledge"
+}
+
+/** The line under the heading. */
+internal fun pledgeStepSubtitle(step: PledgeStep, monthly: Boolean): String = when (step) {
+    PledgeStep.Shape -> "Monthly and open-ended, or a total you will reach by a date — in any instalments."
+    PledgeStep.Amount -> "Choose an amount, or enter your own. You can change it later."
+    PledgeStep.Target -> "Pick what your promise supports, or name it yourself."
+    PledgeStep.Due -> if (monthly) "We'll remind you a few days before, if you'd like." else "The date you would like the total reached by."
+    PledgeStep.Auto ->
+        "If you'd rather not remember, we can collect it for you each month — on your due day, by mobile money. Nothing is collected today."
+    PledgeStep.Review -> "Read it once more. Nothing is charged by creating it."
+}
+
+/** The suggested amounts, in shillings — the edit sheet's own. */
+internal val NEW_PLEDGE_PRESETS = listOf(500, 1_000, 2_000, 5_000, 10_000, 20_000)
+
+/** Where the amount starts: KSh 2,000. */
+internal const val NEW_PLEDGE_DEFAULT_AMOUNT = 2_000
+
+/** A total pledge's date starts three months on, and must fall after today. */
+internal fun newPledgeDefaultDueOn(today: LocalDate): LocalDate = today.plusMonths(3)
+
+internal fun newPledgeDueOnAllowed(d: LocalDate, today: LocalDate): Boolean = d.isAfter(today)
+
+/** The two rails a pledge's collection accepts (`auto_schedule.method`). */
+private val PLEDGE_AUTO_METHODS = setOf("mpesa", "airtel")
+
+/** The rails a pledge's automatic collection may run on: of the two it
+ *  accepts, those the server says take a recurring gift here — M-Pesa alone
+ *  until GET /giving/methods answers (and if it never does). */
+internal fun pledgeAutoRails(res: GivingMethodsRes?): List<GiveMethodOption> =
+    giveMethodOptions(res).filter { it.key in PLEDGE_AUTO_METHODS && it.selectable && it.recurring }
+
+/** Under "Charge me automatically": "On the 5th of every month, by mobile money." */
+internal fun pledgeAutoCaption(dueDay: Int): String = "On the ${ordinal(dueDay)} of every month, by mobile money."
+
+/** Under the rails once it is on. */
+internal fun pledgeAutoOnNote(dueDay: Int): String =
+    "Never today — then on the ${ordinal(dueDay)} of each month. You can stop it at any time from your recurring gifts."
+
+/** Left off: the member pays each instalment. */
+internal const val PLEDGE_AUTO_OFF_NOTE =
+    "You'll pay each instalment yourself with \"Pay now\" on the pledge, and we'll remind you before it's due if you'd like."
+
+/** No rail can collect it here. */
+internal const val PLEDGE_AUTO_UNAVAILABLE_NOTE =
+    "Automatic collection isn't available right now. You'll pay each instalment yourself with \"Pay now\" on the pledge."
+
+/** Under the custom name field. */
+internal const val PLEDGE_CUSTOM_NAME_HELP =
+    "2–60 characters. It goes on your pledge card and statement; the office directs the money where it is needed."
+
+/** Said if Create is reached with a custom name out of bounds. */
+internal const val PLEDGE_CUSTOM_NAME_ERROR = "A custom name is 2–60 characters."
+
+/** On the review when the member is not yet a partner — the server joins
+ *  them as it makes the pledge. */
+internal const val PLEDGE_JOINS_NOTE = "Creating this also joins you to the Partners programme."
+
+private val REVIEW_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH)
+
+/** The review, row by row: Shape · Each month / Total · For · Due day / By ·
+ *  Collected, and — collected automatically — First collection. `autoRail`
+ *  is the rail's name when it will be collected automatically, else null. */
+internal fun pledgeReviewRows(
+    monthly: Boolean,
+    amountMajor: Int,
+    forName: String,
+    dueDay: Int,
+    dueOn: LocalDate?,
+    autoRail: String?,
+    firstCollection: String,
+): List<Pair<String, String>> = buildList {
+    val auto = monthly && autoRail != null
+    add("Shape" to if (monthly) "Monthly" else "A total, by a date")
+    add((if (monthly) "Each month" else "Total") to kshMajor(amountMajor))
+    add("For" to forName)
+    add(if (monthly) "Due day" to "The ${ordinal(dueDay)} of each month" else "By" to (dueOn?.format(REVIEW_DATE) ?: "—"))
+    add("Collected" to if (auto) "Automatically · $autoRail" else "By you, with Pay now")
+    if (auto) add("First collection" to firstCollection)
+}
+
+/** What the flow says when Create does not go through. No answer at all (a
+ *  transport failure): it may have been made, and the same pledge sent again
+ *  is found rather than made twice (`reused`). A refusal comes before
+ *  anything is written: the server's words, and nothing has changed. */
+internal fun pledgeCreateError(noAnswer: Boolean, serverWords: String?): String = when {
+    noAnswer -> "We couldn't hear back from the church. Try again — if your pledge was made, it won't be made twice."
+    else -> serverWords?.trim()?.takeIf { it.isNotEmpty() } ?: "Couldn't create the pledge. Nothing has changed."
 }
