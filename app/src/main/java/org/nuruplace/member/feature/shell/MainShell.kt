@@ -845,6 +845,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // below us (one of its rows opened this receipt), else push
                     // it — never two statements on the stack.
                     onOpenStatement = { nav.navigate("statement") { popUpTo("statement"); launchSingleTop = true } },
+                    // The Pledge row opens that pledge's own page (iOS pledgeRow).
+                    onOpenPledge = { nav.navigate(org.nuruplace.member.feature.give.pledgeRoute(it)) },
                 )
             }
             composable("profile") {

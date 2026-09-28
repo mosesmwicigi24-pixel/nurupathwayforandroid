@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -63,9 +64,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -590,7 +592,13 @@ private val RECEIPT_RED = Color(0xFFDC2626)
 private val RECEIPT_RED_BG = Color(0xFFFEE2E2)
 
 @Composable
-fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStatement: () -> Unit = {}) {
+fun GivingReceiptScreen(
+    transactionId: String,
+    onBack: () -> Unit,
+    onOpenStatement: () -> Unit = {},
+    /** The Pledge row → that pledge's own page; the row is plain without it. */
+    onOpenPledge: ((String) -> Unit)? = null,
+) {
     AsyncContent(
         key = transactionId,
         load = {
@@ -622,6 +630,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
             ReceiptTone.Waiting -> Triple(GIVE.goldChipBg, GIVE.goldChipText, Icons.Filled.Schedule)
             ReceiptTone.NotCompleted -> Triple(RECEIPT_RED_BG, RECEIPT_RED, Icons.Filled.Close)
             ReceiptTone.Refunded -> Triple(GIVE.mutedBg, GIVE.ink600, Icons.AutoMirrored.Filled.Undo)
+            ReceiptTone.Other -> Triple(GIVE.mutedBg, GIVE.ink600, Icons.Filled.Schedule)
         }
 
         fun copy(key: String, value: String) {
@@ -642,7 +651,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                 val ok = sharePdfAuthed(context, receiptFileName(d), text) { Net.client.api.givingReceiptPdf(d.transactionId) }
                 if (!ok) {
                     shareTextOnly(context, text)
-                    shareError = "Couldn't fetch the PDF just now — shared the summary instead."
+                    shareError = RECEIPT_SHARE_FALLBACK
                 }
                 sharing = false
             }
@@ -667,7 +676,8 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                     ReceiptHeaderButton(Icons.AutoMirrored.Filled.ArrowBack, "Back") { onBack() }
                     Text("Receipt", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy)
                     Spacer(Modifier.weight(1f))
-                    ReceiptHeaderButton(Icons.Filled.Share, "Share receipt") { share() }
+                    // Same action as "Share receipt" below; spins while it fetches.
+                    ReceiptHeaderButton(Icons.Filled.Share, "Share receipt", busy = sharing) { share() }
                 }
             }
 
@@ -698,7 +708,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                     )
                     // A thank-you belongs to a gift that arrived or is on its way —
                     // not to one that failed or was refunded.
-                    if (firstName != null && (chip == null || chip.tone == ReceiptTone.Waiting)) {
+                    if (firstName != null && receiptThanks(chip)) {
                         Text(
                             "Thank you, $firstName.",
                             style = giSerif(18, FontWeight.SemiBold),
@@ -735,18 +745,27 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                         )
                     }
                     Text(receiptWhen(d), style = giInter(12), color = RECEIPT_DATE, modifier = Modifier.padding(top = 10.dp))
-                    if (chip != null) {
-                        Row(
-                            Modifier
+                    // A chip ONLY when the gift is not (yet) received — the green
+                    // circle already says "received" for the happy path.
+                    if (chip != null && chip.label.isNotBlank()) {
+                        Text(
+                            chip.label, style = giInter(11, FontWeight.SemiBold), color = badgeFg,
+                            modifier = Modifier
                                 .padding(top = 14.dp)
                                 .clip(Capsule)
                                 .background(badgeBg)
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(badgeIcon, contentDescription = null, tint = badgeFg, modifier = Modifier.size(13.dp))
-                            Text(chip.label, style = giInter(12, FontWeight.SemiBold), color = badgeFg)
+                        )
+                    }
+                    // Why it did not go through, in the server's words (Giving
+                    // Cycle 1): what happened, then what to do next.
+                    receiptFailure(d)?.let { failure ->
+                        Text(
+                            failure.reason, style = giInter(13, FontWeight.SemiBold), color = RECEIPT_RED,
+                            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 10.dp),
+                        )
+                        failure.hint.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = giInter(12), color = GIVE.ink600, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
@@ -763,32 +782,27 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                     // Gift · Fee cover · Total when the member covered the fee.
                     receiptFeeRows(d)?.forEach { (label, value) -> ReceiptRow(label, value) }
                     ReceiptRow("Fund", receiptFundName(d))
-                    // Plain for now: the pledge sheet lives inside PartnersScreen
-                    // and has no route of its own to navigate to.
-                    receiptPledgeTitle(d)?.let { ReceiptRow("Pledge", it) }
+                    // The pledge's own page is one tap away when it has an id.
+                    receiptPledgeTitle(d)?.let { title ->
+                        val pledgeId = d.pledge?.pledgeId?.takeIf { it.isNotBlank() }
+                        if (onOpenPledge != null && pledgeId != null) {
+                            ReceiptLinkRow("Pledge", title) { Haptics.tap(view); onOpenPledge(pledgeId) }
+                        } else {
+                            ReceiptRow("Pledge", title)
+                        }
+                    }
                     d.accountName?.takeIf { it.isNotBlank() }?.let { ReceiptRow("Gift name", it) }
                     ReceiptRow("Method", receiptMethodLabel(d))
                     receiptProviderRef(d)?.let { ref ->
                         ReceiptRow(receiptReferenceLabel(d), ref, mono = true, copied = copied == "ref") { copy("ref", ref) }
                     }
-                    ReceiptRow("Date", receiptWhen(d))
-                    ReceiptRow("Reference", receiptShortId(d), mono = true, copied = copied == "id", last = true) { copy("id", d.transactionId) }
+                    ReceiptRow("Date", receiptWhenFull(d))
+                    ReceiptRow(receiptIdLabel(d), receiptShortId(d), mono = true, copied = copied == "id", last = true) { copy("id", d.transactionId) }
                 }
 
-                // ── Where it went — or, for a gift that did not go through,
-                // why: the server's reason and hint (Giving Cycle 1). A
-                // failed gift reached no fund, so it never says it did. ──
-                val failure = receiptFailure(d)
-                if (failure != null) {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(RECEIPT_RED_BG.copy(alpha = 0.5f))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(failure.reason, style = giInter(13, FontWeight.SemiBold), color = RECEIPT_RED)
-                        failure.hint.takeIf { it.isNotBlank() }?.let { Text(it, style = giInter(12), color = GIVE.sub) }
-                    }
-                } else if (chip?.tone != ReceiptTone.NotCompleted) {
+                // ── Where it went — never under a gift that failed or was
+                // refunded: that money reached no fund (its reason is in the hero). ──
+                if (receiptReachesFund(chip)) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.Top,
@@ -821,7 +835,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                                 Icon(Icons.Filled.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                             Spacer(Modifier.width(8.dp))
-                            Text("Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
+                            Text(if (sharing) "Preparing…" else "Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
                         }
                         Row(
                             Modifier
@@ -829,8 +843,8 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                                 .heightIn(min = 48.dp)
                                 .clip(Capsule)
                                 .background(GIVE.white)
-                                .border(1.dp, GIVE.navy.copy(alpha = 0.22f), Capsule)
-                                .clickable { onOpenStatement() }
+                                .border(1.2.dp, GIVE.navy.copy(alpha = 0.35f), Capsule)
+                                .clickable { Haptics.tap(view); onOpenStatement() }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
@@ -845,29 +859,8 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                     }
                 }
 
-                // ── Verse ──
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(GIVE.cream)
-                        .border(1.dp, GIVE.border, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        "“God loves a cheerful giver.”",
-                        style = giSerif(16, FontWeight.Normal).copy(fontStyle = FontStyle.Italic),
-                        color = GIVE.navy,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        "— 2 Corinthians 9:7",
-                        style = giInter(11, FontWeight.SemiBold, 0.6f),
-                        color = GIVE.eyebrow,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
+                // ── Verse — the Give page's verse card (iOS verseFooter) ──
+                ScriptureStrip(RECEIPT_VERSE)
             }
         }
     }
@@ -888,19 +881,50 @@ internal fun PledgeTag(title: String) {
     )
 }
 
-/** Header chrome button (back · share). Shared with the partners statement. */
+/** Header chrome button (back · share) — a spinner in place of the icon, and
+ *  no second tap, while [busy]. Shared with the pledge page. */
 @Composable
-internal fun ReceiptHeaderButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+internal fun ReceiptHeaderButton(icon: ImageVector, contentDescription: String, busy: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(GIVE.white)
             .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
-            .clickable { onClick() },
+            .clickable(enabled = !busy) { onClick() }
+            .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = GIVE.navy, modifier = Modifier.size(18.dp))
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = GIVE.navy, strokeWidth = 2.dp)
+        } else {
+            Icon(icon, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** A details row that opens something: the label, then the value in navy
+ *  with a chevron (iOS pledgeRow). */
+@Composable
+private fun ReceiptLinkRow(label: String, value: String, onClick: () -> Unit) {
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Opens the pledge") { onClick() }
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = giInter(13), color = RECEIPT_LABEL)
+            Spacer(Modifier.width(16.dp))
+            Text(
+                value, style = giInter(14, FontWeight.SemiBold), color = GIVE.navy,
+                textAlign = TextAlign.End, modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+        }
+        HairlineDivider()
     }
 }
 

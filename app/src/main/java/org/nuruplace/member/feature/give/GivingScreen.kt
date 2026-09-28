@@ -449,9 +449,14 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
     }
 }
 
-/** 2 Corinthians 9:7 on a soft gold wash (iOS scriptureStrip). */
+/** The Give page's verse (2 Corinthians 9:7) on a soft gold wash (iOS
+ *  scriptureStrip) — the receipt's verse card too, with its own words. */
+internal const val GIVE_VERSE = "“Each of you should give what you have decided in your heart to give.”"
+
+/** 2 Corinthians 9:7 on a soft gold wash (iOS scriptureStrip / the
+ *  receipt's verseFooter). */
 @Composable
-private fun ScriptureStrip() {
+internal fun ScriptureStrip(quote: String = GIVE_VERSE) {
     val shape = RoundedCornerShape(22.dp)
     Column(
         Modifier.fillMaxWidth().clip(shape)
@@ -461,7 +466,7 @@ private fun ScriptureStrip() {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            "“Each of you should give what you have decided in your heart to give.”",
+            quote,
             style = giSerif(15, FontWeight.Medium).copy(fontStyle = FontStyle.Italic, lineHeight = 23.sp), color = GIVE.navy,
         )
         Text("2 Corinthians 9:7", style = giInter(11, FontWeight.SemiBold), color = GIVE.overline)
