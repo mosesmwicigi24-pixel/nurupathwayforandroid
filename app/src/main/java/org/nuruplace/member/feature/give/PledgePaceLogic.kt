@@ -51,16 +51,20 @@ fun pledgeCollector(pl: Pledge, schedules: List<GivingSchedule>): GivingSchedule
         }
         .minByOrNull { if (scheduleRunning(it.status)) 0 else 1 }
 
-/** "Collect it automatically at this pace" is offered: the pledge has a pace,
- *  is in shillings (M-Pesa's currency), the server says M-Pesa can take money
- *  (GET /giving/methods), and no recurring gift already collects it (GET
+/** "Collect it automatically at this pace" is offered (iOS PledgePace.offer):
+ *  an ACTIVE TOTAL pledge with a pace, in shillings (M-Pesa's currency), that
+ *  says where its money goes (`pays_to` — the gift is booked there); the
+ *  server says M-Pesa takes money AND recurring gifts here (GET
+ *  /giving/methods); and no recurring gift already collects it (GET
  *  /giving/schedules). Either answer missing — not loaded, or it failed — is
  *  no offer: never a second collector for a pledge on a guess. */
 fun paceOfferAvailable(pl: Pledge, methods: GivingMethodsRes?, schedules: List<GivingSchedule>?): Boolean {
     val pace = pl.pace ?: return false
     if (pace.perMonthMinor <= 0 || pace.collectionsLeft < 1) return false
+    if (pl.status != "active" || pl.shape != "total") return false
     if (currencyCode(pl.currency) != GIVE_FORM_CURRENCY) return false
-    if (methods == null || methods.methods.none { it.key == "mpesa" && it.enabled }) return false
+    if (pl.paysTo?.code.isNullOrBlank()) return false
+    if (methods == null || methods.methods.none { it.key == "mpesa" && it.enabled && it.recurring }) return false
     if (schedules == null) return false
     return pledgeCollector(pl, schedules) == null
 }
@@ -90,11 +94,13 @@ fun pledgeCollection(pl: Pledge, methods: GivingMethodsRes?, schedules: List<Giv
  *  pledge's pace, monthly, on M-Pesa, bound to the pledge, its first prompt
  *  now. The fund is where the pledge's money goes (`pays_to` — the server
  *  books a bound gift there whatever is sent). Every cycle prompts the
- *  profile's number. The key is [newGivingKey]'s. Null without a pace. */
+ *  profile's number. The key is [newGivingKey]'s. Null without a pace, or
+ *  without a `pays_to` to book it to — never a guessed fund (iOS). */
 fun paceScheduleBody(pl: Pledge, key: String = newGivingKey()): CreateScheduleBody? {
     val pace = pl.pace?.takeIf { it.perMonthMinor > 0 } ?: return null
+    val fund = pl.paysTo?.code?.takeIf { it.isNotBlank() } ?: return null
     return CreateScheduleBody(
-        fund = pl.paysTo?.code?.takeIf { it.isNotBlank() } ?: pl.fund?.code?.takeIf { it.isNotBlank() } ?: DEFAULT_GIVE_FUND,
+        fund = fund,
         amountMinor = pace.perMonthMinor,
         currency = GIVE_FORM_CURRENCY,
         frequency = "monthly",

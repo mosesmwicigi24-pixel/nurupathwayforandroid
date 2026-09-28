@@ -119,6 +119,20 @@ class PledgePaceTest {
     }
 
     @Test
+    fun `the offer needs M-Pesa's recurring gifts, the pledge's pays_to, and an active total pledge`() {
+        // M-Pesa takes money but not recurring gifts here: no offer (iOS allowsRecurring).
+        val noRecurring = GivingMethodsRes(methods = listOf(GivingMethodInfo(key = "mpesa", label = "M-Pesa", enabled = true, currency = "KES", recurring = false)))
+        assertFalse(paceOfferAvailable(roof, noRecurring, emptyList()))
+        // No pays_to (an older server): nowhere to book it — no offer, never a guessed fund.
+        assertFalse(paceOfferAvailable(roof.copy(paysTo = null), methods(), emptyList()))
+        assertFalse(paceOfferAvailable(roof.copy(paysTo = FundRef(" ", "")), methods(), emptyList()))
+        // Only an active total pledge.
+        assertFalse(paceOfferAvailable(roof.copy(status = "paused"), methods(), emptyList()))
+        assertFalse(paceOfferAvailable(roof.copy(shape = "monthly"), methods(), emptyList()))
+        assertTrue(paceOfferAvailable(roof, methods(), emptyList()))
+    }
+
+    @Test
     fun `it asks for a monthly M-Pesa gift bound to the pledge at its pace, the first prompt now`() {
         val body = paceScheduleBody(roof, key = "k-pace")!!
         val wire = json.parseToJsonElement(json.encodeToString(body)).jsonObject
@@ -138,8 +152,8 @@ class PledgePaceTest {
         val fresh = paceScheduleBody(roof)!!.idempotencyKey
         assertEquals(36, fresh.length)
         assertFalse(isReservedGivingKey(fresh))
-        // No pays_to (an older server): the pledge's fund, else the default — the server books a bound gift to the pledge's fund anyway.
-        assertEquals("tithe", paceScheduleBody(roof.copy(paysTo = null), "k")!!.fund)
+        // No pays_to: no request at all — a fund is never guessed (iOS scheduleBody).
+        assertNull(paceScheduleBody(roof.copy(paysTo = null), "k"))
         assertNull(paceScheduleBody(roof.copy(pace = null), "k"))
     }
 
