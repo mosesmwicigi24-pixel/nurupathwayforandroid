@@ -131,12 +131,22 @@ fun effectiveGiveMethod(
 fun shownGiveMethods(rows: List<GiveMethod>, options: List<GiveMethodOption>, boundCurrency: String?): List<GiveMethod> =
     rows.filter { row -> options.any { it.key == row.id && it.shownFor(boundCurrency) } }
 
-/** The chip on a method the form cannot take: "UNAVAILABLE" when the server
- *  has it switched off, else "SOON". */
+/** The chip on a method the form cannot take (iOS unavailableBadge): SOON
+ *  for one that is coming — the server's `coming_soon`, or one the server
+ *  has live that this app cannot carry yet (a card) — UNAVAILABLE for one
+ *  switched off here (any other reason, or none), or not listed at all. */
 fun methodChipLabel(option: GiveMethodOption?): String = when {
-    option?.unavailableReason == "unavailable" -> "UNAVAILABLE"
-    else -> "SOON"
+    option != null && option.enabled -> "SOON"
+    option?.unavailableReason == "coming_soon" -> "SOON"
+    else -> "UNAVAILABLE"
 }
+
+/** What Give says when a rail cannot take a gift here (iOS unavailableNote):
+ *  "PayPal giving is coming soon." · "PayPal isn't available for giving
+ *  right now." — by its chip. */
+fun methodUnavailableNote(option: GiveMethodOption): String =
+    if (methodChipLabel(option) == "SOON") "${option.label} giving is coming soon."
+    else "${option.label} isn't available for giving right now."
 
 /** The Give tab's footer promise (iOS GivingMethods.secureNote): it names
  *  only the rails that can take money here — "Secure · M-Pesa · Receipt sent
@@ -164,15 +174,15 @@ fun boundCurrencyMessage(boundCurrency: String): String = when (currencyCode(bou
 }
 
 /** Why nothing can pay a bound gift in its currency (a USD pledge while
- *  PayPal is off): "Gifts toward this are in US dollars — PayPal giving is
- *  coming soon." Null while a rail in that currency can take it. */
+ *  PayPal is off), in iOS's words (unavailableNote(forCurrency:)): "Gifts
+ *  toward this are in US dollars — PayPal giving is coming soon." Null while
+ *  a rail in that currency can take it. */
 fun noRailForCurrencyMessage(boundCurrency: String, options: List<GiveMethodOption>): String? {
     if (options.any { it.selectableFor(boundCurrency) }) return null
     val words = currencyWords(boundCurrency)
     val rail = options.firstOrNull { it.shownFor(boundCurrency) }
         ?: return "Gifts toward this are in $words, and there's no way to give in $words here yet."
-    val why = if (rail.unavailableReason == "unavailable") "${rail.label} is unavailable right now" else "${rail.label} giving is coming soon"
-    return "Gifts toward this are in $words — $why."
+    return "Gifts toward this are in $words — ${methodUnavailableNote(rail)}"
 }
 
 // ── The prompt number ──

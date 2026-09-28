@@ -152,7 +152,7 @@ class GiveMethodsLogicTest {
         val off = giveMethodOptions(res.copy(methods = res.methods.map { if (it.key == "paypal") it.copy(enabled = false, unavailableReason = "coming_soon") else it }))
         assertEquals("Gifts toward this are in US dollars — PayPal giving is coming soon.", noRailForCurrencyMessage("USD", off))
         val down = giveMethodOptions(res.copy(methods = res.methods.map { if (it.key == "paypal") it.copy(enabled = false, unavailableReason = "unavailable") else it }))
-        assertEquals("Gifts toward this are in US dollars — PayPal is unavailable right now.", noRailForCurrencyMessage("USD", down))
+        assertEquals("Gifts toward this are in US dollars — PayPal isn't available for giving right now.", noRailForCurrencyMessage("USD", down))
         // No dollar rail listed at all.
         assertEquals(
             "Gifts toward this are in US dollars, and there's no way to give in US dollars here yet.",
@@ -200,10 +200,22 @@ class GiveMethodsLogicTest {
     fun `a method the form cannot take wears SOON, or UNAVAILABLE when switched off`() {
         val res = json.decodeFromString<GivingMethodsRes>(live)
         val options = giveMethodOptions(res).associateBy { it.key }
+        // Coming soon, as the server says.
         assertEquals("SOON", methodChipLabel(options["airtel"]))
         assertEquals("SOON", methodChipLabel(options["card"]))
-        assertEquals("SOON", methodChipLabel(null)) // not listed by the server
+        // Live on the server but not carried by this app (a card on a dev server).
+        assertEquals("SOON", methodChipLabel(options.getValue("card").copy(enabled = true, unavailableReason = null)))
+        // Switched off for any other reason, or none: UNAVAILABLE (iOS unavailableBadge).
         assertEquals("UNAVAILABLE", methodChipLabel(options.getValue("mpesa").copy(enabled = false, unavailableReason = "unavailable")))
+        assertEquals("UNAVAILABLE", methodChipLabel(options.getValue("mpesa").copy(enabled = false, unavailableReason = null)))
+        assertEquals("UNAVAILABLE", methodChipLabel(options.getValue("mpesa").copy(enabled = false, unavailableReason = "maintenance")))
+        assertEquals("UNAVAILABLE", methodChipLabel(null)) // not listed by the server
+        // What Give says about one, by its chip.
+        assertEquals("Airtel Money giving is coming soon.", methodUnavailableNote(options.getValue("airtel")))
+        assertEquals(
+            "M-Pesa isn't available for giving right now.",
+            methodUnavailableNote(options.getValue("mpesa").copy(enabled = false, unavailableReason = null)),
+        )
     }
 
     // ── The prompt number ──
