@@ -35,7 +35,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /** The STATEMENT card's three numbers, all minor units. */
 internal data class StatementSummary(val pledgedMinor: Int, val paidMinor: Int, val remainingMinor: Int)
@@ -43,6 +45,9 @@ internal data class StatementSummary(val pledgedMinor: Int, val paidMinor: Int, 
 /** Every monthly pledge has a due day 1..28 (spec §1); a row without one is
  *  malformed, and the 1st is the least-surprising day to count from. */
 internal const val DEFAULT_DUE_DAY = 1
+
+/** "Mon 5 Oct" — the DUE row's collected-on chip. */
+private val COLLECTED_ON_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
 
 /** The church's calendar (UTC+3 all year, no DST). */
 private val PARTNER_ZONE: ZoneId = ZoneId.of("Africa/Nairobi")
@@ -369,6 +374,24 @@ internal fun dueWhen(d: DueItem, today: LocalDate): WhenLabel {
     val due = partnerDate(d.dueOn) ?: return WhenLabel(d.dueOn, false)
     return WhenLabel(dueRelativeLabel(due, today, PartnerFormat::dayMonth), overdue = false)
 }
+
+/** What Partners' DUE row says for a running recurring gift, in place of Pay
+ *  (owner, 2026-09-28; iOS ScheduleRhythm.collectedOn): "Collected on Mon 5
+ *  Oct" — `due_on`, the server's Nairobi date of its next prompt. Pay only
+ *  opened a SEPARATE one-time gift while the recurring gift still prompted
+ *  on its day, so the member gave twice that cycle. Null when `due_on` is
+ *  not a date. */
+internal fun collectedOnLine(dueOn: String): String? {
+    val d = runCatching { LocalDate.parse(dueOn.trim().take(10)) }.getOrNull() ?: return null
+    return "Collected on ${d.format(COLLECTED_ON_FMT)}"
+}
+
+/** The chip a DUE row wears instead of Pay: a RUNNING recurring gift's
+ *  "Collected on …" ([collectedOnLine]). Null for a paused gift (it keeps
+ *  Resume) and for a pledge row (it keeps Pay — paying a pledge early by
+ *  hand is safe: its collector skips a month already covered). */
+internal fun dueCollectedChip(d: DueItem): String? =
+    if (d.kind == "schedule" && d.action != "resume") collectedOnLine(d.dueOn) else null
 
 /** The DUE row's first line (iOS dueRow): "KSh 5,000 · in 3 days" — or,
  *  part of it already on its way, the uncovered rest: "KSh 3,000 left · in

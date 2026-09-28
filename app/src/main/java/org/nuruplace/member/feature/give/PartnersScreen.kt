@@ -329,6 +329,9 @@ fun PartnersScreen(
     /** A pledge's "Collect it automatically at this pace" set its recurring
      *  gift up (Giving Cycle 9): the Give segment shows the result. */
     onScheduleStarted: (StartedSchedule) -> Unit = {},
+    /** Open a recurring gift by id when the standing's own list does not
+     *  have it yet — its sheet on the Recurring gifts screen. */
+    onOpenSchedule: (String) -> Unit = {},
 ) {
     // Stale-while-revalidate on every showing of the segment, and on every
     // return to the foreground (the M-Pesa PIN prompt is its own activity).
@@ -451,7 +454,13 @@ fun PartnersScreen(
                         // iOS's rule: the membership decides; an older server's is_partner otherwise.
                         p.isProgrammeMember -> {
                             StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
-                            if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
+                            if (p.due.isNotEmpty()) {
+                                DueSection(p.due, p, vm, onPayNow) { id ->
+                                    // "Collected on …": the gift's own sheet, here, as the
+                                    // pledge page's collector row opens it.
+                                    vm.schedules?.firstOrNull { it.scheduleId == id }?.let { collector = it } ?: onOpenSchedule(id)
+                                }
+                            }
                             // Only when there is something to say — a partner whose
                             // giving is collecting cleanly never sees an amber row.
                             p.trouble?.let { t -> TroubleRow(t, vm.resuming, onResume = p.scheduleId?.let { id -> { vm.resume(id) } }) }
@@ -662,7 +671,14 @@ private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
 // ── 2. Due + trouble ─────────────────────────────────────────────────────────
 
 @Composable
-private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel, onPayNow: (GivePreset) -> Unit) {
+private fun DueSection(
+    due: List<DueItem>,
+    p: Partnership,
+    vm: PartnersViewModel,
+    onPayNow: (GivePreset) -> Unit,
+    /** A running recurring gift's "Collected on …" chip: open that gift. */
+    onOpenSchedule: (String) -> Unit,
+) {
     val view = LocalView.current
     val today = LocalDate.now()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -717,6 +733,23 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                             // Already paid and on its way: no Pay to tap twice.
                             Box(Modifier.clearAndSetSemantics { contentDescription = "${shown.processingChip} — this payment is already on its way" }) {
                                 StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
+                            }
+                        } else if (dueCollectedChip(d) != null) {
+                            // A running recurring gift collects itself — no Pay,
+                            // which gave a second, one-time gift (owner,
+                            // 2026-09-28). A tap opens the gift (pause, change).
+                            val collected = dueCollectedChip(d).orEmpty()
+                            Box(
+                                Modifier.heightIn(min = 32.dp).clip(Capsule).background(GIVE.goldChipBg)
+                                    .clickable { Haptics.tap(view); onOpenSchedule(d.id) }
+                                    .clearAndSetSemantics { contentDescription = "$collected, automatically. Opens the recurring gift." }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    collected, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText,
+                                    maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.85f),
+                                )
                             }
                         } else {
                             NavyPill("Pay") {

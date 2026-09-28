@@ -237,6 +237,9 @@ fun GiveTabScreen(
                         startedSchedule = started
                         segment = GiveSegment.Give
                     },
+                    // A recurring gift not yet in the standing's list: its
+                    // sheet on the Recurring gifts screen.
+                    onOpenSchedule = { id -> onNavigate(scheduleRoute(id)) },
                 )
             }
         }

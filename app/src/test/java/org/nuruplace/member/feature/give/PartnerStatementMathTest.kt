@@ -356,6 +356,23 @@ class PartnerStatementMathTest {
     }
 
     @Test
+    fun `a running recurring gift's DUE row says when it is collected, not Pay`() {
+        // Owner, 2026-09-28: Pay gave a second, one-time gift that cycle.
+        assertEquals("Collected on Mon 5 Oct", collectedOnLine("2026-10-05"))
+        assertEquals("Collected on Mon 5 Oct", collectedOnLine("2026-10-05T06:00:00Z")) // the date as the server sent it
+        assertEquals("Collected on Tue 5 Jan", collectedOnLine("2027-01-05"))
+        // Not a date: no chip at all (Pay stays, as before).
+        assertNull(collectedOnLine(""))
+        assertNull(collectedOnLine("soon"))
+        val gift = DueItem(kind = "schedule", id = "s1", amountMinor = 100_000, dueOn = "2026-10-05", action = "pay")
+        assertEquals("Collected on Mon 5 Oct", dueCollectedChip(gift))
+        // A paused gift keeps Resume; a pledge row keeps Pay; a bad date keeps Pay.
+        assertNull(dueCollectedChip(gift.copy(action = "resume")))
+        assertNull(dueCollectedChip(gift.copy(kind = "pledge")))
+        assertNull(dueCollectedChip(gift.copy(dueOn = "not a date")))
+    }
+
+    @Test
     fun `the DUE row's first line says what is left when part is on its way`() {
         val d = due(amount = 500_000, pending = 200_000)
         assertEquals("KSh 3,000 left · in 3 days", dueLeadLine(d, dueRowView(d, "mpesa"), "in 3 days"))
