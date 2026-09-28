@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -689,7 +690,7 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                             color = GIVE.tertiary,
                             modifier = Modifier.alignByBaseline().padding(end = 6.dp),
                         )
-                        Text(number, style = giSerif(40, FontWeight.SemiBold, -1f), color = GIVE.navy, modifier = Modifier.alignByBaseline())
+                        Text(number, style = giSerif(amountDisplaySize(number, base = 40), FontWeight.SemiBold, -1f), color = GIVE.navy, modifier = Modifier.alignByBaseline())
                     }
                     Text(
                         receiptDestinationLine(d),
@@ -776,13 +777,16 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                 // ── Actions ──
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // At least 48dp, taller rather than clipped when a large
+                        // font wraps the label (half a phone's width each).
                         Row(
                             Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .heightIn(min = 48.dp)
                                 .clip(Capsule)
                                 .background(GIVE.navy)
-                                .clickable(enabled = !sharing) { share() },
+                                .clickable(enabled = !sharing) { share() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -792,22 +796,23 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                                 Icon(Icons.Filled.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                             Spacer(Modifier.width(8.dp))
-                            Text("Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White)
+                            Text("Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
                         }
                         Row(
                             Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .heightIn(min = 48.dp)
                                 .clip(Capsule)
                                 .background(GIVE.white)
                                 .border(1.dp, GIVE.navy.copy(alpha = 0.22f), Capsule)
-                                .clickable { onOpenStatement() },
+                                .clickable { onOpenStatement() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Filled.Description, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("View statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+                            Text("View statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
                         }
                     }
                     shareError?.let {

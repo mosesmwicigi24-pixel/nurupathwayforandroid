@@ -34,8 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import org.nuruplace.member.data.net.InviteCampaign
@@ -102,23 +104,34 @@ private fun InviteProgress(c: InviteCampaign) {
                     .clip(RoundedCornerShape(4.dp)).background(Nuru.gold),
             )
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("${c.currency} ${grouped(c.raisedMinor / 100)}",
-                style = NuruType.label, color = Nuru.ink)
-            Spacer(Modifier.width(6.dp))
-            Text("of ${c.currency} ${grouped(c.goalMinor / 100)}",
-                style = NuruType.caption, color = Nuru.ink600)
-            Spacer(Modifier.weight(1f))
-            // Honest about time without manufacturing panic.
-            Text(
-                when (c.daysLeft) {
-                    0 -> "Ends today"
-                    1 -> "1 day left"
-                    else -> "${c.daysLeft} days left"
-                },
-                style = NuruType.caption, color = Nuru.ink600,
-            )
-        }
+        // What is raised of the goal, and the days left — sharing the width
+        // (FairSplitRow, iOS's HStack) so large amounts wrap rather than
+        // squeeze "12 days left" into a column of letters.
+        FairSplitRow(
+            modifier = Modifier.fillMaxWidth(),
+            spacing = 8.dp,
+            first = {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(NuruType.label.toSpanStyle().copy(color = Nuru.ink)) { append("${c.currency} ${grouped(c.raisedMinor / 100)}") }
+                        append(" ")
+                        withStyle(NuruType.caption.toSpanStyle().copy(color = Nuru.ink600)) { append("of ${c.currency} ${grouped(c.goalMinor / 100)}") }
+                    },
+                    style = NuruType.caption,
+                )
+            },
+            second = {
+                // Honest about time without manufacturing panic.
+                Text(
+                    when (c.daysLeft) {
+                        0 -> "Ends today"
+                        1 -> "1 day left"
+                        else -> "${c.daysLeft} days left"
+                    },
+                    style = NuruType.caption, color = Nuru.ink600, textAlign = TextAlign.End,
+                )
+            },
+        )
     }
 }
 

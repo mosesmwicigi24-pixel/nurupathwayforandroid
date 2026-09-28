@@ -45,14 +45,16 @@ internal fun fairSplit(available: Int, firstIdeal: Int, secondIdeal: Int): Pair<
 
 /**
  * [first] on the leading edge and [second] on the trailing edge, top-aligned
- * (iOS `HStack(alignment: .top)` with a `Spacer` between), sharing the width
- * by [fairSplit] with at least [spacing] between them. Without [second],
- * [first] has the whole width.
+ * (iOS `HStack(alignment: .top)` with a `Spacer` between) — or centred on
+ * each other with [centerVertically] (a row's trailing button) — sharing the
+ * width by [fairSplit] with at least [spacing] between them. Without
+ * [second], [first] has the whole width.
  */
 @Composable
 internal fun FairSplitRow(
     modifier: Modifier = Modifier,
     spacing: Dp = 12.dp,
+    centerVertically: Boolean = false,
     first: @Composable () -> Unit,
     second: (@Composable () -> Unit)? = null,
 ) {
@@ -80,8 +82,8 @@ internal fun FairSplitRow(
         val total = width ?: (p1.width + gap + p2.width)
         val height = maxOf(p1.height, p2.height).coerceAtLeast(constraints.minHeight)
         layout(total, height) {
-            p1.placeRelative(0, 0)
-            p2.placeRelative(total - p2.width, 0)
+            p1.placeRelative(0, if (centerVertically) (height - p1.height) / 2 else 0)
+            p2.placeRelative(total - p2.width, if (centerVertically) (height - p2.height) / 2 else 0)
         }
     }
 }

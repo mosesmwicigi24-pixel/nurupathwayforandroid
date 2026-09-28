@@ -272,7 +272,8 @@ fun NewPledgeFlow(
                     Text(if (shape == "monthly") "EACH MONTH" else "IN TOTAL", style = NuruType.micro, color = Nuru.goldLo)
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("KSh", style = nuruSans(14, FontWeight.Medium), color = Nuru.ink400)
-                        Text("%,d".format(amountMajor), style = nuruSerif(42, FontWeight.SemiBold), color = Nuru.ink)
+                        val shownAmount = "%,d".format(amountMajor)
+                        Text(shownAmount, style = nuruSerif(amountDisplaySize(shownAmount), FontWeight.SemiBold), color = Nuru.ink)
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         PLEDGE_PRESETS.forEach { p ->
@@ -597,10 +598,15 @@ private fun ChoiceRow(selected: Boolean, title: String, sub: String, onSelect: (
     }
 }
 
+/** Label at the leading edge, value at the trailing one, sharing the width
+ *  (FairSplitRow) so a long pledge name or a large font wraps each side
+ *  instead of squeezing the other. */
 @Composable
 private fun ReviewRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = NuruType.body, color = Nuru.ink600)
-        Text(value, style = NuruType.body, color = Nuru.ink, textAlign = TextAlign.End, modifier = Modifier.padding(start = 12.dp))
-    }
+    FairSplitRow(
+        modifier = Modifier.fillMaxWidth(),
+        spacing = 12.dp,
+        first = { Text(label, style = NuruType.body, color = Nuru.ink600) },
+        second = { Text(value, style = NuruType.body, color = Nuru.ink, textAlign = TextAlign.End) },
+    )
 }

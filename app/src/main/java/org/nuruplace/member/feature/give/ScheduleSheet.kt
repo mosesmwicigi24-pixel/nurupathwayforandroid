@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -558,32 +559,37 @@ private fun SheetButton(
     enabled: Boolean = !busy,
     onClick: () -> Unit,
 ) {
+    // At least 42dp, taller rather than clipped when a large font wraps
+    // "Change it on the pledge".
     Row(
-        modifier.fillMaxWidth().height(42.dp).alpha(if (enabled) 1f else 0.5f).clip(RoundedCornerShape(14.dp))
+        modifier.fillMaxWidth().heightIn(min = 42.dp).alpha(if (enabled) 1f else 0.5f).clip(RoundedCornerShape(14.dp))
             .background(if (filled) GIVE.gold else GIVE.white)
             .then(if (filled) Modifier else Modifier.border(1.dp, GIVE.gold.copy(alpha = 0.55f), RoundedCornerShape(14.dp)))
-            .clickable(enabled = enabled) { onClick() },
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         if (busy) {
             CircularProgressIndicator(Modifier.size(16.dp), color = GIVE.navy, strokeWidth = 2.dp)
         } else {
-            Text(label, style = giInter(13, FontWeight.Bold), color = if (filled) GIVE.navy else GIVE.gold)
+            Text(label, style = giInter(13, FontWeight.Bold), color = if (filled) GIVE.navy else GIVE.gold, textAlign = TextAlign.Center)
         }
     }
 }
 
+/** Label at the leading edge, value at the trailing one, sharing the width
+ *  with a gap between (FairSplitRow) — a long value wraps, never flush
+ *  against its label. */
 @Composable
 private fun SheetDetailRow(label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(label, style = giInter(12), color = GIVE.sub)
-        Text(value, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.End)
-    }
+    FairSplitRow(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        spacing = 12.dp,
+        centerVertically = true,
+        first = { Text(label, style = giInter(12), color = GIVE.sub) },
+        second = { Text(value, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.End) },
+    )
 }
 
 @Composable

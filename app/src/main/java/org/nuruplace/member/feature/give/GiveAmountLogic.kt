@@ -44,6 +44,18 @@ fun usdTyping(v: String): String {
     return "$whole.$decimals"
 }
 
+/** The big amount's font size (sp) for how long it reads. iOS shrinks it to
+ *  fit (minimumScaleFactor); here it steps down — up to 6 characters at
+ *  [base], then 90%, 80% and 70% for 7, 8 and 9 or more — so "2,000,000" or
+ *  "10,000.00" stays on one line at 1.3× font scale on a 360dp phone instead
+ *  of breaking mid-number (Android ↔ iOS parity, 2026-09-28). */
+fun amountDisplaySize(text: String, base: Int = 42): Int = when {
+    text.length <= 6 -> base
+    text.length == 7 -> Math.round(base * 0.9f)
+    text.length == 8 -> Math.round(base * 0.8f)
+    else -> Math.round(base * 0.7f)
+}
+
 /** The dollar field's text for an amount: "25" for whole dollars, else "25.50". */
 fun usdInput(cents: Int): String =
     if (cents % 100 == 0) "${cents / 100}" else "%d.%02d".format(cents / 100, cents % 100)

@@ -110,6 +110,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -489,52 +490,60 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                 } else {
                     d.title.ifBlank { null } ?: pledge?.displayTitle ?: "Pledge"
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            buildAnnotatedString {
-                                append("${money(shown.leadMinor, d.currency)} · ")
-                                if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
-                            },
-                            style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
-                        )
-                        Text(
-                            listOfNotNull(what, shown.processingNote).joinToString(" · "),
-                            style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                    if (d.action == "resume") {
-                        NavyPill("Resume", enabled = !vm.resuming && vm.busyPledgeId == null) {
-                            Haptics.tap(view)
-                            if (d.kind == "schedule") vm.resume(d.id) else vm.update(d.id, UpdatePledgeBody(status = "active"))
-                        }
-                    } else if (shown.processingChip != null) {
-                        // Already paid and on its way: no Pay to tap twice.
-                        StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
-                    } else {
-                        NavyPill("Pay") {
-                            Haptics.tap(view)
-                            onPayNow(
-                                GivePreset(
-                                    fundId = pledge?.fund?.code,
-                                    // The uncovered remainder when part is already on its way.
-                                    amountMinor = shown.leadMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
-                                    pledgeId = if (d.kind == "pledge") d.id else pledge?.pledgeId,
-                                    title = d.title.ifBlank { null } ?: pledge?.displayTitle,
-                                    // Where the server will route it, for the
-                                    // PAYING YOUR PLEDGE card (GiveTargetCopy).
-                                    paysTo = d.paysTo ?: pledge?.paysTo,
-                                    terms = pledge?.let { pledgeTermsLine(it, today) },
-                                    // Its currency decides the rails (Giving Cycle 5).
-                                    currency = d.currency.takeIf { it.isNotBlank() } ?: pledge?.currency,
-                                ),
+                // The due and what it is on the leading side, its button or
+                // chip on the trailing one, sharing the width (FairSplitRow):
+                // "Waiting for Airtel Money" wraps in its chip instead of
+                // squeezing the amount and title at a large font.
+                FairSplitRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    spacing = 12.dp,
+                    centerVertically = true,
+                    first = {
+                        Column {
+                            Text(
+                                buildAnnotatedString {
+                                    append("${money(shown.leadMinor, d.currency)} · ")
+                                    if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
+                                },
+                                style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
+                            )
+                            Text(
+                                listOfNotNull(what, shown.processingNote).joinToString(" · "),
+                                style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
                             )
                         }
-                    }
-                }
+                    },
+                    second = {
+                        if (d.action == "resume") {
+                            NavyPill("Resume", enabled = !vm.resuming && vm.busyPledgeId == null) {
+                                Haptics.tap(view)
+                                if (d.kind == "schedule") vm.resume(d.id) else vm.update(d.id, UpdatePledgeBody(status = "active"))
+                            }
+                        } else if (shown.processingChip != null) {
+                            // Already paid and on its way: no Pay to tap twice.
+                            StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
+                        } else {
+                            NavyPill("Pay") {
+                                Haptics.tap(view)
+                                onPayNow(
+                                    GivePreset(
+                                        fundId = pledge?.fund?.code,
+                                        // The uncovered remainder when part is already on its way.
+                                        amountMinor = shown.leadMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
+                                        pledgeId = if (d.kind == "pledge") d.id else pledge?.pledgeId,
+                                        title = d.title.ifBlank { null } ?: pledge?.displayTitle,
+                                        // Where the server will route it, for the
+                                        // PAYING YOUR PLEDGE card (GiveTargetCopy).
+                                        paysTo = d.paysTo ?: pledge?.paysTo,
+                                        terms = pledge?.let { pledgeTermsLine(it, today) },
+                                        // Its currency decides the rails (Giving Cycle 5).
+                                        currency = d.currency.takeIf { it.isNotBlank() } ?: pledge?.currency,
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                )
             }
         }
     }
@@ -750,7 +759,7 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
     Column(Modifier.partnerCard(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(pl.displayTitle, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2)
+                Text(pl.displayTitle, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(amountLine, dueLine).joinToString(" · "),
                     style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
@@ -762,19 +771,26 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
         Box(Modifier.fillMaxWidth().height(6.dp).clip(Capsule).background(GIVE.mutedBg)) {
             Box(Modifier.fillMaxWidth(progressFraction(pl)).fillMaxHeight().clip(Capsule).background(GIVE.gold))
         }
-        Row(Modifier.fillMaxWidth()) {
-            left?.let { Text(it, style = giInter(11), color = GIVE.sub) }
-            Spacer(Modifier.weight(1f))
-            // "Next 5 Oct" — or "Overdue since 10 Aug" in amber once its
-            // next instalment is already past.
-            pledgeNextLabel(pl, today)?.let {
-                Text(
-                    it.text,
-                    style = giInter(11, if (it.overdue) FontWeight.SemiBold else FontWeight.Normal),
-                    color = if (it.overdue) GIVE.goldChipText else GIVE.sub,
-                )
-            }
-        }
+        // "KSh 20,000 paid · KSh 30,000 to go" at the leading edge and "Next
+        // 5 Oct" — or "Overdue since 10 Aug" in amber — at the trailing one,
+        // sharing the width (FairSplitRow): long dollar amounts wrap rather
+        // than squeeze the date into a column of letters.
+        val next = pledgeNextLabel(pl, today)
+        if (left != null || next != null) FairSplitRow(
+            modifier = Modifier.fillMaxWidth(),
+            spacing = 8.dp,
+            first = { left?.let { Text(it, style = giInter(11), color = GIVE.sub) } },
+            second = next?.let { n ->
+                {
+                    Text(
+                        n.text,
+                        style = giInter(11, if (n.overdue) FontWeight.SemiBold else FontWeight.Normal),
+                        color = if (n.overdue) GIVE.goldChipText else GIVE.sub,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            },
+        )
         // A total pledge's pace to reach it on time (Giving Cycle 9).
         paceLine(pl, today)?.let { Text(it, style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText) }
     }
@@ -1148,15 +1164,16 @@ private fun PaceBlock(
             }
             offer -> {
                 Row(
-                    Modifier.fillMaxWidth().height(44.dp).clip(Capsule).background(GIVE.navy)
-                        .clickable(enabled = !starting) { onStart() },
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(Capsule).background(GIVE.navy)
+                        .clickable(enabled = !starting) { onStart() }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
                 ) {
                     if (starting) {
                         CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text("Collect it automatically at this pace", style = giInter(13, FontWeight.SemiBold), color = Color.White)
+                    Text("Collect it automatically at this pace", style = giInter(13, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
                 }
                 Text(PACE_OFFER_NOTE, style = giInter(11), color = GIVE.sub)
             }
@@ -1278,10 +1295,11 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
                 enabled = online && !sending && amountText.isNotBlank(),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Nuru.navyDeep, contentColor = Color.White),
-                modifier = Modifier.weight(1f).height(44.dp),
+                // Taller rather than clipped when a large font wraps the label.
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
             ) {
                 if (sending) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp).size(16.dp))
-                Text(if (sending) "Sending…" else "Tell the office", style = NuruType.cardCta)
+                Text(if (sending) "Sending…" else "Tell the office", style = NuruType.cardCta, textAlign = TextAlign.Center)
             }
             TextButton(onClick = onClose, enabled = !sending) { Text("Not now", style = NuruType.cardCta, color = Nuru.ink600) }
         }

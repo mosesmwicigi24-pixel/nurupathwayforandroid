@@ -299,8 +299,11 @@ private fun GiveHeaderBand(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    // The pill takes what is left beside the eye (weighted, not
+                    // filling): "KSh 3,500 + US$ 20.00 given this year" wraps
+                    // inside it at a large font instead of pushing the eye out.
                     Row(
-                        Modifier.clip(Capsule).background(GIVE.white)
+                        Modifier.weight(1f, fill = false).clip(Capsule).background(GIVE.white)
                             .border(1.dp, GIVE.gold.copy(alpha = 0.45f), Capsule)
                             .clickable { onOpenStatement() }
                             .padding(horizontal = 16.dp, vertical = 9.dp),
@@ -311,6 +314,7 @@ private fun GiveHeaderBand(
                         Text(
                             (if (hidden) "KSh ••••" else moneyTotals(yearTotals)) + " given this year",
                             style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
                     }
@@ -930,9 +934,11 @@ private fun GiveTab(
                     ) {
                         // PayPal speaks dollars with cents; everything else whole shillings.
                         Text(if (inDollars) "US$" else "KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
+                        val shownAmount = if (inDollars) usd(usdCents).removePrefix("US$ ") else "%,d".format(amountMajor)
+                        // Steps down for long amounts (iOS shrinks to fit), never mid-number.
                         Text(
-                            if (inDollars) usd(usdCents).removePrefix("US$ ") else "%,d".format(amountMajor),
-                            style = giSerif(42, FontWeight.SemiBold, -1.2f), color = GIVE.navy,
+                            shownAmount,
+                            style = giSerif(amountDisplaySize(shownAmount), FontWeight.SemiBold, -1.2f), color = GIVE.navy,
                         )
                     }
                     Text(

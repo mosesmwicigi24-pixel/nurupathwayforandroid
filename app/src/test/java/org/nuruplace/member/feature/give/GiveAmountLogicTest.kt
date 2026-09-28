@@ -71,4 +71,20 @@ class GiveAmountLogicTest {
         }
         assertEquals(0, coverFeeMinor(100, coverFee = true)) // KSh 100 has no fee
     }
+
+    @Test
+    fun `a long amount steps down in size instead of breaking mid-number`() {
+        // Up to 6 characters: the full size.
+        assertEquals(42, amountDisplaySize("1,000"))
+        assertEquals(42, amountDisplaySize("10,000"))
+        assertEquals(42, amountDisplaySize("25.50"))
+        // 7, 8, 9+ characters: 90%, 80%, 70%.
+        assertEquals(38, amountDisplaySize("100,000"))
+        assertEquals(34, amountDisplaySize("1,234.56"))
+        assertEquals(29, amountDisplaySize("2,000,000"))
+        assertEquals(29, amountDisplaySize("10,000.00"))
+        // The receipt's hero starts from 40.
+        assertEquals(40, amountDisplaySize("1,000", base = 40))
+        assertEquals(28, amountDisplaySize("2,000,000", base = 40))
+    }
 }
