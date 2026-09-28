@@ -73,8 +73,11 @@ android {
     buildTypes {
         debug {
             // Point debug at prod for on-emulator design verification (fast, no R8).
-            // Flip back to http://10.0.2.2:8080/v1 for local-backend development.
-            buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
+            // For local-backend development pass -PapiBaseUrl=http://10.0.2.2:8080/v1
+            // (Giving cycles: money flows are tested against a local server with a
+            // fake M-Pesa — never against production from a debug build).
+            val apiBase = (project.findProperty("apiBaseUrl") as String?) ?: "https://pathway.nuruplace.org/v1"
+            buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
