@@ -654,7 +654,8 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
         Eyebrow("DUE")
         Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).border(1.dp, GIVE.border, CardShape)) {
             due.sortedBy { it.dueOn }.forEachIndexed { i, d ->
-                if (i > 0) Hairline()
+                // Inset to the text on both sides, as iOS draws it.
+                if (i > 0) Box(Modifier.padding(horizontal = 16.dp)) { Hairline() }
                 val pledge = p.pledges.firstOrNull { it.pledgeId == d.id }
                 // pending_minor: the part of this instalment already on its
                 // way — Processing instead of Pay once it covers the amount.
@@ -808,12 +809,6 @@ private fun stateChip(pl: Pledge): Triple<String, Color, Color> = when {
 private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement?, today: LocalDate, onOpen: () -> Unit) {
     val total = pl.shape == "total"
     val (chipText, chipBg, chipFg) = stateChip(pl)
-    val amountLine = if (total) {
-        "${money(pl.targetMinor ?: 0, pl.currency)} by ${partnerDate(pl.dueOn)?.format(PartnerFormat.MONTH) ?: "a date"}"
-    } else {
-        "${money(pl.amountMinor ?: 0, pl.currency)} monthly"
-    }
-    val dueLine = if (total) partnerDate(pl.dueOn)?.let { "due ${PartnerFormat.dayMonth(it)}" } else pl.dueDay?.let { "due on the ${ordinal(it)}" }
     val left = if (total) {
         val paid = pl.progress.paidMinor
         val toGo = maxOf((pl.targetMinor ?: 0) - paid, 0)
@@ -827,10 +822,9 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(pl.displayTitle, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(
-                    listOfNotNull(amountLine, dueLine).joinToString(" · "),
-                    style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                )
+                // The promise as iOS says it — "KSh 20,000 · by 31 Dec", the
+                // date once (it read "KSh 20,000 by Dec · due 31 Dec").
+                Text(pledgeAmountLine(pl, today), style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
             }
             if (busy) CircularProgressIndicator(color = GIVE.gold, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
             StateChip(chipText, chipBg, chipFg)
