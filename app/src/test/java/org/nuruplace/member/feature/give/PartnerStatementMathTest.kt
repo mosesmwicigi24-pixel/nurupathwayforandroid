@@ -8,7 +8,9 @@
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
@@ -269,8 +271,8 @@ class PartnerStatementMathTest {
     // ── Overdue wording (owner, 2026-09-26) ──
 
     private val sep25: LocalDate = LocalDate.of(2026, 9, 25)
-    private fun pledgeDue(dueOn: String, count: Int = 0, since: String? = null, kind: String = "pledge") =
-        DueItem(kind = kind, id = "p1", amountMinor = 200_000, dueOn = dueOn, overdueCount = count, overdueSince = since)
+    private fun pledgeDue(dueOn: String, count: Int = 0, since: String? = null, kind: String = "pledge", overdue: Boolean? = null) =
+        DueItem(kind = kind, id = "p1", amountMinor = 200_000, dueOn = dueOn, overdueCount = count, overdueSince = since, overdue = overdue)
 
     @Test
     fun `a DUE row counts down to its date, and an instalment already past reads overdue since`() {
@@ -290,9 +292,40 @@ class PartnerStatementMathTest {
     }
 
     @Test
-    fun `a recurring-gift row is never overdue, and an unreadable date reads soon`() {
+    fun `a recurring-gift row is never overdue, and an unreadable date is said as sent`() {
         assertEquals(WhenLabel("10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule"), sep25))
-        assertEquals(WhenLabel("soon", false), dueWhen(pledgeDue(""), sep25))
+        assertEquals(WhenLabel("10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule", overdue = false), sep25))
+        // iOS relativeDay: the text as it came.
+        assertEquals(WhenLabel("soon-ish", false), dueWhen(pledgeDue("soon-ish"), sep25))
+    }
+
+    @Test
+    fun `the server decides overdue — as sent, not by the phone's calendar`() {
+        // A catch-up row: due_on is today (the earliest uncovered), the server
+        // says one instalment is overdue since 10 Aug.
+        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-09-25", count = 1, since = "2026-08-10", overdue = true), sep25))
+        // overdue_since alone, or overdue_count alone, is the server's word too.
+        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-09-25", since = "2026-08-10"), sep25))
+        assertEquals(WhenLabel("2 overdue since 25 Sep", true), dueWhen(pledgeDue("2026-09-25", count = 2), sep25))
+        // The server says on time: on time, even when the phone's day has moved on.
+        assertEquals(WhenLabel("24 Sep", false), dueWhen(pledgeDue("2026-09-24", overdue = false), sep25))
+        assertFalse(dueOverdue(pledgeDue("2026-09-24", overdue = false), sep25))
+        // An older server sends none of them: the due date itself decides.
+        assertTrue(dueOverdue(pledgeDue("2026-09-24"), sep25))
+        assertFalse(dueOverdue(pledgeDue("2026-09-25"), sep25))
+        // A schedule row is never overdue, whatever it carries.
+        assertFalse(dueOverdue(pledgeDue("2026-08-10", count = 2, since = "2026-08-10", kind = "schedule", overdue = true), sep25))
+    }
+
+    @Test
+    fun `the DUE row's first line says what is left when part is on its way`() {
+        val d = due(amount = 500_000, pending = 200_000)
+        assertEquals("KSh 3,000 left · in 3 days", dueLeadLine(d, dueRowView(d, "mpesa"), "in 3 days"))
+        val whole = due(amount = 500_000)
+        assertEquals("KSh 5,000 · in 3 days", dueLeadLine(whole, dueRowView(whole, "mpesa"), "in 3 days"))
+        // All of it on its way: Processing instead of Pay, the whole amount said.
+        val all = due(amount = 500_000, pending = 500_000)
+        assertEquals("KSh 5,000 · today", dueLeadLine(all, dueRowView(all, "mpesa"), "today"))
     }
 
     @Test

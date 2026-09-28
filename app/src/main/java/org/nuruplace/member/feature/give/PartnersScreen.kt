@@ -128,13 +128,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -653,7 +650,8 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Eyebrow("DUE")
         Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).border(1.dp, GIVE.border, CardShape)) {
-            due.sortedBy { it.dueOn }.forEachIndexed { i, d ->
+            // The server's order, as iOS lists them.
+            due.forEachIndexed { i, d ->
                 // Inset to the text on both sides, as iOS draws it.
                 if (i > 0) Box(Modifier.padding(horizontal = 16.dp)) { Hairline() }
                 val pledge = p.pledges.firstOrNull { it.pledgeId == d.id }
@@ -678,12 +676,12 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                     centerVertically = true,
                     first = {
                         Column {
+                            // "KSh 3,000 left · in 3 days"; the whole line amber
+                            // when the server says it is overdue (iOS).
                             Text(
-                                buildAnnotatedString {
-                                    append("${money(shown.leadMinor, d.currency)} · ")
-                                    if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
-                                },
-                                style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
+                                dueLeadLine(d, shown, dueWhen.text),
+                                style = giInter(15, FontWeight.SemiBold),
+                                color = if (dueWhen.overdue) GIVE.goldChipText else GIVE.ink,
                             )
                             Text(
                                 listOfNotNull(what, shown.processingNote).joinToString(" · "),

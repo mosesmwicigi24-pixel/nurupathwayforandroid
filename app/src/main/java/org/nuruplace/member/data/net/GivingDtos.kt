@@ -473,6 +473,10 @@ data class DueItem(
     /** kind "pledge": the earliest overdue instalment's date — the DUE row
      *  says "overdue since" it, preferring it over `due_on`. */
     val overdueSince: String? = null,
+    /** The server's word on whether the row is overdue (`overdue_count > 0`;
+     *  false on a schedule row). Null from an older server that does not
+     *  send it — the row then reads its own due date. */
+    val overdue: Boolean? = null,
 )
 
 /** POST /giving/partners/join `{}` — joining needs no fund, no campaign and no

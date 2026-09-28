@@ -310,23 +310,45 @@ private fun dayMonthIn(d: LocalDate, today: LocalDate): String =
     if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
 
 /**
- * The DUE row's "when". A pledge instalment already past reads "overdue
+ * Whether a DUE row is overdue — the SERVER decides, as sent: its `overdue`
+ * flag (overdue_count > 0), `overdue_count`, or an `overdue_since` date. So
+ * a catch-up row whose `due_on` is today is overdue when the server says an
+ * earlier instalment is, and a row the server calls on time is on time on a
+ * phone whose clock or zone disagrees. Only a pledge row can be — nothing is
+ * owed on a recurring gift. An older server that sends none of the three:
+ * its due date already past on the church's calendar.
+ */
+internal fun dueOverdue(d: DueItem, today: LocalDate): Boolean {
+    if (d.kind != "pledge") return false
+    if (d.overdue == true || d.overdueCount > 0 || !d.overdueSince.isNullOrBlank()) return true
+    if (d.overdue == false) return false
+    return partnerDate(d.dueOn)?.isBefore(today) == true
+}
+
+/**
+ * The DUE row's "when" (iOS dueWhen). Overdue ([dueOverdue]) reads "overdue
  * since 10 Aug" — "2 overdue since 10 Aug" with two or more behind (the
  * amount is then the server's catch-up total) — dated by the server's
- * `overdue_since` when sent, else `due_on`. Otherwise "today" · "tomorrow" ·
- * "in N days" (to two weeks) · the date. A recurring-gift row is never
- * "overdue" (nothing is owed on a schedule); a past date there reads as its
- * date.
+ * `overdue_since` when sent, else `due_on`, the year added outside this one.
+ * Otherwise "today" · "tomorrow" · "in N days" (to two weeks) · the date; a
+ * date that cannot be read is said as sent.
  */
 internal fun dueWhen(d: DueItem, today: LocalDate): WhenLabel {
-    val due = partnerDate(d.dueOn) ?: return WhenLabel("soon", false)
-    if (d.kind == "pledge" && due.isBefore(today)) {
-        val since = partnerDate(d.overdueSince) ?: due
+    if (dueOverdue(d, today)) {
+        val since = partnerDate(d.overdueSince) ?: partnerDate(d.dueOn)
+        val sinceText = since?.let { dayMonthIn(it, today) } ?: (d.overdueSince?.takeIf { it.isNotBlank() } ?: d.dueOn).take(10)
         val lead = if (d.overdueCount >= 2) "${d.overdueCount} overdue since" else "overdue since"
-        return WhenLabel("$lead ${dayMonthIn(since, today)}", overdue = true)
+        return WhenLabel("$lead $sinceText", overdue = true)
     }
+    val due = partnerDate(d.dueOn) ?: return WhenLabel(d.dueOn, false)
     return WhenLabel(dueRelativeLabel(due, today, PartnerFormat::dayMonth), overdue = false)
 }
+
+/** The DUE row's first line (iOS dueRow): "KSh 5,000 · in 3 days" — or,
+ *  part of it already on its way, the uncovered rest: "KSh 3,000 left · in
+ *  3 days". */
+internal fun dueLeadLine(d: DueItem, view: DueRowView, whenText: String): String =
+    "${money(view.leadMinor, d.currency)}${if (view.processingNote != null) " left" else ""} · $whenText"
 
 /** The pledge card's foot: "Next 5 Oct", or — its next instalment already
  *  past — "Overdue since 10 Aug" (amber). Null when the server names no
