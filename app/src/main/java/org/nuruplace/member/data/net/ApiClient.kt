@@ -31,6 +31,10 @@ import org.nuruplace.member.data.offline.OfflineQueue
 import retrofit2.Retrofit
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 
+/** A response the last-good-copy cache may keep: a success the server did
+ *  not mark no-store (Giving Cycle 6: private documents are never cached). */
+internal fun storableLastGoodCopy(successful: Boolean, noStore: Boolean): Boolean = successful && !noStore
+
 /** Process-wide HTTP holder, initialised once from the Application. */
 object Net {
     lateinit var client: ApiClient
@@ -88,11 +92,14 @@ class ApiClient(context: Context) {
 
     /** Network interceptor: marks a good GET response storable. "public" is what
      *  lets OkHttp keep a response to a request that carried an Authorization
-     *  header; max-age=0 sends every online read to the wire regardless. */
+     *  header; max-age=0 sends every online read to the wire regardless. Never
+     *  a response the server marked no-store: the giving receipts and
+     *  statements are private documents, never cached (pathway Giving Cycle
+     *  6) — rewriting their header would have kept them on disk anyway. */
     private val storeLastGoodCopy = Interceptor { chain ->
         val req = chain.request()
         val resp = chain.proceed(req)
-        if (!keepsLastGoodCopy(req) || !resp.isSuccessful) return@Interceptor resp
+        if (!keepsLastGoodCopy(req) || !storableLastGoodCopy(resp.isSuccessful, resp.cacheControl.noStore)) return@Interceptor resp
         resp.newBuilder().header("Cache-Control", "public, max-age=0").removeHeader("Pragma").build()
     }
 
