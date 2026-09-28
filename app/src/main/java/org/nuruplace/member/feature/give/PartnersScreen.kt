@@ -520,9 +520,11 @@ fun PartnersScreen(
             s,
             onClose = { collector = null },
             onChanged = { GivingEvents.emit(); vm.load() },
-            onCancelled = { collector = null; GivingEvents.emit(); vm.load() },
+            // Paused, resumed or cancelled: the sheet closes (iOS).
+            onDone = { collector = null; GivingEvents.emit(); vm.load() },
             pledges = p?.pledges.orEmpty(),
             onOpenPledge = { id -> collector = null; openPage(id) },
+            phoneOnFile = vm.methods?.phoneOnFile,
         )
     }
 }

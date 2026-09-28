@@ -176,10 +176,20 @@ class ScheduleCopyTest {
         assertEquals("Prompts go to your profile number", schedulePromptLine(sched))
     }
 
+    // ── The sheet's words (iOS ScheduleDetailSheet) ──
+
     @Test
-    fun `cancelling asks with what stops and what does not`() {
-        assertEquals("KSh 1,000 every month to Tithe will stop. Gifts already given are not affected.", scheduleCancelText(sched))
-        assertEquals("KSh 500 every week to Mission will stop. Gifts already given are not affected.", scheduleCancelText(weekly.copy(fund = "mission")))
+    fun `the sheet says when it falls and when it next prompts`() {
+        assertEquals("Every month on the 28th", scheduleDayLine(sched))
+        assertEquals("Every Monday", scheduleDayLine(weekly))
+        // No readable day: the rhythm alone.
+        assertEquals("Every month", scheduleDayLine(sched.copy(anchorDay = null, nextRunAt = "")))
+        assertEquals("Every week", scheduleDayLine(weekly.copy(nextRunAt = "")))
+        assertEquals("Wed 28 Oct 2026", scheduleNextPromptLine(sched))
+        // A paused gift's old date is no promise.
+        assertEquals("None while paused", scheduleNextPromptLine(sched.copy(status = "paused")))
+        assertEquals("—", scheduleNextPromptLine(sched.copy(nextRunAt = "")))
+        assertEquals("It comes back on its own at its next day on or after 5 Oct 2026.", pauseComesBackLine(LocalDate.of(2026, 10, 5)))
     }
 
     // ── Pausing ──
@@ -214,13 +224,33 @@ class ScheduleCopyTest {
     }
 
     @Test
-    fun `a changed amount is whole shillings inside M-Pesa's range`() {
-        assertNull(scheduleAmountError("1000", 100, 25_000_000))
-        assertNull(scheduleAmountError("250,000", 100, 25_000_000))
-        assertEquals("Enter an amount.", scheduleAmountError(" ", 100, 25_000_000))
-        assertEquals("Whole shillings only — no cents.", scheduleAmountError("100.50", 100, 25_000_000))
-        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", scheduleAmountError("0", 100, 25_000_000))
-        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", scheduleAmountError("250001", 100, 25_000_000))
+    fun `the Change form says what is wrong in the server's terms, and sends only what changed`() {
+        val rail = FALLBACK_MPESA
+        val draft = scheduleDraftOf(sched)
+        assertEquals(ScheduleDraft(amountText = "1000", day = 28, numberText = "", useProfile = true), draft)
+        // Untouched: nothing to send, nothing wrong — Save waits.
+        assertEquals(ScheduleChangePlan(null, null), scheduleChangePlan(draft, sched, rail))
+        assertEquals("Enter an amount.", scheduleChangePlan(draft.copy(amountText = " "), sched, rail).problem)
+        assertEquals("Enter whole shillings — no cents.", scheduleChangePlan(draft.copy(amountText = "100.50"), sched, rail).problem)
+        assertEquals("Enter an amount.", scheduleChangePlan(draft.copy(amountText = "0"), sched, rail).problem)
+        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", scheduleChangePlan(draft.copy(amountText = "250001"), sched, rail).problem)
+        assertEquals("Choose a day.", scheduleChangePlan(draft.copy(day = 32), sched, rail).problem)
+        assertEquals(
+            "Add the number to prompt, or use your profile number.",
+            scheduleChangePlan(draft.copy(useProfile = false, numberText = " "), sched, rail).problem,
+        )
+        assertEquals(PHONE_INVALID_MESSAGE, scheduleChangePlan(draft.copy(useProfile = false, numberText = "12345"), sched, rail).problem)
+        // Only what changed travels.
+        assertEquals(UpdateScheduleBody(amountMinor = 150_000), scheduleChangePlan(draft.copy(amountText = "1,500"), sched, rail).patch)
+        assertEquals(UpdateScheduleBody(day = 5), scheduleChangePlan(draft.copy(day = 5), sched, rail).patch)
+        assertEquals(
+            UpdateScheduleBody(phoneNumber = JsonPrimitive("+254722000111")),
+            scheduleChangePlan(draft.copy(useProfile = false, numberText = "0722 000 111"), sched, rail).patch,
+        )
+        // A gift with its own number: back to the profile's travels as null.
+        val pinned = sched.copy(phoneNumber = "+254722000111")
+        assertEquals(ScheduleDraft("1000", 28, "0722 000 111", useProfile = false), scheduleDraftOf(pinned))
+        assertEquals(UpdateScheduleBody(phoneNumber = JsonNull), scheduleChangePlan(scheduleDraftOf(pinned).copy(useProfile = true), pinned, rail).patch)
     }
 
     @Test

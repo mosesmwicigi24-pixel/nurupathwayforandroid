@@ -258,10 +258,63 @@ fun monthlyPledgeCollected(s: GivingSchedule, pledges: List<Pledge>): Pledge? {
     return pledges.firstOrNull { it.pledgeId == id && it.shape == "monthly" }
 }
 
-/** The cancel confirmation — what stops, and what does not. */
-fun scheduleCancelText(s: GivingSchedule): String =
-    "${ksh(s.amountMinor)} every ${cadenceWord(s.frequency)} to ${giveFund(s.fund).name} will stop. " +
-        "Gifts already given are not affected."
+// ── The sheet's words (iOS ScheduleDetailSheet) ──
+
+private val NEXT_PROMPT_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.ENGLISH)
+
+/** "Every Sunday" · "Every month on the 31st" — "Every week" / "Every month"
+ *  when its day cannot be read (iOS dayLine). */
+fun scheduleDayLine(s: GivingSchedule): String {
+    val weekly = freqOf(s.frequency) == FREQ_WEEKLY
+    val day = scheduleDay(s) ?: return if (weekly) "Every week" else "Every month"
+    return if (weekly) "Every ${weekdayName(day)}" else "Every month on the ${ordinal(day)}"
+}
+
+/** The sheet's "Next prompt": "Mon 5 Oct 2026" — "None while paused", as a
+ *  paused gift's old date is no promise. */
+fun scheduleNextPromptLine(s: GivingSchedule): String =
+    if (s.status.trim().lowercase() == "paused") "None while paused"
+    else parseNairobi(s.nextRunAt)?.format(NEXT_PROMPT_FMT) ?: "—"
+
+/** Under "Until a date": when the gift comes back on its own. */
+fun pauseComesBackLine(date: LocalDate): String =
+    "It comes back on its own at its next day on or after ${date.format(SCHEDULE_DAY_FMT)}."
+
+/** The sheet's Change form, as typed (iOS ScheduleDraft). */
+data class ScheduleDraft(val amountText: String, val day: Int, val numberText: String, val useProfile: Boolean)
+
+/** The form as the gift is now. */
+fun scheduleDraftOf(s: GivingSchedule): ScheduleDraft = ScheduleDraft(
+    amountText = "${s.amountMinor / 100}",
+    day = scheduleDay(s) ?: if (freqOf(s.frequency) == FREQ_WEEKLY) 0 else 1,
+    numberText = s.phoneNumber?.takeIf { it.isNotBlank() }?.let(::kenyanMobileDisplay).orEmpty(),
+    useProfile = s.phoneNumber.isNullOrBlank(),
+)
+
+/** What Save would send — null when nothing changed or something is wrong —
+ *  and why it cannot be sent, in the server's terms (iOS ScheduleEdit.plan). */
+data class ScheduleChangePlan(val patch: UpdateScheduleBody?, val problem: String?)
+
+/** Whole shillings inside the rail's limits ([rail], null = the server's
+ *  check alone), a real day, a Kenyan mobile number or the profile's. Only
+ *  what changed travels (scheduleEditPatch). */
+fun scheduleChangePlan(d: ScheduleDraft, s: GivingSchedule, rail: GiveMethodOption?): ScheduleChangePlan {
+    fun no(why: String) = ScheduleChangePlan(null, why)
+    val typed = d.amountText.filter { !it.isWhitespace() && it != ',' }
+    if (typed.isEmpty()) return no("Enter an amount.")
+    val ksh = typed.takeIf { t -> t.all { it.isDigit() } }?.toIntOrNull() ?: return no("Enter whole shillings — no cents.")
+    if (ksh <= 0) return no("Enter an amount.")
+    rail?.let { giveAmountProblem(ksh * 100, it) }?.let { return no(it) }
+    if (d.day !in scheduleDayOptions(s.frequency)) return no("Choose a day.")
+    val number: PromptNumberChoice = if (d.useProfile) {
+        PromptNumberChoice.Profile
+    } else {
+        val text = d.numberText.trim()
+        if (text.isEmpty()) return no("Add the number to prompt, or use your profile number.")
+        PromptNumberChoice.Own(kenyanMobileE164(text) ?: return no(PHONE_INVALID_MESSAGE))
+    }
+    return ScheduleChangePlan(scheduleEditPatch(s, amountMajor = ksh, day = d.day, number = number), null)
+}
 
 // ── Pausing ──
 
@@ -287,19 +340,6 @@ fun scheduleDayOptions(frequency: String): IntRange = if (freqOf(frequency) == F
 /** A day's chip: "Sun" … "Sat" weekly, "1" … "31" monthly. */
 fun scheduleDayChip(frequency: String, day: Int): String =
     if (freqOf(frequency) == FREQ_WEEKLY) weekdayName(day).take(3) else "$day"
-
-/** Why a new amount cannot be sent (null = fine): whole shillings only, inside
- *  the rail's range — the server checks again, and its words win. */
-fun scheduleAmountError(text: String, minMinor: Long, maxMinor: Long): String? {
-    val t = text.trim().replace(",", "")
-    if (t.isEmpty()) return "Enter an amount."
-    if (!t.all { it.isDigit() }) return "Whole shillings only — no cents."
-    val minor = t.toLongOrNull()?.times(100) ?: return "Enter an amount."
-    if (minor < minMinor.coerceAtLeast(100) || (maxMinor > 0 && minor > maxMinor)) {
-        return "M-Pesa gifts are from ${money(minMinor.coerceAtLeast(100), GIVE_FORM_CURRENCY)} to ${money(maxMinor.takeIf { it > 0 } ?: FALLBACK_MPESA.maxMinor, GIVE_FORM_CURRENCY)}."
-    }
-    return null
-}
 
 /** The number a changed schedule prompts: its own, or back to the profile's. */
 sealed interface PromptNumberChoice {

@@ -1,13 +1,14 @@
-// Recurring gifts — the member's giving schedules with a cancel action. Port of
-// the iOS schedules list. Giving Cycle 1: a paused schedule says Paused, a
-// failing one says why its last prompt failed (the server's words), each says
-// which phone it prompts, and a cancel asks first and says so when it fails —
-// it used to fire on one tap and swallow any error. Giving Cycle 4: a tap
-// opens the schedule's sheet (ScheduleSheet.kt) to change, pause or resume it,
-// and a schedule push lands here with that schedule open ([openScheduleId]).
-// Giving Cycle 5: a gift that collects a pledge says which, and what its next
-// prompt asks; the member's pledges are read only when one does, so a
-// MONTHLY pledge's collector sends its amount and day to the pledge.
+// Recurring gifts — the member's running and paused giving schedules (never a
+// cancelled one, as Give lists them — listedSchedules). Giving Cycle 1: a
+// paused schedule says why, a failing one why its last prompt failed (the
+// server's words), and each which phone it prompts. Giving Cycle 4: a tap
+// opens the schedule's sheet (ScheduleSheet.kt) to change, pause, resume or
+// cancel it — the only place a gift is cancelled, as on iOS (the per-card
+// Cancel is gone) — and a schedule push lands here with that schedule open
+// ([openScheduleId]). Giving Cycle 5: a gift that collects a pledge says
+// which, and what its next prompt asks; the member's pledges are read only
+// when one does, so a MONTHLY pledge's collector sends its amount and day to
+// the pledge.
 package org.nuruplace.member.feature.give
 
 import androidx.compose.foundation.background
@@ -15,31 +16,25 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.Pledge
@@ -66,7 +61,9 @@ fun SchedulesScreen(
     // its pledge decides where its amount and day change). A failed read
     // leaves them unknown — the server then answers a change itself.
     var pledges by remember { mutableStateOf<List<Pledge>>(emptyList()) }
-    AsyncContent(load = { Net.client.api.schedules().data }) { schedules: List<GivingSchedule>, reload ->
+    AsyncContent(load = { Net.client.api.schedules().data }) { all: List<GivingSchedule>, reload ->
+        // Running, then paused — never a cancelled one (iOS / Give).
+        val schedules = listedSchedules(all)
         LaunchedEffect(schedules) {
             if (!opened && openScheduleId != null) {
                 opened = true
@@ -86,7 +83,7 @@ fun SchedulesScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(Spacing.screen),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
-                    items(schedules, key = { it.scheduleId }) { s -> ScheduleCard(s, onChanged = reload, onOpen = { sheet = s }) }
+                    items(schedules, key = { it.scheduleId }) { s -> ScheduleCard(s, onOpen = { sheet = s }) }
                 }
             }
         }
@@ -98,7 +95,8 @@ fun SchedulesScreen(
                 onClose = { sheet = null },
                 // Partners' standing derives from schedules; the list refetches.
                 onChanged = { GivingEvents.emit(); reload() },
-                onCancelled = { sheet = null; GivingEvents.emit(); reload() },
+                // Paused, resumed or cancelled: the sheet closes (iOS).
+                onDone = { sheet = null; GivingEvents.emit(); reload() },
                 pledges = pledges,
                 onOpenPledge = { id -> sheet = null; onOpenPledge(id) },
             )
@@ -107,91 +105,31 @@ fun SchedulesScreen(
 }
 
 @Composable
-private fun ScheduleCard(s: GivingSchedule, onChanged: () -> Unit, onOpen: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var confirming by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val status = scheduleStatusLabel(s.status)
-    val cancellable = scheduleCancellable(s.status)
+private fun ScheduleCard(s: GivingSchedule, onOpen: () -> Unit) {
     // Paused: why, in words (after failures / until a date / with its pledge).
     val pause = schedulePauseView(s)
     NuruCard(modifier = Modifier.clip(RoundedCornerShape(Radii.card)).clickable { onOpen() }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(money(s.amountMinor, s.currency) + " · ${s.frequency}", style = NuruType.cardTitle, color = Nuru.ink)
-                Text(
-                    "${giveFund(s.fund).name} · ${s.method.takeIf { it.isNotBlank() }?.let { giveMethodLabel(it) } ?: "—"}",
-                    style = NuruType.caption, color = Nuru.ink600,
-                )
-                if (status == null) {
-                    Text("Next: ${nairobiDayOf(s.nextRunAt) ?: "—"}", style = NuruType.micro, color = Nuru.goldLo)
-                } else {
-                    // Paused is trouble the member can act on; Cancelled is history.
-                    Text(
-                        pause?.line ?: status, style = NuruType.micro, fontWeight = FontWeight.SemiBold,
-                        color = if (cancellable) Nuru.danger else Nuru.ink400,
-                    )
-                }
-                if (cancellable) Text(schedulePromptLine(s), style = NuruType.micro, color = Nuru.ink600)
-                // Collecting a pledge: which, and what the next prompt asks.
-                listOfNotNull(schedulePledgeLine(s), scheduleNextAmountLine(s)).forEach {
-                    Text(it, style = NuruType.micro, fontWeight = FontWeight.SemiBold, color = Nuru.goldLo)
-                }
-                // Why the last prompt failed — the server's reason and hint.
-                scheduleFailureLine(s)?.let {
-                    Text(it, style = NuruType.caption, color = Nuru.danger, modifier = Modifier.padding(top = 4.dp))
-                }
-                error?.let {
-                    Text(it, style = NuruType.caption, color = Nuru.danger, modifier = Modifier.padding(top = 4.dp))
-                }
+        Column(Modifier.fillMaxWidth()) {
+            Text(money(s.amountMinor, s.currency) + " · ${s.frequency}", style = NuruType.cardTitle, color = Nuru.ink)
+            Text(
+                "${giveFund(s.fund).name} · ${s.method.takeIf { it.isNotBlank() }?.let { giveMethodLabel(it) } ?: "—"}",
+                style = NuruType.caption, color = Nuru.ink600,
+            )
+            if (pause == null) {
+                Text("Next: ${nairobiDayOf(s.nextRunAt) ?: "—"}", style = NuruType.micro, color = Nuru.goldLo)
+            } else {
+                // Paused is trouble the member can act on (tap: Resume).
+                Text(pause.line, style = NuruType.micro, fontWeight = FontWeight.SemiBold, color = Nuru.danger)
             }
-            if (cancellable) {
-                TextButton(onClick = { if (!busy) { error = null; confirming = true } }, enabled = !busy) {
-                    Text(if (busy) "Cancelling…" else "Cancel", style = NuruType.cardCta, color = Nuru.danger)
-                }
+            Text(schedulePromptLine(s), style = NuruType.micro, color = Nuru.ink600)
+            // Collecting a pledge: which, and what the next prompt asks.
+            listOfNotNull(schedulePledgeLine(s), scheduleNextAmountLine(s)).forEach {
+                Text(it, style = NuruType.micro, fontWeight = FontWeight.SemiBold, color = Nuru.goldLo)
+            }
+            // Why the last prompt failed — the server's reason and hint.
+            scheduleFailureLine(s)?.let {
+                Text(it, style = NuruType.caption, color = Nuru.danger, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
-    if (confirming) {
-        CancelScheduleDialog(
-            s,
-            onConfirm = {
-                confirming = false
-                busy = true
-                scope.launch {
-                    try {
-                        Net.client.api.cancelSchedule(s.scheduleId)
-                        // A cancelled schedule changes the partnership standing.
-                        GivingEvents.emit()
-                        onChanged()
-                    } catch (e: Exception) {
-                        // Said, never swallowed: the schedule still stands.
-                        error = ApiException.message(e)
-                    } finally {
-                        busy = false
-                    }
-                }
-            },
-            onDismiss = { confirming = false },
-        )
-    }
-}
-
-/** Asked before a recurring gift stops — here and on the Give tab's sheet:
- *  what stops, and that nothing already given is touched. */
-@Composable
-internal fun CancelScheduleDialog(s: GivingSchedule, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = GIVE.white,
-        title = { Text("Cancel this recurring gift?", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
-        text = { Text(scheduleCancelText(s), style = giInter(14), color = GIVE.sub) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Cancel gift", style = giInter(14, FontWeight.Bold), color = GIVE.cancelText) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Keep it", style = giInter(14, FontWeight.SemiBold), color = GIVE.sub) }
-        },
-    )
 }

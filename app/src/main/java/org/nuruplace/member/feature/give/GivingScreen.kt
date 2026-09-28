@@ -1562,7 +1562,8 @@ private fun GiveTab(
                 onClose = { sheetSchedule = null },
                 // Partners' standing derives from schedules; the rail refetches.
                 onChanged = { GivingEvents.emit(); reload() },
-                onCancelled = {
+                // Paused, resumed or cancelled: the sheet closes (iOS).
+                onDone = {
                     sheetSchedule = null
                     GivingEvents.emit()
                     reload()
@@ -1571,6 +1572,7 @@ private fun GiveTab(
                 maxMinor = mpesa.maxMinor,
                 pledges = pledges,
                 onOpenPledge = { id -> sheetSchedule = null; onOpenPledge(id) },
+                phoneOnFile = phoneOnFile,
             )
         }
     }
