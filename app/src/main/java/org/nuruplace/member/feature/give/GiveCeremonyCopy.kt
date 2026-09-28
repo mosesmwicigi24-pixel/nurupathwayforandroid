@@ -58,6 +58,14 @@ fun giveDestinationLabel(r: GivingIntentResult, chipFundLabel: String?, giftName
     return giftName?.trim()?.takeIf { it.isNotEmpty() }?.let { "$base — “$it”" } ?: base
 }
 
+/** A PayPal gift still waiting for the member's approval, whose approval page
+ *  the ceremony can (re)open: its answer carried `approve_url` — a fresh
+ *  order's, or since Giving Cycle 10 a RESENT one's (the same key after a
+ *  lost answer), which used to come back without it — and it has not settled
+ *  or failed. */
+fun canReopenPayPal(r: GivingIntentResult, status: String?): Boolean =
+    !r.approveUrl.isNullOrBlank() && giftOutcome(status) == GiftOutcome.Processing
+
 /** Where a gift stands, from its transaction status (txn_status:
  *  requires_action · processing · succeeded · failed · refunded; older
  *  spellings settled / completed / cancelled read the same way). */

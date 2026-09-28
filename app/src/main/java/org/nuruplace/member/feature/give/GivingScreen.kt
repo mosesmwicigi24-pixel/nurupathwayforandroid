@@ -468,6 +468,9 @@ private fun GiveTab(
     var retrying by remember { mutableStateOf(false) }
     var retryError by remember { mutableStateOf<String?>(null) }
     var heldRetry by remember { mutableStateOf<HeldRetryKey?>(null) }
+    // The server refused the last Try again itself (a 429 RATE_LIMITED among
+    // them): the next tap goes back to the form, with its words (iOS parity).
+    var retryToForm by remember { mutableStateOf(false) }
     var confirmSchedule by remember { mutableStateOf<ScheduleToConfirm?>(null) }
     var scheduled by remember { mutableStateOf<CreatedSchedule?>(null) }
     var sheetSchedule by remember { mutableStateOf<GivingSchedule?>(null) }
@@ -521,7 +524,22 @@ private fun GiveTab(
         resultFailure = d.failure
         ceremonyNote = note
         retryError = null
+        retryToForm = false
         result = intentResultFromDetail(d)
+    }
+
+    /** The ceremony resolved: back to the form, the next Pay tap minting a
+     *  fresh key — reset to an ordinary gift when the ceremony spent a
+     *  binding (the double-pay guard). */
+    fun closeCeremony() {
+        result = null
+        heldKey = null
+        ceremonyNote = null
+        resultFailure = null
+        retryError = null
+        retryToForm = false
+        if (ceremonySpentBinding) { ceremonySpentBinding = false; resetToOrdinaryGift() }
+        GivingEvents.emit()
     }
 
     /**
@@ -554,6 +572,7 @@ private fun GiveTab(
                 resultPhone = phone
                 resultFailure = null
                 ceremonyNote = null
+                retryToForm = false
                 result = r
                 if (givingIntentAnnounces(r.status)) GivingEvents.emit()
             } catch (e: Exception) {
@@ -565,7 +584,13 @@ private fun GiveTab(
                         val waiting = runCatching { Net.client.api.givingDetail(next.transactionId) }.getOrNull()
                         if (waiting == null) retryError = next.message else showTransaction(waiting, next.message, boundTo)
                     }
-                    is GiveErrorAction.Say -> retryError = next.message
+                    is GiveErrorAction.Say -> {
+                        retryError = next.message
+                        // Refused for the gift itself (a 429 among them): the
+                        // next tap is the form's, where the number can change.
+                        // No answer, or only the key refused: this gift again.
+                        retryToForm = !retryStaysOnGift(e, refusal)
+                    }
                 }
             } finally {
                 // No server answer: hold the key so the same retry replays it.
@@ -595,16 +620,6 @@ private fun GiveTab(
     // routed the gift to and the pledge it counts toward; the chip label is
     // only the fallback for a result that carries neither.
     result?.let { r ->
-        // The ceremony resolved: the next Pay tap mints a fresh key.
-        fun closeCeremony() {
-            result = null
-            heldKey = null
-            ceremonyNote = null
-            resultFailure = null
-            retryError = null
-            if (ceremonySpentBinding) { ceremonySpentBinding = false; resetToOrdinaryGift() }
-            GivingEvents.emit()
-        }
         GiveResult(
             // A bound gift's fund is the server's to name (pays_to); the
             // chooser's tile was never shown, so it is never the fallback.
@@ -641,7 +656,18 @@ private fun GiveTab(
             canRetry = canRetryGift(r.provider),
             retrying = retrying,
             retryError = retryError,
-            onRetry = { retry(r) },
+            // After a refusal of the gift itself (a 429 RATE_LIMITED among
+            // them) Try again goes back to the form with the server's words —
+            // the member can change the number there; nothing is resent.
+            onRetry = {
+                if (retryToForm) {
+                    val why = retryError
+                    closeCeremony()
+                    error = why
+                } else {
+                    retry(r)
+                }
+            },
         )
         return
     }
@@ -1557,7 +1583,7 @@ private fun GiveResult(
     // PayPal finishes on its own (Giving Cycle 2, iOS parity): back from
     // approving — the app resumes — the order is captured without a second tap.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (openedPayPal && r.approveUrl != null && giftOutcome(status) == GiftOutcome.Processing) capture(quiet = true)
+        if (openedPayPal && canReopenPayPal(r, status)) capture(quiet = true)
     }
     // The watch (iOS parity): GET /giving/transactions/{id} every 3 s, at most
     // 20 times, while the gift is processing. Ends with the ceremony.
@@ -1650,13 +1676,15 @@ private fun GiveResult(
                 }
             }
 
-            if (r.approveUrl != null && outcome == GiftOutcome.Processing) {
+            // "Continue on PayPal" — for a resent order too (Cycle 10: its
+            // answer now carries the approval page).
+            if (canReopenPayPal(r, status)) {
                 Spacer(Modifier.height(20.dp))
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.navy)
                         .clickable {
                             runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.approveUrl)))
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.approveUrl.orEmpty())))
                                 openedPayPal = true
                             }
                         },

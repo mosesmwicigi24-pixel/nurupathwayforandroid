@@ -375,3 +375,16 @@ fun retryKeyFor(held: HeldRetryKey?, retryOf: String, phone: String?, freshKey: 
  *  failed gift stays the ceremony's, so after a 409 CONFLICT the member's
  *  next Try again retries the SAME gift with a fresh key (Giving Cycle 6). */
 fun heldRetryAfter(held: HeldRetryKey, failure: Throwable?): HeldRetryKey? = held.takeIf { keepGiveKeyAfter(failure) }
+
+/**
+ * After a Try again was refused: whether its next tap retries the SAME failed
+ * gift (true) — no answer came (the replay finds a retry that did land), or
+ * only the KEY was refused (409 CONFLICT: a fresh key next tap) — or goes back
+ * to the form (false): the server refused the gift itself, and the same
+ * request would be refused again — a 429 RATE_LIMITED among them (several
+ * prompts to a number not the member's own: they change the number on the
+ * form). iOS parity (GiveRetry.target), decided in Giving Cycle 9. Nothing is
+ * ever resent without a tap.
+ */
+fun retryStaysOnGift(failure: Throwable?, refusal: ServerError?): Boolean =
+    keepGiveKeyAfter(failure) || refusal?.code == "CONFLICT"
