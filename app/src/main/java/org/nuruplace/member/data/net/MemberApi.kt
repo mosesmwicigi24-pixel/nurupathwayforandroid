@@ -585,18 +585,29 @@ interface MemberApi {
      * The reply is the created schedule (schedule_id/status/next_run_at/…).
      */
     @POST("giving/schedules")
-    suspend fun createSchedule(@Body body: CreateScheduleBody): GivingSchedule
+    suspend fun createSchedule(@Body body: CreateScheduleBody): CreatedScheduleRes
 
     @POST("giving/schedules/{id}/cancel")
     suspend fun cancelSchedule(@Path("id") scheduleId: String): Unit
 
+    /** Change a recurring gift instead of cancelling it (Giving Cycle 4):
+     *  amount, day, number, heads-up — only what changes travels. Answers the
+     *  schedule row. 409 SCHEDULE_EXISTS; 422 as a new gift's checks. */
+    @PATCH("giving/schedules/{id}")
+    suspend fun updateSchedule(@Path("id") scheduleId: String, @Body body: UpdateScheduleBody): GivingSchedule
+
+    /** Pause a running gift myself, until resumed or until a date (Cycle 4). */
+    @POST("giving/schedules/{id}/pause")
+    suspend fun pauseSchedule(@Path("id") scheduleId: String, @Body body: PauseScheduleBody): ScheduleStateRes
+
     /**
-     * Re-arm a schedule paused after repeated collection failures. It
-     * deliberately does NOT collect the cycle that was missed — money must
-     * never surprise anyone.
+     * Resume a paused schedule (after repeated collection failures, or the
+     * member's own pause). It deliberately does NOT collect the cycle that
+     * was missed — money must never surprise anyone. 422 when it is paused
+     * with its pledge (resume the pledge).
      */
     @POST("giving/schedules/{id}/resume")
-    suspend fun resumeSchedule(@Path("id") scheduleId: String): Unit
+    suspend fun resumeSchedule(@Path("id") scheduleId: String): ScheduleStateRes
 
     /** May we invite this member today, and with what. The client never decides. */
     @GET("giving/invitation")

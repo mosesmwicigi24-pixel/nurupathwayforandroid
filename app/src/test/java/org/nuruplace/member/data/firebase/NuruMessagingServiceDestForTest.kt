@@ -82,6 +82,27 @@ class NuruMessagingServiceDestForTest {
         )
     }
 
+    @Test fun `a failed or paused schedule opens that schedule, the heads-up opens Give`() {
+        // giving_schedule_failed / giving_schedule_paused: { schedule_id, fund, amount_minor, currency, method, frequency, failure_code, reason, hint, retry_at }
+        val failed = mapOf(
+            "schedule_id" to "s-1", "fund" to "tithe", "amount_minor" to "100000", "currency" to "KES", "method" to "mpesa",
+            "frequency" to "monthly", "failure_code" to "insufficient_funds", "reason" to "There wasn't enough in the M-Pesa account.",
+            "hint" to "Nothing was taken. Top up, or try a smaller amount.",
+        )
+        assertEquals("schedules?open=s-1", NuruMessagingService.destFor(failed))
+        assertEquals("schedules?open=s-1", NuruMessagingService.destFor(failed + ("retry_at" to "2026-09-28T12:00:00.000Z")))
+        // giving_schedule_heads_up: { schedule_id, amount_minor, currency, frequency, fund_name, prompt_at }
+        assertEquals(
+            "give",
+            NuruMessagingService.destFor(
+                mapOf(
+                    "schedule_id" to "s-1", "amount_minor" to "100000", "currency" to "KES", "frequency" to "weekly",
+                    "fund_name" to "Tithe", "prompt_at" to "2026-10-05T06:00:00.000Z",
+                ),
+            ),
+        )
+    }
+
     // --- regression guard: the OLD camelCase keys must NOT be honoured ---
 
     @Test fun `stale camelCase keys do not match`() {

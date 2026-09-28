@@ -42,6 +42,17 @@ data class GivingSchedule(
     val retryAt: String? = null,
     /** The last charge's reason while the schedule is failing, else null. */
     val lastFailure: GiftFailure? = null,
+    // Giving Cycle 4.
+    /** Why it is paused: failures (three strikes) | member | pledge; null otherwise. */
+    val pauseReason: String? = null,
+    /** A member's pause ends on this Nairobi date (YYYY-MM-DD); null = until resumed. */
+    val resumeOn: String? = null,
+    /** A push minutes before each prompt. */
+    val headsUp: Boolean = true,
+    /** A monthly gift's own day of the month (1–31, clamped to short months). */
+    val anchorDay: Int? = null,
+    /** Prompts in a row that did not go through. */
+    val consecutiveFailures: Int = 0,
 )
 
 // --- Announcements ---

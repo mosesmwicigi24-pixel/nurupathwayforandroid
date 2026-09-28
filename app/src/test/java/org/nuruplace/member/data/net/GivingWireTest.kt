@@ -94,6 +94,80 @@ class GivingWireTest {
         assertEquals(1_300, d.feeCoverMinor)
     }
 
+    // ── Giving Cycle 4: a recurring gift the member controls ──
+
+    @Test
+    fun `a schedule asks for its first charge now or next, and leaves heads_up to the server`() {
+        val now = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "weekly", "mpesa", "k", firstCharge = "now"))).jsonObject
+        assertEquals("now", now["first_charge"]!!.jsonPrimitive.content)
+        assertFalse("heads_up" in now) // the server's default (on)
+        val old = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "weekly", "mpesa", "k"))).jsonObject
+        assertFalse("first_charge" in old)
+    }
+
+    @Test
+    fun `the created schedule carries today's prompt, or why it could not go out`() {
+        val given = json.decodeFromString<CreatedScheduleRes>(
+            """{"schedule_id":"s1","status":"active","next_run_at":"2026-10-05T09:30:00.000Z","reused":false,
+                "first_charge":{"transaction_id":"t1","status":"processing","idempotency_key":"sched:s1:first","reused":false,"provider":"mpesa",
+                                "fund":{"code":"tithe","name":"Tithe"},"pledge":null}}""",
+        )
+        assertEquals("s1", given.scheduleId)
+        assertEquals("t1", given.firstCharge?.transactionId)
+        assertEquals("processing", given.firstCharge?.status)
+        assertNull(given.firstChargeError)
+        val failed = json.decodeFromString<CreatedScheduleRes>(
+            """{"schedule_id":"s2","status":"active","next_run_at":"2026-10-05T09:30:00.000Z","reused":false,
+                "first_charge":null,"first_charge_error":"Add the M-Pesa number to prompt for this gift."}""",
+        )
+        assertNull(failed.firstCharge)
+        assertEquals("Add the M-Pesa number to prompt for this gift.", failed.firstChargeError)
+        // first_charge "next" (and an older server): neither key.
+        val next = json.decodeFromString<CreatedScheduleRes>("""{"schedule_id":"s3","status":"active","next_run_at":"2026-10-28T09:30:00.000Z","reused":false}""")
+        assertNull(next.firstCharge)
+        assertNull(next.firstChargeError)
+    }
+
+    @Test
+    fun `a change sends only what changed, and a number back to the profile as null`() {
+        assertEquals("""{"amount_minor":150000}""", json.encodeToString(UpdateScheduleBody(amountMinor = 150_000)))
+        assertEquals("""{"day":0}""", json.encodeToString(UpdateScheduleBody(day = 0)))
+        assertEquals("""{"phone_number":null}""", json.encodeToString(UpdateScheduleBody(phoneNumber = kotlinx.serialization.json.JsonNull)))
+        assertEquals("""{"phone_number":"+254711222333"}""", json.encodeToString(UpdateScheduleBody(phoneNumber = kotlinx.serialization.json.JsonPrimitive("+254711222333"))))
+        assertEquals("""{"heads_up":false}""", json.encodeToString(UpdateScheduleBody(headsUp = false)))
+    }
+
+    @Test
+    fun `a pause sends its date only when there is one`() {
+        assertEquals("""{"resume_on":"2026-10-05"}""", json.encodeToString(PauseScheduleBody("2026-10-05")))
+        assertEquals("{}", json.encodeToString(PauseScheduleBody()))
+        val r = json.decodeFromString<ScheduleStateRes>("""{"schedule_id":"s1","status":"paused","pause_reason":"member","resume_on":"2026-10-05"}""")
+        assertEquals("paused", r.status)
+        assertEquals("member", r.pauseReason)
+        assertEquals("2026-10-05", r.resumeOn)
+        assertEquals("2026-10-05T09:30:00.000Z", json.decodeFromString<ScheduleStateRes>("""{"schedule_id":"s1","status":"active","next_run_at":"2026-10-05T09:30:00.000Z"}""").nextRunAt)
+    }
+
+    @Test
+    fun `schedules decode why they are paused, the heads-up and their day`() {
+        val s = json.decodeFromString<GivingSchedule>(
+            """{"schedule_id":"s1","fund":"tithe","amount_minor":100000,"frequency":"monthly","method":"mpesa","status":"paused",
+                "next_run_at":"2026-10-31T09:30:00.000Z","pause_reason":"member","resume_on":"2026-11-15","heads_up":false,
+                "anchor_day":31,"consecutive_failures":0}""",
+        )
+        assertEquals("member", s.pauseReason)
+        assertEquals("2026-11-15", s.resumeOn)
+        assertFalse(s.headsUp)
+        assertEquals(31, s.anchorDay)
+        // An older server: none of them — heads-up reads as on, as the server defaults.
+        val old = json.decodeFromString<GivingSchedule>("""{"schedule_id":"s2","status":"active","pause_reason":null,"resume_on":null,"anchor_day":null}""")
+        assertNull(old.pauseReason)
+        assertNull(old.resumeOn)
+        assertTrue(old.headsUp)
+        assertNull(old.anchorDay)
+        assertEquals(0, old.consecutiveFailures)
+    }
+
     @Test
     fun `a retry sends its key, and a number only when there is one`() {
         val withPhone = json.parseToJsonElement(json.encodeToString(RetryGiftBody("k-12345678", "+254711222333"))).jsonObject

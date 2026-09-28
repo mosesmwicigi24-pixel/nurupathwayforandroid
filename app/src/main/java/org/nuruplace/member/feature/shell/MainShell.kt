@@ -118,7 +118,11 @@ private const val PARTNERS_STATEMENT_ROUTE = "partners-statement?year={year}"
 
 /** Pushed sub-routes that belong to a tab for HIGHLIGHTING (they carry their
  *  own back button and no bottom bar, exactly as before — see `onTab`). */
-private val GIVE_SUB_ROUTES = setOf("statement", "schedules", "receipt/{id}", PARTNERS_STATEMENT_ROUTE)
+/** The recurring-gifts list, optionally with one schedule open (a schedule
+ *  push, Giving Cycle 4) — built by feature/give/GivingRoutes.scheduleRoute;
+ *  a plain nav.navigate("schedules") still matches. */
+private const val SCHEDULES_ROUTE = "schedules?open={open}"
+private val GIVE_SUB_ROUTES = setOf("statement", SCHEDULES_ROUTE, "receipt/{id}", PARTNERS_STATEMENT_ROUTE)
 private val EVENTS_SUB_ROUTES = setOf("events-calendar", "event/{id}?end={end}", "checkin/{id}", "announcements", "announcement/{id}", "attendance", "service-checkin")
 
 /** Which bottom tab a NavHost route belongs to, or null for none. */
@@ -714,7 +718,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNavigate = { nav.navigate(it) },
                 )
             }
-            composable("schedules") { org.nuruplace.member.feature.give.SchedulesScreen(onBack = { nav.popBackStack() }) }
+            composable(
+                SCHEDULES_ROUTE,
+                arguments = listOf(navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.SchedulesScreen(
+                    onBack = { nav.popBackStack() },
+                    openScheduleId = entry.arguments?.getString("open")?.takeIf { it.isNotBlank() },
+                )
+            }
             composable("announcements") {
                 org.nuruplace.member.feature.events.AnnouncementsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("announcement/$it") })
             }

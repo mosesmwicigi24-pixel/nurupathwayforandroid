@@ -229,6 +229,52 @@ data class CreateScheduleBody(
      *  other than their profile's; absent, each cycle follows the profile
      *  number, so a changed number is used (GiveMethodsLogic.schedulePhoneFor). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: String? = null,
+    /** "now" = the first prompt goes out at once as the first cycle; "next"
+     *  = wait for the next one (Giving Cycle 4). Absent = the server's "next". */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val firstCharge: String? = null,
+    /** A push minutes before each prompt; absent = the server's default (on). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val headsUp: Boolean? = null,
+)
+
+/** POST /giving/schedules' answer: the schedule's id, status and next run —
+ *  and, with first_charge "now" (Giving Cycle 4), today's prompt as an intent
+ *  answer, or null with `first_charge_error` when it could not be sent (the
+ *  schedule stands either way). */
+@Serializable
+data class CreatedScheduleRes(
+    val scheduleId: String = "",
+    val status: String = "active",
+    val nextRunAt: String = "",
+    val reused: Boolean = false,
+    val firstCharge: GivingIntentResult? = null,
+    val firstChargeError: String? = null,
+)
+
+/** PATCH /giving/schedules/{id} (Giving Cycle 4): only what changes travels.
+ *  `phone_number` is tri-state — absent leaves it, JsonNull sends it back to
+ *  the profile number, a string pins that number (ScheduleCopy.scheduleEditPatch). */
+@Serializable
+data class UpdateScheduleBody(
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val amountMinor: Int? = null,
+    /** Monthly 1–31 (clamped to short months); weekly 0–6, Sunday 0. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val day: Int? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: JsonElement? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val headsUp: Boolean? = null,
+)
+
+/** POST /giving/schedules/{id}/pause — until resumed, or until a Nairobi
+ *  date from tomorrow to a year ahead (YYYY-MM-DD). */
+@Serializable
+data class PauseScheduleBody(@EncodeDefault(EncodeDefault.Mode.NEVER) val resumeOn: String? = null)
+
+/** What pause and resume answer: the schedule's new state. */
+@Serializable
+data class ScheduleStateRes(
+    val scheduleId: String = "",
+    val status: String = "",
+    val nextRunAt: String? = null,
+    val pauseReason: String? = null,
+    val resumeOn: String? = null,
 )
 
 /** POST /giving/paypal/capture — settles an approved PayPal order (money §5.6: online-only). */

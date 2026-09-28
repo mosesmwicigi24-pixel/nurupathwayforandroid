@@ -107,6 +107,7 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CreateScheduleBody
+import org.nuruplace.member.data.net.CreatedScheduleRes
 import org.nuruplace.member.data.net.GiftFailure
 import org.nuruplace.member.data.net.GivingDetail
 import org.nuruplace.member.data.net.GivingIntentResult
@@ -349,8 +350,9 @@ private data class ScheduleToConfirm(val plan: GiveSubmission.Schedule, val atte
 
 /** A schedule the server really created, shown from what the member
  *  confirmed — POST /giving/schedules answers with its id, status and first
- *  run only, so the rest is never read off the answer's defaults. */
-private data class CreatedSchedule(val schedule: GivingSchedule, val body: CreateScheduleBody, val phone: String?)
+ *  run only (and, with "start with a gift now", today's prompt or why it
+ *  could not go out), so the rest is never read off the answer's defaults. */
+private data class CreatedSchedule(val created: CreatedScheduleRes, val body: CreateScheduleBody, val phone: String?)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -622,7 +624,7 @@ private fun GiveTab(
     // …or once the server really created a schedule (never faked here).
     scheduled?.let { c ->
         ScheduledResult(
-            c.schedule, c.body, c.phone,
+            c.created, c.body, c.phone,
             // Back to a One-time form: the next tap is never a second
             // schedule the member did not pick again.
             onDone = { scheduled = null; freq = FREQ_ONCE; reload() },
@@ -679,9 +681,29 @@ private fun GiveTab(
                         if (givingIntentAnnounces(r.status)) GivingEvents.emit()
                     }
                     is GiveSubmission.Schedule -> {
-                        val s = Net.client.api.createSchedule(plan.body)
+                        val created = Net.client.api.createSchedule(plan.body)
                         rememberPromptPhone(phoneAtSend)
-                        scheduled = CreatedSchedule(s, plan.body, phoneAtSend)
+                        // The form goes back to One-time: the next tap is never
+                        // a second schedule the member did not pick again.
+                        freq = FREQ_ONCE
+                        val first = created.firstCharge
+                        if (first != null) {
+                            // "Start with a gift now" (Giving Cycle 4): today's
+                            // prompt went out — watch it like any gift.
+                            resultAmountMinor = plan.body.amountMinor
+                            resultCurrency = plan.body.currency
+                            resultGiftName = null
+                            resultPhone = phoneAtSend
+                            resultFailure = null
+                            retryError = null
+                            ceremonyBoundTo = null
+                            ceremonyNote = firstChargeNote(freqOf(plan.body.frequency))
+                            result = first
+                        } else {
+                            // Set up for next time — or today's prompt could
+                            // not go out (first_charge_error), the gift stands.
+                            scheduled = CreatedSchedule(created, plan.body, phoneAtSend)
+                        }
                         // A schedule is the partnership's rhythm — the standing changes.
                         GivingEvents.emit()
                     }
@@ -864,6 +886,29 @@ private fun GiveTab(
                         Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Enter a custom amount", style = giInter(13, FontWeight.Bold), color = GIVE.gold)
+                    }
+                }
+
+                // Your rhythm (docs/PARTNERS_PROGRAMME.md §3a, Giving Cycle 4):
+                // the soonest running schedule, one tap from its sheet —
+                // "KSh 500 every Sunday · next Sun 5 Oct".
+                if (targetCopy == null) {
+                    rhythmSchedule(schedules)?.let { rs ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GIVE.white)
+                                .border(1.dp, GIVE.gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                .clickable { sheetSchedule = rs }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("YOUR RHYTHM", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                                Text(rhythmText(rs), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.padding(top = 2.dp))
+                            }
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
 
@@ -1150,25 +1195,52 @@ private fun GiveTab(
             }
         }
 
-        // ── Confirm a schedule before it exists (Giving Cycle 1) ──
+        // ── Confirm a schedule before it exists (Giving Cycles 1 and 4):
+        // "Start with a gift now" (on by default) sends today's prompt as the
+        // first cycle; off, nothing is taken today ──
         confirmSchedule?.let { c ->
             val cFreq = freqOf(c.plan.body.frequency)
+            val now = remember(c) { Instant.now() }
+            var giveNow by remember(c) { mutableStateOf(true) }
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { confirmSchedule = null },
                 containerColor = GIVE.white,
                 title = { Text(scheduleConfirmTitle(cFreq), style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
                 text = {
-                    Text(
-                        scheduleConfirmText(
-                            amountMinor = c.plan.body.amountMinor, freq = cFreq,
-                            fundName = giveFund(c.plan.body.fund).name, phone = c.phone,
-                            firstPromptDay = firstPromptDay(cFreq),
-                        ),
-                        style = giInter(14), color = GIVE.sub,
-                    )
+                    Column {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GIVE.priorityBg)
+                                .border(1.dp, GIVE.gold.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Start with a gift now", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+                                Text(giveNowLine(c.plan.body.amountMinor, cFreq, now), style = giInter(11), color = GIVE.sub)
+                            }
+                            Switch(
+                                checked = giveNow,
+                                onCheckedChange = { giveNow = it },
+                                colors = SwitchDefaults.colors(checkedTrackColor = GIVE.gold, checkedThumbColor = Color.White),
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            scheduleConfirmText(
+                                amountMinor = c.plan.body.amountMinor, freq = cFreq,
+                                fundName = giveFund(c.plan.body.fund).name, phone = c.phone,
+                                firstPromptDay = nairobiDay(firstPromptAt(now, cFreq)),
+                                giveNow = giveNow, now = now,
+                            ),
+                            style = giInter(14), color = GIVE.sub,
+                        )
+                    }
                 },
                 confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = { confirmSchedule = null; send(c.plan, c.attempt) }) {
+                    androidx.compose.material3.TextButton(onClick = {
+                        confirmSchedule = null
+                        send(GiveSubmission.Schedule(c.plan.body.copy(firstCharge = firstChargeWire(giveNow))), c.attempt)
+                    }) {
                         Text("Confirm", style = giInter(14, FontWeight.Bold), color = GIVE.gold)
                     }
                 },
@@ -1196,121 +1268,24 @@ private fun GiveTab(
             )
         }
 
-        // ── Recurring-gift bottom sheet ──
+        // ── Recurring-gift sheet (ScheduleSheet.kt): change, pause, resume,
+        // heads-up, cancel — Giving Cycle 4 ──
         sheetSchedule?.let { s ->
+            val mpesa = options.firstOrNull { it.key == "mpesa" } ?: FALLBACK_MPESA
             ScheduleSheet(
                 s,
                 onClose = { sheetSchedule = null },
+                // Partners' standing derives from schedules; the rail refetches.
+                onChanged = { GivingEvents.emit(); reload() },
                 onCancelled = {
                     sheetSchedule = null
                     GivingEvents.emit()
                     reload()
                 },
+                minMinor = mpesa.minMinor,
+                maxMinor = mpesa.maxMinor,
             )
         }
-    }
-}
-
-/** The recurring-gift sheet: what the schedule is, whether it runs, which
- *  phone it prompts and why its last prompt failed (the server's words) —
- *  with a cancel that asks first and says so when it fails. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ScheduleSheet(s: GivingSchedule, onClose: () -> Unit, onCancelled: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var confirming by remember { mutableStateOf(false) }
-    var cancelling by remember { mutableStateOf(false) }
-    var cancelError by remember { mutableStateOf<String?>(null) }
-    val status = scheduleStatusLabel(s.status)
-    ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Recurring gift", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy)
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier.size(32.dp).clip(CircleShape).background(GIVE.surface).clickable { onClose() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
-                }
-            }
-            Row(
-                Modifier.padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(GIVE.gold.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(19.dp))
-                }
-                Column {
-                    Text(ksh(s.amountMinor), style = giInter(17, FontWeight.Bold), color = GIVE.navy)
-                    Text(
-                        "Every ${cadenceWord(s.frequency)} · ${giveFund(s.fund).name}" + (status?.let { " · $it" } ?: ""),
-                        style = giInter(12), color = GIVE.sub,
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            SheetDetailRow("Fund", giveFund(s.fund).name)
-            SheetDivider()
-            SheetDetailRow("Amount", ksh(s.amountMinor))
-            SheetDivider()
-            SheetDetailRow("Frequency", s.frequency.replaceFirstChar { it.uppercase() })
-            SheetDivider()
-            if (status == null) SheetDetailRow("Next prompt", prettyDate(s.nextRunAt)) else SheetDetailRow("Status", status)
-            SheetDivider()
-            SheetDetailRow("Method", s.method.takeIf { it.isNotBlank() }?.let { giveMethodLabel(it) } ?: "—")
-            SheetDivider()
-            SheetDetailRow("Prompts go to", s.phoneNumber?.takeIf { it.isNotBlank() }?.let { kenyanMobileDisplay(it) } ?: "Your profile number")
-            // Why the last prompt failed — the server's reason and hint.
-            scheduleFailureLine(s)?.let {
-                Text(
-                    it, style = giInter(12), color = GIVE.danger,
-                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .background(GIVE.cancelBg).padding(12.dp),
-                )
-            }
-            if (scheduleCancellable(s.status)) {
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.cancelBg)
-                        .border(1.dp, GIVE.cancelBorder, RoundedCornerShape(16.dp))
-                        .clickable(enabled = !cancelling) { cancelError = null; confirming = true },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    if (cancelling) {
-                        CircularProgressIndicator(Modifier.size(16.dp), color = GIVE.cancelText, strokeWidth = 2.dp)
-                    } else {
-                        Text("Cancel schedule", style = giInter(13, FontWeight.Bold), color = GIVE.cancelText)
-                    }
-                }
-            }
-            cancelError?.let {
-                Text(it, style = giInter(12), color = GIVE.danger, modifier = Modifier.padding(top = 8.dp))
-            }
-        }
-    }
-    if (confirming) {
-        CancelScheduleDialog(
-            s,
-            onConfirm = {
-                confirming = false
-                cancelling = true
-                scope.launch {
-                    try {
-                        Net.client.api.cancelSchedule(s.scheduleId)
-                        onCancelled()
-                    } catch (e: Exception) {
-                        // Said, never swallowed: the schedule still stands.
-                        cancelError = ApiException.message(e)
-                    } finally {
-                        cancelling = false
-                    }
-                }
-            },
-            onDismiss = { confirming = false },
-        )
     }
 }
 
@@ -1391,35 +1366,21 @@ private fun PromptNumberSheet(
         }
     }
 }
-@Composable
-private fun SheetDetailRow(label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(label, style = giInter(12), color = GIVE.sub)
-        Text(value, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-    }
-}
-
-@Composable
-private fun SheetDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(GIVE.border))
-}
-
 /** Full-screen ceremony once the server really created a schedule — the first
  *  prompt is the server's next cycle boundary (`next_run_at`), shown as such;
  *  "Cancel anytime" is true because Manage schedules is one tap away. The
  *  amount, cadence and fund are what the member confirmed ([body]): the
- *  server's answer carries only the id, status and first run. */
+ *  server's answer carries only the id, status and first run. When the member
+ *  asked to start with a gift now and today's prompt could not go out, the
+ *  server's reason comes first, then that the gift is set up (Giving Cycle 4). */
 @Composable
-private fun ScheduledResult(s: GivingSchedule, body: CreateScheduleBody, phone: String?, onDone: () -> Unit) {
-    LaunchedEffect(s.scheduleId) {
-        CelebrationCenter.fire(Moment("schedule-${s.scheduleId}", "Thank you for committing", "Faithfulness, month after month, carries the gospel further."))
+private fun ScheduledResult(created: CreatedScheduleRes, body: CreateScheduleBody, phone: String?, onDone: () -> Unit) {
+    LaunchedEffect(created.scheduleId) {
+        CelebrationCenter.fire(Moment("schedule-${created.scheduleId}", "Thank you for committing", "Faithfulness, month after month, carries the gospel further."))
     }
     val freq = freqOf(body.frequency)
-    val firstPrompt = s.nextRunAt.takeIf { it.isNotBlank() }?.let { prettyDate(it) } ?: firstPromptDay(freq)
+    val firstPrompt = created.nextRunAt.takeIf { it.isNotBlank() }?.let { prettyDate(it) } ?: firstPromptDay(freq)
+    val todayFailed = created.firstChargeError?.takeIf { it.isNotBlank() }
     Box(Modifier.fillMaxSize().background(GIVE.paper), contentAlignment = Alignment.Center) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 32.dp),
@@ -1445,10 +1406,17 @@ private fun ScheduledResult(s: GivingSchedule, body: CreateScheduleBody, phone: 
                 Text("Prompts go to ${kenyanMobileDisplay(it)}", style = giInter(12, FontWeight.SemiBold), color = GIVE.eyebrow, textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(4.dp))
-            Text(
-                scheduledFirstPromptLine(freq, firstPrompt),
-                style = giInter(13), color = GIVE.sub, textAlign = TextAlign.Center,
-            )
+            if (todayFailed != null) {
+                // Today's prompt could not go out; the gift itself stands.
+                Text(todayFailed, style = giInter(13), color = GIVE.danger, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(4.dp))
+                Text(scheduledSetUpLine(freq, firstPrompt), style = giInter(13), color = GIVE.sub, textAlign = TextAlign.Center)
+            } else {
+                Text(
+                    scheduledFirstPromptLine(freq, firstPrompt),
+                    style = giInter(13), color = GIVE.sub, textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(20.dp))
             Row(
                 Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.gold)

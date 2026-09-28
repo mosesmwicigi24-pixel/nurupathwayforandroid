@@ -80,9 +80,12 @@ data class NotifPayload(
     val needId: String? = null,
     val department: String? = null,
     // Giving (feature/give/GivingRoutes.kt): giving_gift_failed carries the
-    // gift and why it failed.
+    // gift and why it failed; the schedule notices carry the schedule (and
+    // the heads-up its prompt time).
     val transactionId: String? = null,
     val failureCode: String? = null,
+    val scheduleId: String? = null,
+    val promptAt: String? = null,
 )
 
 @Serializable

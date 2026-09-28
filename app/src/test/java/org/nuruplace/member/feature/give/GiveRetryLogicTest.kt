@@ -80,4 +80,16 @@ class GiveRetryLogicTest {
         assertNull(givingPushRoute(mapOf("transaction_id" to " ", "failure_code" to "cancelled")))
         assertNull(givingPushRoute(mapOf("module_id" to "m1")))
     }
+
+    @Test
+    fun `schedule notices open that schedule, and the heads-up opens Give`() {
+        assertEquals("schedules?open=s1", givingDest(transactionId = null, failureCode = "busy", scheduleId = "s1"))
+        assertEquals("schedules?open=s1", scheduleRoute("s1"))
+        // A paused notice may say nothing new but still names its schedule.
+        assertEquals("schedules?open=s1", givingDest(transactionId = null, failureCode = null, scheduleId = "s1"))
+        assertEquals("give", givingDest(transactionId = null, failureCode = null, scheduleId = "s1", promptAt = "2026-10-05T06:00:00Z"))
+        // A failure beats a prompt time: the schedule, where it can be fixed.
+        assertEquals("schedules?open=s1", givingDest(transactionId = null, failureCode = "busy", scheduleId = "s1", promptAt = "2026-10-05T06:00:00Z"))
+        assertNull(givingDest(transactionId = null, failureCode = null, scheduleId = " "))
+    }
 }
