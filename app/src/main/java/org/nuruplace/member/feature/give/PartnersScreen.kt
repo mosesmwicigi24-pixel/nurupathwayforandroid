@@ -53,7 +53,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,7 +91,6 @@ import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.Cancel
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -157,7 +155,6 @@ import org.nuruplace.member.data.net.PledgePayment
 import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.UpdatePledgeBody
-import org.nuruplace.member.data.net.pledgeTitlePatch
 import org.nuruplace.member.data.offline.Connectivity
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.NuruRefreshBox
@@ -896,14 +893,15 @@ internal fun ordinal(n: Int): String {
     return "$n$suffix"
 }
 
-/** Edit name / amount / due day (spec §5 PATCH + pledge names). Due day only
- *  for monthly pledges. The Name field is prefilled with the custom name, or
- *  the derived one when there is none; only a CHANGE travels (a cleared field
- *  sends null so the server falls back to its derived name) — and the same
- *  for the amount and the day (pledgeEditPatch): a monthly pledge's amount
- *  is `amount_minor`, a total pledge's is its TARGET, in the pledge's own
- *  currency. A collector that follows the pledge moves with it; an amount it
- *  can't take is the server's refusal, said here ([error]). */
+/** Edit name / amount / due day (spec §5 PATCH + pledge names), as iOS's
+ *  EditPledgeSheet: the NAME (prefilled with the member's own, else the
+ *  derived one — a cleared name goes back to the derived one), the promise
+ *  in the pledge's own currency (EACH MONTH or TOTAL, the suggested amounts
+ *  or one of the member's own), and a monthly pledge's DUE DAY. Only a
+ *  CHANGE travels (pledgeEditPatch: a monthly pledge's `amount_minor`, a
+ *  total pledge's TARGET); Save waits until something changed. A collector
+ *  that follows the pledge moves with it; an amount it can't take is the
+ *  server's refusal, said here ([error]). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditPledgeSheet(
@@ -913,80 +911,137 @@ private fun EditPledgeSheet(
     onDismiss: () -> Unit,
     onSave: (UpdatePledgeBody?) -> Unit,
 ) {
+    val view = LocalView.current
     val dollars = currencyCode(pl.currency) == USD_CURRENCY
-    var amountText by remember { mutableStateOf(pledgeAmountInput(pl.headlineMinor, pl.currency)) }
-    var dueDay by remember { mutableStateOf(pl.dueDay ?: 1) }
-    val namePrefill = remember(pl.pledgeId) { pl.customTitle?.takeIf { it.isNotBlank() } ?: pl.displayTitle }
-    var name by remember(pl.pledgeId) { mutableStateOf(namePrefill) }
-    val parsed = pledgeAmountMinor(amountText, pl.currency)
+    val monthly = pl.shape != "total"
+    // The promise, in minor units of the pledge's own currency.
+    var amountMinor by remember(pl.pledgeId) { mutableIntStateOf(pl.headlineMinor) }
+    var customAmount by remember(pl.pledgeId) { mutableStateOf("") }
+    var dueDay by remember(pl.pledgeId) { mutableIntStateOf(pl.dueDay ?: 1) }
+    val hasCustom = !pl.customTitle.isNullOrBlank()
+    var name by remember(pl.pledgeId) { mutableStateOf(pl.customTitle?.takeIf { it.isNotBlank() } ?: pl.displayTitle) }
     // A blank name is a valid CLEAR; anything else must be 2–60.
     val nameValid = name.isBlank() || pledgeTitleValid(name)
-    val valid = parsed != null && nameValid
+    val patch = pledgeEditPatch(pl, amountMinor.takeIf { it > 0 }, if (monthly) dueDay else null, pledgeEditTitlePatch(pl, name))
+    val canSave = patch != null && amountMinor > 0 && nameValid && !busy
+    val label = giInter(9, FontWeight.SemiBold, 1.6f)
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Edit pledge", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
-            Text("NAME", style = NuruType.micro, color = Nuru.goldLo)
-            OutlinedTextField(
-                value = name,
-                onValueChange = { v -> name = v.take(PLEDGE_TITLE_MAX) },
-                singleLine = true,
-                placeholder = { Text(pl.displayTitle, style = NuruType.body, color = Nuru.ink400) },
-                supportingText = {
-                    Row(Modifier.fillMaxWidth()) {
-                        Text(
-                            if (!nameValid) "$PLEDGE_TITLE_MIN–$PLEDGE_TITLE_MAX characters, or clear it to use the church's name" else "",
-                            style = NuruType.caption, color = Nuru.danger, modifier = Modifier.weight(1f),
-                        )
-                        Text("${name.length}/$PLEDGE_TITLE_MAX", style = NuruType.caption, color = Nuru.ink400)
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Edit pledge", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy, modifier = Modifier.weight(1f))
+                Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() }, Alignment.Center) {
+                    Icon(Icons.Filled.Close, "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("NAME", style = label, color = GIVE.overline)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { v -> name = v.take(PLEDGE_TITLE_MAX) },
+                    singleLine = true,
+                    placeholder = { Text("Name this pledge", style = giInter(14), color = Nuru.ink400) },
+                    leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                    suffix = {
+                        Text("${name.trim().length}/$PLEDGE_TITLE_MAX", style = giInter(11), color = if (nameValid) Nuru.ink400 else Nuru.danger)
+                    },
+                    isError = !nameValid,
+                    textStyle = giInter(14).copy(color = Nuru.ink),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(pledgeNameHelp(hasCustom), style = giInter(12), color = Nuru.ink400)
+            }
+            // The promise, in its own money.
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (monthly) "EACH MONTH" else "TOTAL", style = label, color = GIVE.tertiary)
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (dollars) "US$" else "KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
+                    val shown = pledgeEditAmountText(amountMinor, pl.currency)
+                    Text(shown, style = giSerif(amountDisplaySize(shown, 38), FontWeight.SemiBold, -1.1f), color = GIVE.navy)
+                }
+            }
+            // The suggested amounts, three to a row.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                pledgeEditPresets(pl.currency).chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { v ->
+                            val on = amountMinor == v && customAmount.isEmpty()
+                            Box(
+                                Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(if (on) GIVE.navy else Nuru.surface)
+                                    .border(1.dp, if (on) Color.Transparent else Nuru.border, RoundedCornerShape(12.dp))
+                                    .clickable { Haptics.tick(view); customAmount = ""; amountMinor = v },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("%,d".format(v / 100), style = giInter(13, FontWeight.SemiBold), color = if (on) Color.White else GIVE.navy)
+                            }
+                        }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
-                },
-                isError = !nameValid,
-                textStyle = nuruSans(16, FontWeight.Medium).copy(color = Nuru.ink),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(if (pl.shape == "total") "TARGET" else "AMOUNT EACH MONTH", style = NuruType.micro, color = Nuru.goldLo)
+                }
+            }
             OutlinedTextField(
-                value = amountText,
-                onValueChange = { v -> amountText = if (dollars) usdTyping(v) else v.filter { it.isDigit() }.take(8) },
+                value = customAmount,
+                onValueChange = { v ->
+                    // Give's rules, in the pledge's money: whole shillings, or dollars and cents.
+                    customAmount = if (dollars) usdTyping(v) else v.filter { it.isDigit() }.take(8)
+                    pledgeAmountMinor(customAmount, pl.currency)?.let { amountMinor = it }
+                },
                 singleLine = true,
-                prefix = { Text(if (dollars) "US$ " else "KSh ", style = NuruType.body, color = Nuru.ink600) },
-                textStyle = nuruSerif(22, FontWeight.Medium).copy(color = Nuru.ink),
+                placeholder = {
+                    Text(if (dollars) "Or enter your own amount, e.g. 20.00" else "Or enter your own amount", style = giInter(14), color = Nuru.ink400)
+                },
+                leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                textStyle = giInter(14).copy(color = Nuru.ink),
                 keyboardOptions = KeyboardOptions(keyboardType = if (dollars) KeyboardType.Decimal else KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (pl.shape != "total") {
-                Text("DUE DAY", style = NuruType.micro, color = Nuru.goldLo)
+            if (dollars) Text("This pledge is in US dollars.", style = giInter(12), color = Nuru.ink400)
+            if (monthly) {
+                Text("DUE DAY", style = label, color = GIVE.overline)
                 DueDayPicker(dueDay) { dueDay = it }
             }
-            error?.let { Text(it, style = NuruType.caption, color = Nuru.danger) }
-            Button(
-                onClick = { if (valid) onSave(pledgeEditPatch(pl, parsed, dueDay, pledgeTitlePatch(namePrefill, name))) },
-                enabled = valid && !busy,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Nuru.navyDeep, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+            error?.let { Text(it, style = giInter(12), color = Nuru.danger) }
+            // Gold, as iOS's sheet buttons; it waits until something changed.
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).alpha(if (canSave || busy) 1f else 0.5f)
+                    .clip(RoundedCornerShape(14.dp)).background(GIVE.gold)
+                    .clickable(enabled = canSave) { Haptics.tap(view); onSave(patch) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                if (busy) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp).size(16.dp))
-                Text(if (busy) "Saving…" else "Save changes", style = NuruType.cardCta)
+                if (busy) {
+                    CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (busy) "Saving…" else "Save changes", style = giInter(15, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
         }
     }
 }
 
-/** 1–28 so every month has the day (spec §1). Shared with NewPledgeFlow. */
+/** 1–28 so every month has the day (spec §1), seven to a row — every day in
+ *  sight, as iOS lays it out. Shared with NewPledgeFlow. */
 @Composable
 internal fun DueDayPicker(selected: Int, onSelect: (Int) -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        (1..28).forEach { d ->
-            val on = d == selected
-            Box(
-                Modifier.size(38.dp).clip(CircleShape)
-                    .background(if (on) Nuru.navyDeep else Nuru.white)
-                    .border(1.dp, if (on) Nuru.navyDeep else Nuru.border, CircleShape)
-                    .clickable { onSelect(d) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("$d", style = nuruSans(13, FontWeight.SemiBold), color = if (on) Color.White else Nuru.navy)
+    val view = LocalView.current
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        (1..28).chunked(7).forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                week.forEach { d ->
+                    val on = d == selected
+                    Box(
+                        Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
+                            .background(if (on) GIVE.navy else Nuru.surface)
+                            .border(1.dp, if (on) Color.Transparent else Nuru.border, RoundedCornerShape(10.dp))
+                            .clickable { Haptics.tick(view); onSelect(d) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("$d", style = nuruSans(13, FontWeight.SemiBold), color = if (on) Color.White else Nuru.navy)
+                    }
+                }
             }
         }
     }

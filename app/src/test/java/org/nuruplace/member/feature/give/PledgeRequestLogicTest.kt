@@ -115,4 +115,34 @@ class PledgeRequestLogicTest {
         assertFalse(pledgeOptionSelected(general, PledgeFor.Custom("Mum's house")))
         assertFalse(pledgeOptionSelected(general, null))
     }
+
+    // ── Editing a pledge (iOS EditPledgeSheet) ──
+
+    @Test
+    fun `the edit offers iOS's amounts in the pledge's own money`() {
+        assertEquals(listOf(50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000), pledgeEditPresets("KES"))
+        assertEquals(listOf(500, 1_000, 2_500, 5_000, 10_000), pledgeEditPresets("usd"))
+        assertEquals("20,000", pledgeEditAmountText(2_000_000, "KES"))
+        assertEquals("25.50", pledgeEditAmountText(2_550, "USD"))
+    }
+
+    @Test
+    fun `the name field says what a name does, before and after one is given`() {
+        assertEquals("Named after what it's for. Give it a name of your own if you like — 2–60 characters.", pledgeNameHelp(false))
+        assertEquals("2–60 characters. Clear it to go back to the name of what it's for.", pledgeNameHelp(true))
+    }
+
+    @Test
+    fun `clearing a name travels only when there was one of the member's own`() {
+        val derived = org.nuruplace.member.data.net.Pledge(pledgeId = "p", title = "Tithe")
+        val named = derived.copy(title = "School fees", customTitle = "School fees")
+        // Untouched: nothing.
+        assertNull(pledgeEditTitlePatch(derived, " Tithe "))
+        assertNull(pledgeEditTitlePatch(named, "School fees"))
+        // A new name: it travels.
+        assertEquals(kotlinx.serialization.json.JsonPrimitive("Mum's house"), pledgeEditTitlePatch(derived, " Mum's house "))
+        // Cleared: back to the derived name — only when there was a custom one.
+        assertEquals(kotlinx.serialization.json.JsonNull, pledgeEditTitlePatch(named, "  "))
+        assertNull(pledgeEditTitlePatch(derived, "  "))
+    }
 }

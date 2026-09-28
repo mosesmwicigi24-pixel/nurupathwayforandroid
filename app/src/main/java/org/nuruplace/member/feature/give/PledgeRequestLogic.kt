@@ -162,3 +162,32 @@ fun pledgeEditPatch(
         title = titlePatch,
     )
 }
+
+// ── Editing a pledge (iOS EditPledgeSheet / PledgeAmountEdit) ──
+
+/** The edit's suggested amounts, in minor units of the pledge's currency:
+ *  KSh 500 · 1,000 · 2,000 · 5,000 · 10,000 · 20,000, or Give's dollar ones
+ *  (US$ 5 … 100). */
+fun pledgeEditPresets(currency: String?): List<Int> =
+    if (currencyCode(currency) == USD_CURRENCY) USD_PRESETS.map { it * 100 }
+    else listOf(500, 1_000, 2_000, 5_000, 10_000, 20_000).map { it * 100 }
+
+/** The big figure: "1,000" in shillings, "25.50" in dollars. */
+fun pledgeEditAmountText(minor: Int, currency: String?): String =
+    if (currencyCode(currency) == USD_CURRENCY) "%,.2f".format(minor / 100.0) else "%,d".format(minor / 100)
+
+/** Under the NAME field (iOS): what a name does, whether or not the member
+ *  already gave the pledge one of their own. */
+fun pledgeNameHelp(hasCustomTitle: Boolean): String =
+    if (hasCustomTitle) "2–60 characters. Clear it to go back to the name of what it's for."
+    else "Named after what it's for. Give it a name of your own if you like — 2–60 characters."
+
+/** The `title` the edit sends (iOS titlePatch): untouched → nothing; a new
+ *  name → it; cleared → back to the derived name — but only when there WAS
+ *  a name of the member's own (clearing a derived one changes nothing, so
+ *  nothing travels). */
+fun pledgeEditTitlePatch(pl: org.nuruplace.member.data.net.Pledge, entered: String): kotlinx.serialization.json.JsonElement? {
+    val custom = pl.customTitle?.takeIf { it.isNotBlank() }
+    val patch = org.nuruplace.member.data.net.pledgeTitlePatch(custom ?: pl.displayTitle, entered)
+    return if (patch is kotlinx.serialization.json.JsonNull && custom == null) null else patch
+}
