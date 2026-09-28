@@ -85,9 +85,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        <!-- Where a push the system shows lands if it names no channel, or
+             one this phone doesn't have yet (data/firebase/NotificationChannels.kt). -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="nuru_default" />
+            android:value="nuru_updates" />
 
         <!-- Nuru Radio background playback — Media3 foreground media service. -->
         <service
