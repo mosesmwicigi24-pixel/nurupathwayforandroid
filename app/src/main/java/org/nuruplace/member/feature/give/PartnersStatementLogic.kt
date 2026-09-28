@@ -194,13 +194,33 @@ internal fun statementYearTotals(months: List<StatementMonth>): List<CurrencyAmo
 /** The PROCESSING rows above PAYMENTS: the server's `pending` list,
  *  pledge-tied only (as every row here), newest first, minus any row that
  *  has meanwhile settled into `payments` (the two are read in one answer,
- *  but a row is never shown twice). Never summed anywhere. */
+ *  but a row is never shown twice), and only those dated in the statement's
+ *  own year — or undated (iOS pendingPledgePayments). Never summed anywhere. */
 internal fun pendingPaymentRows(s: GivingStatement): List<StatementPendingPayment> {
     val settled = s.payments.map { it.transactionId }.filter { it.isNotBlank() }.toSet()
     return s.pending.orEmpty()
         .filter { !it.pledgeId.isNullOrBlank() && (it.transactionId.isBlank() || it.transactionId !in settled) }
+        .filter { r -> partnerDate(r.at)?.let { it.year == s.year } ?: true }
         .sortedByDescending { it.at ?: "" }
 }
+
+/** What a pledge payment row calls the pledge (iOS paymentTitle): the
+ *  server's name for it, else the row's own title, else the member's pledge
+ *  by id, else "Pledge". */
+internal fun statementPaymentTitle(pledgeTitle: String?, title: String?, pledgeId: String?, pledges: List<Pledge>): String =
+    pledgeTitle?.takeIf { it.isNotBlank() }
+        ?: title?.takeIf { it.isNotBlank() }
+        ?: pledgeId?.let { id -> pledges.firstOrNull { it.pledgeId == id }?.displayTitle }
+        ?: "Pledge"
+
+/** A settled pledge payment's second line (iOS StatementPaymentRow.meta):
+ *  the fund first — the server's name, else the local one for its code —
+ *  then the receipt code. Its rail is not on this wire, so never guessed. */
+internal fun statementPaymentMeta(pay: StatementPayment): String =
+    listOfNotNull(
+        pay.fundName?.takeIf { it.isNotBlank() } ?: pay.fund?.takeIf { it.isNotBlank() }?.let { giveFund(it).name },
+        pay.receiptCode?.takeIf { it.isNotBlank() },
+    ).joinToString(" · ")
 
 /** The amber chip on a PROCESSING row: what the payment is waiting for. */
 internal fun pendingChipText(method: String?): String = when (method?.trim()?.lowercase(Locale.ROOT)) {

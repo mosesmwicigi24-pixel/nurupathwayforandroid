@@ -427,6 +427,35 @@ class PartnersStatementLogicTest {
     }
 
     @Test
+    fun `pending rows are only the statement's own year, or undated`() {
+        val s = GivingStatement(
+            year = 2026,
+            pending = listOf(
+                pending("this", at = "2026-09-26T19:04:00Z"),
+                pending("last", at = "2025-12-31T10:00:00Z"),
+                // 22:30Z on 31 Dec is already the new year in Nairobi.
+                pending("new-year", at = "2025-12-31T22:30:00Z"),
+                pending("undated", at = null),
+            ),
+        )
+        assertEquals(setOf("this", "new-year", "undated"), pendingPaymentRows(s).map { it.transactionId }.toSet())
+    }
+
+    @Test
+    fun `a payment row names its pledge, then its fund first and the receipt code`() {
+        val pledges = listOf(monthly(id = "p1", amount = 200_000, dueDay = 5, createdAt = "2026-01-01T00:00:00Z").copy(title = "Kenya trip"))
+        assertEquals("School fees", statementPaymentTitle("School fees", "Tithe", "p1", pledges))
+        assertEquals("Tithe", statementPaymentTitle(" ", "Tithe", "p1", pledges))
+        assertEquals("Kenya trip", statementPaymentTitle(null, null, "p1", pledges))
+        assertEquals("Pledge", statementPaymentTitle(null, "", "p9", pledges))
+        val pay = payment(200_000, "p1", "2026-09-05T09:00:00Z")
+        assertEquals("Building Fund · UIKJ2713B5", statementPaymentMeta(pay.copy(fund = "building", fundName = "Building Fund", receiptCode = "UIKJ2713B5", method = "mpesa")))
+        // No server name: the local name for its code; the rail is never shown here.
+        assertEquals("Tithe", statementPaymentMeta(pay.copy(fund = "tithe", fundName = null, receiptCode = null, method = "mpesa")))
+        assertEquals("", statementPaymentMeta(pay.copy(fund = null, fundName = null, receiptCode = " ")))
+    }
+
+    @Test
     fun `pending never enters any total`() {
         val settled = listOf(payment(200_000, "p1", "2026-09-05T09:00:00Z"))
         val without = GivingStatement(year = 2026, payments = settled)

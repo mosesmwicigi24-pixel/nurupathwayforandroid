@@ -128,6 +128,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -153,6 +155,7 @@ import org.nuruplace.member.data.net.PledgeClaim
 import org.nuruplace.member.data.net.PledgeDetail
 import org.nuruplace.member.data.net.PledgePayment
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.UpdatePledgeBody
 import org.nuruplace.member.data.net.pledgeTitlePatch
 import org.nuruplace.member.data.offline.Connectivity
@@ -1617,13 +1620,21 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                     }
                     Hairline()
                     val rows = pledgePayments(s.payments).sortedByDescending { it.occurredAt ?: "" }
-                    if (rows.isEmpty()) {
-                        Text("No pledge payments in $shownYear.", style = giInter(12), color = GIVE.sub)
-                    } else {
-                        Column {
+                    // Still processing: listed first, never in Paid above (iOS).
+                    val pending = pendingPaymentRows(s)
+                    Column {
+                        pending.forEach { pay ->
+                            PendingPledgePaymentRow(
+                                pay, statementPaymentTitle(pay.pledgeTitle, null, pay.pledgeId, p.pledges), onOpenReceipt,
+                            )
+                            Hairline()
+                        }
+                        if (rows.isEmpty() && pending.isEmpty()) {
+                            Text("No pledge payments in $shownYear.", style = giInter(13), color = GIVE.ink600)
+                        } else {
                             rows.forEachIndexed { i, pay ->
                                 if (i > 0) Hairline()
-                                StatementPaymentRow(pay, onOpenReceipt)
+                                StatementPaymentRow(pay, statementPaymentTitle(pay.pledgeTitle, pay.title, pay.pledgeId, p.pledges), onOpenReceipt)
                             }
                         }
                     }
@@ -1643,34 +1654,30 @@ internal fun SummaryColumn(label: String, value: String, color: Color, modifier:
     SummaryColumn(label, listOf(value), color, modifier)
 }
 
-/** A summary figure per currency: the first large, any other under it as
- *  "+ US$ 50.00" — never added together. */
+/** A summary figure per currency, one under another, each the same size —
+ *  the same currency on the same line in every column, never added
+ *  together (iOS partnerSummaryColumn). */
 @Composable
 internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(label, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
         // One line each, shrunk to the column (iOS minimumScaleFactor 0.7) —
         // "KSh 1,250,000" never splits mid-figure in a third of the card.
-        Text(
-            values.firstOrNull().orEmpty(), style = giInter(16, FontWeight.SemiBold), color = color,
-            maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 4.dp).shrinkToFit(0.7f),
-        )
-        values.drop(1).forEach {
-            Text("+ $it", style = giInter(12, FontWeight.SemiBold), color = color, maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.7f))
+        values.forEachIndexed { i, v ->
+            Text(
+                v, style = giInter(16, FontWeight.SemiBold), color = color,
+                maxLines = 1, softWrap = false, modifier = Modifier.padding(top = if (i == 0) 4.dp else 3.dp).shrinkToFit(0.7f),
+            )
         }
     }
 }
 
-/** "20 Sep · Monthly pledge" over "M-Pesa · UIKJ2713B5" (method when the row
- *  carries one, else the fund; then the receipt code), amount at right. */
+/** "20 Sep · Monthly pledge" over "Tithe · UIKJ2713B5" — the fund first,
+ *  then the receipt code (iOS StatementPaymentRow) — amount at right. */
 @Composable
-private fun StatementPaymentRow(pay: StatementPayment, onOpenReceipt: (String) -> Unit) {
+private fun StatementPaymentRow(pay: StatementPayment, title: String, onOpenReceipt: (String) -> Unit) {
     val date = partnerDate(pay.occurredAt)?.let { PartnerFormat.dayMonth(it) }
-    val what = pay.pledgeTitle?.takeIf { it.isNotBlank() } ?: pay.title?.takeIf { it.isNotBlank() } ?: "Pledge"
-    val via = listOfNotNull(
-        pay.method?.takeIf { it.isNotBlank() }?.let(::giveMethodLabel) ?: pay.fund?.takeIf { it.isNotBlank() }?.let { giveFund(it).name },
-        pay.receiptCode?.takeIf { it.isNotBlank() },
-    ).joinToString(" · ")
+    val meta = statementPaymentMeta(pay)
     Row(
         Modifier.fillMaxWidth()
             .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
@@ -1678,10 +1685,45 @@ private fun StatementPaymentRow(pay: StatementPayment, onOpenReceipt: (String) -
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(listOfNotNull(date, what).joinToString(" · "), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-            if (via.isNotBlank()) Text(via, style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
+            Text(
+                listOfNotNull(date, title).joinToString(" · "), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (meta.isNotBlank()) {
+                Text(meta, style = giInter(11), color = Nuru.ink400, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            }
         }
-        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1)
+    }
+}
+
+/** A pledge payment still processing (iOS PendingPledgePaymentRow): the
+ *  pledge, an amber "Waiting for M-Pesa" chip and its day, the amount muted
+ *  — it is in no total yet. Tap → its receipt, which says so too. */
+@Composable
+internal fun PendingPledgePaymentRow(pay: StatementPendingPayment, title: String, onOpenReceipt: (String) -> Unit) {
+    val day = partnerDate(pay.at)?.let { PartnerFormat.dayMonth(it) }
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
+            .clearAndSetSemantics {
+                contentDescription = listOfNotNull(title, pendingChipText(pay.method), day, money(pay.amountMinor, pay.currency))
+                    .joinToString(", ") + ". Not yet counted in your totals"
+            }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    pendingChipText(pay.method), style = giInter(10, FontWeight.Bold), color = Nuru.answeredText,
+                    modifier = Modifier.clip(Capsule).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+                day?.let { Text(it, style = giInter(11), color = Nuru.ink400) }
+            }
+        }
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = Nuru.ink400, maxLines = 1)
     }
 }
 
