@@ -39,6 +39,8 @@ private fun amountOf(p: NotifPayload?): String = money(p?.amountMinor ?: 0L, p?.
 internal fun givingNotificationTitle(template: String, p: NotifPayload?): String? {
     val weekly = p?.frequency == "weekly"
     return when (template) {
+        // The receipt goes by email or SMS only; its row in the centre is that one.
+        "giving_receipt" -> "Giving receipt"
         "giving_gift_failed" -> "Your gift didn't go through"
         "giving_schedule_failed" -> {
             val kind = when (p?.frequency) { "weekly" -> "weekly"; "monthly" -> "monthly"; else -> "recurring" }
@@ -88,6 +90,7 @@ internal fun givingNotificationBody(template: String, p: NotifPayload?): String?
     // The pledge by name, in quotes — "“Kenya trip”" — else "Your pledge".
     val pledgeQuoted = p?.title.said()?.let { "“$it”" } ?: "Your pledge"
     return when (template) {
+        "giving_receipt" -> "Thank you for giving — your receipt is ready."
         "giving_gift_failed" ->
             "${p?.reason.said() ?: "The payment didn't complete."} ${p?.hint.said() ?: "Open Give to try again."}"
         "giving_schedule_failed" -> listOf(

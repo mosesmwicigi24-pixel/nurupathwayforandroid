@@ -229,6 +229,15 @@ class GivingNotificationCopyTest {
     }
 
     @Test
+    fun `a giving receipt's row says the receipt is ready`() {
+        // Email/SMS only — its row in the centre is that notice (iOS words).
+        val p = NotifPayload(transactionId = "t1", amountMinor = 100_000, currency = "KES")
+        assertEquals("Giving receipt", title("giving_receipt", p))
+        assertEquals("Thank you for giving — your receipt is ready.", body("giving_receipt", p))
+        assertEquals("Thank you for giving — your receipt is ready.", body("giving_receipt", null))
+    }
+
+    @Test
     fun `any other template has no giving words`() {
         assertNull(title("badge_awarded", NotifPayload(title = "Faithful")))
         assertNull(body("event_cancelled", NotifPayload()))
