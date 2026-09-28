@@ -268,4 +268,16 @@ class ScheduleCopyTest {
         // And back on the 31st when the month has one.
         assertEquals("KSh 500 every month on the 31st · next Thu 31 Dec", rhythmText(eom.copy(nextRunAt = "2026-12-31T09:30:00Z")))
     }
+
+    @Test
+    fun `a Give card says its next prompt short — the year only when it isn't this one`() {
+        // Seen on screen: "Next 5 Oct 2026" where iOS says "Next 5 Oct".
+        val today = LocalDate.of(2026, 9, 28)
+        assertEquals("Next 5 Oct", scheduleCardNextLine("2026-10-05T06:00:00Z", today))
+        assertEquals("Next 5 Jan 2027", scheduleCardNextLine("2027-01-05T06:00:00Z", today))
+        // The Nairobi day: 22:30 UTC on the 4th is 01:30 on the 5th there.
+        assertEquals("Next 5 Oct", scheduleCardNextLine("2026-10-04T22:30:00Z", today))
+        assertEquals("Next —", scheduleCardNextLine(null, today))
+        assertEquals("Next —", scheduleCardNextLine("soon", today))
+    }
 }

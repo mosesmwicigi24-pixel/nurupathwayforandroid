@@ -37,6 +37,7 @@ import java.util.Locale
 
 private val NAIROBI_ZONE: ZoneId = ZoneId.of("Africa/Nairobi")
 private val SCHEDULE_DAY_FMT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+private val CARD_DAY_FMT = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 private val RHYTHM_DAY_FMT = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
 
 /** Prompts go out 07:00–21:00 Nairobi — the platform's quiet hours. */
@@ -87,6 +88,14 @@ fun nairobiDayOf(iso: String?): String? = parseNairobi(iso)?.toLocalDate()?.form
 
 /** Today in Nairobi. */
 fun nairobiToday(now: Instant): LocalDate = now.atZone(NAIROBI_ZONE).toLocalDate()
+
+/** A Give card's next prompt (iOS): "Next 5 Oct" — the year only when it
+ *  isn't this one ("Next 5 Jan 2027") — on the Nairobi calendar; "Next —"
+ *  when there is no date to read. */
+fun scheduleCardNextLine(nextRunAt: String?, today: LocalDate): String {
+    val d = parseNairobi(nextRunAt)?.toLocalDate() ?: return "Next —"
+    return "Next " + d.format(if (d.year == today.year) CARD_DAY_FMT else SCHEDULE_DAY_FMT)
+}
 
 // ── Setting one up ──
 

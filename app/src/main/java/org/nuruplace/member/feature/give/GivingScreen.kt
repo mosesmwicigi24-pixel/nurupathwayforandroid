@@ -43,6 +43,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -1330,28 +1331,41 @@ private fun GiveTab(
                 // stands until it is resumed or cancelled).
                 if (liveSchedules.isNotEmpty()) {
                     Text("RECURRING GIFTS", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                    Row(
-                        Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        liveSchedules.forEach { s ->
-                            val status = scheduleStatusLabel(s.status)
-                            Column(
-                                Modifier.width(150.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.white)
-                                    .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
-                                    .clickable { sheetSchedule = s }
-                                    .padding(12.dp),
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(12.dp))
-                                    Text(s.frequency.uppercase(), style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.overline)
-                                }
-                                Text(ksh(s.amountMinor), style = giInter(15, FontWeight.Bold, -0.15f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
-                                Text(giveFund(s.fund).name, style = giInter(13), color = GIVE.sub)
-                                if (status != null) {
-                                    Text(status, style = giInter(11, FontWeight.SemiBold), color = GIVE.danger)
-                                } else {
-                                    Text("Next ${prettyDate(s.nextRunAt)}", style = giInter(11), color = GIVE.tertiary)
+                    val today = nairobiToday(Instant.now())
+                    // Two cards to the width, as on iOS; more scroll sideways.
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val cardWidth = (maxWidth - 10.dp) / 2
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            liveSchedules.forEach { s ->
+                                val status = scheduleStatusLabel(s.status)
+                                Column(
+                                    Modifier.width(cardWidth).clip(RoundedCornerShape(16.dp)).background(GIVE.white)
+                                        .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
+                                        .clickable { sheetSchedule = s }
+                                        .padding(12.dp),
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(12.dp))
+                                        Text(s.frequency.uppercase(), style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.overline)
+                                    }
+                                    Text(ksh(s.amountMinor), style = giInter(15, FontWeight.Bold, -0.15f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
+                                    Text(giveFund(s.fund).name, style = giInter(13), color = GIVE.sub)
+                                    // The pledge it collects, in gold (iOS): "Collects your pledge “Kenya trip”".
+                                    schedulePledgeLine(s)?.let {
+                                        Text(
+                                            it, style = giInter(10, FontWeight.SemiBold), color = GIVE.eyebrow,
+                                            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                                        )
+                                    }
+                                    if (status != null) {
+                                        Text(status, style = giInter(11, FontWeight.SemiBold), color = GIVE.danger, modifier = Modifier.padding(top = 4.dp))
+                                    } else {
+                                        // "Next 5 Oct" — the year only when it isn't this one.
+                                        Text(scheduleCardNextLine(s.nextRunAt, today), style = giInter(11), color = GIVE.tertiary, modifier = Modifier.padding(top = 4.dp))
+                                    }
                                 }
                             }
                         }
