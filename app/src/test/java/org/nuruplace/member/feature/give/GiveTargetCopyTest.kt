@@ -98,16 +98,17 @@ class GiveTargetCopyTest {
             pledgeTermsLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = 100_000, dueDay = 25), today),
         )
         assertEquals("KSh 2,000 monthly", pledgeTermsLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = 200_000), today))
+        // The promise as the pledge card says it (iOS pledgeAmountLine).
         assertEquals(
-            "KSh 50,000 by 15 Dec",
+            "KSh 50,000 · by 15 Dec",
             pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000, dueOn = "2026-12-15"), today),
         )
         // Not this year → the year is said.
         assertEquals(
-            "KSh 50,000 by 15 Mar 2027",
+            "KSh 50,000 · by 15 Mar 2027",
             pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-15"), today),
         )
-        assertEquals("KSh 50,000 in total", pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000), today))
+        assertEquals("KSh 50,000", pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000), today))
         // Nothing to state → no line.
         assertNull(pledgeTermsLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = null), today))
         assertNull(pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 0), today))

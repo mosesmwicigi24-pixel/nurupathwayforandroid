@@ -89,8 +89,8 @@ val GIVE_FUNDS = listOf(
     GiveFund("tithe", "Tithe", "A faithful portion", Icons.Filled.Percent, Color(0xFFFFF4DA), Color(0xFFC89B3C)),
     GiveFund("offering", "Offering", "Freewill worship", Icons.Filled.VolunteerActivism, Color(0xFFFEE2E2), Color(0xFFDC2626)),
     GiveFund("gift", "Gift", "A special gift", Icons.Filled.CardGiftcard, Color(0xFFF3E8FF), Color(0xFFA855F7)),
-    GiveFund("mission", "Mission", "Reaching the lost", Icons.Filled.Public, Color(0xFFE0F2FE), Color(0xFF0EA5E9)),
-    GiveFund("discipleship", "Discipleship", "Making disciples", Icons.Filled.MenuBook, Color(0xFFDCFCE7), Color(0xFF16A34A)),
+    GiveFund("mission", "Mission", "Beyond our walls", Icons.Filled.Public, Color(0xFFE0F2FE), Color(0xFF0EA5E9)),
+    GiveFund("discipleship", "Discipleship", "Growing the Pathway", Icons.Filled.MenuBook, Color(0xFFDCFCE7), Color(0xFF16A34A)),
 )
 
 fun giveFund(id: String?): GiveFund = GIVE_FUNDS.firstOrNull { it.id.equals(id?.trim(), true) }

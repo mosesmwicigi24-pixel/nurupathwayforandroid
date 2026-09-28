@@ -262,11 +262,19 @@ class ScheduleCopyTest {
     fun `a monthly gift on the 31st keeps its day in a short month`() {
         // November has 30 days: the prompt comes on the 30th, the gift is still "the 31st".
         val eom = sched.copy(amountMinor = 50_000, anchorDay = 31, nextRunAt = "2026-11-30T09:30:00Z")
-        assertEquals("KSh 500 every month on the 31st · next Mon 30 Nov", rhythmText(eom))
+        assertEquals("KSh 500 every month on the 31st · next Mon 30 Nov, the last day of November", rhythmText(eom))
         // February: the 28th.
-        assertEquals("KSh 500 every month on the 31st · next Sun 28 Feb", rhythmText(eom.copy(nextRunAt = "2027-02-28T09:30:00Z")))
+        assertEquals("KSh 500 every month on the 31st · next Sun 28 Feb, the last day of February", rhythmText(eom.copy(nextRunAt = "2027-02-28T09:30:00Z")))
         // And back on the 31st when the month has one.
         assertEquals("KSh 500 every month on the 31st · next Thu 31 Dec", rhythmText(eom.copy(nextRunAt = "2026-12-31T09:30:00Z")))
+    }
+
+    @Test
+    fun `the recurring summary says the day, and that today or next time is the member's choice`() {
+        // Monday 28 Sep 2026, 09:30 Nairobi.
+        val now = Instant.parse("2026-09-28T06:30:00Z")
+        assertEquals("Every Monday — start with a gift today, or from the next one. Cancel anytime.", recurringSummaryLine(FREQ_WEEKLY, now))
+        assertEquals("Every month on the 28th — start with a gift today, or from the next one. Cancel anytime.", recurringSummaryLine(FREQ_MONTHLY, now))
     }
 
     @Test

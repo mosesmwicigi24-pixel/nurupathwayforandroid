@@ -125,6 +125,13 @@ fun cadencePhrase(freq: Int, now: Instant): String =
     if (freq == FREQ_WEEKLY) "every ${weekdayName(nairobiWeekday(now))}"
     else "every month on the ${ordinal(now.atZone(NAIROBI_ZONE).dayOfMonth)}"
 
+/** The Give form's recurring summary, before a schedule exists (iOS
+ *  recurringSummary): "Every Monday — start with a gift today, or from the
+ *  next one. Cancel anytime." — today or next time is the member's choice
+ *  at the confirm step. */
+fun recurringSummaryLine(freq: Int, now: Instant): String =
+    cadencePhrase(freq, now).replaceFirstChar { it.uppercase() } + " — start with a gift today, or from the next one. Cancel anytime."
+
 /** The "Start with a gift now" line: "KSh 1,000 now, then every Monday". */
 fun giveNowLine(amountMinor: Int, freq: Int, now: Instant): String =
     "${ksh(amountMinor)} now, then ${cadencePhrase(freq, now)}"
@@ -338,8 +345,10 @@ fun rhythmSchedule(schedules: List<GivingSchedule>): GivingSchedule? =
         .minByOrNull { parseNairobi(it.nextRunAt)?.toInstant() ?: Instant.MAX }
 
 /** "KSh 500 every Sunday · next Sun 5 Oct" / "KSh 500 every month on the
- *  31st · next Fri 30 Oct" — the day a monthly gift keeps (clamped to a short
- *  month on the calendar, never renamed), and when it next prompts. */
+ *  31st · next Mon 30 Nov, the last day of November" — the day a monthly
+ *  gift keeps (clamped to a short month on the calendar, never renamed), and
+ *  when it next prompts, saying so when a short month moved it (iOS
+ *  ScheduleRhythm.next). */
 fun rhythmText(s: GivingSchedule): String {
     val next = parseNairobi(s.nextRunAt)
     val cadence = if (freqOf(s.frequency) == FREQ_WEEKLY) {
@@ -347,6 +356,10 @@ fun rhythmText(s: GivingSchedule): String {
     } else {
         scheduleDay(s)?.let { "every month on the ${ordinal(it)}" } ?: "every month"
     }
-    val nextPart = next?.let { " · next ${it.format(RHYTHM_DAY_FMT)}" }.orEmpty()
+    val clamped = next != null && freqOf(s.frequency) != FREQ_WEEKLY && (s.anchorDay ?: 0) > next.dayOfMonth
+    val nextPart = next?.let {
+        " · next ${it.format(RHYTHM_DAY_FMT)}" +
+            (if (clamped) ", the last day of ${it.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}" else "")
+    }.orEmpty()
     return "${money(s.amountMinor, s.currency)} $cadence$nextPart"
 }

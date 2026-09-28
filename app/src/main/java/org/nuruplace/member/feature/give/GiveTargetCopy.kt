@@ -91,19 +91,13 @@ internal fun paysToLine(paysTo: FundRef?): String {
     return if (name.lowercase(Locale.ROOT).endsWith("fund")) "Goes to the $name" else "Goes to the $name fund"
 }
 
-/** A pledge's own terms for the PAYING YOUR PLEDGE card: "KSh 1,000 monthly
- *  · due on the 25th" · "KSh 50,000 by 15 Dec" (the year added when it is
- *  not this one). Null when the pledge carries no amount to state. */
-internal fun pledgeTermsLine(pl: Pledge, today: LocalDate): String? = when (pl.shape) {
-    "total" -> pl.targetMinor?.takeIf { it > 0 }?.let { target ->
-        val by = partnerDate(pl.dueOn)?.let { d ->
-            if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
-        }
-        money(target, pl.currency) + (by?.let { " by $it" } ?: " in total")
-    }
-    else -> pl.amountMinor?.takeIf { it > 0 }?.let { amount ->
-        "${money(amount, pl.currency)} monthly" + (pl.dueDay?.let { " · due on the ${ordinal(it)}" } ?: "")
-    }
+/** A pledge's own terms for the PAYING YOUR PLEDGE card — the promise as
+ *  the pledge card says it (iOS pledgeAmountLine): "KSh 1,000 monthly · due
+ *  on the 25th" · "KSh 50,000 · by 15 Dec" (the year added when it is not
+ *  this one). Null when the pledge carries no amount to state. */
+internal fun pledgeTermsLine(pl: Pledge, today: LocalDate): String? {
+    val amount = if (pl.shape == "total") pl.targetMinor else pl.amountMinor
+    return amount?.takeIf { it > 0 }?.let { pledgeAmountLine(pl, today) }
 }
 
 /** The promise in one line, as iOS says it (PartnersView pledgeAmountLine)

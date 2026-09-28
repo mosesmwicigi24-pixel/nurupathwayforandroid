@@ -59,6 +59,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -322,7 +323,6 @@ private fun GiveHeaderBand(
                             style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow,
                             modifier = Modifier.weight(1f, fill = false),
                         )
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
                     }
                     // Masks the amount on a phone that gets shown around.
                     Box(
@@ -1108,7 +1108,8 @@ private fun GiveTab(
                         (if (inDollars) USD_PRESETS else GIVE_PRESETS).forEach { p ->
                             val on = if (inDollars) usdCents == p * 100 else amountMajor == p
                             Text(
-                                if (inDollars) "US$ $p" else "%,d".format(p),
+                                // Just the figure, in either money (iOS).
+                                "%,d".format(p),
                                 style = giInter(13, FontWeight.SemiBold),
                                 color = if (on) Color.White else GIVE.navy,
                                 modifier = Modifier.clip(Capsule)
@@ -1143,24 +1144,28 @@ private fun GiveTab(
                 // "KSh 500 every Sunday · next Sun 5 Oct".
                 if (targetCopy == null) {
                     rhythmSchedule(schedules)?.let { rs ->
+                        // iOS rhythmRow: a gold tile, "Your rhythm" over the
+                        // rhythm itself, the pledge it collects, a chevron.
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GIVE.white)
-                                .border(1.dp, GIVE.gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.white)
+                                .border(1.dp, GIVE.border, RoundedCornerShape(18.dp))
                                 .clickable { sheetSchedule = rs }
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(16.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("YOUR RHYTHM", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                                Text(rhythmText(rs), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.padding(top = 2.dp))
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(15.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Your rhythm", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+                                Text(rhythmText(rs), style = giInter(11), color = GIVE.sub, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 // Collecting a pledge: which, and what the next prompt asks.
                                 listOfNotNull(schedulePledgeLine(rs), scheduleNextAmountLine(rs)).forEach {
-                                    Text(it, style = giInter(11, FontWeight.Medium), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                                    Text(it, style = giInter(11), color = GIVE.eyebrow, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -1198,10 +1203,10 @@ private fun GiveTab(
                         }
                         Column {
                             Text("${kshMajor(chargedAmountMajor(amountMajor, coverFee))} every ${cadenceWord(freq)}", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-                            Text(
-                                "Nothing is taken today · first prompt ${firstPromptDay(freq)}, then every ${cadenceWord(freq)}. Cancel anytime.",
-                                style = giInter(11), color = GIVE.sub,
-                            )
+                            // Today or next time is the member's choice at the
+                            // confirm step (iOS): "Every Monday — start with a
+                            // gift today, or from the next one. Cancel anytime."
+                            Text(recurringSummaryLine(freq, Instant.now()), style = giInter(11), color = GIVE.sub)
                         }
                     }
                 }
@@ -1328,11 +1333,8 @@ private fun GiveTab(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text("Cover the transaction fee", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
-                        Text(
-                            if (coverFee) "Adds ${kshMajor(giveFee(amountMajor))} — you'll be charged ${kshMajor(chargedAmountMajor(amountMajor, true))}"
-                            else "Adds ${kshMajor(giveFee(amountMajor))} — 100% reaches the fund",
-                            style = giInter(11), color = GIVE.sub,
-                        )
+                        // The same line on or off (iOS): the button already says the total.
+                        Text("Adds ${kshMajor(giveFee(amountMajor))} — 100% reaches the fund", style = giInter(11), color = GIVE.sub)
                     }
                     Switch(
                         checked = coverFee,
