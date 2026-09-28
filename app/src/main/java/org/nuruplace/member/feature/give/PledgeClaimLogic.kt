@@ -23,8 +23,11 @@ import java.util.Locale
 /** A claim's note, at most this long (the server's limit). */
 const val CLAIM_NOTE_MAX = 300
 
-/** Said instead of the form while the phone is offline. */
-const val CLAIM_OFFLINE_LINE = "You're offline — telling us about a payment needs a connection."
+/** Said on the form while the phone is offline (iOS PledgeClaimSheet). */
+const val CLAIM_OFFLINE_LINE = "You're offline. Telling the office needs a connection — nothing is saved to send later."
+
+/** Said when the request got no answer at all (iOS sendClaim). */
+const val CLAIM_NO_ANSWER_LINE = "We couldn't reach the church just now. Try again in a moment."
 
 private val COLLECTION_DAY_FMT = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH)
 private val COLLECTION_DAY_YEAR_FMT = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH)
@@ -41,10 +44,10 @@ fun claimAmountError(text: String, currency: String): String? {
     val t = text.trim().replace(",", "")
     if (t.isEmpty()) return "Enter the amount you paid."
     return if (currencyCode(currency) == USD_CURRENCY) {
-        val cents = usdCentsOf(t) ?: return "Enter the amount in US dollars, like 25.50."
+        val cents = usdCentsOf(t) ?: return "Enter the amount you paid."
         if (cents <= 0) "Enter the amount you paid." else null
     } else {
-        if ('.' in t) return "Whole shillings only — no cents."
+        if ('.' in t) return "Shillings only — no cents."
         val major = t.takeIf { s -> s.all { it.isDigit() } }?.toLongOrNull() ?: return "Enter the amount you paid."
         if (major <= 0) "Enter the amount you paid." else if (major > 10_000_000) "That's more than one payment can be." else null
     }
@@ -79,6 +82,23 @@ fun planClaim(amountText: String, pledgeCurrency: String, paidOn: LocalDate, not
         ),
     )
 }
+
+/** What stops the claim from going, said as the member types (iOS
+ *  ClaimRules.problem) — null when it can go. */
+fun claimProblem(amountText: String, pledgeCurrency: String, paidOn: LocalDate, note: String, today: LocalDate): String? =
+    (planClaim(amountText, pledgeCurrency, paidOn, note, today) as? ClaimPlan.Invalid)?.message
+
+/** The form's first line (iOS): what it is for, by the pledge's name. */
+fun claimIntro(pledgeTitle: String): String =
+    "Tell the office about money you gave toward “$pledgeTitle” outside the app — cash, a bank transfer, a paybill. " +
+        "They'll match it and add it to your pledge."
+
+/** "AMOUNT · IN SHILLINGS" · "AMOUNT · IN US DOLLARS" — the pledge's money. */
+fun claimAmountLabel(currency: String): String = "AMOUNT · IN ${currencyWords(currency).uppercase(Locale.ENGLISH)}"
+
+/** Under the amount (iOS): how to write it, in the pledge's money. */
+fun claimAmountHelp(currency: String): String =
+    if (currencyCode(currency) == USD_CURRENCY) "In ${currencyWords(currency)} — this pledge's currency." else "In whole shillings, as you paid it."
 
 /** How a claim stands, for its colour. */
 enum class ClaimTone { Waiting, Recorded, Unmatched }

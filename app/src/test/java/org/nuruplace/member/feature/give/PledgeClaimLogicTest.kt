@@ -68,7 +68,7 @@ class PledgeClaimLogicTest {
     fun `a shilling pledge is told in whole shillings`() {
         assertEquals(300_000, ready(planClaim("3000", "KES", today, "", today)).amountMinor)
         assertEquals(300_000, ready(planClaim(" 3,000 ", "KES", today, "", today)).amountMinor)
-        assertEquals("Whole shillings only — no cents.", refused(planClaim("3000.50", "KES", today, "", today)))
+        assertEquals("Shillings only — no cents.", refused(planClaim("3000.50", "KES", today, "", today)))
         assertEquals("Enter the amount you paid.", refused(planClaim("", "KES", today, "", today)))
         assertEquals("Enter the amount you paid.", refused(planClaim("0", "KES", today, "", today)))
         assertEquals("Enter the amount you paid.", refused(planClaim("-5", "KES", today, "", today)))
@@ -81,7 +81,7 @@ class PledgeClaimLogicTest {
         assertEquals(2_550, ready(planClaim("25.50", "USD", today, "", today)).amountMinor)
         assertEquals(2_550, ready(planClaim("25.5", "usd", today, "", today)).amountMinor)
         assertEquals(2_500, ready(planClaim("25", "USD", today, "", today)).amountMinor)
-        assertEquals("Enter the amount in US dollars, like 25.50.", refused(planClaim("25.555", "USD", today, "", today)))
+        assertEquals("Enter the amount you paid.", refused(planClaim("25.555", "USD", today, "", today)))
         assertEquals("Enter the amount you paid.", refused(planClaim("0.00", "USD", today, "", today)))
     }
 
@@ -148,6 +148,26 @@ class PledgeClaimLogicTest {
         )
         assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c3", amountMinor = 50_000, paidOn = null), today))
         assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c4", amountMinor = 50_000, paidOn = "garbled"), today))
+    }
+
+    // ── The form's words (iOS PledgeClaimSheet) ──
+
+    @Test
+    fun `the form says what it is for, in the pledge's money, and what stops it as it is typed`() {
+        assertEquals(
+            "Tell the office about money you gave toward “Kenya trip” outside the app — cash, a bank transfer, a paybill. They'll match it and add it to your pledge.",
+            claimIntro("Kenya trip"),
+        )
+        assertEquals("AMOUNT · IN SHILLINGS", claimAmountLabel("KES"))
+        assertEquals("AMOUNT · IN US DOLLARS", claimAmountLabel("usd"))
+        assertEquals("In whole shillings, as you paid it.", claimAmountHelp("KES"))
+        assertEquals("In US dollars — this pledge's currency.", claimAmountHelp("USD"))
+        val today = LocalDate.of(2026, 9, 28)
+        assertEquals("Enter the amount you paid.", claimProblem("", "KES", today, "", today))
+        assertEquals("Shillings only — no cents.", claimProblem("3000.5", "KES", today, "", today))
+        assertEquals("Choose the day you paid — today or within the last year.", claimProblem("3000", "KES", today.plusDays(1), "", today))
+        assertEquals(null, claimProblem("3000", "KES", today, "Cash at the 9am service", today))
+        assertEquals("You're offline. Telling the office needs a connection — nothing is saved to send later.", CLAIM_OFFLINE_LINE)
     }
 
     // ── "First collection: 5 October" ──

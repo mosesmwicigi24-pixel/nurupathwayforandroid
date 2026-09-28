@@ -1490,12 +1490,14 @@ private fun ClaimRow(c: PledgeClaim, today: LocalDate) {
     }
 }
 
-/** "I paid another way" — the form (PledgeClaimLogic.kt): the amount in the
- *  PLEDGE's currency (whole shillings, or dollars and cents), the day it was
- *  paid (today back a year, Nairobi; today by default), an optional note.
- *  Online only — nothing is queued, so offline the form says so and cannot
- *  send. The server's refusals (a different currency, a day out of range,
- *  the same payment already told, five waiting) are shown in its words. */
+/** "I paid another way" — the form (iOS PledgeClaimSheet, PledgeClaimLogic):
+ *  the amount in the PLEDGE's currency (whole shillings, or dollars and
+ *  cents), the day it was paid (today back a year, Nairobi; today by
+ *  default), an optional note. What stops it is said as the member types,
+ *  and "Tell the office" waits for it. Online only — nothing is queued, so
+ *  offline the form says so and cannot send. The server's refusals (a
+ *  different currency, a day out of range, the same payment already told,
+ *  five waiting) are shown in its words. Shown in a sheet over the page. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> Unit) {
@@ -1512,84 +1514,104 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
     var picking by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val problem = claimProblem(amountText, pl.currency, paidOn, note, today)
+    val label = giInter(9, FontWeight.SemiBold, 1.6f)
 
     fun send() {
-        when (val plan = planClaim(amountText, pl.currency, paidOn, note, partnerToday())) {
-            is ClaimPlan.Invalid -> { error = plan.message; Haptics.reject(view) }
-            is ClaimPlan.Ready -> {
-                sending = true; error = null
-                scope.launch {
-                    try {
-                        val made = Net.client.api.createClaim(pl.pledgeId, plan.body)
-                        Haptics.confirm(view)
-                        onSent(made)
-                    } catch (e: Exception) {
-                        // 422 CURRENCY_MISMATCH / INVALID_DATE, 409 CONFLICT — the server's words.
-                        error = ApiException.message(e, context)
-                        Haptics.reject(view)
-                    } finally {
-                        sending = false
-                    }
-                }
+        if (!online || sending) return
+        val plan = planClaim(amountText, pl.currency, paidOn, note, partnerToday()) as? ClaimPlan.Ready ?: return
+        sending = true; error = null
+        scope.launch {
+            try {
+                val made = Net.client.api.createClaim(pl.pledgeId, plan.body)
+                Haptics.confirm(view)
+                onSent(made)
+            } catch (e: Exception) {
+                // No answer at all, or the server's words (422 CURRENCY_MISMATCH
+                // / INVALID_DATE, 409 CONFLICT).
+                error = if (e is java.io.IOException) CLAIM_NO_ANSWER_LINE else ApiException.message(e, context)
+                Haptics.reject(view)
+            } finally {
+                sending = false
             }
         }
     }
 
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nuru.white)
-            .border(1.dp, Nuru.gold.copy(alpha = 0.28f), RoundedCornerShape(14.dp)).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text("I paid another way", style = NuruType.heading, color = Nuru.ink)
-        Text("The office checks it, then it counts toward this pledge.", style = NuruType.caption, color = Nuru.ink600)
-        if (!online) Text(CLAIM_OFFLINE_LINE, style = NuruType.caption, color = Nuru.danger)
-        Text("AMOUNT", style = NuruType.micro, color = Nuru.goldLo)
-        OutlinedTextField(
-            value = amountText,
-            onValueChange = { v -> amountText = if (dollars) usdTyping(v) else v.filter { it.isDigit() }.take(8); error = null },
-            singleLine = true,
-            prefix = { Text(if (dollars) "US$ " else "KSh ", style = NuruType.body, color = Nuru.ink600) },
-            placeholder = { Text(if (dollars) "25.00" else "Whole shillings", style = NuruType.body, color = Nuru.ink400) },
-            textStyle = nuruSans(16, FontWeight.Medium).copy(color = Nuru.ink),
-            keyboardOptions = KeyboardOptions(keyboardType = if (dollars) KeyboardType.Decimal else KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text("PAID ON", style = NuruType.micro, color = Nuru.goldLo)
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Nuru.border, RoundedCornerShape(12.dp))
-                .clickable { picking = true }.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(Icons.Filled.CalendarMonth, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
-            Text(paidOn.format(CLAIM_PICKED_DAY), style = NuruType.body, color = Nuru.ink)
-        }
-        Text("NOTE (OPTIONAL)", style = NuruType.micro, color = Nuru.goldLo)
-        OutlinedTextField(
-            value = note,
-            onValueChange = { v -> note = v.take(CLAIM_NOTE_MAX); error = null },
-            placeholder = { Text("e.g. Paid at the office after the service", style = NuruType.body, color = Nuru.ink400) },
-            supportingText = {
-                Text("${note.length}/$CLAIM_NOTE_MAX", style = NuruType.caption, color = Nuru.ink400, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End)
-            },
-            minLines = 2, maxLines = 4,
-            textStyle = nuruSans(14).copy(color = Nuru.ink),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        error?.let { Text(it, style = NuruType.caption, color = Nuru.danger) }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { send() },
-                enabled = online && !sending && amountText.isNotBlank(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Nuru.navyDeep, contentColor = Color.White),
-                // Taller rather than clipped when a large font wraps the label.
-                modifier = Modifier.weight(1f).heightIn(min = 44.dp),
-            ) {
-                if (sending) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp).size(16.dp))
-                Text(if (sending) "Sending…" else "Tell the office", style = NuruType.cardCta, textAlign = TextAlign.Center)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("I paid another way", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy, modifier = Modifier.weight(1f))
+            Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable(enabled = !sending) { onClose() }, Alignment.Center) {
+                Icon(Icons.Filled.Close, "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
             }
-            TextButton(onClick = onClose, enabled = !sending) { Text("Not now", style = NuruType.cardCta, color = Nuru.ink600) }
         }
+        Text(claimIntro(pl.displayTitle), style = giInter(12), color = Nuru.ink600)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(claimAmountLabel(pl.currency), style = label, color = GIVE.overline)
+            OutlinedTextField(
+                value = amountText,
+                onValueChange = { v -> amountText = if (dollars) usdTyping(v) else v.filter { it.isDigit() }.take(8); error = null },
+                singleLine = true,
+                prefix = { Text(if (dollars) "US$ " else "KSh ", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary) },
+                placeholder = { Text(if (dollars) "e.g. 20.00" else "e.g. 2000", style = giInter(16), color = Nuru.ink400) },
+                textStyle = giInter(16, FontWeight.SemiBold).copy(color = Nuru.ink),
+                keyboardOptions = KeyboardOptions(keyboardType = if (dollars) KeyboardType.Decimal else KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(claimAmountHelp(pl.currency), style = giInter(12), color = Nuru.ink400)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("THE DAY YOU PAID", style = label, color = GIVE.overline)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nuru.surface)
+                    .border(1.dp, Nuru.border, RoundedCornerShape(14.dp))
+                    .clickable { picking = true }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Icons.Filled.CalendarMonth, null, tint = GIVE.gold, modifier = Modifier.size(18.dp))
+                Text(paidOn.format(CLAIM_PICKED_DAY), style = giInter(14), color = Nuru.ink)
+            }
+            Text("Today, or any day in the last year.", style = giInter(12), color = Nuru.ink400)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("A NOTE FOR THE OFFICE · OPTIONAL", style = label, color = GIVE.overline)
+            OutlinedTextField(
+                value = note,
+                onValueChange = { v -> note = v.take(CLAIM_NOTE_MAX); error = null },
+                placeholder = { Text("e.g. Cash at the 9am service", style = giInter(14), color = Nuru.ink400) },
+                leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                minLines = 2, maxLines = 5,
+                textStyle = giInter(14).copy(color = Nuru.ink),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "${note.trim().length}/$CLAIM_NOTE_MAX", style = giInter(11), color = Nuru.ink400,
+                textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // Offline first, then the server's refusal, then what the typing lacks.
+        when {
+            !online -> Text(CLAIM_OFFLINE_LINE, style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText)
+            error != null -> Text(error.orEmpty(), style = giInter(12), color = Nuru.danger)
+            amountText.isNotEmpty() && problem != null -> Text(problem, style = giInter(12), color = Nuru.danger)
+        }
+        val canSend = problem == null && online && !sending
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).alpha(if (canSend || sending) 1f else 0.5f)
+                .clip(RoundedCornerShape(14.dp)).background(GIVE.gold)
+                .clickable(enabled = canSend) { Haptics.tap(view); send() }
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            if (sending) {
+                CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (sending) "Sending…" else "Tell the office", style = giInter(15, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
+        }
+        Text(
+            "Nothing is charged. It's added to your pledge once the office confirms it.",
+            style = giInter(12), color = Nuru.ink400, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
     }
 
     if (picking) {
