@@ -12,14 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -98,7 +96,10 @@ val GIVE_FUNDS = listOf(
 fun giveFund(id: String?): GiveFund = GIVE_FUNDS.firstOrNull { it.id.equals(id?.trim(), true) }
     ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Icons.Filled.CardGiftcard, Color(0xFFF3E8FF), Color(0xFFA855F7))
 
-/** A payment method (iOS `PayMethod`). `provider == null` → "SOON" (disabled). */
+/** A payment method (iOS `PayMethod`). `provider == null` → "SOON" (disabled).
+ *  Only rails GET /giving/methods can list have a row (Giving Cycle 5): the
+ *  Equity Bank and device-wallet rows were never returned by the server, so
+ *  they only ever showed as "SOON" — iOS dropped them, and so does this. */
 data class GiveMethod(
     val id: String, val label: String, val sub: String,
     val badgeBg: Color, val badgeFg: Color, val badgeText: String?, val badgeIcon: ImageVector?,
@@ -108,9 +109,7 @@ data class GiveMethod(
 val GIVE_METHODS = listOf(
     GiveMethod("mpesa", "Pay with M-Pesa", "STK push to your phone", Color(0xFF16A34A), Color.White, "M-PESA", null, "mpesa"),
     GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", Color(0xFFDC2626), Color.White, "AIRTEL", null, "airtel"),
-    GiveMethod("equity", "Pay with Equity Bank", "Bank account", Color(0xFFA6093D), Color.White, null, Icons.Filled.AccountBalance, null),
     GiveMethod("card", "Pay with Card", "Visa · Mastercard", Color(0xFFEEF2FF), Color(0xFF6366F1), null, Icons.Filled.CreditCard, "card"),
-    GiveMethod("wallet", "Apple / Google Pay", "Device wallet", Color(0xFFEEF2FF), Color(0xFF6366F1), null, Icons.Filled.Wallet, null),
     GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", Color(0xFFE8F1FB), Color(0xFF0070BA), "PP", null, "paypal"),
 )
 
@@ -210,6 +209,12 @@ data class GivePreset(
     /** The pledge's terms, "KSh 1,000 monthly · due on the 25th"
      *  (GiveTargetCopy.pledgeTermsLine); null when unknown. */
     val terms: String? = null,
+    /** The pledge's or need's currency — it decides the rails and the
+     *  amount's money (Giving Cycle 5): a KES promise is paid with M-Pesa, a
+     *  USD one with PayPal; the server refuses any other (CURRENCY_MISMATCH).
+     *  Null = shillings, as every bound gift was before. [amountMinor] is in
+     *  this currency's minor units. */
+    val currency: String? = null,
 ) {
     /** The gift is bound to a target and should land on One-time. */
     val isTargeted: Boolean get() = pledgeId != null || needId != null
@@ -221,6 +226,9 @@ data class GivePreset(
 const val NEED_GIFT_FUND = "gift"
 
 /** MainShell route that opens the Give tab preset for a need (see
- *  GIVE_NEED_ROUTE there). Title is URL-encoded; amount is minor units. */
+ *  GIVE_NEED_ROUTE there). Title is URL-encoded; amount is minor units of the
+ *  need's currency, which travels too when it is not shillings (Giving
+ *  Cycle 5 — it decides the rails). */
 fun giveToNeedRoute(preset: GivePreset): String =
-    "give-need/${preset.needId}?amount=${preset.amountMinor ?: 0}&title=${android.net.Uri.encode(preset.title ?: "")}"
+    "give-need/${preset.needId}?amount=${preset.amountMinor ?: 0}&title=${android.net.Uri.encode(preset.title ?: "")}" +
+        (preset.currency?.let { currencyCode(it) }?.takeIf { it != GIVE_FORM_CURRENCY }?.let { "&currency=$it" } ?: "")

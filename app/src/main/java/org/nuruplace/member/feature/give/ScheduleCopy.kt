@@ -11,12 +11,20 @@
 // Dates follow the server (financial/service.ts, Giving Cycle 2): the Nairobi
 // calendar, a monthly gift keeping its own day clamped to short months (31 Jan
 // → 28/29 Feb → 31 Mar), prompts only inside 07:00–21:00 Nairobi.
+//
+// A gift that collects a pledge (Giving Cycle 5) says so — "Collects your
+// pledge “Kenya trip”" — and what its next prompt asks when that is not the
+// whole amount: only the rest of what's due, or nothing when the pledge is
+// already paid. Collecting a MONTHLY pledge, its amount and day are the
+// pledge's: they change on the pledge (the server refuses them here, 422
+// details.pledge_id), while its number, heads-up and pause stay here.
 package org.nuruplace.member.feature.give
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import org.nuruplace.member.data.net.GivingSchedule
+import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.UpdateScheduleBody
 import java.time.DayOfWeek
 import java.time.Instant
@@ -127,6 +135,11 @@ fun scheduledFirstPromptLine(freq: Int, firstPromptDay: String): String =
 fun scheduledSetUpLine(freq: Int, firstPromptDay: String): String =
     "Your ${if (freq == FREQ_WEEKLY) "weekly" else "monthly"} gift is set up — the first prompt comes on $firstPromptDay."
 
+/** The celebration when a schedule is set up — said in its own rhythm: a
+ *  weekly gift is faithfulness week after week, not month after month. */
+fun scheduleCelebrationLine(freq: Int): String =
+    "Faithfulness, ${if (freq == FREQ_WEEKLY) "week after week" else "month after month"}, carries the gospel further."
+
 /** Said over today's prompt when the schedule starts with a gift now. */
 fun firstChargeNote(freq: Int): String =
     "Your ${if (freq == FREQ_WEEKLY) "weekly" else "monthly"} gift is set up — this is the first."
@@ -183,6 +196,33 @@ fun scheduleFailureLine(s: GivingSchedule): String? =
 fun schedulePromptLine(s: GivingSchedule): String =
     s.phoneNumber?.takeIf { it.isNotBlank() }?.let { "Prompts go to ${kenyanMobileDisplay(it)}" }
         ?: "Prompts go to your profile number"
+
+// ── Collecting a pledge (Giving Cycle 5) ──
+
+/** "Collects your pledge “Kenya trip”"; null for a gift that pays no pledge. */
+fun schedulePledgeLine(s: GivingSchedule): String? =
+    s.pledge?.title?.trim()?.takeIf { it.isNotEmpty() }?.let { "Collects your pledge “$it”" }
+
+/** What the next prompt asks when it is not the whole amount — "Next: KSh
+ *  3,000 — the rest of what's due", or "Nothing to pay next time — your
+ *  pledge is already paid" — else null (the whole amount, or none coming). */
+fun scheduleNextAmountLine(s: GivingSchedule): String? {
+    val next = s.nextAmountMinor ?: return null
+    return when {
+        next <= 0L -> "Nothing to pay next time — your pledge is already paid"
+        next < s.amountMinor -> "Next: ${money(next, s.currency)} — the rest of what's due"
+        else -> null
+    }
+}
+
+/** The MONTHLY pledge this gift collects, found among [pledges]: its amount
+ *  and day are changed on the pledge, never here. Null when it collects
+ *  none, a total pledge, or one not among [pledges] — the server then
+ *  answers a change itself (422 with details.pledge_id). */
+fun monthlyPledgeCollected(s: GivingSchedule, pledges: List<Pledge>): Pledge? {
+    val id = s.pledge?.pledgeId?.takeIf { it.isNotBlank() } ?: return null
+    return pledges.firstOrNull { it.pledgeId == id && it.shape == "monthly" }
+}
 
 /** The cancel confirmation — what stops, and what does not. */
 fun scheduleCancelText(s: GivingSchedule): String =

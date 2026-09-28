@@ -8,6 +8,13 @@
 // heads-up before each prompt, or Cancel it (asked first). Every call is
 // online and its refusal is said in the server's own words. The rules and
 // words are ScheduleCopy.kt's (pinned by ScheduleCopyTest).
+//
+// A gift that collects a pledge (Giving Cycle 5) says which, and what its
+// next prompt asks; collecting a MONTHLY pledge, Change keeps the number and
+// offers "Change it on the pledge" for the amount and day, and a change the
+// server refuses for that reason (details.pledge_id) offers the same. The
+// sheet follows the caller's latest row for it, so a reload — a retried
+// scheduled charge that cleared its strikes — shows here too.
 package org.nuruplace.member.feature.give
 
 import androidx.compose.foundation.background
@@ -49,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +76,7 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PauseScheduleBody
+import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.UpdateScheduleBody
 import java.time.Instant
 import java.time.LocalDate
@@ -92,11 +101,21 @@ internal fun ScheduleSheet(
     /** M-Pesa's own range for a changed amount (the server checks again). */
     minMinor: Long = FALLBACK_MPESA.minMinor,
     maxMinor: Long = FALLBACK_MPESA.maxMinor,
+    /** The member's pledges as far as the caller knows them — a MONTHLY
+     *  pledge this gift collects owns its amount and day. */
+    pledges: List<Pledge> = emptyList(),
+    /** Open a pledge ("Change it on the pledge"). */
+    onOpenPledge: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var s by remember(schedule.scheduleId) { mutableStateOf(schedule) }
+    // The caller's newer row for this gift (its list reloaded) replaces ours.
+    LaunchedEffect(schedule) { s = schedule }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // A refusal that named the pledge owning this change (details.pledge_id).
+    var errorPledgeId by remember { mutableStateOf<String?>(null) }
+    val followsPledge = monthlyPledgeCollected(s, pledges)
     var confirmingCancel by remember { mutableStateOf(false) }
     var changing by remember { mutableStateOf(false) }
     var pausing by remember { mutableStateOf(false) }
@@ -107,13 +126,17 @@ internal fun ScheduleSheet(
     /** One call at a time; its refusal is said, never swallowed. */
     fun act(call: suspend () -> Unit) {
         if (busy) return
-        busy = true; error = null
+        busy = true; error = null; errorPledgeId = null
         scope.launch {
             try {
                 call()
                 onChanged()
             } catch (e: Exception) {
-                error = ApiException.message(e)
+                // Read ONCE (an error body is one-shot): the words, and the
+                // pledge a refused amount or day belongs to.
+                val refusal = ApiException.serverError(e)
+                error = refusal?.displayMessage ?: ApiException.message(e)
+                errorPledgeId = refusal?.detail("pledge_id")
             } finally {
                 busy = false
             }
@@ -151,6 +174,10 @@ internal fun ScheduleSheet(
                         "Every ${cadenceWord(s.frequency)} · ${giveFund(s.fund).name}" + (scheduleStatusLabel(s.status)?.let { " · $it" } ?: ""),
                         style = giInter(12), color = GIVE.sub,
                     )
+                    // The pledge it collects, and what its next prompt asks.
+                    listOfNotNull(schedulePledgeLine(s), scheduleNextAmountLine(s)).forEach {
+                        Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                    }
                 }
             }
 
@@ -245,6 +272,10 @@ internal fun ScheduleSheet(
             error?.let {
                 Text(it, style = giInter(12), color = GIVE.danger, modifier = Modifier.padding(top = 8.dp))
             }
+            // The server named the pledge that owns what was refused.
+            errorPledgeId?.let { id ->
+                SheetButton("Change it on the pledge", filled = false, busy = false, modifier = Modifier.padding(top = 8.dp)) { onOpenPledge(id) }
+            }
         }
     }
 
@@ -274,11 +305,13 @@ internal fun ScheduleSheet(
     if (changing) {
         ChangeScheduleDialog(
             s, minMinor, maxMinor,
+            followsPledge = followsPledge,
             onSave = { patch ->
                 changing = false
                 // Nothing changed → nothing is sent.
                 if (patch != null) act { keep(Net.client.api.updateSchedule(s.scheduleId, patch)) }
             },
+            onOpenPledge = { id -> changing = false; onOpenPledge(id) },
             onDismiss = { changing = false },
         )
     }
@@ -298,14 +331,19 @@ internal fun ScheduleSheet(
 }
 
 /** Change the amount, the day or the number — only what changed is sent
- *  (ScheduleCopy.scheduleEditPatch); whole shillings inside M-Pesa's range. */
+ *  (ScheduleCopy.scheduleEditPatch); whole shillings inside M-Pesa's range.
+ *  Collecting a MONTHLY pledge ([followsPledge]), the amount and day are the
+ *  pledge's: only the number changes here, and "Change it on the pledge"
+ *  opens the pledge for the rest. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChangeScheduleDialog(
     s: GivingSchedule,
     minMinor: Long,
     maxMinor: Long,
+    followsPledge: Pledge?,
     onSave: (UpdateScheduleBody?) -> Unit,
+    onOpenPledge: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var amountText by remember { mutableStateOf("${s.amountMinor / 100}") }
@@ -313,7 +351,8 @@ private fun ChangeScheduleDialog(
     val startNumber = promptNumberChoiceOf(s)
     var useProfile by remember { mutableStateOf(startNumber is PromptNumberChoice.Profile) }
     var numberText by remember { mutableStateOf((startNumber as? PromptNumberChoice.Own)?.e164?.let(::kenyanMobileDisplay).orEmpty()) }
-    val amountError = scheduleAmountError(amountText, minMinor, maxMinor)
+    // The pledge owns the amount and day: they are neither shown nor sent.
+    val amountError = if (followsPledge != null) null else scheduleAmountError(amountText, minMinor, maxMinor)
     val number = kenyanMobileE164(numberText)
     val numberWrong = !useProfile && number == null && numberText.count { it.isDigit() } >= 9
     val valid = amountError == null && (useProfile || number != null)
@@ -323,44 +362,55 @@ private fun ChangeScheduleDialog(
         title = { Text("Change this gift", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("AMOUNT", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { v -> amountText = v.filter { it.isDigit() }.take(7) },
-                    singleLine = true,
-                    prefix = { Text("KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
-                    isError = amountError != null && amountText.isNotEmpty(),
-                    textStyle = giSerif(22, FontWeight.SemiBold).copy(color = GIVE.navy),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                )
-                amountError?.let { Text(it, style = giInter(12), color = GIVE.danger, modifier = Modifier.padding(top = 4.dp)) }
-                Text(
-                    if (freqOf(s.frequency) == FREQ_WEEKLY) "DAY OF THE WEEK" else "DAY OF THE MONTH",
-                    style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(top = 16.dp),
-                )
-                FlowRow(
-                    Modifier.padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    scheduleDayOptions(s.frequency).forEach { d ->
-                        val on = d == day
-                        Text(
-                            scheduleDayChip(s.frequency, d),
-                            style = giInter(12, FontWeight.SemiBold),
-                            color = if (on) Color.White else GIVE.navy,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.clip(SheetCapsule)
-                                .background(if (on) GIVE.navy else GIVE.surface)
-                                .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, SheetCapsule))
-                                .clickable { day = d }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
+                if (followsPledge != null) {
+                    // Collecting a monthly pledge: its amount and day live there.
+                    Text(
+                        "The amount and day follow your pledge “${followsPledge.displayTitle}”.",
+                        style = giInter(13), color = GIVE.sub,
+                    )
+                    SheetButton("Change it on the pledge", filled = false, busy = false, modifier = Modifier.padding(top = 8.dp)) {
+                        onOpenPledge(followsPledge.pledgeId)
                     }
-                }
-                if (freqOf(s.frequency) != FREQ_WEEKLY && (day ?: 0) > 28) {
-                    Text("In a shorter month, the last day.", style = giInter(11), color = GIVE.tertiary, modifier = Modifier.padding(top = 4.dp))
+                } else {
+                    Text("AMOUNT", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { v -> amountText = v.filter { it.isDigit() }.take(7) },
+                        singleLine = true,
+                        prefix = { Text("KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
+                        isError = amountError != null && amountText.isNotEmpty(),
+                        textStyle = giSerif(22, FontWeight.SemiBold).copy(color = GIVE.navy),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    )
+                    amountError?.let { Text(it, style = giInter(12), color = GIVE.danger, modifier = Modifier.padding(top = 4.dp)) }
+                    Text(
+                        if (freqOf(s.frequency) == FREQ_WEEKLY) "DAY OF THE WEEK" else "DAY OF THE MONTH",
+                        style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(top = 16.dp),
+                    )
+                    FlowRow(
+                        Modifier.padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        scheduleDayOptions(s.frequency).forEach { d ->
+                            val on = d == day
+                            Text(
+                                scheduleDayChip(s.frequency, d),
+                                style = giInter(12, FontWeight.SemiBold),
+                                color = if (on) Color.White else GIVE.navy,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.clip(SheetCapsule)
+                                    .background(if (on) GIVE.navy else GIVE.surface)
+                                    .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, SheetCapsule))
+                                    .clickable { day = d }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                    if (freqOf(s.frequency) != FREQ_WEEKLY && (day ?: 0) > 28) {
+                        Text("In a shorter month, the last day.", style = giInter(11), color = GIVE.tertiary, modifier = Modifier.padding(top = 4.dp))
+                    }
                 }
                 Text("M-PESA NUMBER", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(top = 16.dp))
                 ChoiceLine("My profile number", selected = useProfile) { useProfile = true }
@@ -387,8 +437,8 @@ private fun ChangeScheduleDialog(
                         onSave(
                             scheduleEditPatch(
                                 s,
-                                amountMajor = amountText.toIntOrNull(),
-                                day = day,
+                                amountMajor = if (followsPledge != null) null else amountText.toIntOrNull(),
+                                day = if (followsPledge != null) null else day,
                                 number = if (useProfile) PromptNumberChoice.Profile else number?.let { PromptNumberChoice.Own(it) },
                             ),
                         )

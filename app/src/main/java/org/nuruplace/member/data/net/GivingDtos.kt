@@ -131,7 +131,8 @@ data class RetryGiftBody(
 @Serializable
 data class FundRef(val code: String = "", val name: String = "")
 
-/** The pledge a gift counts toward (`pledge` on POST /giving/intents' result). */
+/** The pledge a gift counts toward (`pledge` on POST /giving/intents' result
+ *  and a receipt), or a recurring gift collects (a schedule's, Giving Cycle 5). */
 @Serializable
 data class IntentPledge(val pledgeId: String = "", val title: String = "")
 

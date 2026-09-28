@@ -506,6 +506,8 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                                     // PAYING YOUR PLEDGE card (GiveTargetCopy).
                                     paysTo = d.paysTo ?: pledge?.paysTo,
                                     terms = pledge?.let { pledgeTermsLine(it, today) },
+                                    // Its currency decides the rails (Giving Cycle 5).
+                                    currency = d.currency.takeIf { it.isNotBlank() } ?: pledge?.currency,
                                 ),
                             )
                         }
@@ -649,6 +651,8 @@ private fun PledgesSection(
                     GivePreset(
                         fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.displayTitle,
                         paysTo = pl.paysTo, terms = pledgeTermsLine(pl, today),
+                        // Its currency decides the rails (Giving Cycle 5).
+                        currency = pl.currency,
                     ),
                 )
             },

@@ -633,6 +633,11 @@ interface MemberApi {
     @POST("giving/partners/join")
     suspend fun joinPartners(@Body body: JoinPartnersBody = JoinPartnersBody()): PartnerMembership
 
+    /** The member's pledges (not cancelled) — a pledge collector's shape
+     *  (monthly: changed on the pledge) when Partners isn't loaded. */
+    @GET("giving/pledges")
+    suspend fun pledges(): Envelope<Pledge>
+
     @POST("giving/pledges")
     suspend fun createPledge(@Body body: CreatePledgeBody): Pledge
 

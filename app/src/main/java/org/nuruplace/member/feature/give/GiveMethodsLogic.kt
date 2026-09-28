@@ -8,9 +8,12 @@
 //    express: whole shillings, or (Giving Cycle 2) US dollars with cents for
 //    PayPal. A card needs the Stripe SDK this app does not have (its intents
 //    sat "processing" for ever), so it is never selectable here even when the
-//    server has it live. A pledge or a need is kept in shillings, so a dollar
-//    rail is not offered for one. A rail the app does not know is dropped; no
-//    answer at all (an older server, a failed call) leaves M-Pesa alone.
+//    server has it live. A pledge or a need has ONE currency, and it decides
+//    the rails (Giving Cycle 5): a KES pledge is paid with M-Pesa, a USD one
+//    with PayPal — the server refuses any other (422 CURRENCY_MISMATCH), so
+//    the form neither shows nor sends one. A rail the app does not know is
+//    dropped; no answer at all (an older server, a failed call) leaves M-Pesa
+//    alone. Only rails the server lists get a row.
 //
 // 2. The number the prompt goes to — the server's own Kenyan-mobile rule
 //    (financial/service.ts kenyanMobileNumber over providers.ts toMsisdn), so
@@ -60,9 +63,15 @@ data class GiveMethodOption(
     /** Settles in US dollars (PayPal): the form switches to its dollar entry. */
     val inDollars: Boolean get() = currency.equals(USD_CURRENCY, ignoreCase = true)
 
-    /** Selectable for this gift: a pledge or a need is kept in shillings, so
-     *  a dollar rail is not offered while the form is bound to one. */
-    fun selectableFor(bound: Boolean): Boolean = selectable && !(bound && inDollars)
+    /** In this currency — null (an older server) is shillings. */
+    fun inCurrency(code: String): Boolean = currencyCode(currency) == currencyCode(code)
+
+    /** Offered for this gift: every rail, or — bound to a pledge or need
+     *  ([boundCurrency]) — only those in its currency. */
+    fun shownFor(boundCurrency: String?): Boolean = boundCurrency == null || inCurrency(boundCurrency)
+
+    /** Selectable for this gift: selectable, and in a bound gift's currency. */
+    fun selectableFor(boundCurrency: String?): Boolean = selectable && shownFor(boundCurrency)
 }
 
 /** M-Pesa on the server's own terms (FinancialService.RAILS.mpesa) — all the
@@ -95,37 +104,66 @@ private fun GivingMethodInfo.toOption() = GiveMethodOption(
 )
 
 /** Where the form starts: the server's `default_method` when this form can
- *  take it (for this gift — [bound] to a pledge or need, or not), else the
- *  first rail it can, else none at all. */
-fun defaultGiveMethod(res: GivingMethodsRes?, options: List<GiveMethodOption>, bound: Boolean = false): String? {
-    val selectable = options.filter { it.selectableFor(bound) }.map { it.key }
+ *  take it (for this gift — bound to a pledge or need in [boundCurrency], or
+ *  not), else the first rail it can, else none at all. */
+fun defaultGiveMethod(res: GivingMethodsRes?, options: List<GiveMethodOption>, boundCurrency: String? = null): String? {
+    val selectable = options.filter { it.selectableFor(boundCurrency) }.map { it.key }
     return res?.defaultMethod?.takeIf { it in selectable } ?: selectable.firstOrNull()
 }
 
 /** The method a gift goes on: the member's pick while the form can still
  *  take it, else the default — a rail switched off mid-visit is never sent,
- *  nor a dollar rail once the form is bound to a pledge or need. */
+ *  nor one in another currency than the pledge or need the form is bound to. */
 fun effectiveGiveMethod(
     picked: String?,
     res: GivingMethodsRes?,
     options: List<GiveMethodOption>,
-    bound: Boolean = false,
+    boundCurrency: String? = null,
 ): GiveMethodOption? {
-    val key = picked?.takeIf { p -> options.any { it.key == p && it.selectableFor(bound) } } ?: defaultGiveMethod(res, options, bound)
+    val key = picked?.takeIf { p -> options.any { it.key == p && it.selectableFor(boundCurrency) } }
+        ?: defaultGiveMethod(res, options, boundCurrency)
     return options.firstOrNull { it.key == key }
 }
 
+/** The rows the form lists, in the member's order: the rails the server
+ *  listed (no Equity Bank, no device wallet — it never lists them), and —
+ *  bound to a pledge or need — only those in its currency. */
+fun shownGiveMethods(rows: List<GiveMethod>, options: List<GiveMethodOption>, boundCurrency: String?): List<GiveMethod> =
+    rows.filter { row -> options.any { it.key == row.id && it.shownFor(boundCurrency) } }
+
 /** The chip on a method the form cannot take: "UNAVAILABLE" when the server
- *  has it switched off, "USD" for a dollar rail kept off a bound (shilling)
- *  gift, else the existing "SOON". */
-fun methodChipLabel(option: GiveMethodOption?, bound: Boolean = false): String = when {
+ *  has it switched off, else "SOON". */
+fun methodChipLabel(option: GiveMethodOption?): String = when {
     option?.unavailableReason == "unavailable" -> "UNAVAILABLE"
-    bound && option?.selectable == true && option.inDollars -> "USD"
     else -> "SOON"
 }
 
-/** Why a dollar rail is not offered for a bound gift — said on a tap. */
-const val BOUND_IN_SHILLINGS_MESSAGE = "PayPal gifts are in US dollars, and this one is in shillings. Choose M-Pesa to give it."
+/** "US dollars" · "shillings" — a currency in words. */
+fun currencyWords(code: String?): String = when (currencyCode(code)) {
+    GIVE_FORM_CURRENCY -> "shillings"
+    USD_CURRENCY -> "US dollars"
+    else -> currencyCode(code)
+}
+
+/** Why a rail in another currency cannot pay a bound gift — the form never
+ *  offers one; this holds even if it did (the server's 422 CURRENCY_MISMATCH). */
+fun boundCurrencyMessage(boundCurrency: String): String = when (currencyCode(boundCurrency)) {
+    USD_CURRENCY -> "Gifts toward this are in US dollars. Choose PayPal to give."
+    GIVE_FORM_CURRENCY -> "Gifts toward this are in shillings. Choose M-Pesa to give."
+    else -> "Gifts toward this are in ${currencyWords(boundCurrency)}."
+}
+
+/** Why nothing can pay a bound gift in its currency (a USD pledge while
+ *  PayPal is off): "Gifts toward this are in US dollars — PayPal giving is
+ *  coming soon." Null while a rail in that currency can take it. */
+fun noRailForCurrencyMessage(boundCurrency: String, options: List<GiveMethodOption>): String? {
+    if (options.any { it.selectableFor(boundCurrency) }) return null
+    val words = currencyWords(boundCurrency)
+    val rail = options.firstOrNull { it.shownFor(boundCurrency) }
+        ?: return "Gifts toward this are in $words, and there's no way to give in $words here yet."
+    val why = if (rail.unavailableReason == "unavailable") "${rail.label} is unavailable right now" else "${rail.label} giving is coming soon"
+    return "Gifts toward this are in $words — $why."
+}
 
 // ── The prompt number ──
 

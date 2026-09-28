@@ -53,6 +53,13 @@ data class GivingSchedule(
     val anchorDay: Int? = null,
     /** Prompts in a row that did not go through. */
     val consecutiveFailures: Int = 0,
+    // Giving Cycle 5 — null from an older server.
+    /** The pledge this gift collects ({pledge_id, title}); null = none. */
+    val pledge: IntentPledge? = null,
+    /** What the next prompt will ask: the amount, or — collecting a pledge —
+     *  only what the pledge still owes (0 when it is already paid); null
+     *  when no prompt is coming (paused, cancelled, stopping with its pledge). */
+    val nextAmountMinor: Long? = null,
 )
 
 // --- Announcements ---

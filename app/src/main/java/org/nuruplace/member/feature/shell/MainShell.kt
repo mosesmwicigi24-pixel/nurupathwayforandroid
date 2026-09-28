@@ -104,7 +104,7 @@ private const val GIVE_TAB_ROUTE = "give"
 private const val EVENTS_TAB_ROUTE = "events"
 /** The Give tab opened on Give with a department need preset (docs/
  *  PARTNERS_PROGRAMME.md §4) — built by feature/give/GiveShared.giveToNeedRoute. */
-private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={title}"
+private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={title}&currency={currency}"
 /** The Give tab on one gift's result — a giving_gift_failed push (Giving
  *  Cycle 3), built by feature/give/GivingRoutes.giftRoute. */
 private const val GIVE_GIFT_ROUTE = "give-gift/{id}"
@@ -730,6 +730,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.give.SchedulesScreen(
                     onBack = { nav.popBackStack() },
                     openScheduleId = entry.arguments?.getString("open")?.takeIf { it.isNotBlank() },
+                    onOpenPledge = { nav.navigate(org.nuruplace.member.feature.give.pledgeRoute(it)) },
                 )
             }
             composable("announcements") {
@@ -801,6 +802,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     navArgument("needId") { type = NavType.StringType },
                     navArgument("amount") { type = NavType.IntType; defaultValue = 0 },
                     navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    // The need's currency (Giving Cycle 5) — absent = shillings.
+                    navArgument("currency") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { entry ->
                 val needId = entry.arguments?.getString("needId") ?: ""
@@ -812,6 +815,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         amountMinor = entry.arguments?.getInt("amount")?.takeIf { it > 0 },
                         needId = needId.ifBlank { null },
                         title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() },
+                        currency = entry.arguments?.getString("currency")?.takeIf { it.isNotBlank() },
                     ),
                 )
             }

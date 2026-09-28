@@ -105,23 +105,62 @@ class GiveMethodsLogicTest {
     }
 
     @Test
-    fun `a pledge or need stays in shillings, so a dollar rail is not offered for one`() {
+    fun `a pledge's or need's currency decides the rails`() {
         val res = json.decodeFromString<GivingMethodsRes>(live)
         val options = giveMethodOptions(res)
         val paypal = options.single { it.key == "paypal" }
-        assertTrue(paypal.selectableFor(bound = false))
-        assertFalse(paypal.selectableFor(bound = true))
-        assertTrue(options.single { it.key == "mpesa" }.selectableFor(bound = true))
-        // Picked PayPal, then bound (a pledge's Pay) → the form falls back to M-Pesa.
-        assertEquals("paypal", effectiveGiveMethod("paypal", res, options, bound = false)?.key)
-        assertEquals("mpesa", effectiveGiveMethod("paypal", res, options, bound = true)?.key)
-        // A PayPal-only server leaves a bound form with nothing to give with.
+        val mpesa = options.single { it.key == "mpesa" }
+        // Unbound: every rail the form can take.
+        assertTrue(paypal.selectableFor(null))
+        assertTrue(mpesa.selectableFor(null))
+        // A shilling pledge: M-Pesa, never PayPal; a dollar pledge: PayPal, never M-Pesa.
+        assertFalse(paypal.selectableFor("KES"))
+        assertTrue(mpesa.selectableFor("KES"))
+        assertTrue(paypal.selectableFor("usd"))
+        assertFalse(mpesa.selectableFor("USD"))
+        // Picked PayPal, then bound to a shilling pledge → M-Pesa; to a dollar one → PayPal stays.
+        assertEquals("paypal", effectiveGiveMethod("paypal", res, options)?.key)
+        assertEquals("mpesa", effectiveGiveMethod("paypal", res, options, boundCurrency = "KES")?.key)
+        assertEquals("paypal", effectiveGiveMethod("mpesa", res, options, boundCurrency = "USD")?.key)
+        // A PayPal-only server leaves a shilling-bound form with nothing to give with.
         val paypalOnly = res.copy(methods = res.methods.map { if (it.key == "mpesa") it.copy(enabled = false, unavailableReason = "unavailable") else it }, defaultMethod = "paypal")
         assertEquals("paypal", effectiveGiveMethod(null, paypalOnly, giveMethodOptions(paypalOnly))?.key)
-        assertNull(effectiveGiveMethod(null, paypalOnly, giveMethodOptions(paypalOnly), bound = true))
-        // The row says why on a bound form.
-        assertEquals("USD", methodChipLabel(paypal, bound = true))
-        assertEquals("SOON", methodChipLabel(paypal.copy(enabled = false, unavailableReason = "coming_soon"), bound = true))
+        assertNull(effectiveGiveMethod(null, paypalOnly, giveMethodOptions(paypalOnly), boundCurrency = "KES"))
+        // A chip only ever says why a rail can't take money.
+        assertEquals("SOON", methodChipLabel(paypal.copy(enabled = false, unavailableReason = "coming_soon")))
+    }
+
+    @Test
+    fun `the rows shown are the listed rails, bound to a currency only its own`() {
+        val res = json.decodeFromString<GivingMethodsRes>(live)
+        val options = giveMethodOptions(res)
+        // No Equity Bank, no device wallet — the server never lists them.
+        assertEquals(listOf("mpesa", "airtel", "card", "paypal"), GIVE_METHODS.map { it.id })
+        assertEquals(options.map { it.key }.toSet(), shownGiveMethods(GIVE_METHODS, options, null).map { it.id }.toSet())
+        // A shilling pledge shows the shilling rails; a dollar one, PayPal alone.
+        assertEquals(listOf("mpesa", "airtel", "card"), shownGiveMethods(GIVE_METHODS, options, "KES").map { it.id })
+        assertEquals(listOf("paypal"), shownGiveMethods(GIVE_METHODS, options, "USD").map { it.id })
+        // The member's order is kept.
+        assertEquals(listOf("paypal", "mpesa"), shownGiveMethods(GIVE_METHODS.reversed(), options, null).map { it.id }.filter { it in setOf("paypal", "mpesa") })
+        // No answer: M-Pesa alone.
+        assertEquals(listOf("mpesa"), shownGiveMethods(GIVE_METHODS, giveMethodOptions(null), null).map { it.id })
+    }
+
+    @Test
+    fun `a dollar pledge with PayPal off says why instead of offering shillings`() {
+        val res = json.decodeFromString<GivingMethodsRes>(live)
+        val off = giveMethodOptions(res.copy(methods = res.methods.map { if (it.key == "paypal") it.copy(enabled = false, unavailableReason = "coming_soon") else it }))
+        assertEquals("Gifts toward this are in US dollars — PayPal giving is coming soon.", noRailForCurrencyMessage("USD", off))
+        val down = giveMethodOptions(res.copy(methods = res.methods.map { if (it.key == "paypal") it.copy(enabled = false, unavailableReason = "unavailable") else it }))
+        assertEquals("Gifts toward this are in US dollars — PayPal is unavailable right now.", noRailForCurrencyMessage("USD", down))
+        // No dollar rail listed at all.
+        assertEquals(
+            "Gifts toward this are in US dollars, and there's no way to give in US dollars here yet.",
+            noRailForCurrencyMessage("USD", giveMethodOptions(null)),
+        )
+        // A rail that can take it: nothing to say.
+        assertNull(noRailForCurrencyMessage("USD", giveMethodOptions(res)))
+        assertNull(noRailForCurrencyMessage("KES", giveMethodOptions(res)))
     }
 
     @Test

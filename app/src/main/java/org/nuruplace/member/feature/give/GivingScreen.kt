@@ -116,6 +116,7 @@ import org.nuruplace.member.data.net.GivingRecord
 import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PayPalCaptureBody
+import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.RetryGiftBody
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.Haptics
@@ -151,6 +152,9 @@ data class GiveSegmentData(
     val methods: GivingMethodsRes?,
     /** The profile's number as E.164 when it is a Kenyan mobile, else null. */
     val phoneOnFile: String?,
+    /** The member's pledges — fetched only when a schedule collects one, so
+     *  its sheet knows a MONTHLY pledge owns its amount and day (Cycle 5). */
+    val pledges: List<Pledge> = emptyList(),
 )
 
 /**
@@ -194,6 +198,13 @@ class GiveViewModel : ViewModel() {
             val phoneOnFile = methods.map { it.phoneOnFile }.recoverCatching {
                 kenyanMobileE164(Net.client.api.me().profile.phoneNumber)
             }
+            // A pledge's collector: whether its pledge is monthly decides
+            // where its amount and day change. None collecting one → no call.
+            val pledges = if (sched.getOrNull()?.any { it.pledge != null } == true) {
+                runCatching { Net.client.api.pledges().data }
+            } else {
+                Result.success(emptyList())
+            }
             if (mine != seq) return@launch
             val shown = data
             data = GiveSegmentData(
@@ -201,6 +212,7 @@ class GiveViewModel : ViewModel() {
                 schedules = sched.getOrElse { shown?.schedules ?: emptyList() },
                 methods = methods.getOrElse { shown?.methods },
                 phoneOnFile = phoneOnFile.getOrElse { shown?.phoneOnFile },
+                pledges = pledges.getOrElse { shown?.pledges ?: emptyList() },
             )
         }
     }
@@ -228,6 +240,9 @@ fun GivingScreen(
      *  Cycle 3) — and the call that marks it opened, so it opens once. */
     followTransactionId: String? = null,
     onFollowed: () -> Unit = {},
+    /** Open a pledge on Partners — a pledge collector's "Change it on the
+     *  pledge" (Giving Cycle 5). */
+    onOpenPledge: (String) -> Unit = {},
     /** Scoped to the tab's destination, so it outlives the segment. */
     vm: GiveViewModel = viewModel(),
 ) {
@@ -250,6 +265,7 @@ fun GivingScreen(
     GiveTab(
         d.history, d.schedules, d.methods, d.phoneOnFile, vm::load, onOpenStatement, onOpenSchedules, preset,
         segmentControl, onUnbind, onRebind, followTransactionId, onFollowed,
+        pledges = d.pledges, onOpenPledge = onOpenPledge,
     )
 }
 
@@ -371,6 +387,8 @@ private fun GiveTab(
     /** A gift to open on its result (a giving_gift_failed push), once. */
     followTransactionId: String? = null,
     onFollowed: () -> Unit = {},
+    pledges: List<Pledge> = emptyList(),
+    onOpenPledge: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -385,7 +403,7 @@ private fun GiveTab(
     var amountMajor by remember { mutableIntStateOf(seed.amountMajor) }
     // The dollar form's own amount (PayPal, Giving Cycle 2) — kept apart, so
     // switching back to M-Pesa finds the shillings untouched.
-    var usdCents by remember { mutableIntStateOf(DEFAULT_USD_CENTS) }
+    var usdCents by remember { mutableIntStateOf(seed.usdCents) }
     var customOpen by remember { mutableStateOf(false) }
     // "Named giving" (custom sheet, optional): set from the custom-amount
     // dialog. Rides the M-Pesa AccountReference + persists for
@@ -396,14 +414,17 @@ private fun GiveTab(
     // and a bound gift (a pledge's Pay, a need's Give) is one-time anyway.
     var freq by remember { mutableIntStateOf(seed.freq) }
     // The rows keep their look and the member's order (GIVE_METHODS); which
-    // are selectable is the server's word, re-read on every refetch
+    // show and are selectable is the server's word, re-read on every refetch
     // (GiveMethodsLogic.kt). A pick stands only while it stays selectable —
     // otherwise the form falls back to the server's default rail — and a
-    // pledge or need keeps to shillings (no dollar rail while bound).
+    // pledge or need is paid in ITS currency (Giving Cycle 5): a KES one
+    // with M-Pesa, a USD one with PayPal; the other rails are not shown.
     val methods = remember { mutableStateListOf(*GIVE_METHODS.toTypedArray()) }
     val options = remember(methodsRes) { giveMethodOptions(methodsRes) }
     var pickedMethod by remember { mutableStateOf<String?>(null) }
-    val method = effectiveGiveMethod(pickedMethod, methodsRes, options, bound = target != null)
+    // Null while unbound; a bound preset with no currency is shillings.
+    val boundCurrency = target?.let { currencyCode(it.currency) }
+    val method = effectiveGiveMethod(pickedMethod, methodsRes, options, boundCurrency = boundCurrency)
     // PayPal settles in US dollars: the amount entry speaks dollars with cents.
     val inDollars = method?.inDollars == true
     var coverFee by remember { mutableStateOf(false) }
@@ -761,10 +782,17 @@ private fun GiveTab(
             coverFee = coverFee && !inDollars, phone = promptPhone, accountName = accountName,
             idempotencyKey = attempt.key, pledgeId = target?.pledgeId,
             needId = target?.needId, phoneOnFile = phoneOnFile, usdCents = usdCents,
+            boundCurrency = boundCurrency,
         )
         when (plan) {
             is GiveSubmission.Blocked -> {
-                error = plan.message
+                // Bound in a currency no rail can take here (a USD pledge
+                // while PayPal is off): say which, not "unavailable".
+                error = if (plan.message == NO_METHOD_MESSAGE && boundCurrency != null) {
+                    noRailForCurrencyMessage(boundCurrency, options) ?: plan.message
+                } else {
+                    plan.message
+                }
                 // No number to prompt (or not one M-Pesa can reach): ask for it here.
                 if (method != null && plan.message in setOf(phoneNeededMessage(method.label), PHONE_INVALID_MESSAGE)) {
                     phoneSheet = true
@@ -791,7 +819,7 @@ private fun GiveTab(
             ) {
                 // Pledge-pay / need mode: ONE card says where the gift goes,
                 // in place of the chooser (the server picks a pledge's fund).
-                val targetCopy = giveTargetCopy(target, chargedAmountMajor(amountMajor, coverFee))
+                val targetCopy = giveTargetCopyFor(target, if (inDollars) usd(usdCents) else kshMajor(chargedAmountMajor(amountMajor, coverFee)))
                 if (targetCopy != null) {
                     GiveTargetCard(targetCopy) { Haptics.tick(view); target = null; onUnbind() }
                 } else {
@@ -906,6 +934,10 @@ private fun GiveTab(
                             Column(Modifier.weight(1f)) {
                                 Text("YOUR RHYTHM", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                                 Text(rhythmText(rs), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.padding(top = 2.dp))
+                                // Collecting a pledge: which, and what the next prompt asks.
+                                listOfNotNull(schedulePledgeLine(rs), scheduleNextAmountLine(rs)).forEach {
+                                    Text(it, style = giInter(11, FontWeight.Medium), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                                }
                             }
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
                         }
@@ -962,26 +994,30 @@ private fun GiveTab(
                         Text("Reorder", style = giInter(11), color = GIVE.tertiary)
                     }
                 }
+                // Bound in a currency no rail can take here: say so up front.
+                boundCurrency?.let { noRailForCurrencyMessage(it, options) }?.let {
+                    Text(it, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(horizontal = 4.dp))
+                }
+                // Only the rails the server lists; bound, only those in the
+                // pledge's or need's currency (GiveMethodsLogic.shownGiveMethods).
+                val shownMethods = shownGiveMethods(methods, options, boundCurrency)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    methods.forEachIndexed { i, m ->
+                    shownMethods.forEachIndexed { i, m ->
                         // Not selectable here (switched off, a card) → the
-                        // SOON treatment, never a tap. PayPal's dollars are
-                        // kept off a bound (shilling) gift, and a tap says why.
+                        // SOON treatment, never a tap.
                         val option = options.firstOrNull { it.key == m.id }
-                        val soon = option?.selectableFor(bound = target != null) != true
-                        val keptForShillings = soon && option?.selectable == true
+                        val soon = option?.selectableFor(boundCurrency) != true
                         val on = m.id == method?.key && !soon
+                        /** Swap this row with a neighbour among the shown rows, in the member's order. */
+                        fun swapWith(other: GiveMethod) {
+                            val a = methods.indexOf(m); val b = methods.indexOf(other)
+                            if (a >= 0 && b >= 0) { methods[a] = other; methods[b] = m }
+                        }
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                                 .background(if (on) GIVE.priorityBg else GIVE.white)
                                 .border(if (on) 1.5.dp else 1.dp, if (on) GIVE.gold else GIVE.border, RoundedCornerShape(18.dp))
-                                .then(
-                                    when {
-                                        keptForShillings -> Modifier.alpha(0.7f).clickable { error = BOUND_IN_SHILLINGS_MESSAGE }
-                                        soon -> Modifier.alpha(0.7f)
-                                        else -> Modifier.clickable { pickedMethod = m.id; if (error == BOUND_IN_SHILLINGS_MESSAGE) error = null }
-                                    },
-                                )
+                                .then(if (soon) Modifier.alpha(0.7f) else Modifier.clickable { pickedMethod = m.id })
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1006,7 +1042,7 @@ private fun GiveTab(
                             }
                             if (soon) {
                                 Box(Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 9.dp, vertical = 4.dp)) {
-                                    Text(methodChipLabel(option, bound = target != null), style = giInter(10, FontWeight.Bold, 0.5f), color = GIVE.goldChipText)
+                                    Text(methodChipLabel(option), style = giInter(10, FontWeight.Bold, 0.5f), color = GIVE.goldChipText)
                                 }
                             }
                             if (on) {
@@ -1019,13 +1055,13 @@ private fun GiveTab(
                                 Icon(
                                     Icons.Filled.KeyboardArrowUp, contentDescription = "Move up", tint = GIVE.ink300,
                                     modifier = Modifier.size(14.dp).clickable {
-                                        if (i > 0) { val t = methods[i]; methods[i] = methods[i - 1]; methods[i - 1] = t }
+                                        if (i > 0) swapWith(shownMethods[i - 1])
                                     },
                                 )
                                 Icon(
                                     Icons.Filled.KeyboardArrowDown, contentDescription = "Move down", tint = GIVE.ink300,
                                     modifier = Modifier.size(14.dp).clickable {
-                                        if (i < methods.lastIndex) { val t = methods[i]; methods[i] = methods[i + 1]; methods[i + 1] = t }
+                                        if (i < shownMethods.lastIndex) swapWith(shownMethods[i + 1])
                                     },
                                 )
                             }
@@ -1165,7 +1201,7 @@ private fun GiveTab(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                val boundCta = giveTargetCopy(target, chargedAmountMajor(amountMajor, coverFee))?.cta
+                val boundCta = giveTargetCopyFor(target, if (inDollars) usd(usdCents) else kshMajor(chargedAmountMajor(amountMajor, coverFee)))?.cta
                 if (busy) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = GIVE.navy, strokeWidth = 2.dp)
                     Spacer(Modifier.width(6.dp))
@@ -1270,8 +1306,11 @@ private fun GiveTab(
 
         // ── Recurring-gift sheet (ScheduleSheet.kt): change, pause, resume,
         // heads-up, cancel — Giving Cycle 4 ──
-        sheetSchedule?.let { s ->
+        sheetSchedule?.let { opened ->
             val mpesa = options.firstOrNull { it.key == "mpesa" } ?: FALLBACK_MPESA
+            // The latest row for this gift: a reload (a retried charge that
+            // cleared its strikes, a change) reaches the open sheet.
+            val s = schedules.firstOrNull { it.scheduleId == opened.scheduleId } ?: opened
             ScheduleSheet(
                 s,
                 onClose = { sheetSchedule = null },
@@ -1284,6 +1323,8 @@ private fun GiveTab(
                 },
                 minMinor = mpesa.minMinor,
                 maxMinor = mpesa.maxMinor,
+                pledges = pledges,
+                onOpenPledge = { id -> sheetSchedule = null; onOpenPledge(id) },
             )
         }
     }
@@ -1376,7 +1417,7 @@ private fun PromptNumberSheet(
 @Composable
 private fun ScheduledResult(created: CreatedScheduleRes, body: CreateScheduleBody, phone: String?, onDone: () -> Unit) {
     LaunchedEffect(created.scheduleId) {
-        CelebrationCenter.fire(Moment("schedule-${created.scheduleId}", "Thank you for committing", "Faithfulness, month after month, carries the gospel further."))
+        CelebrationCenter.fire(Moment("schedule-${created.scheduleId}", "Thank you for committing", scheduleCelebrationLine(freqOf(body.frequency))))
     }
     val freq = freqOf(body.frequency)
     val firstPrompt = created.nextRunAt.takeIf { it.isNotBlank() }?.let { prettyDate(it) } ?: firstPromptDay(freq)

@@ -54,10 +54,11 @@ class GiveSubmitLogicTest {
         pledgeId: String? = null,
         phone: String? = "+254700000000",
         phoneOnFile: String? = null,
+        boundCurrency: String? = null,
     ) = planGiveSubmission(
         freq = freq, method = method, fundId = "tithe", amountMajor = amount, coverFee = coverFee,
         phone = phone, accountName = " Tithe ", idempotencyKey = "idem-1", pledgeId = pledgeId,
-        phoneOnFile = phoneOnFile,
+        phoneOnFile = phoneOnFile, boundCurrency = boundCurrency,
     )
 
     @Test
@@ -166,11 +167,14 @@ class GiveSubmitLogicTest {
 
     // ── PayPal in dollars (Giving Cycle 2) ──
 
-    private fun planUsd(usdCents: Int, freq: Int = FREQ_ONCE, amountMajor: Int = 1000, coverFee: Boolean = false, pledgeId: String? = null, needId: String? = null) =
+    private fun planUsd(
+        usdCents: Int, freq: Int = FREQ_ONCE, amountMajor: Int = 1000, coverFee: Boolean = false,
+        pledgeId: String? = null, needId: String? = null, boundCurrency: String? = null,
+    ) =
         planGiveSubmission(
             freq = freq, method = paypalLive, fundId = "mission", amountMajor = amountMajor, coverFee = coverFee,
             phone = "+254700000000", accountName = "", idempotencyKey = "idem-usd", pledgeId = pledgeId, needId = needId,
-            usdCents = usdCents,
+            usdCents = usdCents, boundCurrency = boundCurrency,
         )
 
     @Test
@@ -213,9 +217,31 @@ class GiveSubmitLogicTest {
     }
 
     @Test
-    fun `a pledge or need is never paid in dollars`() {
-        assertEquals(BOUND_IN_SHILLINGS_MESSAGE, (planUsd(usdCents = 2_500, pledgeId = "p1") as GiveSubmission.Blocked).message)
-        assertEquals(BOUND_IN_SHILLINGS_MESSAGE, (planUsd(usdCents = 2_500, needId = "n1") as GiveSubmission.Blocked).message)
+    fun `a pledge or need is paid only in its own currency`() {
+        val inShillings = "Gifts toward this are in shillings. Choose M-Pesa to give."
+        // A shilling pledge or need (or one from before currencies travelled) is never paid in dollars.
+        assertEquals(inShillings, (planUsd(usdCents = 2_500, pledgeId = "p1") as GiveSubmission.Blocked).message)
+        assertEquals(inShillings, (planUsd(usdCents = 2_500, needId = "n1", boundCurrency = "KES") as GiveSubmission.Blocked).message)
+        // A dollar pledge IS paid with PayPal, in cents, bound to its pledge.
+        val usd = (planUsd(usdCents = 2_550, pledgeId = "p1", boundCurrency = "USD") as GiveSubmission.Intent).body
+        assertEquals("USD", usd.currency)
+        assertEquals(2_550, usd.amountMinor)
+        assertEquals("p1", usd.pledgeId)
+        // …and never in shillings.
+        assertEquals(
+            "Gifts toward this are in US dollars. Choose PayPal to give.",
+            (plan(FREQ_ONCE, mpesa, pledgeId = "p1", boundCurrency = "USD") as GiveSubmission.Blocked).message,
+        )
+        // Unbound, the bound currency is ignored.
+        assertTrue(plan(FREQ_ONCE, mpesa, boundCurrency = "USD") is GiveSubmission.Intent)
+    }
+
+    @Test
+    fun `a dollar preset seeds the dollar form, a shilling one the shillings`() {
+        val usdPledge = GivePreset(pledgeId = "p1", amountMinor = 2_550, currency = "USD", title = "Kenya trip")
+        assertEquals(GiveFormSeed("tithe", DEFAULT_GIVE_AMOUNT_MAJOR, FREQ_ONCE, usdCents = 2_550), giveFormSeed(usdPledge))
+        assertEquals(GiveFormSeed("tithe", 1_500, FREQ_ONCE), giveFormSeed(usdPledge.copy(currency = "KES", amountMinor = 150_000)))
+        assertEquals(DEFAULT_USD_CENTS, giveFormSeed(null).usdCents)
     }
 
     @Test

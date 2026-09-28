@@ -261,6 +261,8 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                             amountMinor = (n.targetMinor - n.raisedMinor).takeIf { it > 0 },
                             needId = n.needId,
                             title = n.title,
+                            // The need's currency decides the rails (Giving Cycle 5).
+                            currency = n.currency,
                         ),
                     )
                 })

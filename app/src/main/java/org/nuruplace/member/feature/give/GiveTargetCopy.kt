@@ -42,9 +42,14 @@ internal data class GiveTargetCopy(
 /** The copy for a bound gift, or null when the preset is bound to nothing.
  *  `chargedMajor` is what the button will charge (the fee rides inside it
  *  when the member covers it, GiveSubmitLogic.chargedAmountMajor). */
-internal fun giveTargetCopy(target: GivePreset?, chargedMajor: Int): GiveTargetCopy? {
+internal fun giveTargetCopy(target: GivePreset?, chargedMajor: Int): GiveTargetCopy? =
+    giveTargetCopyFor(target, kshMajor(chargedMajor))
+
+/** [giveTargetCopy] for an amount already said in the gift's own money —
+ *  "US$ 25.00" for a dollar pledge paid with PayPal (Giving Cycle 5), whose
+ *  button must never read KSh. */
+internal fun giveTargetCopyFor(target: GivePreset?, amount: String): GiveTargetCopy? {
     if (target == null) return null
-    val amount = kshMajor(chargedMajor)
     val name = target.title?.trim()?.takeIf { it.isNotEmpty() }
     return when {
         target.pledgeId != null -> GiveTargetCopy(

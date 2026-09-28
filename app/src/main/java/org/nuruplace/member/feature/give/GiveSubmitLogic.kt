@@ -61,19 +61,26 @@ sealed interface GiveSubmission {
 const val DEFAULT_GIVE_FUND = "tithe"
 const val DEFAULT_GIVE_AMOUNT_MAJOR = 1_000
 
-/** Where the giving form starts. */
-data class GiveFormSeed(val fundId: String, val amountMajor: Int, val freq: Int)
+/** Where the giving form starts — the dollar form's amount too (PayPal). */
+data class GiveFormSeed(val fundId: String, val amountMajor: Int, val freq: Int, val usdCents: Int = DEFAULT_USD_CENTS)
 
-/** A bound preset (a pledge's Pay, a need's Give) seeds its fund and amount;
- *  anything else — including the form a spent binding resets to — is the
- *  ordinary Tithe · KSh 1,000. Always One-time (Giving Cycle 1): a Monthly
- *  start turned a member who simply tapped Give into a monthly M-Pesa charge
- *  they never chose, since a Monthly choice creates a real schedule. */
-fun giveFormSeed(preset: GivePreset?): GiveFormSeed = GiveFormSeed(
-    fundId = preset?.fundId?.takeIf { it.isNotBlank() } ?: DEFAULT_GIVE_FUND,
-    amountMajor = preset?.amountMinor?.takeIf { it > 0 }?.let { it / 100 } ?: DEFAULT_GIVE_AMOUNT_MAJOR,
-    freq = FREQ_ONCE,
-)
+/** A bound preset (a pledge's Pay, a need's Give) seeds its fund and amount
+ *  — in its own currency: a dollar pledge seeds the dollar form's cents,
+ *  leaving the shillings at their default (Giving Cycle 5); anything else —
+ *  including the form a spent binding resets to — is the ordinary Tithe ·
+ *  KSh 1,000. Always One-time (Giving Cycle 1): a Monthly start turned a
+ *  member who simply tapped Give into a monthly M-Pesa charge they never
+ *  chose, since a Monthly choice creates a real schedule. */
+fun giveFormSeed(preset: GivePreset?): GiveFormSeed {
+    val amount = preset?.amountMinor?.takeIf { it > 0 }
+    val dollars = currencyCode(preset?.currency) == USD_CURRENCY
+    return GiveFormSeed(
+        fundId = preset?.fundId?.takeIf { it.isNotBlank() } ?: DEFAULT_GIVE_FUND,
+        amountMajor = amount?.takeIf { !dollars }?.let { it / 100 } ?: DEFAULT_GIVE_AMOUNT_MAJOR,
+        freq = FREQ_ONCE,
+        usdCents = amount?.takeIf { dollars } ?: DEFAULT_USD_CENTS,
+    )
+}
 
 /**
  * The double-pay guard: whether a bound gift's intent outcome SPENDS the
@@ -170,6 +177,9 @@ fun frequencyWire(freq: Int): String = when (freq) {
  *   choice with a need is blocked rather than silently dropping the need.
  * @param phoneOnFile the profile's number: a schedule pins its own number
  *   only when the chosen one differs (GiveMethodsLogic.schedulePhoneFor).
+ * @param boundCurrency a bound gift's pledge or need currency (Giving Cycle
+ *   5): only a rail in it can pay (the server refuses any other,
+ *   CURRENCY_MISMATCH); null — an older preset — is shillings, as before.
  */
 fun planGiveSubmission(
     freq: Int,
@@ -184,14 +194,18 @@ fun planGiveSubmission(
     needId: String? = null,
     phoneOnFile: String? = null,
     usdCents: Int = 0,
+    boundCurrency: String? = null,
 ): GiveSubmission {
     val dollars = method?.inDollars == true
+    // A pledge's or need's own currency decides the rails; unknown = shillings.
+    val bound = (pledgeId != null || needId != null)
+    val paidIn = if (bound) currencyCode(boundCurrency) else null
     if ((if (dollars) usdCents else amountMajor) <= 0) return GiveSubmission.Blocked("Enter an amount to give.")
     if (method == null) return GiveSubmission.Blocked(NO_METHOD_MESSAGE)
     if (!method.selectable) return GiveSubmission.Blocked(METHOD_SOON_MESSAGE)
-    // A pledge or a need is kept in shillings (the form never offers a dollar
-    // rail for one; this holds even if it did).
-    if (dollars && (pledgeId != null || needId != null)) return GiveSubmission.Blocked(BOUND_IN_SHILLINGS_MESSAGE)
+    // The form never offers a rail in another currency for a bound gift;
+    // this holds even if it did.
+    if (paidIn != null && !method.inCurrency(paidIn)) return GiveSubmission.Blocked(boundCurrencyMessage(paidIn))
     val currency = if (dollars) USD_CURRENCY else GIVE_FORM_CURRENCY
     val split = if (dollars) FeeSplit(giftMinor = usdCents, feeMinor = 0) else feeSplit(amountMajor, coverFee)
     val amountMinor = split.totalMinor

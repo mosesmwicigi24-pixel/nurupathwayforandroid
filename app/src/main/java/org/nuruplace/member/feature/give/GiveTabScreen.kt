@@ -201,6 +201,9 @@ fun GiveTabScreen(
                         },
                         followTransactionId = followTransactionId.takeIf { !followOpened },
                         onFollowed = { followOpened = true },
+                        // A pledge collector's "Change it on the pledge": the
+                        // pledge opens on Partners, in this same tab.
+                        onOpenPledge = { id -> landing = PledgeLanding(id); segment = GiveSegment.Partners },
                     )
                 }
                 GiveSegment.Partners -> PartnersScreen(
