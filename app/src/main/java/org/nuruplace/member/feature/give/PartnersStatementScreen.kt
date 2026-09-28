@@ -6,30 +6,40 @@ package org.nuruplace.member.feature.give
 // design as iOS PartnersStatementView.swift; keep in step.
 //
 // Statement v2 (docs/PARTNERS_PROGRAMME.md §3d, 2026-09-25) leads with what
-// the partnership did. One navy hero (back · share), then:
-//   HERO       "PARTNERS STATEMENT · 2026", "Thank you, Moses.", "Partner
-//              since Sep 2026 · Builder", and three tiles when the server
-//              sends `impact`: Disciples carried (never 0 — below the first
-//              it is progress toward it), Kept N of M (hidden before anything
-//              is due), Given (compact; full amount read aloud)
+// the partnership did — laid out and worded as iOS PartnersStatementView:
+//   BAR        pinned navy: back · share PDF (a spinner while it fetches) —
+//              the hero scrolls under it, so the way back never scrolls away
+//   HERO       "PARTNERS STATEMENT · 2026", "Thank you, Moses." (plain
+//              "Thank you." without a name), "Partner since Sep 2026 ·
+//              Builder", and the tiles when the server sends `impact`:
+//              DISCIPLES CARRIED (never 0 — below the first it is the bar,
+//              "KSh 5,000 of 20,000" and what it is toward, full width, with
+//              KEPT and GIVEN side by side beneath; from one up, three
+//              across), KEPT "5 of 6" · "commitments · 1 late" (hidden before
+//              anything is due), GIVEN compact · "toward pledges" (a second
+//              currency said in the caption); each tile read aloud whole
 //   YEAR       chips, this year back to the join year, at most four — the
-//              Partners tab's own list (partnerStatementYears)
-//   SUMMARY    Pledged / Paid / Remaining — the server's numbers when it
-//              sends them, else PartnerStatementMath over the same payments
+//              Partners tab's own list (partnerStatementYears); then the
+//              "Couldn't refresh just now" line when a refetch failed
+//   SUMMARY    Pledged / Paid / Remaining — only without the tiles (an older
+//              server sends no `impact`)
 //   FAITHFULNESS  twelve squares Jan→Dec (kept · late · missed · upcoming ·
-//              none) and one line; hidden without `months`
-//   COMMITMENTS  one row per pledge: name, amount line, state chip,
-//              "KSh 6,000 paid · 3 of 4 kept" or "KSh 20,000 paid", and
-//              "Church raised N%" on a need; "Remaining this year" in the header
+//              none), read aloud as one sentence, and one line; hidden
+//              without `months`
+//   COMMITMENTS  "Remaining this year KSh X" at the header's right; one row
+//              per pledge — name, promise, Behind / On track / Paused /
+//              Fulfilled / Cancelled, "KSh 6,000 paid · 3 of 4 kept" and
+//              "Church raised N%" on a need — a tap opens the pledge
 //   SINCE YOU BEGAN  navy card, the church-wide season; hidden without `season`
-//   PAYMENTS   pledge-tied only. First, when the server sends `pending`, one
-//              PROCESSING card — day · pledge · amber "Waiting for M-Pesa" ·
-//              amount — counted in NO total; then one card per month with its
-//              subtotal; a row is day · pledge · method + receipt code ·
-//              amount, tap → receipt
-//   TOTAL      the year's foot
-//   Download PDF (navy — the money-document action) · Giving statement
-//   (outlined) — the general statement is one tap away, never mixed in here.
+//   PAYMENTS   one card, pledge-tied only: PROCESSING · "not yet counted"
+//              first (counted in NO total), then "SEPTEMBER 2026" · subtotal
+//              and its rows — "Sat 20" · pledge over method + receipt code ·
+//              amount, tap → receipt — then TOTAL PAID 2026 at the foot
+//   ACTIONS    Download PDF (navy — the money-document action) · "Giving
+//              statement →" (outlined) · "Every gift, pledged or not, is on
+//              your giving statement." The general statement is one tap
+//              away, never mixed in here.
+// Pull down to refresh the standing and the year.
 //
 // Every number is derived in PartnersStatementLogic.kt (pure, pinned by
 // PartnersStatementLogicTest) from GET /giving/statements?year= and
@@ -51,9 +61,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,24 +73,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,7 +99,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -114,23 +124,23 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.Partnership
-import org.nuruplace.member.data.net.StatementFaithfulness
-import org.nuruplace.member.data.net.StatementImpact
+import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.theme.Nuru
+import retrofit2.HttpException
+import java.io.IOException
 import java.time.LocalDate
-import java.time.Month
-import java.time.format.TextStyle
-import java.util.Locale
 
 private val Capsule = RoundedCornerShape(999.dp)
 
-// Statement v2 palette (spec §3d). The hero's gold reads on navy; the strip's
-// five marks: kept green, late gold, missed navy, upcoming white with a dashed
-// ink-300 edge, none the muted track.
+// Statement v2 palette (spec §3d). The eyebrow's light gold reads on navy
+// (the count, the bar and SINCE YOU BEGAN take the theme's gold, as iOS);
+// the strip's five marks: kept green, late gold, missed navy, upcoming white
+// with a dashed ink-300 edge, none the muted track.
 private val HERO_GOLD = Color(0xFFE6CA68)
 private val MARK_KEPT = Color(0xFF16A34A)
 private val MARK_DASH = Color(0xFFB5BDC9)
@@ -202,6 +212,8 @@ class PartnersStatementViewModel : ViewModel() {
 
     fun select(y: Int) {
         year = y
+        // The PDF line spoke of the year that was on screen.
+        pdfError = null
         if (statements[y] == null) loadYear(y)
     }
 
@@ -235,19 +247,32 @@ class PartnersStatementViewModel : ViewModel() {
 
     /** GET /giving/partners/statement.pdf?year= through the authed client →
      *  cache/shared/nuru-partners-statement-<year>.pdf → the share sheet
-     *  (sharePdfAuthed). A miss — offline, or 404 for a member who was never
-     *  a partner — reads as one quiet line; nothing on screen changes. */
+     *  (sharePdfAuthed). A miss reads as one quiet line in iOS's words
+     *  (partnersPdfErrorLine) — a 404 for a member with no partners
+     *  statement, offline, or anything else; nothing on screen changes. */
     fun sharePdf(context: Context) {
         if (pdfBusy) return
         val y = year
         val app = context.applicationContext
         viewModelScope.launch {
             pdfBusy = true; pdfError = null
+            // The fetch's own failure, kept so the line can say which it was.
+            var failure: Throwable? = null
             val ok = sharePdfAuthed(
                 app, "nuru-partners-statement-$y.pdf", "Nuru Place partners statement $y",
                 subject = "Nuru Place partners statement $y", chooserTitle = "Share statement",
-            ) { Net.client.api.partnersStatementPdf(y) }
-            if (!ok) pdfError = "Couldn't fetch the PDF just now. What you see here is unchanged."
+            ) {
+                try {
+                    Net.client.api.partnersStatementPdf(y)
+                } catch (e: Throwable) {
+                    failure = e
+                    throw e
+                }
+            }
+            if (!ok) {
+                val f = failure
+                pdfError = partnersPdfErrorLine(status = (f as? HttpException)?.code(), network = f is IOException)
+            }
             pdfBusy = false
         }
     }
@@ -259,10 +284,12 @@ fun PartnersStatementScreen(
     initialYear: Int?,
     onBack: () -> Unit,
     onOpenReceipt: (String) -> Unit,
+    /** A COMMITMENTS row → that pledge's own page (iOS PartnersRoute.pledge). */
+    onOpenPledge: (String) -> Unit,
     /** The general giving statement — the outlined button at the foot. */
     onOpenGivingStatement: () -> Unit,
     /** The signed-in member's name (MainShell's `me`) for "Thank you, <first
-     *  name>."; the line is left out when it is null or blank. */
+     *  name>."; plain "Thank you." when it is null or blank. */
     memberName: String? = null,
     // Scoped to this destination: it survives a receipt and back (the page
     // stays while it refetches), and its GivingEvents collector dies with it.
@@ -279,6 +306,7 @@ fun PartnersStatementScreen(
     val years = partnerStatementYears(today.year, partnerDate(p?.membership?.joinedAt ?: p?.since)?.year)
     val year = vm.year
     val s = vm.statements[year]
+    val tiles = s?.let(::heroTiles)
     // PROCESSING rows resolve by themselves: poll while the page is in front
     // and shows one. Keyed so ON_PAUSE (RESUMED → STARTED), a row appearing
     // or the last one settling restarts or ends it; leaving cancels it.
@@ -288,59 +316,76 @@ fun PartnersStatementScreen(
     LaunchedEffect(visible, hasPending) {
         pollWhilePending(visible, hasPending = { vm.showsPendingRows() }, poll = { vm.pollPending() })
     }
+    // The member pulled the page down; its spinner shows until the reads end.
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(vm.loading) { if (!vm.loading) pulled = false }
 
-    Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(rememberScrollState())) {
-        PartnersHero(
-            year = year,
-            firstName = receiptFirstName(memberName, null),
-            standing = standingLine(p),
-            impact = s?.impact,
-            // Paid toward pledges per currency — never dollars in shillings (Cycle 9).
-            given = s?.let(::givenTileAmounts).orEmpty(),
-            faithfulness = s?.faithfulness,
-            onBack = onBack,
+    Column(Modifier.fillMaxSize().background(GIVE.paper)) {
+        // Pinned: the way back never scrolls away, however tall the hero grows.
+        StatementTopBar(
+            busy = vm.pdfBusy,
+            onBack = { Haptics.tap(view); onBack() },
             onShare = { Haptics.tap(view); vm.sharePdf(context) },
         )
-        Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        NuruRefreshBox(
+            refreshing = pulled && vm.loading,
+            onRefresh = { pulled = true; vm.load() },
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                years.forEach { y -> YearChip(y, on = y == year) { Haptics.tick(view); vm.select(y) } }
-            }
-
-            when {
-                s == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 40.dp), Alignment.Center) {
-                    CircularProgressIndicator(color = GIVE.gold)
-                }
-                s == null -> Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(vm.error ?: "We couldn't load your statement just now.", style = giInter(13), color = GIVE.sub)
-                    TextButton(onClick = { vm.loadYear(year) }, contentPadding = PaddingValues(0.dp)) {
-                        Text("Try again", style = giInter(13, FontWeight.SemiBold), color = GIVE.gold)
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                PartnersHero(year = year, thankYou = thankYouLine(memberName), standing = standingLine(p), tiles = tiles)
+                Column(
+                    Modifier.padding(horizontal = 16.dp).padding(top = 16.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        years.forEach { y ->
+                            YearChip(y, on = y == year) { if (y != year) { Haptics.tick(view); vm.select(y) } }
+                        }
                     }
-                }
-                else -> {
-                    val pledges = p?.pledges.orEmpty()
-                    SummaryCard(partnerStatementSummaries(year, s, pledges))
-                    faithfulnessMarks(s.months)?.let { marks ->
-                        val nextDue = if (year == today.year) nextPledgeDue(p, today) else null
-                        FaithfulnessCard(marks, faithfulnessLine(s.faithfulness, marks, nextDue, today))
+                    if (vm.error != null && s != null) {
+                        Text(
+                            "Couldn't refresh just now — showing what we last had.", style = giInter(11), color = Nuru.ink400,
+                            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                        )
                     }
-                    CommitmentsCard(partnerStatementPledges(year, s, pledges, today))
-                    seasonLine(s.season)?.let { SeasonCard(it) }
-                    PaymentsSection(year, pendingPaymentRows(s), paymentsByMonth(s.payments), onOpenReceipt)
-                }
-            }
-            if (vm.error != null && s != null) {
-                Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            }
 
-            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DownloadPdfButton(busy = vm.pdfBusy) { Haptics.tap(view); vm.sharePdf(context) }
-                vm.pdfError?.let {
-                    Text(it, style = giInter(11), color = GIVE.danger, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    when {
+                        s == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), Alignment.Center) {
+                            CircularProgressIndicator(color = GIVE.gold)
+                        }
+                        s == null -> Row(
+                            Modifier.partnerCard(),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(vm.error ?: "We couldn't load your statement just now.", style = giInter(12), color = GIVE.ink600, modifier = Modifier.weight(1f))
+                            Text(
+                                "Try again", style = giInter(12, FontWeight.SemiBold), color = GIVE.gold,
+                                modifier = Modifier.clickable { Haptics.tap(view); vm.loadYear(year) },
+                            )
+                        }
+                        else -> {
+                            val pledges = p?.pledges.orEmpty()
+                            // No hero tiles (an older server sends no `impact`):
+                            // the three numbers stay on their card.
+                            if (tiles == null) SummaryCard(partnerStatementSummaries(year, s, pledges))
+                            faithfulnessMarks(s.months)?.let { marks ->
+                                val nextDue = if (year == today.year) nextPledgeDue(p, today) else null
+                                FaithfulnessCard(marks, faithfulnessLine(s.faithfulness, marks, nextDue, today))
+                            }
+                            CommitmentsCard(year, partnerStatementPledges(year, s, pledges, today), today, onOpenPledge)
+                            seasonLine(s.season)?.let { SeasonCard(it) }
+                            PaymentsSection(year, pendingPaymentRows(s), paymentsByMonth(s.payments), pledges, onOpenReceipt)
+                        }
+                    }
+
+                    StatementActions(
+                        busy = vm.pdfBusy,
+                        error = vm.pdfError,
+                        onDownload = { Haptics.tap(view); vm.sharePdf(context) },
+                        onOpenGivingStatement = { Haptics.tap(view); onOpenGivingStatement() },
+                    )
                 }
-                GivingStatementButton(onOpenGivingStatement)
             }
         }
     }
@@ -356,188 +401,205 @@ private fun standingLine(p: Partnership?): String? {
 
 // ── Pieces ───────────────────────────────────────────────────────────────────
 
-/** The navy hero (spec §3d): back · share, the eyebrow, the thank-you, the
- *  standing, and — when the server sends `impact` — the three tiles. */
+/** The pinned navy bar (iOS topBar): back, and share with its spinner while
+ *  the PDF is being fetched. */
 @Composable
-private fun PartnersHero(
-    year: Int,
-    firstName: String?,
-    standing: String?,
-    impact: StatementImpact?,
-    given: List<CurrencyAmount>,
-    faithfulness: StatementFaithfulness?,
-    onBack: () -> Unit,
-    onShare: () -> Unit,
-) {
-    Box(
-        Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
-            .background(GIVE.statementHeader),
+private fun StatementTopBar(busy: Boolean, onBack: () -> Unit, onShare: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(GIVE.navy).padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.radialGradient(listOf(GIVE.gold.copy(alpha = 0.26f), Color.Transparent), center = Offset(820f, 40f), radius = 420f),
-            ),
-        )
-        Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HeroButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
-                Spacer(Modifier.weight(1f))
-                HeroButton(Icons.Filled.Share, "Share statement PDF", onShare)
-            }
-            Text(
-                "PARTNERS STATEMENT · $year", style = giInter(10, FontWeight.Bold, 2.2f), color = HERO_GOLD,
-                modifier = Modifier.padding(top = 14.dp),
-            )
-            firstName?.let {
-                Text("Thank you, $it.", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = Color.White, modifier = Modifier.padding(top = 6.dp))
-            }
-            standing?.let {
-                Text(it, style = giInter(12), color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
-            }
-            impact?.let { ImpactTiles(it, given, faithfulness, Modifier.padding(top = 16.dp)) }
+        SquareButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+        Spacer(Modifier.weight(1f))
+        SquareButton(Icons.Filled.Share, "Share PDF", busy = busy, onClick = onShare)
+    }
+}
+
+/** Header chrome on navy: a translucent rounded square. */
+@Composable
+private fun SquareButton(icon: ImageVector, label: String, busy: Boolean = false, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        Modifier.size(40.dp).clip(shape)
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(1.dp, Color.White.copy(alpha = 0.15f), shape)
+            .clickable(enabled = !busy) { onClick() }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+        } else {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
     }
 }
 
-/** Header chrome on navy — the giving statement's translucent circle. */
+/** The navy hero (spec §3d) under the pinned bar: the eyebrow, the
+ *  thank-you, the standing, and — when the server sends `impact` — the tiles. */
 @Composable
-private fun HeroButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
-    Box(
-        Modifier.size(40.dp).clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.10f))
-            .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
+private fun PartnersHero(year: Int, thankYou: String, standing: String?, tiles: HeroTiles?) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+            .background(GIVE.navy)
+            .padding(horizontal = 20.dp)
+            .padding(top = 6.dp, bottom = 20.dp),
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(17.dp))
+        Text("PARTNERS STATEMENT · $year", style = giInter(10, FontWeight.Bold, 1.8f), color = HERO_GOLD)
+        Text(thankYou, style = giSerif(24, FontWeight.SemiBold, -0.48f), color = Color.White, modifier = Modifier.padding(top = 6.dp))
+        standing?.let {
+            Text(it, style = giInter(12), color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
+        }
+        tiles?.let { ImpactTiles(it, Modifier.padding(top = 16.dp)) }
     }
 }
 
-/** Disciples carried · Kept · Given. The disciples tile widens while it holds
- *  the progress sentence (below the first disciple) so the row stays level.
- *  Disciples count shillings only (the costing is in shillings); Given says
- *  every currency paid, the first large and the rest as "+ US$ 299.99". */
+/** Three across while the disciples tile holds a count. Below the first
+ *  disciple its sentence needs the width: that tile goes full width and Kept
+ *  + Given sit side by side beneath it (iOS tileRow). Disciples count
+ *  shillings only (the costing is in shillings); Given says every currency
+ *  paid, the first large and the rest in its caption. */
 @Composable
-private fun ImpactTiles(impact: StatementImpact, given: List<CurrencyAmount>, faithfulness: StatementFaithfulness?, modifier: Modifier = Modifier) {
-    val disciples = disciplesTile(impact)
-    val kept = keptTileValue(faithfulness)
-    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        when (disciples) {
-            is DisciplesTile.Carried -> HeroTile(
-                "Disciples carried",
-                "${disciples.count} disciple${if (disciples.count == 1) "" else "s"} carried through a level",
-                Modifier.weight(1f),
-            ) {
+private fun ImpactTiles(t: HeroTiles, modifier: Modifier = Modifier) {
+    when (val d = t.disciples) {
+        is DisciplesTile.Toward -> Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TowardTile(d, Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                KeptAndGiven(t)
+            }
+        }
+        is DisciplesTile.Carried -> Row(
+            modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HeroTile("DISCIPLES CARRIED", d.spoken, Modifier.weight(1f)) {
                 Text(
-                    "${disciples.count}", style = giSerif(26, FontWeight.SemiBold), color = HERO_GOLD,
+                    "${d.count}", style = giSerif(26, FontWeight.SemiBold), color = GIVE.gold,
                     maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.6f),
                 )
                 TileCaption("through a level")
             }
-            is DisciplesTile.Toward -> HeroTile("Disciples carried", disciples.text, Modifier.weight(1.5f)) {
-                Box(
-                    Modifier.padding(top = 8.dp, bottom = 6.dp).fillMaxWidth().height(4.dp)
-                        .clip(Capsule).background(Color.White.copy(alpha = 0.16f)),
-                ) {
-                    Box(Modifier.fillMaxWidth(disciples.fraction).fillMaxHeight().clip(Capsule).background(HERO_GOLD))
-                }
-                TileCaption(disciples.text)
-            }
-        }
-        keptTileCounts(faithfulness)?.let { (keptCount, due) ->
-            HeroTile("Kept", "Kept $kept commitments", Modifier.weight(1f)) {
-                // As iOS: the count large and "of 6" small beside it, on one
-                // line shrunk to the tile — never cut on a narrow phone.
-                Row(Modifier.shrinkToFit(0.6f)) {
-                    Text(
-                        "$keptCount", style = giSerif(26, FontWeight.SemiBold), color = Color.White,
-                        maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
-                    )
-                    Text(
-                        "of $due", style = giInter(12, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
-                        maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 4.dp).alignByBaseline(),
-                    )
-                }
-                TileCaption("commitments")
-            }
-        }
-        val shown = given.ifEmpty { listOf(CurrencyAmount(GIVE_FORM_CURRENCY, impact.paidMinor.toLong())) }
-        val first = shown.first()
-        HeroTile("Given", "Given ${moneyTotals(shown)} toward pledges", Modifier.weight(1f)) {
-            // As iOS: the currency small, the amount large, one line shrunk
-            // to the tile.
-            Row(Modifier.shrinkToFit(0.6f)) {
-                Text(
-                    if (first.currency == USD_CURRENCY) "US$" else if (first.currency == GIVE_FORM_CURRENCY) "KSh" else first.currency,
-                    style = giInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
-                    maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
-                )
-                Text(
-                    compactAmount(first.minor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()),
-                    style = giSerif(26, FontWeight.SemiBold), color = Color.White,
-                    maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 3.dp).alignByBaseline(),
-                )
-            }
-            shown.drop(1).forEach { TileCaption("+ ${money(it.minor, it.currency)}") }
-            TileCaption("toward pledges")
+            KeptAndGiven(t)
         }
     }
 }
 
+/** Below the first disciple: the bar, "KSh 5,000 of 20,000" and what it is toward. */
+@Composable
+private fun TowardTile(d: DisciplesTile.Toward, modifier: Modifier) {
+    HeroTile("DISCIPLES CARRIED", d.spoken, modifier) {
+        Box(
+            Modifier.padding(top = 6.dp).fillMaxWidth().height(5.dp)
+                .clip(Capsule).background(Color.White.copy(alpha = 0.15f)),
+        ) {
+            // A sliver shows as soon as anything is given (iOS: never under 4).
+            if (d.fraction > 0f) {
+                Box(Modifier.widthIn(min = 4.dp).fillMaxWidth(d.fraction).fillMaxHeight().clip(Capsule).background(GIVE.gold))
+            }
+        }
+        Text(
+            d.ofLine, style = giInter(11, FontWeight.SemiBold), color = Color.White,
+            maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 4.dp).shrinkToFit(0.7f),
+        )
+        TileCaption(TOWARD_CAPTION)
+    }
+}
+
+@Composable
+private fun RowScope.KeptAndGiven(t: HeroTiles) {
+    t.kept?.let { k ->
+        HeroTile("KEPT", k.spoken, Modifier.weight(1f)) {
+            // The count large and "of 6" small beside it, on one line shrunk
+            // to the tile — never cut on a narrow phone.
+            Row(Modifier.shrinkToFit(0.6f)) {
+                Text(
+                    "${k.kept}", style = giSerif(26, FontWeight.SemiBold), color = Color.White,
+                    maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
+                )
+                Text(
+                    "of ${k.due}", style = giInter(12, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
+                    maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 4.dp).alignByBaseline(),
+                )
+            }
+            TileCaption(k.caption)
+        }
+    }
+    val g = t.given
+    HeroTile("GIVEN", g.spoken, Modifier.weight(1f)) {
+        // The currency small, the amount large, one line shrunk to the tile.
+        Row(Modifier.shrinkToFit(0.6f)) {
+            Text(
+                tileCurrency(g.first.currency), style = giInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
+                maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
+            )
+            Text(
+                compactAmount(g.first.minor.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()),
+                style = giSerif(26, FontWeight.SemiBold), color = Color.White,
+                maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 3.dp).alignByBaseline(),
+            )
+        }
+        TileCaption(g.caption)
+    }
+}
+
+/** The Given tile's currency, small beside the amount. */
+private fun tileCurrency(currency: String): String = when (currency) {
+    GIVE_FORM_CURRENCY -> "KSh"
+    USD_CURRENCY -> "US$"
+    else -> currency
+}
+
 /** One translucent tile; the whole tile reads as one sentence to TalkBack. */
 @Composable
-private fun HeroTile(label: String, spoken: String, modifier: Modifier, content: @Composable () -> Unit) {
+private fun HeroTile(label: String, spoken: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier.fillMaxHeight()
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .clearAndSetSemantics { contentDescription = spoken }
             .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(label, style = giInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(4.dp))
+        Text(
+            label, style = giInter(9, FontWeight.SemiBold, 0.8f), color = Color.White.copy(alpha = 0.6f),
+            maxLines = 1, softWrap = false, modifier = Modifier.padding(bottom = 2.dp).shrinkToFit(0.65f),
+        )
         content()
     }
 }
 
 @Composable
 private fun TileCaption(text: String) {
-    Text(text, style = giInter(10), color = Color.White.copy(alpha = 0.6f))
+    Text(text, style = giInter(10), color = Color.White.copy(alpha = 0.7f))
 }
 
-/** FAITHFULNESS: twelve squares Jan→Dec, "Jan"/"Dec" under the ends, one line. */
+/** FAITHFULNESS: twelve squares Jan→Dec, read aloud as one sentence;
+ *  "Jan"/"Dec" under the ends; one line. */
 @Composable
 private fun FaithfulnessCard(marks: List<MonthMark>, line: String?) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Eyebrow("FAITHFULNESS")
-        Column(Modifier.partnerCard()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                marks.forEachIndexed { i, m -> MonthSquare(i + 1, m) }
+        Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = faithfulnessSpoken(marks) },
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                marks.forEach { MonthSquare(it) }
             }
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                Text("Jan", style = giInter(9), color = GIVE.tertiary)
+            Row(Modifier.fillMaxWidth().clearAndSetSemantics { }) {
+                Text("Jan", style = giInter(9, FontWeight.Medium), color = Nuru.ink400)
                 Spacer(Modifier.weight(1f))
-                Text("Dec", style = giInter(9), color = GIVE.tertiary)
+                Text("Dec", style = giInter(9, FontWeight.Medium), color = Nuru.ink400)
             }
-            line?.let { Text(it, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 8.dp)) }
+            line?.let { Text(it, style = giInter(11), color = GIVE.ink600, modifier = Modifier.padding(top = 4.dp)) }
         }
     }
 }
 
-private fun markSpoken(m: MonthMark): String = when (m) {
-    MonthMark.Kept -> "kept on time"
-    MonthMark.Late -> "kept late"
-    MonthMark.Missed -> "missed"
-    MonthMark.Upcoming -> "upcoming"
-    MonthMark.None -> "nothing due"
-}
-
 @Composable
-private fun MonthSquare(month: Int, mark: MonthMark) {
+private fun MonthSquare(mark: MonthMark) {
     val shape = RoundedCornerShape(5.dp)
-    val name = Month.of(month).getDisplayName(TextStyle.FULL, Locale.ENGLISH)
-    val base = Modifier.size(20.dp).clip(shape).semantics { contentDescription = "$name, ${markSpoken(mark)}" }
+    val base = Modifier.size(20.dp).clip(shape)
     Box(
         when (mark) {
             MonthMark.Kept -> base.background(MARK_KEPT)
@@ -563,10 +625,11 @@ private fun MonthSquare(month: Int, mark: MonthMark) {
 @Composable
 private fun SeasonCard(line: String) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(GIVE.statementHeader).padding(18.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(GIVE.navy)
+            .semantics(mergeDescendants = true) {}.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("SINCE YOU BEGAN", style = giInter(9, FontWeight.SemiBold, 1.6f), color = HERO_GOLD)
+        Text("SINCE YOU BEGAN", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.gold)
         Text(line, style = giSerif(17, FontWeight.Medium), color = Color.White)
     }
 }
@@ -582,7 +645,8 @@ private fun YearChip(year: Int, on: Boolean, onClick: () -> Unit) {
 }
 
 /** Pledged / Paid / Remaining — one line per currency under each, never
- *  one sum across them (Giving Cycle 5). */
+ *  one sum across them (Giving Cycle 5). Shown only without the hero's
+ *  tiles (an older server sends no `impact`). */
 @Composable
 private fun SummaryCard(sums: List<CurrencyStatementSummary>) {
     Row(Modifier.partnerCard()) {
@@ -592,164 +656,157 @@ private fun SummaryCard(sums: List<CurrencyStatementSummary>) {
     }
 }
 
-/** COMMITMENTS (was YOUR PLEDGES): "Remaining this year KSh X" at the
- *  header's right when the server sends each pledge's remaining_year_minor. */
+/** COMMITMENTS (iOS commitmentsSection): one row per pledge — a tap opens
+ *  it — and "Remaining this year KSh X" at the header's right when the
+ *  server sends each pledge's remaining_year_minor. */
 @Composable
-private fun CommitmentsCard(rows: List<StatementPledge>) {
+private fun CommitmentsCard(year: Int, rows: List<StatementPledge>, today: LocalDate, onOpenPledge: (String) -> Unit) {
     val remaining = remainingThisYear(rows)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Eyebrow("COMMITMENTS")
             Spacer(Modifier.weight(1f))
             remaining?.let {
-                Text("Remaining this year ${moneyTotals(it)}", style = giInter(11, FontWeight.SemiBold), color = GIVE.goldLo)
+                Text("Remaining this year", style = giInter(11), color = Nuru.ink400, maxLines = 1)
+                Text(
+                    moneyTotals(it), style = giInter(11, FontWeight.SemiBold), color = GIVE.ink600,
+                    maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 4.dp).shrinkToFit(0.8f),
+                )
             }
         }
-        Column(Modifier.partnerCard()) {
-            if (rows.isEmpty()) {
-                Text("No pledges counted this year.", style = giInter(13), color = GIVE.sub)
-            } else {
+        if (rows.isEmpty()) {
+            Box(Modifier.partnerCard()) { Text("No pledges in $year.", style = giInter(13), color = GIVE.ink600) }
+        } else {
+            Column(Modifier.partnerCard()) {
                 rows.forEachIndexed { i, e ->
-                    if (i > 0) Hairline()
-                    PledgeRow(e)
+                    if (i > 0) Box(Modifier.fillMaxWidth().padding(vertical = 12.dp)) { Hairline() }
+                    PledgeRow(e, today, onOpen = e.pledgeId.takeIf { it.isNotBlank() }?.let { id -> { onOpenPledge(id) } })
                 }
             }
         }
     }
 }
 
-/** active → green Active · paused → grey · fulfilled → green · cancelled → grey. */
-private fun pledgeStateChip(status: String): Triple<String, Color, Color> = when (status) {
-    "paused" -> Triple("Paused", GIVE.mutedBg, GIVE.ink600)
-    "fulfilled" -> Triple("Fulfilled", GIVE.successBg, GIVE.successText)
-    "cancelled" -> Triple("Cancelled", GIVE.mutedBg, GIVE.ink600)
-    else -> Triple("Active", GIVE.successBg, GIVE.successText)
-}
-
+/** One pledge as the statement reports it (iOS StatementPledgeRow): its
+ *  name and promise, the state chip, then what was paid and — on a
+ *  department need — how far the whole church has got. */
 @Composable
-private fun PledgeRow(e: StatementPledge) {
-    val (chipText, chipBg, chipFg) = pledgeStateChip(e.status)
-    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(e.title.ifBlank { "General partnership" }, style = giInter(14, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(pledgeAmountLine(e), style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
+private fun PledgeRow(e: StatementPledge, today: LocalDate, onOpen: (() -> Unit)?) {
+    val state = statementPledgeState(e, today)
+    val (chipBg, chipFg) = when (state) {
+        "Behind" -> GIVE.goldChipBg to GIVE.goldChipText
+        "Paused", "Cancelled" -> GIVE.mutedBg to GIVE.ink600
+        else -> GIVE.successBg to GIVE.successText
+    }
+    Column(
+        Modifier.fillMaxWidth().then(if (onOpen != null) Modifier.clickable { onOpen() } else Modifier),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(e.title.ifBlank { "Pledge" }, style = giInter(15, FontWeight.SemiBold), color = GIVE.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(pledgeAmountLine(e, today), style = giInter(12), color = GIVE.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            StateChip(chipText, chipBg, chipFg)
+            StateChip(state, chipBg, chipFg)
         }
-        Text(pledgeProgressLine(e), style = giInter(11, FontWeight.Medium), color = GIVE.ink600)
-        churchRaisedLine(e)?.let { Text(it, style = giInter(10, FontWeight.Medium), color = GIVE.tertiary) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(pledgeProgressLine(e), style = giInter(11), color = GIVE.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            churchRaisedLine(e)?.let { Text(it, style = giInter(10, FontWeight.SemiBold), color = GIVE.goldLo, maxLines = 1) }
+        }
     }
 }
 
+/** PAYMENTS as one card (iOS paymentsSection): PROCESSING first — shown,
+ *  counted nowhere — then each month with its subtotal, and at the foot the
+ *  year's total, the sum of the rows above it. */
 @Composable
 private fun PaymentsSection(
     year: Int,
     pending: List<StatementPendingPayment>,
     months: List<StatementMonth>,
+    pledges: List<Pledge>,
     onOpenReceipt: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Eyebrow("PAYMENTS")
-        // Started, not settled — shown first, counted nowhere.
-        if (pending.isNotEmpty()) PendingCard(pending, onOpenReceipt)
-        if (months.isEmpty()) {
-            if (pending.isEmpty()) {
-                Box(Modifier.partnerCard()) { Text("No pledge payments in $year.", style = giInter(13), color = GIVE.sub) }
-            }
+        if (months.isEmpty() && pending.isEmpty()) {
+            Box(Modifier.partnerCard()) { Text("No pledge payments in $year.", style = giInter(13), color = GIVE.ink600) }
         } else {
-            months.forEach { m -> MonthCard(m, onOpenReceipt) }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("TOTAL PAID $year", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.navy)
-                Spacer(Modifier.weight(1f))
-                Text(moneyTotals(statementYearTotals(months)), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
+            Column(Modifier.partnerCard()) {
+                if (pending.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("PROCESSING", style = giInter(10, FontWeight.Bold, 1.1f), color = Nuru.answeredText)
+                        Spacer(Modifier.weight(1f))
+                        Text("not yet counted", style = giInter(11), color = Nuru.ink400)
+                    }
+                    pending.forEachIndexed { i, pay ->
+                        if (i > 0) Hairline()
+                        PendingPledgePaymentRow(pay, statementPaymentTitle(pay.pledgeTitle, null, pay.pledgeId, pledges), onOpenReceipt)
+                    }
+                }
+                months.forEachIndexed { gi, m ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = if (gi == 0 && pending.isEmpty()) 0.dp else 16.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(statementMonthLabel(m), style = giInter(10, FontWeight.Bold, 1.1f), color = GIVE.goldChipText)
+                        Spacer(Modifier.weight(1f))
+                        Text(moneyTotals(m.subtotals), style = giInter(11, FontWeight.SemiBold), color = GIVE.ink600, maxLines = 1)
+                    }
+                    m.payments.forEachIndexed { i, pay ->
+                        if (i > 0) Hairline()
+                        PaymentRow(pay, statementPaymentTitle(pay.pledgeTitle, pay.title, pay.pledgeId, pledges), onOpenReceipt)
+                    }
+                }
+                Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(1.dp).background(GIVE.navy.copy(alpha = 0.35f)))
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("TOTAL PAID $year", style = giInter(10, FontWeight.Bold, 1.2f), color = GIVE.navy)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        moneyTotals(statementYearTotals(months)), style = giSerif(18, FontWeight.Bold), color = GIVE.gold,
+                        maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 8.dp).shrinkToFit(0.7f),
+                    )
+                }
             }
         }
     }
 }
 
-private fun monthLabel(m: StatementMonth): String =
-    if (m.undated) "UNDATED" else Month.of(m.month).getDisplayName(TextStyle.FULL, Locale.ENGLISH).uppercase(Locale.ENGLISH)
-
-/** One month: its name and subtotal, then the rows newest first. */
+/** "Sat 20" · the pledge over "M-Pesa · UIKJ2713B5" · "KSh 2,000" (iOS
+ *  StatementPaymentLine) — the month is the group's head above. Tap → its
+ *  receipt. */
 @Composable
-private fun MonthCard(m: StatementMonth, onOpenReceipt: (String) -> Unit) {
-    Column(Modifier.partnerCard()) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(monthLabel(m), style = giInter(11, FontWeight.Bold, 1.1f), color = GIVE.overline)
-            Spacer(Modifier.weight(1f))
-            Text(moneyTotals(m.subtotals), style = giInter(12, FontWeight.SemiBold), color = GIVE.sub)
-        }
-        m.payments.forEachIndexed { i, pay ->
-            if (i > 0) Hairline()
-            PaymentRow(pay, onOpenReceipt)
-        }
-    }
-}
-
-/** "25" · "School fees" over "M-Pesa · UIKJ2713B5" · "KSh 2,000" — the method
- *  when the row carries one, else the fund by the server's name, else by code. */
-@Composable
-private fun PaymentRow(pay: StatementPayment, onOpenReceipt: (String) -> Unit) {
-    val day = partnerDate(pay.occurredAt)?.dayOfMonth?.toString() ?: "—"
-    val what = pay.pledgeTitle?.takeIf { it.isNotBlank() } ?: pay.title?.takeIf { it.isNotBlank() } ?: "Pledge"
-    val via = listOfNotNull(
-        pay.method?.takeIf { it.isNotBlank() }?.let(::giveMethodLabel)
-            ?: pay.fundName?.takeIf { it.isNotBlank() }
-            ?: pay.fund?.takeIf { it.isNotBlank() }?.let { giveFund(it).name },
-        pay.receiptCode?.takeIf { it.isNotBlank() },
-    ).joinToString(" · ")
+private fun PaymentRow(pay: StatementPayment, title: String, onOpenReceipt: (String) -> Unit) {
+    val meta = statementLineMeta(pay)
     Row(
         Modifier.fillMaxWidth()
             .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
             .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(day, style = giInter(13, FontWeight.SemiBold), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.width(24.dp))
-        Column(Modifier.weight(1f)) {
-            Text(what, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (via.isNotBlank()) Text(via, style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
+        Text(statementPaymentDay(pay.occurredAt), style = giInter(12, FontWeight.SemiBold), color = GIVE.ink600, maxLines = 1, modifier = Modifier.width(54.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (meta.isNotBlank()) Text(meta, style = giInter(11), color = Nuru.ink400, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1)
     }
 }
 
-/** PROCESSING — pledge payments the server has not settled yet: "Not counted
- *  yet" at the head, then day · pledge · amber chip · amount (muted: it is in
- *  no total). Tap → the receipt, which says Processing too. */
+/** The PDF, and the way to the complete record (iOS actions): the general
+ *  statement holds every gift, pledged or not — a partner must still reach it. */
 @Composable
-private fun PendingCard(rows: List<StatementPendingPayment>, onOpenReceipt: (String) -> Unit) {
-    Column(Modifier.partnerCard()) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("PROCESSING", style = giInter(11, FontWeight.Bold, 1.1f), color = GIVE.overline)
-            Spacer(Modifier.weight(1f))
-            Text("Not counted yet", style = giInter(12, FontWeight.SemiBold), color = GIVE.sub)
+private fun StatementActions(busy: Boolean, error: String?, onDownload: () -> Unit, onOpenGivingStatement: () -> Unit) {
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        DownloadPdfButton(busy = busy, onClick = onDownload)
+        error?.let {
+            Text(it, style = giInter(11), color = GIVE.danger, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
-        rows.forEachIndexed { i, pay ->
-            if (i > 0) Hairline()
-            PendingRow(pay, onOpenReceipt)
-        }
-    }
-}
-
-@Composable
-private fun PendingRow(pay: StatementPendingPayment, onOpenReceipt: (String) -> Unit) {
-    val day = partnerDate(pay.at)?.dayOfMonth?.toString() ?: "—"
-    Row(
-        Modifier.fillMaxWidth()
-            .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(day, style = giInter(13, FontWeight.SemiBold), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.width(24.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                pay.pledgeTitle?.takeIf { it.isNotBlank() } ?: "Pledge",
-                style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            StateChip(pendingChipText(pay.method), Nuru.warningBg, Nuru.answeredText)
-        }
-        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.tertiary)
+        GivingStatementButton(onOpenGivingStatement)
+        Text(
+            "Every gift, pledged or not, is on your giving statement.", style = giInter(11), color = Nuru.ink400,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -761,12 +818,12 @@ private fun DownloadPdfButton(busy: Boolean, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         if (busy) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
         } else {
-            Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
         }
         Spacer(Modifier.width(8.dp))
-        Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.SemiBold), color = Color.White)
+        Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.Bold), color = Color.White)
     }
 }
 
@@ -774,11 +831,11 @@ private fun DownloadPdfButton(busy: Boolean, onClick: () -> Unit) {
 @Composable
 private fun GivingStatementButton(onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.white).border(1.5.dp, GIVE.navy, Capsule).clickable { onClick() },
+        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.white).border(1.2.dp, GIVE.navy, Capsule).clickable { onClick() },
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Description, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
         Text("Giving statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
     }
 }

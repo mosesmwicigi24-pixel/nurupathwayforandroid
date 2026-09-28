@@ -769,6 +769,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     initialYear = entry.arguments?.getInt("year")?.takeIf { it > 0 },
                     onBack = { nav.popBackStack() },
                     onOpenReceipt = { nav.navigate("receipt/$it") },
+                    // A COMMITMENTS row → that pledge's own page (iOS).
+                    onOpenPledge = { nav.navigate(org.nuruplace.member.feature.give.pledgeRoute(it)) },
                     onOpenGivingStatement = { nav.navigate("statement") },
                     memberName = me?.profile?.fullName,
                 )

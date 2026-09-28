@@ -105,13 +105,27 @@ internal fun pledgeTermsLine(pl: Pledge, today: LocalDate): String? {
  *  5th", or "KSh 50,000 · by 15 Dec" — the year only when it isn't this one;
  *  just the amount when the date is unknown. */
 internal fun pledgeAmountLine(pl: Pledge, today: LocalDate): String =
-    if (pl.shape == "total") {
-        val by = partnerDate(pl.dueOn)?.let { d ->
+    promiseLine(pl.shape == "total", pl.amountMinor, pl.targetMinor, pl.currency, pl.dueDay, pl.dueOn, today)
+
+/** [pledgeAmountLine]'s rule for any pledge-shaped row (iOS
+ *  pledgeAmountLine(isMonthly:…)) — the Partners card, the pledge's page and
+ *  the partners statement's COMMITMENTS say a promise the same way. */
+internal fun promiseLine(
+    total: Boolean,
+    amountMinor: Int?,
+    targetMinor: Int?,
+    currency: String?,
+    dueDay: Int?,
+    dueOn: String?,
+    today: LocalDate,
+): String =
+    if (total) {
+        val by = partnerDate(dueOn)?.let { d ->
             if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
         }
-        listOfNotNull(money(pl.targetMinor ?: 0, pl.currency), by?.let { "by $it" }).joinToString(" · ")
+        listOfNotNull(money(targetMinor ?: 0, currency), by?.let { "by $it" }).joinToString(" · ")
     } else {
-        listOfNotNull("${money(pl.amountMinor ?: 0, pl.currency)} monthly", pl.dueDay?.let { "due on the ${ordinal(it)}" })
+        listOfNotNull("${money(amountMinor ?: 0, currency)} monthly", dueDay?.let { "due on the ${ordinal(it)}" })
             .joinToString(" · ")
     }
 

@@ -38,6 +38,9 @@ import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.StatementPendingPayment
 import org.nuruplace.member.data.net.StatementPledge
 import java.time.LocalDate
+import java.time.Month
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 /** One month of pledge-tied payments, newest first, with its subtotal per
@@ -103,11 +106,12 @@ internal fun partnerStatementSummaries(year: Int, s: GivingStatement, pledges: L
  *  server's order (shillings first) — never one sum. The server's per-currency
  *  paid when it sends it; else the impact's paid, in shillings (its costing
  *  is in shillings — Giving Cycle 9: it counts shillings only). Currencies
- *  with nothing paid are left out; nothing at all is KSh 0. */
+ *  with nothing paid are left out; nothing at all is 0 in the statement's
+ *  own currency (iOS: a dollar partner's nothing is not "KSh 0"). */
 internal fun givenTileAmounts(s: GivingStatement): List<CurrencyAmount> {
     val perCurrency = s.summaryByCurrency?.filter { it.paidMinor != 0 }?.map { CurrencyAmount(currencyCode(it.currency), it.paidMinor.toLong()) }
     return perCurrency?.takeIf { it.isNotEmpty() }
-        ?: listOf(CurrencyAmount(GIVE_FORM_CURRENCY, (s.impact?.paidMinor ?: 0).toLong()))
+        ?: listOf(CurrencyAmount(currencyCode(s.summaryCurrency), (s.impact?.paidMinor ?: 0).toLong()))
 }
 
 /** "k of d kept" for a monthly pledge in `year`: d = its due dates in that
@@ -162,10 +166,65 @@ internal fun pledgeProgressLine(e: StatementPledge): String {
     return if (e.shape == "total" || e.dueCount <= 0) paid else "$paid · ${e.kept} of ${e.dueCount} kept"
 }
 
-/** "KSh 2,000 monthly · due on the 5th" · "KSh 50,000 by Dec 2026". */
-internal fun pledgeAmountLine(e: StatementPledge): String = when (e.shape) {
-    "total" -> "${money(e.targetMinor ?: 0, e.currency)} by ${e.dueOn?.let(PartnerFormat::monthYear) ?: "a date"}"
-    else -> "${money(e.amountMinor ?: 0, e.currency)} monthly" + (e.dueDay?.let { " · due on the ${ordinal(it)}" } ?: "")
+/** "KSh 2,000 monthly · due on the 5th" · "KSh 50,000 · by 15 Dec" — the
+ *  pledge card's own words (iOS pledgeAmountLine): the year only when it
+ *  isn't this one, just the amount when the date is unknown. */
+internal fun pledgeAmountLine(e: StatementPledge, today: LocalDate): String =
+    promiseLine(e.shape == "total", e.amountMinor, e.targetMinor, e.currency, e.dueDay, e.dueOn, today)
+
+/** COMMITMENTS' chip (iOS StatementPledgeRow.stateChip): Paused, Fulfilled
+ *  and Cancelled by status; a live monthly pledge is "Behind" while fewer of
+ *  its due dates are kept than have come, a live total one once its date
+ *  has passed unfulfilled — otherwise "On track". */
+internal fun statementPledgeState(e: StatementPledge, today: LocalDate): String = when (e.status) {
+    "paused" -> "Paused"
+    "fulfilled" -> "Fulfilled"
+    "cancelled" -> "Cancelled"
+    else -> when {
+        e.shape == "monthly" -> if (e.kept < e.dueCount) "Behind" else "On track"
+        partnerDate(e.dueOn)?.isBefore(today) == true -> "Behind"
+        else -> "On track"
+    }
+}
+
+/** A month group's head in PAYMENTS: "SEPTEMBER 2026" (iOS "MMMM yyyy",
+ *  upper-cased); the trailing group of unreadable dates is "UNDATED". */
+internal fun statementMonthLabel(m: StatementMonth): String =
+    if (m.undated) "UNDATED"
+    else "${Month.of(m.month).getDisplayName(TextStyle.FULL, Locale.ENGLISH).uppercase(Locale.ENGLISH)} ${m.year}"
+
+private val WEEKDAY_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d", Locale.ENGLISH)
+
+/** A payment row's day: "Sat 20" — the month is the group's head above
+ *  (iOS StatementPaymentLine.dayLabel); "—" when the date can't be read. */
+internal fun statementPaymentDay(iso: String?): String = partnerDate(iso)?.format(WEEKDAY_DAY) ?: "—"
+
+/** A settled payment's second line on the statement page (iOS
+ *  StatementPaymentLine.meta): the rail when the row names one, else the
+ *  fund — the server's name, else the local one for its code — then the
+ *  receipt code. Nothing is guessed. (The Partners tab's STATEMENT card says
+ *  the fund first: [statementPaymentMeta].) */
+internal fun statementLineMeta(pay: StatementPayment): String =
+    listOfNotNull(
+        pay.method?.takeIf { it.isNotBlank() }?.let(::giveMethodLabel)
+            ?: pay.fundName?.takeIf { it.isNotBlank() }
+            ?: pay.fund?.takeIf { it.isNotBlank() }?.let { giveFund(it).name },
+        pay.receiptCode?.takeIf { it.isNotBlank() },
+    ).joinToString(" · ")
+
+/** The hero's thank-you: "Thank you, Grace." — the first word of the
+ *  member's name — else plain "Thank you." (iOS thankYouLine). */
+internal fun thankYouLine(memberName: String?): String =
+    receiptFirstName(memberName, null)?.let { "Thank you, $it." } ?: "Thank you."
+
+/** The one quiet line under Download PDF when the PDF can't be had (iOS
+ *  downloadMessage): a 404 is a member with no partners statement, a
+ *  transport failure is the connection; anything else leaves the page as
+ *  the record. */
+internal fun partnersPdfErrorLine(status: Int?, network: Boolean): String = when {
+    status == 404 -> "There's no partners statement for you yet."
+    network -> "You appear to be offline — the PDF needs a connection."
+    else -> "The PDF isn't available right now. The statement above is still complete."
 }
 
 /** Pledge-tied payments by month, newest month first and newest row first
@@ -240,15 +299,60 @@ internal const val DISCIPLE_COST_MINOR = 2_000_000
  *  count; below the first it is progress toward it. */
 internal sealed interface DisciplesTile {
     /** `count` ≥ 1 disciples carried through a level. */
-    data class Carried(val count: Int) : DisciplesTile
+    data class Carried(val count: Int) : DisciplesTile {
+        /** "3 disciples carried through a level" — the tile, read aloud. */
+        val spoken: String get() = "$count disciple${if (count == 1) "" else "s"} carried through a level"
+    }
 
     /** Below the first: `towardMinor` of `perDiscipleMinor`, and the bar's
      *  fill 0..1. */
     data class Toward(val towardMinor: Int, val perDiscipleMinor: Int, val fraction: Float) : DisciplesTile {
-        /** "KSh 6,000 of 20,000 toward carrying one disciple through a level". */
-        val text: String
-            get() = "${ksh(towardMinor)} of ${PartnerFormat.grouped(perDiscipleMinor / 100)} toward carrying one disciple through a level"
+        /** Under the bar: "KSh 6,000 of 20,000". */
+        val ofLine: String get() = "${ksh(towardMinor)} of ${PartnerFormat.grouped(perDiscipleMinor / 100)}"
+
+        /** The tile, read aloud: "KSh 6,000 of KSh 20,000 toward carrying one
+         *  disciple through a level". */
+        val spoken: String get() = "${ksh(towardMinor)} of ${ksh(perDiscipleMinor)} $TOWARD_CAPTION"
     }
+}
+
+/** The progress tile's caption, under "KSh 6,000 of 20,000". */
+internal const val TOWARD_CAPTION = "toward carrying one disciple through a level"
+
+/** The Kept tile (iOS HeroTiles.kept): kept = on time + late — "kept" has one
+ *  meaning, a due date paid in full (owner, 2026-09-25) — of those that fell
+ *  due, and the late ones said beside it. */
+internal data class KeptTile(val kept: Int, val due: Int, val late: Int) {
+    /** "commitments · 1 late" — the late ones are kept, and said. */
+    val caption: String get() = if (late > 0) "commitments · $late late" else "commitments"
+
+    /** "5 of 6 commitments kept, 1 late". */
+    val spoken: String get() = "$kept of $due commitments kept${if (late > 0) ", $late late" else ""}"
+}
+
+/** The Given tile: the first currency large, any other said beside it and
+ *  never added to it (Giving Cycle 9). */
+internal data class GivenTile(val amounts: List<CurrencyAmount>) {
+    val first: CurrencyAmount get() = amounts.firstOrNull() ?: CurrencyAmount(GIVE_FORM_CURRENCY, 0)
+
+    /** "+ US$ 20.00" for a second currency; null with one. */
+    val rest: String?
+        get() = amounts.drop(1).takeIf { it.isNotEmpty() }?.let { more -> "+ " + more.joinToString(" + ") { money(it.minor, it.currency) } }
+
+    /** "toward pledges" · "toward pledges · + US$ 20.00". */
+    val caption: String get() = rest?.let { "toward pledges · $it" } ?: "toward pledges"
+
+    /** "Given KSh 25,000 + US$ 299.99 toward pledges". */
+    val spoken: String get() = "Given ${money(first.minor, first.currency)}${rest?.let { " $it" } ?: ""} toward pledges"
+}
+
+/** The hero's tiles, or null — no `impact` (an older server) — when the
+ *  Pledged / Paid / Remaining card stays in their place (iOS HeroTiles). */
+internal data class HeroTiles(val disciples: DisciplesTile, val kept: KeptTile?, val given: GivenTile)
+
+internal fun heroTiles(s: GivingStatement): HeroTiles? {
+    val impact = s.impact ?: return null
+    return HeroTiles(disciplesTile(impact), keptTile(s.faithfulness), GivenTile(givenTileAmounts(s)))
 }
 
 internal fun disciplesTile(impact: StatementImpact): DisciplesTile {
@@ -260,15 +364,13 @@ internal fun disciplesTile(impact: StatementImpact): DisciplesTile {
     return DisciplesTile.Toward(toward, per, toward.toFloat() / per)
 }
 
-/** The Kept tile's counts — kept (on time + late) and due — or null to hide
- *  it: no faithfulness block, or nothing has come due yet. */
-internal fun keptTileCounts(f: StatementFaithfulness?): Pair<Int, Int>? {
+/** The Kept tile, or null to hide it: no faithfulness block, or nothing has
+ *  come due yet. */
+internal fun keptTile(f: StatementFaithfulness?): KeptTile? {
     if (f == null || f.dueCount <= 0) return null
-    return (f.keptOnTime + f.late) to f.dueCount
+    val late = maxOf(f.late, 0)
+    return KeptTile(maxOf(f.keptOnTime, 0) + late, f.dueCount, late)
 }
-
-/** The Kept tile's "5 of 6", as TalkBack reads it; null hides the tile. */
-internal fun keptTileValue(f: StatementFaithfulness?): String? = keptTileCounts(f)?.let { (kept, due) -> "$kept of $due" }
 
 /** A compact amount in major units for a narrow tile — "950", "9.5k",
  *  "22k", "1.5M". Always rounded DOWN so the short form never overstates;
@@ -298,6 +400,20 @@ internal fun monthMark(status: String?): MonthMark = when (status?.trim()?.lower
     "upcoming" -> MonthMark.Upcoming
     else -> MonthMark.None
 }
+
+/** The strip read aloud as one sentence (iOS stripAccessibility):
+ *  "Faithfulness: January kept on time, February nothing due, …". */
+internal fun faithfulnessSpoken(marks: List<MonthMark>): String =
+    "Faithfulness: " + marks.mapIndexed { i, m ->
+        val word = when (m) {
+            MonthMark.Kept -> "kept on time"
+            MonthMark.Late -> "kept late"
+            MonthMark.Missed -> "missed"
+            MonthMark.Upcoming -> "upcoming"
+            MonthMark.None -> "nothing due"
+        }
+        "${Month.of(i + 1).getDisplayName(TextStyle.FULL, Locale.ENGLISH)} $word"
+    }.joinToString(", ")
 
 /** Jan..Dec, exactly twelve, whatever order or gaps the wire has (a month
  *  the server left out reads as none). Null — hide the card — when there is
