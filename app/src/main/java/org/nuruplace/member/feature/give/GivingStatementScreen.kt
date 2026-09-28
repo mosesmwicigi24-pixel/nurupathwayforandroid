@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -143,13 +144,16 @@ fun GivingStatementScreen(
         var pledgesOpen by remember { mutableStateOf(false) }
 
         val currentYear = LocalDate.now(NAIROBI).year
-        val settled = records.filter { it.status == "succeeded" || it.status == "settled" }
         val targetYear = if (period == 0) currentYear else currentYear - 1
         // The Nairobi year a gift was made in — the server's statement rule.
-        val periodRecords = settled.filter { givingYear(it) == targetYear }
-        val split = givingSplit(periodRecords)
+        // EVERY gift of the year is listed — failed and processing ones with
+        // their chip (iOS) — and only the settled ones are counted
+        // (GivingStatementLogic: the sums, BY FUND, the counts).
+        val yearRecords = records.filter { givingYear(it) == targetYear }
+        val split = givingSplit(yearRecords)
         val hero = givingHero(split)
         val group = pledgeGroup(split)
+        val giftCount = settledCount(split.gifts)
         val periodLabel = if (period == 0) "this year" else "in ${currentYear - 1}"
 
         Column(
@@ -259,7 +263,7 @@ fun GivingStatementScreen(
                         )
                     }
                     Text(
-                        "${split.gifts.size} gift${if (split.gifts.size == 1) "" else "s"} · $periodLabel · most recent first",
+                        "$giftCount gift${if (giftCount == 1) "" else "s"} · $periodLabel · most recent first",
                         style = giInter(11),
                         color = Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.padding(top = 2.dp),
@@ -302,7 +306,13 @@ fun GivingStatementScreen(
                     }
                 }
 
-                // BY FUND card — gifts only; pledge money is in PARTNER PLEDGES.
+                // Nothing ever given: one quiet card instead of the statement (iOS).
+                if (records.isEmpty()) {
+                    EmptyStatement()
+                    return@Column
+                }
+
+                // BY FUND card — settled gifts only; pledge money is in PARTNER PLEDGES.
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -366,7 +376,13 @@ fun GivingStatementScreen(
                     }
                 }
 
-                // Gifts grouped by day
+                // Every gift of the year by day, whatever became of it.
+                if (split.gifts.isEmpty()) {
+                    Text(
+                        "No gifts $periodLabel.", style = giInter(14), color = GIVE.sub, textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
                 statementDays(split.gifts).forEach { day ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         DayHeader(day.date)
@@ -385,27 +401,34 @@ fun GivingStatementScreen(
                     )
                 }
 
-                // Empty state
-                if (periodRecords.isEmpty()) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            "No gifts $periodLabel.",
-                            style = giInter(13),
-                            color = GIVE.sub,
-                        )
-                        Text(
-                            "Statement reflects records held under Finance · receipts emailed per gift.",
-                            style = giInter(11),
-                            color = GIVE.tertiary,
-                        )
-                    }
-                }
+                // The footer, always (iOS).
+                Text(
+                    "Statement reflects records held under Finance · receipts emailed per gift.",
+                    style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                )
             }
         }
+    }
+}
+
+/** Nothing ever given (iOS emptyState): the gift hands, "No gifts yet", and
+ *  where the record will live. */
+@Composable
+private fun EmptyStatement() {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.size(48.dp).clip(CircleShape).background(GIVE.gold.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.VolunteerActivism, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(20.dp))
+        }
+        Text("No gifts yet", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        Text(
+            "When you give, your full record and receipts live here.",
+            style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -444,15 +467,17 @@ private fun StatementRecordRow(r: GivingRecord, onOpenReceipt: (String) -> Unit)
         }
         Column(Modifier.weight(1f)) {
             Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
+            // "8:11 PM · M-Pesa" — the rail by its name (M-Pesa when the row
+            // names none), as iOS.
+            Text(
+                "${timeLabel(r.createdAt)} · ${giveMethodLabel(r.method?.takeIf { it.isNotBlank() } ?: "mpesa")}",
+                style = giInter(11),
+                color = GIVE.tertiary,
+            )
             // A gift that counted toward a pledge says which (wire
             // pledge_title, contract 2026-09-25); "Partner pledge" when an
             // older row carries only the id.
             if (isPledgeRecord(r)) PledgeTag(pledgeTagTitle(r))
-            Text(
-                "${timeLabel(r.createdAt)} · ${(r.method ?: "").replaceFirstChar { it.uppercase() }}",
-                style = giInter(11),
-                color = GIVE.tertiary,
-            )
             // "Named giving" (custom sheet, optional): the
             // member's own label for this gift, when set.
             r.accountName?.takeIf { it.isNotBlank() }?.let {

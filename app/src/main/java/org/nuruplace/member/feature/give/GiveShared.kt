@@ -183,13 +183,16 @@ fun GiveCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
     }
 }
 
-/** Status → (label, bg, fg) for a giving record/receipt (iOS `statusChip`). */
-fun giveStatus(status: String?): Triple<String, Color, Color> = when (status?.lowercase()?.trim()) {
+/** Status → (label, bg, fg) for a statement row (iOS `statusChip`): the four
+ *  it names in its colours; any other status by its own name, quietly —
+ *  "Pending", "Cancelled", "Requires action" (iOS capitalises the raw word;
+ *  the underscore is read as a space here). */
+fun giveStatus(status: String?): Triple<String, Color, Color> = when (val s = status?.lowercase()?.trim().orEmpty()) {
     "succeeded", "settled", "completed" -> Triple("Succeeded", GIVE.successBg, GIVE.successText)
-    "processing", "pending" -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
+    "processing" -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
     "failed" -> Triple("Failed", GIVE.danger.copy(alpha = 0.12f), GIVE.danger)
-    "refunded", "cancelled" -> Triple("Refunded", GIVE.mutedBg, GIVE.ink600)
-    else -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
+    "refunded" -> Triple("Refunded", GIVE.mutedBg, GIVE.ink600)
+    else -> Triple(s.replace('_', ' ').replaceFirstChar { it.uppercase() }, GIVE.mutedBg, GIVE.ink600)
 }
 
 /** What a pledge's "Pay now" — or a department need's "Give to this need" —

@@ -2,6 +2,7 @@
 // gifts are rows without a pledge_id and make the hero, BY FUND and the day
 // list; pledge rows sit in one PARTNER PLEDGES group; Gifts + Partner pledges
 // = Total, and the hero keeps "Total given" when there is no pledge money.
+// Every gift is listed whatever became of it; only settled money is counted.
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
@@ -14,10 +15,10 @@ import java.time.LocalDate
 class GivingStatementLogicTest {
     private fun rec(
         id: String, amount: Int, at: String, pledgeId: String? = null, pledgeTitle: String? = null,
-        fund: String = "tithe", currency: String = "KES", settledAt: String? = null,
+        fund: String = "tithe", currency: String = "KES", settledAt: String? = null, status: String = "succeeded",
     ) =
         GivingRecord(
-            transactionId = id, amountMinor = amount, currency = currency, status = "succeeded", fund = fund, createdAt = at,
+            transactionId = id, amountMinor = amount, currency = currency, status = status, fund = fund, createdAt = at,
             settledAt = settledAt, pledgeId = pledgeId, pledgeTitle = pledgeTitle,
         )
 
@@ -147,6 +148,58 @@ class GivingStatementLogicTest {
         assertEquals("KSh 2,000 · 1 payment", pledgeGroup(givingSplit(listOf(pledge1)))!!.summary)
         assertNull(pledgeGroup(givingSplit(listOf(gift1, gift2))))
         assertNull(pledgeGroup(givingSplit(emptyList())))
+    }
+
+    // ── Every gift listed, only settled money counted (iOS) ──
+
+    private val failedGift = rec("f1", 100_000, "2026-09-21T07:00:00Z", status = "failed")
+    private val waitingGift = rec("w1", 70_000, "2026-09-22T07:00:00Z", status = "processing")
+    private val completed = rec("c1", 30_000, "2026-09-23T07:00:00Z", status = "completed")
+
+    @Test
+    fun `a failed or waiting gift is listed but never counted`() {
+        val split = givingSplit(listOf(gift1, failedGift, waitingGift, completed))
+        // Listed: every one of them, in the day list.
+        assertEquals(listOf("g1", "f1", "w1", "c1"), split.gifts.map { it.transactionId })
+        assertEquals(setOf("g1", "f1", "w1", "c1"), statementDays(split.gifts).flatMap { it.records }.map { it.transactionId }.toSet())
+        // Counted: only what went through — succeeded, settled, completed.
+        assertEquals(sums("KES" to 180_000), split.giftsSums)
+        assertEquals(2, settledCount(split.gifts))
+        assertEquals(listOf(FundLine("tithe", "KES", 180_000, 2)), fundLines(split.gifts))
+        val hero = givingHero(split)
+        assertEquals("Total given", hero.label)
+        assertEquals("KSh 1,800", hero.primary)
+    }
+
+    @Test
+    fun `a pledge payment that has not settled is listed in the group and said, never counted`() {
+        val failedPledge = rec("fp", 200_000, "2026-09-06T09:00:00Z", pledgeId = "pl", pledgeTitle = "School fees", status = "failed")
+        val g = pledgeGroup(givingSplit(listOf(gift1, pledge1, failedPledge)))!!
+        assertEquals(sums("KES" to 200_000), g.totals)
+        assertEquals(1, g.count)
+        assertEquals(1, g.unsettled)
+        assertEquals("KSh 2,000 · 1 payment · 1 not settled", g.summary)
+        assertEquals(setOf("p1", "fp"), g.days.flatMap { it.records }.map { it.transactionId }.toSet())
+        // Only an unsettled pledge row: the rows are still separated (the group
+        // shows), but the hero does not split — there is no pledge money.
+        val onlyFailed = givingSplit(listOf(gift1, failedPledge))
+        assertEquals("KSh 0 · 0 payments · 1 not settled", pledgeGroup(onlyFailed)!!.summary)
+        val hero = givingHero(onlyFailed)
+        assertEquals("Total given", hero.label)
+        assertNull(hero.pledgeLine)
+        assertEquals("TOTAL GIVEN", hero.footLabel)
+    }
+
+    @Test
+    fun `a statement row's chip is iOS's — its four statuses, any other by name`() {
+        assertEquals("Succeeded", giveStatus("completed").first)
+        assertEquals("Processing", giveStatus("processing").first)
+        assertEquals("Failed", giveStatus("failed").first)
+        assertEquals("Refunded", giveStatus("refunded").first)
+        // A cancelled gift was never refunded.
+        assertEquals("Cancelled", giveStatus("cancelled").first)
+        assertEquals("Pending", giveStatus("pending").first)
+        assertEquals("Requires action", giveStatus("requires_action").first)
     }
 
     @Test

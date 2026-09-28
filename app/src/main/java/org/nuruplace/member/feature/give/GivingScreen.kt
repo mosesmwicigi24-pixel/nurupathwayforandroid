@@ -856,7 +856,8 @@ private fun GiveTab(
 
     // This Nairobi year's settled giving, per currency — the statement's rule.
     val thisYear = LocalDate.now(java.time.ZoneId.of("Africa/Nairobi")).year
-    val yearTotals = currencySums(history.filter { it.status in listOf("succeeded", "settled") && givingYear(it) == thisYear })
+    // The one settled rule (succeeded / settled / completed), as iOS GiveMoney.
+    val yearTotals = currencySums(history.filter { giftSettled(it.status) && givingYear(it) == thisYear })
 
     // Running or paused — a paused schedule still stands until it is cancelled.
     val liveSchedules = schedules.filter { scheduleCancellable(it.status) }
