@@ -17,6 +17,13 @@ package org.nuruplace.member.feature.give
 //   STATEMENT  year chips · Pledged / Paid / Remaining · pledge-tied payments
 //              only · "Partners statement and PDF →"
 //
+// A pledge's card opens its own PAGE over the list (iOS PledgeDetailView):
+// "YOUR PLEDGE" and its name; the promise, what counts toward it and a total
+// pledge's pace; the recurring gift that collects it — any pledge — or the
+// offer to collect it at its pace; Pay now · Pause, Edit | Cancel, I paid
+// another way, reminders; PAYMENTS; PAID ANOTHER WAY. Back returns to the
+// list where it was.
+//
 // The Statement button and that link open the PARTNERS statement
 // (PartnersStatementScreen, route "partners-statement?year=") for the year the
 // chips show — never the general giving statement (owner 2026-09-25: "have
@@ -42,6 +49,7 @@ package org.nuruplace.member.feature.give
 //   · nothing here says "your giving produced this"; we cannot trace a
 //     shilling to a disciple.
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,13 +74,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EventRepeat
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -97,12 +118,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.SpanStyle
@@ -131,11 +154,13 @@ import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeClaim
 import org.nuruplace.member.data.net.PledgeDetail
+import org.nuruplace.member.data.net.PledgePayment
 import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.UpdatePledgeBody
 import org.nuruplace.member.data.net.pledgeTitlePatch
 import org.nuruplace.member.data.offline.Connectivity
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.nuruSans
@@ -315,41 +340,172 @@ fun PartnersScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
     val p = vm.partnership
     val openStatement = { onOpenPartnersStatement(vm.statementYear ?: LocalDate.now().year) }
+    val today = LocalDate.now()
 
-    Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(rememberScrollState())) {
-        PartnersHeaderBand(segmentControl)
-        Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when {
-                p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
-                    CircularProgressIndicator(color = GIVE.gold)
-                }
-                p == null -> PartnerNotice(
-                    "We couldn't load this just now",
-                    vm.error ?: "Your giving is unaffected.",
-                    action = "Try again" to { vm.load() },
+    // A pledge opens as its own PAGE over the list (iOS PledgeDetailView): its
+    // back arrow, or the system back, returns to the list where it was.
+    // Saveable, so a receipt opened from the page comes back to it.
+    var pageId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Why a pledge just made has no automatic collection (Giving Cycle 5),
+    // said at the top of its page until dismissed.
+    var pageNotice by rememberSaveable { mutableStateOf<String?>(null) }
+    // A pledge not in the list — cancelled, or made a moment ago while the
+    // list reloads — is fetched on its own; and why one could not be opened.
+    var outside by remember { mutableStateOf<Pledge?>(null) }
+    var openError by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<Pledge?>(null) }
+    var cancelling by remember { mutableStateOf<Pledge?>(null) }
+    // The recurring gift collecting a pledge, opened from its page.
+    var collector by remember { mutableStateOf<GivingSchedule?>(null) }
+    // Held here, so the list keeps its place under an open page.
+    val listScroll = rememberScrollState()
+
+    fun openPage(id: String, notice: String? = null) {
+        vm.clearActionError(); openError = null
+        pageNotice = notice; pageId = id
+    }
+    fun closePage() {
+        pageId = null; pageNotice = null
+        vm.clearActionError()
+    }
+    // Opened from outside (Giving Cycle 5): a Partners notice, a collector's
+    // "Change it on the pledge", a pledge just made without its collection.
+    LaunchedEffect(openPledge) {
+        val want = openPledge ?: return@LaunchedEffect
+        openPage(want.pledgeId, want.notice)
+        onPledgeOpened()
+    }
+    LaunchedEffect(pageId, p != null) {
+        val id = pageId ?: return@LaunchedEffect
+        val listed = vm.partnership?.pledges ?: return@LaunchedEffect
+        if (listed.any { it.pledgeId == id } || outside?.pledgeId == id) return@LaunchedEffect
+        runCatching { Net.client.api.pledge(id).asPledge() }
+            .onSuccess { outside = it }
+            .onFailure { openError = ApiException.message(it); pageId = null; pageNotice = null }
+    }
+    // Re-resolved by id, so a change made ON the page shows the reloaded
+    // pledge; one fetched on its own shows until the list has it.
+    val page = pageId?.let { id -> p?.pledges?.firstOrNull { it.pledgeId == id } ?: outside?.takeIf { it.pledgeId == id } }
+
+    if (page != null) {
+        BackHandler { closePage() }
+        PledgePage(
+            pl = page,
+            busy = vm.busyPledgeId == page.pledgeId,
+            actionError = vm.actionError,
+            notice = pageNotice,
+            // Read with the standing, so the collector (or the pace offer)
+            // is there the moment the page opens.
+            methods = vm.methods,
+            schedules = vm.schedules,
+            onBack = { closePage() },
+            onDismissNotice = { pageNotice = null },
+            onRefresh = { vm.load() },
+            onOpenReceipt = onOpenReceipt,
+            onPayNow = {
+                closePage()
+                onPayNow(
+                    GivePreset(
+                        fundId = page.fund?.code, amountMinor = payNowAmount(page), pledgeId = page.pledgeId, title = page.displayTitle,
+                        paysTo = page.paysTo, terms = pledgeTermsLine(page, today),
+                        // Its currency decides the rails (Giving Cycle 5).
+                        currency = page.currency,
+                    ),
                 )
-                p.isMember || p.isPartner -> {
-                    StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
-                    if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
-                    // Only when there is something to say — a partner whose
-                    // giving is collecting cleanly never sees an amber row.
-                    p.trouble?.let { t -> TroubleRow(t, vm.resuming) { p.scheduleId?.let(vm::resume) } }
-                    PledgesSection(p, vm, onPayNow, onOpenReceipt, openPledge, onPledgeOpened, onScheduleStarted)
-                    StatementSection(p, vm, onOpenReceipt, openStatement)
+            },
+            onPauseResume = { vm.update(page.pledgeId, UpdatePledgeBody(status = if (page.status == "paused") "active" else "paused")) },
+            onEdit = { vm.clearActionError(); editing = page },
+            onCancel = { cancelling = page },
+            onReminders = { on -> vm.update(page.pledgeId, UpdatePledgeBody(remindersEnabled = on)) },
+            // Collecting it at its pace: the Give segment shows the first prompt.
+            onScheduleStarted = { started -> closePage(); onScheduleStarted(started) },
+            onOpenCollector = { s -> collector = s },
+        )
+    } else {
+        Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(listScroll)) {
+            PartnersHeaderBand(segmentControl)
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                when {
+                    p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
+                        CircularProgressIndicator(color = GIVE.gold)
+                    }
+                    p == null -> PartnerNotice(
+                        "We couldn't load this just now",
+                        vm.error ?: "Your giving is unaffected.",
+                        action = "Try again" to { vm.load() },
+                    )
+                    p.isMember || p.isPartner -> {
+                        StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
+                        if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
+                        // Only when there is something to say — a partner whose
+                        // giving is collecting cleanly never sees an amber row.
+                        p.trouble?.let { t -> TroubleRow(t, vm.resuming) { p.scheduleId?.let(vm::resume) } }
+                        PledgesSection(p, vm, openError) { id -> openPage(id) }
+                        StatementSection(p, vm, onOpenReceipt, openStatement)
+                    }
+                    else -> {
+                        JoinCard(vm.joining, onJoin = { vm.join() })
+                        vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                    }
                 }
-                else -> {
-                    JoinCard(vm.joining, onJoin = { vm.join() })
-                    vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                if (vm.error != null && p != null) {
+                    // A refresh failed but we still have a standing to show — say so quietly.
+                    Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
-            }
-            if (vm.error != null && p != null) {
-                // A refresh failed but we still have a standing to show — say so quietly.
-                Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+
+    // Over the page (or the list): edit, cancel, the gift that collects it.
+    editing?.let { pl ->
+        EditPledgeSheet(
+            pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
+            // The server's refusal — an amount M-Pesa can't take for the
+            // collector that follows this pledge is 422 AMOUNT_OUT_OF_RANGE —
+            // said in the sheet, not behind it.
+            error = vm.actionError,
+            onDismiss = { editing = null },
+            onSave = { patch ->
+                // Only what changed travels (pledgeEditPatch); nothing → close.
+                if (patch == null) editing = null else vm.update(pl.pledgeId, patch) { editing = null }
+            },
+        )
+    }
+    cancelling?.let { pl ->
+        AlertDialog(
+            onDismissRequest = { cancelling = null },
+            title = { Text("Cancel “${pl.displayTitle}”?", style = NuruType.cardTitle, color = Nuru.navy) },
+            text = {
+                Text(
+                    "Nothing already given is affected, and nothing further is owed. You can make a new pledge any time.",
+                    style = NuruType.body, color = Nuru.ink600,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = pl.pledgeId; cancelling = null
+                    vm.update(id, UpdatePledgeBody(status = "cancelled"))
+                }) { Text("Cancel the pledge", style = NuruType.cardCta, color = Nuru.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { cancelling = null }) { Text("Keep it", style = NuruType.cardCta, color = Nuru.ink600) }
+            },
+        )
+    }
+    // The gift collecting a pledge — number, heads-up, pause, cancel; its
+    // amount and day follow a monthly pledge (ScheduleSheet).
+    collector?.let { s ->
+        ScheduleSheet(
+            s,
+            onClose = { collector = null },
+            onChanged = { GivingEvents.emit(); vm.load() },
+            onCancelled = { collector = null; GivingEvents.emit(); vm.load() },
+            pledges = p?.pledges.orEmpty(),
+            onOpenPledge = { id -> collector = null; openPage(id) },
+        )
     }
 }
 
@@ -588,41 +744,10 @@ private fun TroubleRow(t: PartnerTrouble, resuming: Boolean, onResume: () -> Uni
 
 // ── 3. My pledges ────────────────────────────────────────────────────────────
 
+/** PLEDGES — one card per live pledge; a tap opens its page. [openError] is
+ *  why a pledge opened from outside could not be. */
 @Composable
-private fun PledgesSection(
-    p: Partnership,
-    vm: PartnersViewModel,
-    onPayNow: (GivePreset) -> Unit,
-    onOpenReceipt: (String) -> Unit,
-    openPledge: PledgeLanding?,
-    onPledgeOpened: () -> Unit,
-    onScheduleStarted: (StartedSchedule) -> Unit,
-) {
-    var editing by remember { mutableStateOf<Pledge?>(null) }
-    // The recurring gift collecting a pledge, opened from its sheet.
-    var collector by remember { mutableStateOf<GivingSchedule?>(null) }
-    var cancelling by remember { mutableStateOf<Pledge?>(null) }
-    var detailId by remember { mutableStateOf<String?>(null) }
-    // Opened from outside (Giving Cycle 5): the reason a pledge just made has
-    // no automatic collection, said at the top of its sheet; a pledge not in
-    // the list — cancelled, or made a moment ago while the list reloads — is
-    // fetched on its own; and why it could not be opened, if it could not.
-    var notice by remember { mutableStateOf<String?>(null) }
-    var outside by remember { mutableStateOf<Pledge?>(null) }
-    var openError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(openPledge) {
-        val want = openPledge ?: return@LaunchedEffect
-        vm.clearActionError()
-        detailId = want.pledgeId; notice = want.notice; openError = null
-        onPledgeOpened()
-    }
-    LaunchedEffect(detailId) {
-        val id = detailId ?: return@LaunchedEffect
-        if (p.pledges.any { it.pledgeId == id } || outside?.pledgeId == id) return@LaunchedEffect
-        runCatching { Net.client.api.pledge(id).asPledge() }
-            .onSuccess { outside = it }
-            .onFailure { openError = ApiException.message(it); detailId = null; notice = null }
-    }
+private fun PledgesSection(p: Partnership, vm: PartnersViewModel, openError: String?, onOpen: (String) -> Unit) {
     val live = p.pledges.filter { it.status != "cancelled" }
     val active = live.count { it.status == "active" }
     val today = LocalDate.now()
@@ -645,96 +770,13 @@ private fun PledgesSection(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 live.forEach { pl ->
                     PledgeCard(pl, busy = vm.busyPledgeId == pl.pledgeId, yearStatement = yearStatement, today = today) {
-                        vm.clearActionError(); notice = null; detailId = pl.pledgeId
+                        onOpen(pl.pledgeId)
                     }
                 }
             }
         }
         vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
         openError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
-    }
-
-    editing?.let { pl ->
-        EditPledgeSheet(
-            pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
-            // The server's refusal — an amount M-Pesa can't take for the
-            // collector that follows this pledge is 422 AMOUNT_OUT_OF_RANGE —
-            // said in the sheet, not behind it.
-            error = vm.actionError,
-            onDismiss = { editing = null },
-            onSave = { patch ->
-                // Only what changed travels (pledgeEditPatch); nothing → close.
-                if (patch == null) editing = null else vm.update(pl.pledgeId, patch) { editing = null }
-            },
-        )
-    }
-    cancelling?.let { pl ->
-        AlertDialog(
-            onDismissRequest = { cancelling = null },
-            title = { Text("Cancel this pledge?", style = NuruType.cardTitle, color = Nuru.navy) },
-            text = {
-                Text(
-                    "Nothing is owed. What you have already given stays counted; nothing more will be asked for this pledge.",
-                    style = NuruType.body, color = Nuru.ink600,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val id = pl.pledgeId; cancelling = null
-                    vm.update(id, UpdatePledgeBody(status = "cancelled"))
-                }) { Text("Cancel pledge", style = NuruType.cardCta, color = Nuru.danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { cancelling = null }) { Text("Keep it", style = NuruType.cardCta, color = Nuru.ink600) }
-            },
-        )
-    }
-    // Re-resolved by id so a pause/resume/reminders change made INSIDE the
-    // sheet shows the reloaded pledge, not the one captured at the tap; one
-    // fetched on its own shows until the list has it.
-    detailId?.let { id ->
-        val pl = p.pledges.firstOrNull { it.pledgeId == id } ?: outside?.takeIf { it.pledgeId == id } ?: return@let
-        PledgeDetailSheet(
-            pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
-            actionError = vm.actionError,
-            notice = notice,
-            // Read with the standing, so the collector (or the pace offer)
-            // is there the moment the sheet opens.
-            methods = vm.methods,
-            schedules = vm.schedules,
-            onDismiss = { detailId = null; notice = null },
-            onOpenReceipt = onOpenReceipt,
-            onPayNow = {
-                detailId = null
-                onPayNow(
-                    GivePreset(
-                        fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.displayTitle,
-                        paysTo = pl.paysTo, terms = pledgeTermsLine(pl, today),
-                        // Its currency decides the rails (Giving Cycle 5).
-                        currency = pl.currency,
-                    ),
-                )
-            },
-            onPauseResume = { vm.update(pl.pledgeId, UpdatePledgeBody(status = if (pl.status == "paused") "active" else "paused")) },
-            onEdit = { detailId = null; notice = null; vm.clearActionError(); editing = pl },
-            onCancel = { detailId = null; notice = null; cancelling = pl },
-            onReminders = { on -> vm.update(pl.pledgeId, UpdatePledgeBody(remindersEnabled = on)) },
-            // Collecting it at its pace: the Give segment shows the first prompt.
-            onScheduleStarted = { started -> detailId = null; notice = null; onScheduleStarted(started) },
-            onOpenCollector = { s -> detailId = null; notice = null; collector = s },
-        )
-    }
-    // The gift collecting a pledge — number, heads-up, pause, cancel; its
-    // amount and day follow a monthly pledge (ScheduleSheet).
-    collector?.let { s ->
-        ScheduleSheet(
-            s,
-            onClose = { collector = null },
-            onChanged = { GivingEvents.emit(); vm.load() },
-            onCancelled = { collector = null; GivingEvents.emit(); vm.load() },
-            pledges = p.pledges,
-            onOpenPledge = { id -> collector = null; vm.clearActionError(); notice = null; detailId = id },
-        )
     }
 }
 
@@ -816,24 +858,8 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
                 }
             },
         )
-        // A total pledge's pace to reach it on time (Giving Cycle 9).
-        paceLine(pl, today)?.let { Text(it, style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText) }
+        // A total pledge's pace lives on its page, not here (iOS).
     }
-}
-
-@Composable
-private fun ActionPill(label: String, primary: Boolean = false, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
-    val bg = when { primary -> Nuru.navyDeep; else -> Nuru.white }
-    val fg = when { primary -> Color.White; danger -> Nuru.danger; else -> Nuru.navy }
-    Text(
-        label, style = nuruSans(12, FontWeight.SemiBold), color = fg,
-        modifier = Modifier
-            .alpha(if (enabled) 1f else 0.45f)
-            .clip(CircleShape).background(bg)
-            .then(if (primary) Modifier else Modifier.border(1.dp, if (danger) Nuru.danger.copy(alpha = 0.3f) else Nuru.border, CircleShape))
-            .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    )
 }
 
 internal fun ordinal(n: Int): String {
@@ -937,18 +963,22 @@ internal fun DueDayPicker(selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** The pledge detail — the card's tap target. Its actions (Pay · Pause/Resume
- *  · Edit · Cancel · reminders) live here now that the cards carry none, then
- *  GET /giving/pledges/{id}: every payment attributed to it; then "I paid
- *  another way" and what the member already told the office (GET
- *  /giving/pledges/{id}/claims, Giving Cycle 5). A cancelled or fulfilled
- *  pledge shows its record and no actions. */
+/** A pledge's own PAGE — the card's tap target (iOS PledgeDetailView), over
+ *  the Partners list with its own back. In iOS's order and words: the cream
+ *  band ("YOUR PLEDGE", the pledge's name); the promise card ("KSh 5,000
+ *  monthly · due on the 5th" · "KSh 0 of KSh 5,000 this month · KSh 0 given
+ *  in all", and a total pledge's pace); the recurring gift that collects it,
+ *  or "Collect it automatically at this pace"; the actions (Pay now · Pause,
+ *  Edit | Cancel, I paid another way, Remind me); PAYMENTS (GET
+ *  /giving/pledges/{id}); PAID ANOTHER WAY — what the member told the office
+ *  (…/claims, Giving Cycle 5). A cancelled or fulfilled pledge shows its
+ *  record and no actions. Pull down to read it all again. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PledgeDetailSheet(
+private fun PledgePage(
     pl: Pledge,
     busy: Boolean,
-    /** A failed action on this pledge — said here, not behind the sheet. */
+    /** A failed action on this pledge — said here, not behind the page. */
     actionError: String?,
     /** Said first: why a pledge just made has no automatic collection. */
     notice: String?,
@@ -956,40 +986,46 @@ private fun PledgeDetailSheet(
      *  ViewModel — null while unknown (then nothing is shown or offered). */
     methods: GivingMethodsRes?,
     schedules: List<GivingSchedule>?,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
+    onDismissNotice: () -> Unit,
+    /** Pulled down: the standing too — the pledge's progress, its collector. */
+    onRefresh: () -> Unit,
     onOpenReceipt: (String) -> Unit,
     onPayNow: () -> Unit,
     onPauseResume: () -> Unit,
     onEdit: () -> Unit,
     onCancel: () -> Unit,
     onReminders: (Boolean) -> Unit,
-    onScheduleStarted: (StartedSchedule) -> Unit = {},
-    onOpenCollector: (GivingSchedule) -> Unit = {},
+    onScheduleStarted: (StartedSchedule) -> Unit,
+    onOpenCollector: (GivingSchedule) -> Unit,
 ) {
     val view = LocalView.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val connectivity = remember(context) { Connectivity(context) }
+    val online by remember(connectivity) { connectivity.online() }.collectAsState(initial = connectivity.isOnline())
     val today = remember { partnerToday() }
-    val paused = pl.status == "paused"
-    val done = pl.status == "fulfilled"
+    val fulfilled = pl.status == "fulfilled" || pl.progress.label == "fulfilled"
     val cancelled = pl.status == "cancelled"
     var detail by remember(pl.pledgeId) { mutableStateOf<PledgeDetail?>(null) }
     var error by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
     var attempt by remember(pl.pledgeId) { mutableIntStateOf(0) }
-    // What the member told the office about this pledge, newest first.
+    var refreshing by remember(pl.pledgeId) { mutableStateOf(false) }
+    // What the member told the office about this pledge, newest first; a
+    // failed read with nothing yet on screen is said quietly.
     var claims by remember(pl.pledgeId) { mutableStateOf<List<PledgeClaim>?>(null) }
-    var claimsError by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
+    var claimsFailed by remember(pl.pledgeId) { mutableStateOf(false) }
     var claiming by remember(pl.pledgeId) { mutableStateOf(false) }
-    var claimSent by remember(pl.pledgeId) { mutableStateOf(false) }
     LaunchedEffect(pl.pledgeId, attempt) {
         error = null
         runCatching { Net.client.api.pledge(pl.pledgeId) }
             .onSuccess { detail = it }
-            .onFailure { error = ApiException.message(it, context) }
-        claimsError = null
+            // A failed re-read keeps the payments already on screen.
+            .onFailure { if (detail == null) error = ApiException.message(it, context) }
         runCatching { Net.client.api.pledgeClaims(pl.pledgeId).data }
-            .onSuccess { claims = it }
-            .onFailure { claimsError = ApiException.message(it, context) }
+            .onSuccess { claims = it; claimsFailed = false }
+            .onFailure { claimsFailed = claims == null }
+        refreshing = false
     }
     // "Collect it automatically at this pace" (Giving Cycle 9): in flight,
     // its refusal in the server's words, and its key.
@@ -1000,9 +1036,10 @@ private fun PledgeDetailSheet(
     var paceKey by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
 
     /** "Collect it automatically at this pace": a monthly M-Pesa gift bound
-     *  to the pledge at its pace, its first prompt now (PledgePaceLogic). */
+     *  to the pledge at its pace, its first prompt now (PledgePaceLogic).
+     *  Online only — money is never queued. */
     fun startPace() {
-        if (startingPace) return
+        if (startingPace || !online) return
         val key = paceKey ?: newGivingKey()
         val body = paceScheduleBody(pl, key) ?: return
         paceKey = key; startingPace = true; paceError = null
@@ -1025,205 +1062,347 @@ private fun PledgeDetailSheet(
             }
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
-        Column(
-            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+
+    Column(Modifier.fillMaxSize().background(GIVE.paper)) {
+        PledgePageHeader(pl.displayTitle, onBack)
+        NuruRefreshBox(
+            refreshing = refreshing,
+            onRefresh = { refreshing = true; attempt++; onRefresh() },
+            modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(pl.displayTitle, style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
-                    Text(
-                        "${money(pl.headlineMinor, pl.currency)} ${if (pl.shape == "total") "target" else "each month"} · ${money(pl.progress.paidMinor, pl.currency)} paid",
-                        style = NuruType.caption, color = Nuru.ink600,
-                    )
-                }
-                if (busy) CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp).size(14.dp))
-                Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() }, Alignment.Center) {
-                    Icon(Icons.Filled.Close, "Close", tint = Nuru.navy, modifier = Modifier.size(15.dp))
-                }
-            }
-            // The pledge stands; only its automatic collection could not be
-            // set up (auto_schedule_error) — said once, nothing blocks.
-            notice?.let { PledgeNotice("Your pledge is made", it) }
-            if (cancelled) Text("This pledge is cancelled — nothing more is asked for it.", style = NuruType.caption, color = Nuru.ink600)
-            actionError?.let { Text(it, style = NuruType.caption, color = Nuru.danger) }
-            if (!done && !cancelled) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ActionPill("Pay now", primary = true, enabled = !busy && !paused) { Haptics.tap(view); onPayNow() }
-                    ActionPill(if (paused) "Resume" else "Pause", enabled = !busy) { Haptics.tap(view); onPauseResume() }
-                    ActionPill("Edit", enabled = !busy) { onEdit() }
-                    ActionPill("Cancel", enabled = !busy, danger = true) { onCancel() }
-                }
-                // The recurring gift that collects this pledge — ANY pledge,
-                // a monthly one as much as a total one — or, for a total
-                // pledge with a pace, collecting it at that pace (Giving
-                // Cycle 9, PledgePaceLogic.pledgeCollection).
-                val collection = pledgeCollection(pl, methods, schedules)
-                if (collection is PledgeCollection.Collected) {
-                    CollectorRow(collection.schedule, today) { onOpenCollector(collection.schedule) }
-                }
-                paceLine(pl, today)?.let { line ->
-                    PaceBlock(
-                        line = line,
-                        offer = collection == PledgeCollection.Offer,
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // The pledge stands; only its automatic collection could not
+                // be set up (auto_schedule_error) — said once, nothing blocks.
+                notice?.let { AutoScheduleNotice(it, onDismissNotice) }
+                actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                PledgePromiseCard(pl, today)
+                // The recurring gift that collects it — ANY pledge, monthly or
+                // total — or, for a total pledge with a pace, the offer
+                // (PledgePaceLogic.pledgeCollection).
+                when (val c = pledgeCollection(pl, methods, schedules)) {
+                    is PledgeCollection.Collected -> CollectorCard(collectedLine(c.schedule, today)) {
+                        Haptics.tap(view); onOpenCollector(c.schedule)
+                    }
+                    PledgeCollection.Offer -> PaceOfferCard(
                         starting = startingPace,
+                        enabled = !startingPace && !busy && online,
+                        online = online,
                         error = paceError,
-                        onStart = { Haptics.tap(view); startPace() },
+                    ) { Haptics.tap(view); startPace() }
+                    PledgeCollection.None -> Unit
+                }
+                if (!fulfilled && !cancelled) {
+                    PledgeActionsCard(
+                        paused = pl.status == "paused", busy = busy, online = online, reminders = pl.remindersEnabled,
+                        onPayNow = onPayNow, onPauseResume = onPauseResume, onEdit = onEdit, onCancel = onCancel,
+                        onPaidAnotherWay = { claiming = true }, onReminders = onReminders,
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Remind me before it's due", style = NuruType.label, color = Nuru.ink)
-                        Text("A nudge three days ahead, on the channels you allow.", style = NuruType.caption, color = Nuru.ink400)
+                val d = detail
+                when {
+                    d == null && error == null -> Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), Alignment.Center) {
+                        CircularProgressIndicator(color = GIVE.gold)
                     }
-                    Switch(
-                        checked = pl.remindersEnabled, enabled = !busy,
-                        onCheckedChange = { Haptics.tick(view); onReminders(it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = Nuru.gold, checkedThumbColor = Color.White),
-                    )
-                }
-                // "I paid another way" — only a live pledge takes one (the
-                // server's rule: active or paused).
-                if (claiming) {
-                    ClaimForm(
-                        pl = pl,
-                        onSent = { made ->
-                            claims = listOf(made) + claims.orEmpty().filter { it.claimId != made.claimId }
-                            claiming = false; claimSent = true
-                        },
-                        onClose = { claiming = false },
-                    )
-                } else {
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.white)
-                            .border(1.dp, Nuru.border, RoundedCornerShape(12.dp))
-                            .clickable { Haptics.tap(view); claimSent = false; claiming = true }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    d == null -> Column(
+                        Modifier.fillMaxWidth().padding(top = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("I paid another way", style = NuruType.label, color = Nuru.ink)
-                            Text("At the church, by bank, or straight to M-Pesa — tell the office.", style = NuruType.caption, color = Nuru.ink400)
-                        }
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
+                        Text(error.orEmpty(), style = giInter(14), color = GIVE.sub, textAlign = TextAlign.Center)
+                        Text(
+                            "Try again", style = giInter(11, FontWeight.SemiBold), color = Color.White,
+                            modifier = Modifier.clip(Capsule).background(GIVE.navy)
+                                .clickable { Haptics.tap(view); attempt++ }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
                     }
+                    else -> PledgePaymentsCard(d.payments, onOpenReceipt)
                 }
-                if (claimSent) Text("Sent — the office will check it, then it counts toward this pledge.", style = NuruType.caption, color = GIVE.successText)
+                PledgeClaimsCard(claims, claimsFailed, today)
             }
-            Text("PAYMENTS", style = NuruType.micro, color = Nuru.goldLo)
-            val d = detail
-            when {
-                d == null && error == null -> Box(Modifier.fillMaxWidth().padding(20.dp), Alignment.Center) { CircularProgressIndicator(color = Nuru.gold) }
-                d == null -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(error ?: "", style = NuruType.body, color = Nuru.ink600)
-                    TextButton(onClick = { attempt++ }) { Text("Try again", style = NuruType.cardCta, color = Nuru.gold) }
-                }
-                d.payments.isEmpty() -> Text("Nothing counted toward this pledge yet.", style = NuruType.body, color = Nuru.ink600)
-                else -> d.payments.forEach { pay ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.white)
-                            .border(1.dp, Nuru.border, RoundedCornerShape(12.dp))
-                            .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(money(pay.amountMinor, pay.currency), style = NuruType.label, color = Nuru.ink)
-                            Text(
-                                listOfNotNull(pay.at?.let { PartnerFormat.dayMonthYear(it) }, pay.receiptCode?.takeIf { it.isNotBlank() }?.let { "Ref $it" }).joinToString(" · "),
-                                style = NuruType.caption, color = Nuru.ink600,
-                            )
-                        }
-                        if (pay.transactionId.isNotBlank()) Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
-                    }
-                }
-            }
-            // What the member told the office (Giving Cycle 5) — shown once
-            // there is any; a confirmed one is also a payment above.
-            val told = claims.orEmpty()
-            if (told.isNotEmpty() || claimsError != null) {
-                Text("TOLD THE OFFICE", style = NuruType.micro, color = Nuru.goldLo)
-                claimsError?.let { Text("We couldn't load what you told the office — $it", style = NuruType.caption, color = Nuru.ink600) }
-                told.forEach { ClaimRow(it) }
+        }
+    }
+
+    // "I paid another way" — its form in a sheet over the page; the claim
+    // joins PAID ANOTHER WAY the moment the office has it.
+    if (claiming) {
+        ModalBottomSheet(onDismissRequest = { claiming = false }, containerColor = Nuru.paper) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                ClaimForm(
+                    pl = pl,
+                    onSent = { made ->
+                        claims = listOf(made) + claims.orEmpty().filter { it.claimId != made.claimId }
+                        claimsFailed = false
+                        claiming = false
+                    },
+                    onClose = { claiming = false },
+                )
             }
         }
     }
 }
 
-/** The recurring gift that collects a pledge — "Collected automatically —
+/** The page's cream band (iOS): back, then "YOUR PLEDGE" over the pledge's
+ *  name — the name IS the page's title (pledge names contract). */
+@Composable
+private fun PledgePageHeader(title: String, onBack: () -> Unit) {
+    val view = LocalView.current
+    GiveCreamHeaderBox {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 24.dp)) {
+            ReceiptHeaderButton(Icons.AutoMirrored.Filled.ArrowBack, "Back") { Haptics.tap(view); onBack() }
+            Text("YOUR PLEDGE", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.eyebrow, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                title, style = giSerif(26, FontWeight.SemiBold), color = GIVE.navy,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/** The promise, under the page's name (iOS): "KSh 5,000 monthly · due on the
+ *  5th" or "KSh 20,000 · by 31 Dec"; "KSh 0 of KSh 5,000 this month · KSh 0
+ *  given in all"; and a total pledge's pace to reach it on time. */
+@Composable
+private fun PledgePromiseCard(pl: Pledge, today: LocalDate) {
+    Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).padding(18.dp)) {
+        Text(pledgeAmountLine(pl, today), style = giSerif(22, FontWeight.Medium), color = GIVE.ink)
+        Text(pledgeGivenLine(pl), style = giInter(12), color = GIVE.ink600, modifier = Modifier.padding(top = 4.dp))
+        // A total pledge's pace (Giving Cycle 9), as the server sets it.
+        paceLine(pl, today)?.let { line ->
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Filled.EventRepeat, null, tint = GIVE.gold, modifier = Modifier.padding(top = 2.dp).size(12.dp))
+                Text(line, style = giInter(12, FontWeight.SemiBold), color = GIVE.navy)
+            }
+        }
+    }
+}
+
+/** The recurring gift that collects the pledge — "Collected automatically —
  *  next KSh 5,000 on 5 Oct" — on every pledge it collects, monthly or total;
  *  it opens that gift's sheet. */
 @Composable
-private fun CollectorRow(collector: GivingSchedule, today: LocalDate, onOpen: () -> Unit) {
+private fun CollectorCard(line: String, onOpen: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GIVE.white)
-            .border(1.dp, GIVE.border, RoundedCornerShape(12.dp))
-            .clickable { onOpen() }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        Modifier.partnerCard(onClick = onOpen),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(collectedLine(collector, today), style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.weight(1f))
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+        Icon(Icons.Filled.Autorenew, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+        Text(line, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GIVE.ink300, modifier = Modifier.size(16.dp))
     }
 }
 
-/** A total pledge's pace — "To reach KSh 20,000 by 31 Dec: KSh 5,000 a month
- *  — 4 collections" — then, when it may be set up here, "Collect it
- *  automatically at this pace" with its one-line promise. Its refusal is
- *  said in the server's words. */
+/** "Collect it automatically at this pace" (iOS): an outlined button, its
+ *  one-line promise, and why it waits while offline — or the server's
+ *  refusal in its own words. */
 @Composable
-private fun PaceBlock(
-    line: String,
-    offer: Boolean,
-    starting: Boolean,
-    error: String?,
-    onStart: () -> Unit,
+private fun PaceOfferCard(starting: Boolean, enabled: Boolean, online: Boolean, error: String?, onStart: () -> Unit) {
+    Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (enabled || starting) 1f else 0.5f)
+                .clip(RoundedCornerShape(12.dp)).background(GIVE.white)
+                .border(1.2.dp, GIVE.navy, RoundedCornerShape(12.dp))
+                .clickable(enabled = enabled) { onStart() }
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            if (starting) {
+                CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+            } else {
+                Icon(Icons.Filled.EventRepeat, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (starting) "Setting it up…" else "Collect it automatically at this pace",
+                style = giInter(13, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center,
+            )
+        }
+        Text(PACE_OFFER_NOTE, style = giInter(12), color = Nuru.ink400)
+        if (!online) {
+            Text("You're offline — setting this up needs a connection.", style = giInter(11), color = Nuru.ink400)
+        } else {
+            error?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+        }
+    }
+}
+
+/** The pledge's actions, in one card (iOS): Pay now → beside Pause (Resume);
+ *  Edit | Cancel; "I paid another way" — online only, a claim about money is
+ *  never queued; and "Remind me before it's due". */
+@Composable
+private fun PledgeActionsCard(
+    paused: Boolean,
+    busy: Boolean,
+    online: Boolean,
+    reminders: Boolean,
+    onPayNow: () -> Unit,
+    onPauseResume: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
+    onPaidAnotherWay: () -> Unit,
+    onReminders: (Boolean) -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GIVE.priorityBg)
-            .border(1.dp, GIVE.gold.copy(alpha = 0.35f), RoundedCornerShape(12.dp)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(line, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-        if (offer) {
+    val view = LocalView.current
+    val shape = RoundedCornerShape(12.dp)
+    Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The page's one gold button; a paused pledge takes nothing.
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(Capsule).background(GIVE.navy)
-                    .clickable(enabled = !starting) { onStart() }
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                Modifier.weight(1f).heightIn(min = 40.dp).alpha(if (paused) 0.5f else 1f)
+                    .clip(shape).background(GIVE.gold)
+                    .clickable(enabled = !paused && !busy) { Haptics.tap(view); onPayNow() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                if (starting) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text("Collect it automatically at this pace", style = giInter(13, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
+                Text("Pay now", style = giInter(13, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
             }
-            Text(PACE_OFFER_NOTE, style = giInter(11), color = GIVE.sub)
+            Row(
+                Modifier.weight(1f).heightIn(min = 40.dp)
+                    .clip(shape).background(GIVE.surface).border(1.dp, GIVE.border, shape)
+                    .clickable(enabled = !busy) { Haptics.tap(view); onPauseResume() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
+                } else {
+                    Icon(if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause, null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(if (paused) "Resume" else "Pause", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
+            }
         }
-        error?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SmallAction("Edit", Icons.Filled.Edit, GIVE.ink600, enabled = !busy, modifier = Modifier.weight(1f), onClick = onEdit)
+            Box(Modifier.width(1.dp).height(16.dp).background(GIVE.border))
+            SmallAction("Cancel", Icons.Filled.Close, GIVE.danger, enabled = !busy, modifier = Modifier.weight(1f), onClick = onCancel)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val tint = if (online) GIVE.navy else GIVE.ink300
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 32.dp)
+                    .clickable(enabled = online && !busy) { Haptics.tap(view); onPaidAnotherWay() },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.Filled.Check, null, tint = tint, modifier = Modifier.size(12.dp))
+                Text("I paid another way", style = giInter(12, FontWeight.SemiBold), color = tint, modifier = Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
+            }
+            if (!online) Text("You're offline — telling the office needs a connection.", style = giInter(11), color = Nuru.ink400)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Outlined.Notifications, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+            Text("Remind me before it's due", style = giInter(13), color = GIVE.ink, modifier = Modifier.weight(1f))
+            Switch(
+                checked = reminders, enabled = !busy,
+                onCheckedChange = { Haptics.tick(view); onReminders(it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = GIVE.gold, checkedThumbColor = Color.White),
+            )
+        }
+    }
+}
+
+/** Edit / Cancel — a small action with its icon, half the row each. */
+@Composable
+private fun SmallAction(label: String, icon: ImageVector, tint: Color, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val view = LocalView.current
+    Row(
+        modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled) { Haptics.tap(view); onClick() }
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(12.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = giInter(12, FontWeight.SemiBold), color = tint)
+    }
+}
+
+/** PAYMENTS — every payment counted toward the pledge, each opening its
+ *  receipt; before the first, what will happen (iOS words). */
+@Composable
+private fun PledgePaymentsCard(payments: List<PledgePayment>, onOpenReceipt: (String) -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape).padding(16.dp)) {
+        Text("PAYMENTS", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+        if (payments.isEmpty()) {
+            Text(
+                "No payments yet — the first one will appear here the moment it settles.",
+                style = giInter(13), color = GIVE.sub, modifier = Modifier.padding(top = 10.dp),
+            )
+        } else {
+            payments.forEach { pay -> PledgePaymentRow(pay, onOpenReceipt) }
+        }
+    }
+}
+
+/** One payment: the amount, then the day and its receipt code. */
+@Composable
+private fun PledgePaymentRow(pay: PledgePayment, onOpenReceipt: (String) -> Unit) {
+    val opens = pay.transactionId.isNotBlank()
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = opens) { onOpenReceipt(pay.transactionId) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(GIVE.goldChipBg), Alignment.Center) {
+            Icon(Icons.Filled.VolunteerActivism, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+            val meta = listOfNotNull(pay.at?.let { PartnerFormat.dayMonthYear(it) }, pay.receiptCode?.takeIf { it.isNotBlank() })
+            if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = giInter(11), color = GIVE.tertiary)
+        }
+        if (opens) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GIVE.ink300, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** PAID ANOTHER WAY — each thing the member told the office and where it
+ *  stands; hidden while there is none. A first read that failed says so
+ *  quietly (pull down to try again). */
+@Composable
+private fun PledgeClaimsCard(claims: List<PledgeClaim>?, failed: Boolean, today: LocalDate) {
+    val told = claims.orEmpty()
+    if (told.isNotEmpty()) {
+        val shape = RoundedCornerShape(22.dp)
+        Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape).padding(16.dp)) {
+            Text("PAID ANOTHER WAY", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(bottom = 4.dp))
+            told.forEach { ClaimRow(it, today) }
+        }
+    } else if (failed) {
+        Text(
+            "We couldn't load what you've told the office. Pull down to try again.",
+            style = giInter(11), color = Nuru.ink400, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 /** A payment the member told the office about: the amount and the day it
- *  was paid, then where it stands — "The office is checking it" · "Recorded
- *  — thank you" · "The office couldn't match it" — and their note. */
+ *  was paid, where it stands — "The office is checking it" · "Recorded —
+ *  thank you" · "The office couldn't match it" — and their note. */
 @Composable
-private fun ClaimRow(c: PledgeClaim) {
-    val tone = when (claimTone(c.status)) {
-        ClaimTone.Waiting -> GIVE.goldChipText
-        ClaimTone.Recorded -> GIVE.successText
-        ClaimTone.Unmatched -> GIVE.danger
+private fun ClaimRow(c: PledgeClaim, today: LocalDate) {
+    val (tint, icon) = when (claimTone(c.status)) {
+        ClaimTone.Waiting -> GIVE.goldChipText to Icons.Filled.Schedule
+        ClaimTone.Recorded -> GIVE.successText to Icons.Filled.Verified
+        ClaimTone.Unmatched -> GIVE.ink600 to Icons.Outlined.Cancel
     }
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.white)
-            .border(1.dp, Nuru.border, RoundedCornerShape(12.dp)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(claimRowLine(c), style = NuruType.label, color = Nuru.ink)
-        Text(claimStatusLine(c.status), style = NuruType.caption, color = tone)
-        c.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = NuruType.caption, color = Nuru.ink400, maxLines = 3) }
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), Alignment.Center) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(14.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(claimRowLine(c, today), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+            Text(claimStatusLine(c.status), style = giInter(12, FontWeight.SemiBold), color = tint)
+            c.note?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = giInter(11), color = Nuru.ink400, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
@@ -1361,18 +1540,23 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
 /** The day picked on the claim form: "Monday, 28 September 2026". */
 private val CLAIM_PICKED_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.ENGLISH)
 
-/** An amber notice with a heading — a pledge made whose automatic collection
- *  could not be set up says so here, in the server's words. */
+/** "Charge me automatically" could not be set up when the pledge was made
+ *  (Giving Cycle 5): the pledge stands, and the server's words say why —
+ *  one amber row, until dismissed. */
 @Composable
-private fun PledgeNotice(title: String, message: String) {
+private fun AutoScheduleNotice(message: String, onDismiss: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.warningBg).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.warningBg)
+            .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Outlined.Info, null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 2.dp).size(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = giInter(13, FontWeight.SemiBold), color = Nuru.answeredText)
-            Text(message, style = giInter(12), color = Nuru.answeredText)
+        Icon(Icons.Filled.Warning, null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 2.dp).size(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("Your pledge is made — automatic collection isn't set up.", style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText)
+            Text(message, style = giInter(12), color = GIVE.ink600)
+        }
+        Box(Modifier.size(28.dp).clip(CircleShape).clickable { onDismiss() }, Alignment.Center) {
+            Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(12.dp))
         }
     }
 }

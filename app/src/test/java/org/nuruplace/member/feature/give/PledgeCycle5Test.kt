@@ -22,6 +22,7 @@ import org.nuruplace.member.data.net.Envelope
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeClaim
 import org.nuruplace.member.data.net.UpdatePledgeBody
+import java.time.LocalDate
 
 @OptIn(ExperimentalSerializationApi::class)
 class PledgeCycle5Test {
@@ -94,7 +95,7 @@ class PledgeCycle5Test {
         assertEquals("pending", made.status)
         assertNull(made.decidedAt)
         assertNull(made.transactionId)
-        assertEquals("KSh 3,000 · paid 28 Sep 2026", claimRowLine(made))
+        assertEquals("KSh 3,000 · paid 28 September", claimRowLine(made, LocalDate.of(2026, 9, 28)))
     }
 
     @Test

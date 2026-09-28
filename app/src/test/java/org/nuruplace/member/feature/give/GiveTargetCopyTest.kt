@@ -10,6 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.nuruplace.member.data.net.FundRef
 import org.nuruplace.member.data.net.Pledge
+import org.nuruplace.member.data.net.PledgeProgress
 import java.time.LocalDate
 
 class GiveTargetCopyTest {
@@ -110,5 +111,38 @@ class GiveTargetCopyTest {
         // Nothing to state → no line.
         assertNull(pledgeTermsLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = null), today))
         assertNull(pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 0), today))
+    }
+
+    // ── the pledge card and the pledge's page say the promise as iOS does ──
+
+    @Test
+    fun `the promise is said once — by its date, never the date twice`() {
+        // Seen on screen: Android said "KSh 20,000 by Dec · due 31 Dec".
+        assertEquals(
+            "KSh 20,000 · by 31 Dec",
+            pledgeAmountLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 2_000_000, dueOn = "2026-12-31"), today),
+        )
+        assertEquals(
+            "KSh 50,000 · by 15 Mar 2027",
+            pledgeAmountLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-15"), today),
+        )
+        assertEquals("KSh 50,000", pledgeAmountLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000), today))
+        assertEquals(
+            "KSh 5,000 monthly · due on the 5th",
+            pledgeAmountLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = 500_000, dueDay = 5), today),
+        )
+        assertEquals("US$ 25.00 monthly", pledgeAmountLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = 2_500, currency = "USD"), today))
+    }
+
+    @Test
+    fun `the page says what counts toward it now, then everything given`() {
+        val kenya = Pledge(
+            pledgeId = "p", shape = "monthly", amountMinor = 500_000, dueDay = 5,
+            progress = PledgeProgress(paidMinor = 1_000_000, periodPaidMinor = 200_000),
+        )
+        assertEquals("KSh 2,000 of KSh 5,000 this month · KSh 10,000 given in all", pledgeGivenLine(kenya))
+        assertEquals("KSh 0 of KSh 5,000 this month · KSh 0 given in all", pledgeGivenLine(kenya.copy(progress = PledgeProgress())))
+        val roof = Pledge(pledgeId = "p", shape = "total", targetMinor = 2_000_000, dueOn = "2026-12-31", progress = PledgeProgress(paidMinor = 500_000))
+        assertEquals("KSh 5,000 of KSh 20,000 · KSh 5,000 given in all", pledgeGivenLine(roof))
     }
 }

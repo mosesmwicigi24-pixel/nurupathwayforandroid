@@ -105,3 +105,31 @@ internal fun pledgeTermsLine(pl: Pledge, today: LocalDate): String? = when (pl.s
         "${money(amount, pl.currency)} monthly" + (pl.dueDay?.let { " · due on the ${ordinal(it)}" } ?: "")
     }
 }
+
+/** The promise in one line, as iOS says it (PartnersView pledgeAmountLine)
+ *  on the pledge card and the pledge's page: "KSh 2,000 monthly · due on the
+ *  5th", or "KSh 50,000 · by 15 Dec" — the year only when it isn't this one;
+ *  just the amount when the date is unknown. */
+internal fun pledgeAmountLine(pl: Pledge, today: LocalDate): String =
+    if (pl.shape == "total") {
+        val by = partnerDate(pl.dueOn)?.let { d ->
+            if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
+        }
+        listOfNotNull(money(pl.targetMinor ?: 0, pl.currency), by?.let { "by $it" }).joinToString(" · ")
+    } else {
+        listOfNotNull("${money(pl.amountMinor ?: 0, pl.currency)} monthly", pl.dueDay?.let { "due on the ${ordinal(it)}" })
+            .joinToString(" · ")
+    }
+
+/** Under the promise on the pledge's page (iOS): what counts toward it now
+ *  of what it asks — this month's for a monthly pledge, the whole for a
+ *  total one — then everything given toward it. "KSh 0 of KSh 5,000 this
+ *  month · KSh 0 given in all" · "KSh 5,000 of KSh 20,000 · KSh 5,000 given
+ *  in all". */
+internal fun pledgeGivenLine(pl: Pledge): String {
+    val total = pl.shape == "total"
+    val toward = if (total) pl.progress.paidMinor else pl.progress.periodPaidMinor ?: 0
+    val asks = if (total) pl.targetMinor ?: 0 else pl.amountMinor ?: 0
+    return "${money(toward, pl.currency)} of ${money(asks, pl.currency)}${if (total) "" else " this month"} · " +
+        "${money(pl.progress.paidMinor, pl.currency)} given in all"
+}

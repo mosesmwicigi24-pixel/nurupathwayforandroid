@@ -132,16 +132,22 @@ class PledgeClaimLogicTest {
 
     @Test
     fun `a claim row says the amount and the day it was paid`() {
+        // iOS ClaimCopy.line: the day in words, the year only when it isn't this one.
+        val today = LocalDate.of(2026, 10, 2)
         assertEquals(
-            "KSh 3,000 · paid 12 Sep 2026",
-            claimRowLine(PledgeClaim(claimId = "c1", amountMinor = 300_000, currency = "KES", paidOn = "2026-09-12")),
+            "KSh 3,000 · paid 12 September",
+            claimRowLine(PledgeClaim(claimId = "c1", amountMinor = 300_000, currency = "KES", paidOn = "2026-09-12"), today),
         )
         assertEquals(
-            "US$ 25.50 · paid 1 Oct 2026",
-            claimRowLine(PledgeClaim(claimId = "c2", amountMinor = 2_550, currency = "USD", paidOn = "2026-10-01")),
+            "US$ 25.50 · paid 1 October",
+            claimRowLine(PledgeClaim(claimId = "c2", amountMinor = 2_550, currency = "USD", paidOn = "2026-10-01"), today),
         )
-        assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c3", amountMinor = 50_000, paidOn = null)))
-        assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c4", amountMinor = 50_000, paidOn = "garbled")))
+        assertEquals(
+            "KSh 3,000 · paid 28 December 2025",
+            claimRowLine(PledgeClaim(claimId = "c5", amountMinor = 300_000, currency = "KES", paidOn = "2025-12-28"), today),
+        )
+        assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c3", amountMinor = 50_000, paidOn = null), today))
+        assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c4", amountMinor = 50_000, paidOn = "garbled"), today))
     }
 
     // ── "First collection: 5 October" ──

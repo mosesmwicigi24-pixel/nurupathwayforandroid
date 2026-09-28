@@ -26,7 +26,6 @@ const val CLAIM_NOTE_MAX = 300
 /** Said instead of the form while the phone is offline. */
 const val CLAIM_OFFLINE_LINE = "You're offline — telling us about a payment needs a connection."
 
-private val CLAIM_DAY_FMT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 private val COLLECTION_DAY_FMT = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH)
 private val COLLECTION_DAY_YEAR_FMT = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH)
 
@@ -97,9 +96,11 @@ fun claimStatusLine(status: String?): String = when (claimTone(status)) {
     ClaimTone.Unmatched -> "The office couldn't match it"
 }
 
-/** "KSh 3,000 · paid 12 Sep 2026". */
-fun claimRowLine(c: PledgeClaim): String {
-    val day = c.paidOn?.let { runCatching { LocalDate.parse(it.take(10)).format(CLAIM_DAY_FMT) }.getOrNull() }
+/** "KSh 3,000 · paid 12 September" — the year only when it isn't this one
+ *  (iOS ClaimCopy.line). */
+fun claimRowLine(c: PledgeClaim, today: LocalDate): String {
+    val day = c.paidOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+        ?.let { d -> d.format(if (d.year == today.year) COLLECTION_DAY_FMT else COLLECTION_DAY_YEAR_FMT) }
     return listOfNotNull(money(c.amountMinor, c.currency), day?.let { "paid $it" }).joinToString(" · ")
 }
 
