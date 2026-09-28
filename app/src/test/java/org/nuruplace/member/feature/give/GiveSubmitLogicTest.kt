@@ -156,6 +156,23 @@ class GiveSubmitLogicTest {
     }
 
     @Test
+    fun `an amount the rail cannot take is said before any tap, in the server's words`() {
+        // iOS GiveAmountRules.problem — the form says it under the amount and
+        // holds the Give button.
+        assertNull(giveAmountProblem(100_000, mpesa))
+        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", giveAmountProblem(25_000_100, mpesa))
+        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", giveAmountProblem(99, mpesa.copy(wholeUnits = false)))
+        assertNull(giveAmountProblem(25_000_000, mpesa)) // the ceiling itself is fine
+        // No ceiling sent: the server decides the range.
+        assertNull(giveAmountProblem(1_000_000_000, mpesa.copy(maxMinor = 0)))
+        // Whole shillings only on a whole-units rail.
+        assertEquals("M-Pesa takes whole shillings — no cents.", giveAmountProblem(100_050, mpesa))
+        // Dollars, with cents.
+        assertEquals("PayPal gifts are from US$ 1.00 to US$ 10,000.00.", giveAmountProblem(99, paypalLive))
+        assertNull(giveAmountProblem(2_550, paypalLive))
+    }
+
+    @Test
     fun `a schedule pins its number only when it is not the profile's`() {
         val same = plan(FREQ_MONTHLY, mpesa, phone = "0700 000 000", phoneOnFile = "+254700000000") as GiveSubmission.Schedule
         assertNull(same.body.phoneNumber) // follows the profile, as the server stores it

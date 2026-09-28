@@ -862,6 +862,14 @@ private fun GiveTab(
     // Running or paused — a paused schedule still stands until it is cancelled.
     val liveSchedules = schedules.filter { scheduleCancellable(it.status) }
 
+    // The gift in its rail's money, and what it charges (the covered fee
+    // inside). An amount the rail cannot take is said under the amount and
+    // holds the Give button (iOS amountProblem).
+    val giftMinor = if (inDollars) usdCents else amountMajor * 100
+    val chargedMinor = if (inDollars) usdCents else chargedAmountMajor(amountMajor, coverFee && !inDollars) * 100
+    val amountProblem = method?.takeIf { giftMinor > 0 }?.let { giveAmountProblem(chargedMinor, it) }
+    val canGive = giftMinor > 0 && amountProblem == null
+
     /** Send a planned request: an intent, or a schedule the member confirmed. */
     fun send(plan: GiveSubmission, attempt: HeldGiveKey) {
         // One request at a time: a second tap inside the same frame (before
@@ -1086,6 +1094,10 @@ private fun GiveTab(
                             style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 2.dp),
                         )
+                    }
+                    // An amount the rail cannot take, in the server's words.
+                    amountProblem?.let {
+                        Text(it, style = giInter(11), color = GIVE.danger, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
                     }
                     Row(
                         Modifier.padding(top = 16.dp).horizontalScroll(rememberScrollState()),
@@ -1396,14 +1408,16 @@ private fun GiveTab(
             }
             // A BLOCK, not an outline (owner, 2026-08-24 — iOS parity): solid
             // gold with navy text, the same voice as every primary CTA.
+            // Nothing to give, or an amount the rail cannot take (said under
+            // it): the button waits, dimmed (iOS).
             Row(
-                Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
+                Modifier.fillMaxWidth().height(48.dp).alpha(if (canGive) 1f else 0.5f).clip(RoundedCornerShape(16.dp))
                     .background(
                         androidx.compose.ui.graphics.Brush.linearGradient(
                             listOf(GIVE.gold, Color(0xFFB6862F)),
                         ),
                     )
-                    .clickable(enabled = amountMajor > 0 && !busy) { submit() },
+                    .clickable(enabled = canGive && !busy) { submit() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {

@@ -181,6 +181,23 @@ fun keepGiveKeyAfter(failure: Throwable?): Boolean = failure is IOException
 fun heldKeyAfter(held: HeldGiveKey, failure: Throwable?): HeldGiveKey? = held.takeIf { keepGiveKeyAfter(failure) }
 
 /** iOS `total = amount + fee`: the charged amount in MAJOR units. */
+/**
+ * Why [totalMinor] — what the gift charges, the covered fee inside it —
+ * cannot go on [method] (iOS GiveAmountRules.problem), in the server's terms
+ * (422 AMOUNT_OUT_OF_RANGE): "M-Pesa gifts are from KSh 1 to KSh 250,000." ·
+ * "M-Pesa takes whole shillings — no cents." Null when it can. A rail that
+ * sent no ceiling (max 0) is left to the server. The form says it under the
+ * amount and holds the Give button until it is fixed.
+ */
+fun giveAmountProblem(totalMinor: Int, method: GiveMethodOption): String? {
+    val currency = method.currency ?: GIVE_FORM_CURRENCY
+    if (method.maxMinor > 0 && (totalMinor < method.minMinor || totalMinor > method.maxMinor)) {
+        return "${method.label} gifts are from ${money(method.minMinor, currency)} to ${money(method.maxMinor, currency)}."
+    }
+    if (method.wholeUnits && totalMinor % 100 != 0) return "${method.label} takes whole shillings — no cents."
+    return null
+}
+
 fun chargedAmountMajor(amountMajor: Int, coverFee: Boolean): Int =
     amountMajor + if (coverFee) giveFee(amountMajor) else 0
 
@@ -246,10 +263,9 @@ fun planGiveSubmission(
     val currency = if (dollars) USD_CURRENCY else GIVE_FORM_CURRENCY
     val split = if (dollars) FeeSplit(giftMinor = usdCents, feeMinor = 0) else feeSplit(amountMajor, coverFee)
     val amountMinor = split.totalMinor
-    // The rail's own limits, as the server sent them (it checks again).
-    if (amountMinor < method.minMinor || (method.maxMinor > 0 && amountMinor > method.maxMinor)) {
-        return GiveSubmission.Blocked("${method.label} gifts are from ${money(method.minMinor, currency)} to ${money(method.maxMinor, currency)}.")
-    }
+    // The rail's own limits, as the server sent them (it checks again) —
+    // the same words the form says under the amount.
+    giveAmountProblem(amountMinor, method)?.let { return GiveSubmission.Blocked(it) }
     val prompt = if (method.needsPhone) {
         kenyanMobileE164(phone)
             ?: return GiveSubmission.Blocked(if (phone.isNullOrBlank()) phoneNeededMessage(method.label) else PHONE_INVALID_MESSAGE)
