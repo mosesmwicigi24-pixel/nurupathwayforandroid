@@ -78,7 +78,12 @@ data class NotifPayload(
     // department_need_* all carry department_id; need pushes also need_id.
     val departmentId: String? = null,
     val needId: String? = null,
+    // serve_request_* / department_post carry the department's name, a
+    // department_post its first 90 characters, and the leader's
+    // serve_request_received who asked in `name` — the words the push says
+    // (feature/departments/DepartmentNotificationCopy.kt).
     val department: String? = null,
+    val preview: String? = null,
 )
 
 @Serializable
