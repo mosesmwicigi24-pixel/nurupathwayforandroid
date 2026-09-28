@@ -76,6 +76,25 @@ class GivingWireTest {
     }
 
     @Test
+    fun `intent body names the fee cover only when there is one`() {
+        val covered = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 101_300, "KES", "mpesa", idempotencyKey = "k", coverFeeMinor = 1_300))).jsonObject
+        assertEquals("1300", covered["cover_fee_minor"]!!.jsonPrimitive.content)
+        assertEquals("101300", covered["amount_minor"]!!.jsonPrimitive.content) // still the total
+        val plain = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 100_000, "KES", "mpesa", idempotencyKey = "k"))).jsonObject
+        assertFalse("cover_fee_minor" in plain)
+    }
+
+    @Test
+    fun `history and detail decode fee_cover_minor, null when absent`() {
+        val r = json.decodeFromString<GivingRecord>("""{"transaction_id":"t","amount_minor":101300,"status":"succeeded","fee_cover_minor":1300}""")
+        assertEquals(1_300, r.feeCoverMinor)
+        assertNull(json.decodeFromString<GivingRecord>("""{"transaction_id":"t","fee_cover_minor":null}""").feeCoverMinor)
+        assertNull(json.decodeFromString<GivingRecord>("""{"transaction_id":"t"}""").feeCoverMinor)
+        val d = json.decodeFromString<GivingDetail>("""{"transaction_id":"t","amount_minor":101300,"fee_cover_minor":1300,"ledger":[]}""")
+        assertEquals(1_300, d.feeCoverMinor)
+    }
+
+    @Test
     fun `intent body carries the prompt number as phone_number`() {
         val i = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 100_000, "KES", "mpesa", phoneNumber = "+254711222333", idempotencyKey = "k"))).jsonObject
         assertEquals("+254711222333", i["phone_number"]!!.jsonPrimitive.content)

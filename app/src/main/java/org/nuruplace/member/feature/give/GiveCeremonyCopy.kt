@@ -32,12 +32,14 @@ fun giveDestinationPhrase(r: GivingIntentResult, chipFundLabel: String?): String
 }
 
 /** The ceremony's one instruction line. `amountMinor` is what was charged
- *  (the fee rides inside it, GiveSubmitLogic.kt). */
-fun giveCeremonyLine(r: GivingIntentResult, amountMinor: Int, chipFundLabel: String?): String {
-    val what = listOfNotNull(ksh(amountMinor), giveDestinationPhrase(r, chipFundLabel)).joinToString(" ")
+ *  (the fee rides inside it, GiveSubmitLogic.kt), in `currency` — a PayPal
+ *  gift is in US dollars. PayPal finishes on its own when the member comes
+ *  back from approving (Giving Cycle 2), so the line says exactly that. */
+fun giveCeremonyLine(r: GivingIntentResult, amountMinor: Int, chipFundLabel: String?, currency: String? = null): String {
+    val what = listOfNotNull(money(amountMinor, currency), giveDestinationPhrase(r, chipFundLabel)).joinToString(" ")
     return when {
         r.provider?.lowercase() in PIN_PROVIDERS -> "Enter your PIN to complete $what."
-        r.approveUrl != null -> "Continue on PayPal to complete $what, then confirm below."
+        r.approveUrl != null -> "Continue on PayPal to complete $what — we'll confirm it when you come back."
         else -> "$what is being processed."
     }
 }
@@ -93,12 +95,13 @@ fun giveCeremonyStatusLine(
     outcome: GiftOutcome,
     watchLapsed: Boolean,
     failure: GiftFailure? = null,
+    currency: String? = null,
 ): String = when (outcome) {
     GiftOutcome.Succeeded -> "Gift confirmed — receipt on its way. 🎉"
     GiftOutcome.Failed -> failure?.reason?.trim()?.takeIf { it.isNotEmpty() }
         ?: "The payment didn't complete — no charge was made."
     GiftOutcome.Processing ->
-        if (watchLapsed) "Still processing — your gift will show once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel)
+        if (watchLapsed) "Still processing — your gift will show once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel, currency)
 }
 
 /** The failed ceremony's second line: what to do next and whether money

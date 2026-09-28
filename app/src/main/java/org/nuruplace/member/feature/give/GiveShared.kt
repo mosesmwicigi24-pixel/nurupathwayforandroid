@@ -134,10 +134,17 @@ fun ksh(minor: Int): String = "KSh " + "%,d".format(minor / 100)
 
 /** Currency-AWARE amount — statement/receipt rows carry a real `currency`
  *  (PayPal settles in USD server-side); rendering everything as "KSh" printed
- *  the wrong symbol on USD gifts while the Currency detail row said USD. */
-fun money(minor: Int, currency: String?): String = when (currency?.uppercase()) {
-    null, "", "KES" -> ksh(minor)
-    "USD" -> "$" + "%,.2f".format(minor / 100.0)
+ *  the wrong symbol on USD gifts while the Currency detail row said USD.
+ *  Dollars read "US$ 12.50" everywhere (Giving Cycle 2) — the Give form's
+ *  dollar entry, the ceremony, the statement's "+ US$ …" and the receipt say
+ *  it the same way, and never as a bare "$" a reader might take for another
+ *  dollar. */
+fun money(minor: Int, currency: String?): String = money(minor.toLong(), currency)
+
+/** [money] for a sum that may pass Int (a year's totals). */
+fun money(minor: Long, currency: String?): String = when (currency?.uppercase()) {
+    null, "", "KES" -> "KSh " + "%,d".format(minor / 100)
+    "USD" -> "US$ " + "%,.2f".format(minor / 100.0)
     else -> currency.uppercase() + " " + "%,.2f".format(minor / 100.0)
 }
 

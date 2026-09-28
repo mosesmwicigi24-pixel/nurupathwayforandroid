@@ -63,7 +63,7 @@ class GiveReceiptCopyTest {
         )
         // Older server: no method_label → the local label; USD keeps its symbol.
         assertEquals(
-            "$12.50 to the Discipleship fund · PayPal 9AB · 25 Sep 2026",
+            "US$ 12.50 to the Discipleship fund · PayPal 9AB · 25 Sep 2026",
             receiptShareText(base.copy(methodLabel = null, method = "paypal", currency = "USD", amountMinor = 1_250, receiptCode = null, providerRef = "9AB")),
         )
         // No method at all and no dates → nothing dangling.
@@ -145,10 +145,23 @@ class GiveReceiptCopyTest {
     }
 
     @Test
+    fun `a covered fee reads Gift, Fee cover, Total — and nothing without one`() {
+        val covered = base.copy(amountMinor = 101_300, feeCoverMinor = 1_300)
+        assertEquals(
+            listOf("Gift" to "KSh 1,000", "Fee cover" to "KSh 13 · covered by you", "Total" to "KSh 1,013"),
+            receiptFeeRows(covered),
+        )
+        assertNull(receiptFeeRows(base))
+        assertNull(receiptFeeRows(base.copy(feeCoverMinor = 0)))
+        // A fee that is the whole amount (bad data) is never shown as a KSh 0 gift.
+        assertNull(receiptFeeRows(base.copy(amountMinor = 1_300, feeCoverMinor = 1_300)))
+    }
+
+    @Test
     fun `amount splits into a currency mark and a number`() {
         assertEquals("KSh" to "500", receiptAmountParts(50_000, "KES"))
         assertEquals("KSh" to "1,000", receiptAmountParts(100_000, null))
-        assertEquals("$" to "12.50", receiptAmountParts(1_250, "USD"))
+        assertEquals("US$" to "12.50", receiptAmountParts(1_250, "USD"))
     }
 
     @Test
@@ -166,7 +179,7 @@ class MoneyFormatTest {
     @org.junit.Test
     fun `money prints the ISO code for currencies other than KES and USD, never a template`() {
         org.junit.Assert.assertEquals("KSh 1,000", money(100_000, "KES"))
-        org.junit.Assert.assertEquals("$1,000.00", money(100_000, "USD"))
+        org.junit.Assert.assertEquals("US$ 1,000.00", money(100_000, "USD"))
         org.junit.Assert.assertEquals("EUR 12.50", money(1_250, "eur"))
         org.junit.Assert.assertFalse(money(1_250, "eur").contains("{"))
     }

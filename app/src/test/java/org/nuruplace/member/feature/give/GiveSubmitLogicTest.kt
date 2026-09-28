@@ -113,10 +113,18 @@ class GiveSubmitLogicTest {
     @Test
     fun `a method this form cannot take is never sent, for any frequency`() {
         // A card (no Stripe SDK here — its intents sat "processing" for ever),
-        // PayPal's dollars on a shilling form, and a switched-off rail.
-        listOf(cardLive, paypalLive, airtelSoon, mpesa.copy(enabled = false, unavailableReason = "unavailable")).forEach { m ->
+        // a currency the form cannot express, and switched-off rails.
+        listOf(
+            cardLive, paypalLive.copy(currency = "EUR"), airtelSoon,
+            mpesa.copy(enabled = false, unavailableReason = "unavailable"),
+            paypalLive.copy(enabled = false, unavailableReason = "coming_soon"),
+        ).forEach { m ->
             listOf(FREQ_ONCE, FREQ_WEEKLY, FREQ_MONTHLY).forEach { f ->
-                val s = plan(f, m)
+                // An amount in both currencies, so only the method can refuse it.
+                val s = planGiveSubmission(
+                    freq = f, method = m, fundId = "tithe", amountMajor = 1_000, coverFee = false,
+                    phone = "+254700000000", accountName = "", idempotencyKey = "k", usdCents = 2_500,
+                )
                 assertTrue("${m.key} · freq $f", s is GiveSubmission.Blocked)
                 assertEquals(METHOD_SOON_MESSAGE, (s as GiveSubmission.Blocked).message)
             }
@@ -154,6 +162,80 @@ class GiveSubmitLogicTest {
         assertEquals("+254711222333", other.body.phoneNumber)
         val noneOnFile = plan(FREQ_MONTHLY, mpesa, phone = "0711222333", phoneOnFile = null) as GiveSubmission.Schedule
         assertEquals("+254711222333", noneOnFile.body.phoneNumber)
+    }
+
+    // ── PayPal in dollars (Giving Cycle 2) ──
+
+    private fun planUsd(usdCents: Int, freq: Int = FREQ_ONCE, amountMajor: Int = 1000, coverFee: Boolean = false, pledgeId: String? = null, needId: String? = null) =
+        planGiveSubmission(
+            freq = freq, method = paypalLive, fundId = "mission", amountMajor = amountMajor, coverFee = coverFee,
+            phone = "+254700000000", accountName = "", idempotencyKey = "idem-usd", pledgeId = pledgeId, needId = needId,
+            usdCents = usdCents,
+        )
+
+    @Test
+    fun `PayPal sends US dollars in cents, never the shilling amount`() {
+        val b = (planUsd(usdCents = 2_550, amountMajor = 1_000) as GiveSubmission.Intent).body
+        assertEquals("USD", b.currency)
+        assertEquals(2_550, b.amountMinor) // US$ 25.50 — not KSh 1,000's 100000
+        assertEquals("paypal", b.method)
+        assertNull(b.phoneNumber) // PayPal prompts no phone
+        assertNull(b.coverFeeMinor) // the M-Pesa fee is not PayPal's
+        // Covering the fee on the shilling form never leaks into a dollar gift.
+        assertEquals(2_550, (planUsd(usdCents = 2_550, coverFee = true) as GiveSubmission.Intent).body.amountMinor)
+        // No dollar amount → nothing is sent, whatever the shillings say.
+        assertEquals("Enter an amount to give.", (planUsd(usdCents = 0, amountMajor = 5_000) as GiveSubmission.Blocked).message)
+    }
+
+    @Test
+    fun `the shilling form never sends dollars, and switching back restores it`() {
+        val kes = plan(FREQ_ONCE, mpesa, amount = 1_000) as GiveSubmission.Intent
+        assertEquals("KES", kes.body.currency)
+        assertEquals(100_000, kes.body.amountMinor)
+        // The dollar amount the form also holds is ignored on M-Pesa.
+        val withDollars = planGiveSubmission(
+            freq = FREQ_ONCE, method = mpesa, fundId = "tithe", amountMajor = 1_000, coverFee = false,
+            phone = "0711222333", accountName = "", idempotencyKey = "k", usdCents = 9_999,
+        ) as GiveSubmission.Intent
+        assertEquals(100_000, withDollars.body.amountMinor)
+        assertEquals("KES", withDollars.body.currency)
+    }
+
+    @Test
+    fun `PayPal keeps to its own range and never recurs`() {
+        assertTrue(planUsd(usdCents = 100) is GiveSubmission.Intent) // US$ 1.00
+        assertEquals(
+            "PayPal gifts are from US$ 1.00 to US$ 10,000.00.",
+            (planUsd(usdCents = 99) as GiveSubmission.Blocked).message,
+        )
+        assertTrue(planUsd(usdCents = 1_000_001) is GiveSubmission.Blocked)
+        assertEquals(RECURRING_BLOCKED_MESSAGE, (planUsd(usdCents = 2_500, freq = FREQ_MONTHLY) as GiveSubmission.Blocked).message)
+    }
+
+    @Test
+    fun `a pledge or need is never paid in dollars`() {
+        assertEquals(BOUND_IN_SHILLINGS_MESSAGE, (planUsd(usdCents = 2_500, pledgeId = "p1") as GiveSubmission.Blocked).message)
+        assertEquals(BOUND_IN_SHILLINGS_MESSAGE, (planUsd(usdCents = 2_500, needId = "n1") as GiveSubmission.Blocked).message)
+    }
+
+    @Test
+    fun `a changed dollar amount never replays a held key`() {
+        val shape = gift.copy(methodId = "paypal", usdCents = 2_500)
+        val held = giveKeyFor(null, shape, fresh)
+        assertTrue(giveKeyFor(held, shape.copy(usdCents = 5_000), fresh).key != held.key)
+        assertEquals(held.key, giveKeyFor(held, shape, fresh).key)
+    }
+
+    // ── Cover the fee (Giving Cycle 2) ──
+
+    @Test
+    fun `covering the fee names the fee inside the total`() {
+        val covered = (plan(FREQ_ONCE, mpesa, coverFee = true) as GiveSubmission.Intent).body
+        assertEquals(101_300, covered.amountMinor) // still the TOTAL charged
+        assertEquals(1_300, covered.coverFeeMinor) // KSh 13 of it is the fee
+        assertNull((plan(FREQ_ONCE, mpesa, coverFee = false) as GiveSubmission.Intent).body.coverFeeMinor)
+        // KSh 100 has no fee to cover: nothing is named.
+        assertNull((plan(FREQ_ONCE, mpesa, coverFee = true, amount = 100) as GiveSubmission.Intent).body.coverFeeMinor)
     }
 
     @Test

@@ -1,8 +1,9 @@
 // Giving Cycle 1 — HOW a gift is paid. The method list is the server's word
 // (GET /giving/methods) narrowed to what this app can carry: a card (no Stripe
-// SDK) and PayPal's dollars (a shilling form) are never selectable, a rail
-// the server switched off never is, and no answer at all leaves M-Pesa alone.
-// The prompt number follows the server's own Kenyan-mobile rule exactly.
+// SDK) is never selectable, a rail the server switched off never is, and no
+// answer at all leaves M-Pesa alone. Cycle 2: PayPal is selectable in dollars
+// — but never for a pledge or need, which stay in shillings. The prompt
+// number follows the server's own Kenyan-mobile rule exactly.
 package org.nuruplace.member.feature.give
 
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -90,12 +91,37 @@ class GiveMethodsLogicTest {
         val options = giveMethodOptions(json.decodeFromString<GivingMethodsRes>(live)).associateBy { it.key }
         assertTrue(options.getValue("mpesa").selectable)
         assertFalse("switched off", options.getValue("airtel").selectable)
-        assertFalse("USD on a KSh form", options.getValue("paypal").selectable)
+        assertTrue("PayPal, live, in dollars", options.getValue("paypal").selectable)
+        assertTrue(options.getValue("paypal").inDollars)
+        assertFalse(options.getValue("mpesa").inDollars)
         assertFalse("disabled card", options.getValue("card").selectable)
         // Even live, a card is not selectable here — no Stripe SDK to confirm it.
         assertFalse(options.getValue("card").copy(enabled = true).selectable)
-        // A live Airtel in shillings would be.
+        // A live Airtel in shillings would be; PayPal switched off is not.
         assertTrue(options.getValue("airtel").copy(enabled = true).selectable)
+        assertFalse(options.getValue("paypal").copy(enabled = false, unavailableReason = "coming_soon").selectable)
+        // A currency the form cannot express is never selectable.
+        assertFalse(options.getValue("paypal").copy(currency = "EUR").selectable)
+    }
+
+    @Test
+    fun `a pledge or need stays in shillings, so a dollar rail is not offered for one`() {
+        val res = json.decodeFromString<GivingMethodsRes>(live)
+        val options = giveMethodOptions(res)
+        val paypal = options.single { it.key == "paypal" }
+        assertTrue(paypal.selectableFor(bound = false))
+        assertFalse(paypal.selectableFor(bound = true))
+        assertTrue(options.single { it.key == "mpesa" }.selectableFor(bound = true))
+        // Picked PayPal, then bound (a pledge's Pay) → the form falls back to M-Pesa.
+        assertEquals("paypal", effectiveGiveMethod("paypal", res, options, bound = false)?.key)
+        assertEquals("mpesa", effectiveGiveMethod("paypal", res, options, bound = true)?.key)
+        // A PayPal-only server leaves a bound form with nothing to give with.
+        val paypalOnly = res.copy(methods = res.methods.map { if (it.key == "mpesa") it.copy(enabled = false, unavailableReason = "unavailable") else it }, defaultMethod = "paypal")
+        assertEquals("paypal", effectiveGiveMethod(null, paypalOnly, giveMethodOptions(paypalOnly))?.key)
+        assertNull(effectiveGiveMethod(null, paypalOnly, giveMethodOptions(paypalOnly), bound = true))
+        // The row says why on a bound form.
+        assertEquals("USD", methodChipLabel(paypal, bound = true))
+        assertEquals("SOON", methodChipLabel(paypal.copy(enabled = false, unavailableReason = "coming_soon"), bound = true))
     }
 
     @Test
@@ -119,9 +145,11 @@ class GiveMethodsLogicTest {
         // A pick the form cannot take (switched off, a card) falls back.
         assertEquals("mpesa", effectiveGiveMethod("airtel", res, options)?.key)
         assertEquals("mpesa", effectiveGiveMethod("card", res, options)?.key)
+        // A pick it can take stands.
+        assertEquals("paypal", effectiveGiveMethod("paypal", res, options)?.key)
         // A default this form cannot take is skipped for the first it can.
-        val paypalFirst = res.copy(defaultMethod = "paypal")
-        assertEquals("mpesa", defaultGiveMethod(paypalFirst, giveMethodOptions(paypalFirst)))
+        val cardFirst = res.copy(defaultMethod = "card")
+        assertEquals("mpesa", defaultGiveMethod(cardFirst, giveMethodOptions(cardFirst)))
         // Nothing selectable at all → no method (the plan says giving is unavailable).
         val allOff = json.decodeFromString<GivingMethodsRes>(
             """{"methods":[{"key":"mpesa","label":"M-Pesa","enabled":false,"unavailable_reason":"unavailable"}],"default_method":null}""",
@@ -135,7 +163,6 @@ class GiveMethodsLogicTest {
         val options = giveMethodOptions(res).associateBy { it.key }
         assertEquals("SOON", methodChipLabel(options["airtel"]))
         assertEquals("SOON", methodChipLabel(options["card"]))
-        assertEquals("SOON", methodChipLabel(options["paypal"]))
         assertEquals("SOON", methodChipLabel(null)) // not listed by the server
         assertEquals("UNAVAILABLE", methodChipLabel(options.getValue("mpesa").copy(enabled = false, unavailableReason = "unavailable")))
     }

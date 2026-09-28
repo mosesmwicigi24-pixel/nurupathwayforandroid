@@ -57,11 +57,11 @@ fun receiptReferenceLabel(d: GivingDetail): String {
     }
 }
 
-/** ("KSh", "500") / ("$", "12.50") — the hero's small currency mark beside the
- *  big number. Currency-aware like [money] (a PayPal gift settles in USD). */
+/** ("KSh", "500") / ("US$", "12.50") — the hero's small currency mark beside
+ *  the big number. Currency-aware like [money] (a PayPal gift settles in USD). */
 fun receiptAmountParts(minor: Int, currency: String?): Pair<String, String> {
     val s = money(minor, currency)
-    return if (s.startsWith("$")) "$" to s.drop(1) else s.substringBefore(' ') to s.substringAfter(' ')
+    return s.substringBefore(' ') to s.substringAfter(' ')
 }
 
 /** How a not-yet-succeeded gift is chipped; null = succeeded (the green check says it). */
@@ -91,6 +91,19 @@ fun receiptEyebrow(chip: ReceiptChip?): String = when (chip?.tone) {
     ReceiptTone.Waiting -> "GIFT PENDING"
     ReceiptTone.NotCompleted -> "GIFT NOT COMPLETED"
     ReceiptTone.Refunded -> "GIFT REFUNDED"
+}
+
+/** Gift · Fee cover · Total — the receipt's amount rows when the member
+ *  covered the fee (fee_cover_minor > 0, Giving Cycle 2): amount_minor is the
+ *  total charged, so the gift is the total less the fee. Null otherwise (the
+ *  hero's one amount says it all). */
+fun receiptFeeRows(d: GivingDetail): List<Pair<String, String>>? {
+    val fee = d.feeCoverMinor?.takeIf { it > 0 && it < d.amountMinor } ?: return null
+    return listOf(
+        "Gift" to money(d.amountMinor - fee, d.currency),
+        "Fee cover" to "${money(fee, d.currency)} · covered by you",
+        "Total" to money(d.amountMinor, d.currency),
+    )
 }
 
 /** Why a gift that did not go through failed — the server's reason and hint,

@@ -103,6 +103,8 @@ data class GiveRequestShape(
     val giftName: String,
     val coverFee: Boolean,
     val phone: String,
+    /** The dollar amount (PayPal, Giving Cycle 2); 0 on the shilling form. */
+    val usdCents: Int = 0,
 )
 
 /** The idempotency key held for one submission, and the gift it was minted for. */
@@ -148,6 +150,13 @@ fun frequencyWire(freq: Int): String = when (freq) {
  *   (GiveMethodsLogic.effectiveGiveMethod); null means the form has none it
  *   can take, and one this form cannot take (SOON) is blocked for every
  *   frequency — so a card or a switched-off rail is never sent.
+ * @param amountMajor the shilling form's amount (whole KSh).
+ * @param usdCents the dollar form's amount (Giving Cycle 2). Which of the two
+ *   is sent is the METHOD's currency's choice, never the caller's: a dollar
+ *   rail (PayPal) sends currency USD and these cents, with no fee cover and
+ *   no phone; a shilling rail sends KSh. A KSh number never goes to PayPal.
+ * @param coverFee the fee rides inside amount_minor (the total charged) and
+ *   is named in cover_fee_minor so the receipt can split it (Cycle 2).
  * @param phone the number the prompt goes to, for a rail that prompts one
  *   (E.164 from the number sheet); none, or not a Kenyan mobile, is blocked
  *   before any request.
@@ -171,14 +180,21 @@ fun planGiveSubmission(
     pledgeId: String? = null,
     needId: String? = null,
     phoneOnFile: String? = null,
+    usdCents: Int = 0,
 ): GiveSubmission {
-    if (amountMajor <= 0) return GiveSubmission.Blocked("Enter an amount to give.")
+    val dollars = method?.inDollars == true
+    if ((if (dollars) usdCents else amountMajor) <= 0) return GiveSubmission.Blocked("Enter an amount to give.")
     if (method == null) return GiveSubmission.Blocked(NO_METHOD_MESSAGE)
     if (!method.selectable) return GiveSubmission.Blocked(METHOD_SOON_MESSAGE)
-    val amountMinor = chargedAmountMajor(amountMajor, coverFee) * 100
+    // A pledge or a need is kept in shillings (the form never offers a dollar
+    // rail for one; this holds even if it did).
+    if (dollars && (pledgeId != null || needId != null)) return GiveSubmission.Blocked(BOUND_IN_SHILLINGS_MESSAGE)
+    val currency = if (dollars) USD_CURRENCY else GIVE_FORM_CURRENCY
+    val split = if (dollars) FeeSplit(giftMinor = usdCents, feeMinor = 0) else feeSplit(amountMajor, coverFee)
+    val amountMinor = split.totalMinor
     // The rail's own limits, as the server sent them (it checks again).
     if (amountMinor < method.minMinor || (method.maxMinor > 0 && amountMinor > method.maxMinor)) {
-        return GiveSubmission.Blocked("${method.label} gifts are from ${kshMinor(method.minMinor)} to ${kshMinor(method.maxMinor)}.")
+        return GiveSubmission.Blocked("${method.label} gifts are from ${money(method.minMinor, currency)} to ${money(method.maxMinor, currency)}.")
     }
     val prompt = if (method.needsPhone) {
         kenyanMobileE164(phone)
@@ -191,13 +207,14 @@ fun planGiveSubmission(
             GiveBody(
                 fund = fundId,
                 amountMinor = amountMinor,
-                currency = GIVE_FORM_CURRENCY,
+                currency = currency,
                 method = method.key,
                 phoneNumber = prompt,
                 accountName = accountName.trim().ifBlank { null },
                 idempotencyKey = idempotencyKey,
                 pledgeId = pledgeId,
                 needId = needId,
+                coverFeeMinor = split.feeMinor.takeIf { it > 0 },
             ),
         )
     } else {
@@ -208,7 +225,7 @@ fun planGiveSubmission(
             CreateScheduleBody(
                 fund = fundId,
                 amountMinor = amountMinor,
-                currency = GIVE_FORM_CURRENCY,
+                currency = currency,
                 frequency = frequencyWire(freq),
                 method = method.key,
                 idempotencyKey = idempotencyKey,
@@ -218,9 +235,6 @@ fun planGiveSubmission(
         )
     }
 }
-
-/** "KSh 250,000" from minor units (a rail's limits are int64 on the wire). */
-private fun kshMinor(minor: Long): String = "KSh " + "%,d".format(minor / 100)
 
 // ── A refused gift (Giving Cycle 1) ──
 

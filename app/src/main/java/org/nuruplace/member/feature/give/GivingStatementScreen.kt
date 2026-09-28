@@ -106,9 +106,6 @@ private fun dayHeader(date: LocalDate?): String =
 private fun timeLabel(iso: String?): String =
     parseNairobi(iso)?.format(TIME_FMT) ?: ""
 
-/** Year a record belongs to — prefer settledAt, fall back to createdAt. */
-private fun recordYear(r: GivingRecord): Int? =
-    (parseNairobi(r.settledAt) ?: parseNairobi(r.createdAt))?.year
 
 // ── Status chip (shared visual for statement rows + receipt) ──────────────────
 @Composable
@@ -147,7 +144,8 @@ fun GivingStatementScreen(
         val currentYear = LocalDate.now(NAIROBI).year
         val settled = records.filter { it.status == "succeeded" || it.status == "settled" }
         val targetYear = if (period == 0) currentYear else currentYear - 1
-        val periodRecords = settled.filter { recordYear(it) == targetYear }
+        // The Nairobi year a gift was made in — the server's statement rule.
+        val periodRecords = settled.filter { givingYear(it) == targetYear }
         val split = givingSplit(periodRecords)
         val hero = givingHero(split)
         val group = pledgeGroup(split)
@@ -214,9 +212,11 @@ fun GivingStatementScreen(
                                 .background(Color.White.copy(alpha = 0.10f))
                                 .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
                                 .clickable {
+                                    // The year on screen (Giving Cycle 2) — the
+                                    // PDF used to be every year whatever the chip said.
                                     pdfScope.launch {
-                                        openPdfAuthed(pdfCtx, "nuru-giving-statement.pdf") {
-                                            Net.client.api.givingStatementPdf()
+                                        openPdfAuthed(pdfCtx, "nuru-giving-statement-$targetYear.pdf") {
+                                            Net.client.api.givingStatementPdf(targetYear)
                                         }
                                     }
                                 },
@@ -239,11 +239,16 @@ fun GivingStatementScreen(
                         modifier = Modifier.padding(top = 16.dp),
                     )
                     Text(
-                        ksh(hero.amountMinor),
+                        hero.primary,
                         style = giSerif(34, FontWeight.SemiBold, -1f),
                         color = Color.White,
                         modifier = Modifier.padding(top = 2.dp),
                     )
+                    // Another currency (a PayPal gift in dollars): "+ US$ 20.00",
+                    // never added into the shillings.
+                    hero.extra?.let {
+                        Text(it, style = giInter(15, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.85f))
+                    }
                     hero.pledgeLine?.let {
                         Text(
                             it,
@@ -306,8 +311,9 @@ fun GivingStatementScreen(
                         .padding(16.dp),
                 ) {
                     Text("BY FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                    val byFund = split.gifts.groupBy { it.fund }
-                    if (byFund.isEmpty()) {
+                    // One row per fund per currency — never one sum across them.
+                    val entries = fundLines(split.gifts)
+                    if (entries.isEmpty()) {
                         Text(
                             "No settled gifts $periodLabel.",
                             style = giInter(13),
@@ -315,9 +321,8 @@ fun GivingStatementScreen(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     } else {
-                        val entries = byFund.entries.toList()
-                        entries.forEachIndexed { idx, (fund, recs) ->
-                            val f = giveFund(fund)
+                        entries.forEachIndexed { idx, line ->
+                            val f = giveFund(line.fund)
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -332,13 +337,13 @@ fun GivingStatementScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text(f.name, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
                                     Text(
-                                        "${recs.size} gift${if (recs.size == 1) "" else "s"}",
+                                        "${line.count} gift${if (line.count == 1) "" else "s"}",
                                         style = giInter(11),
                                         color = GIVE.tertiary,
                                     )
                                 }
                                 Text(
-                                    ksh(recs.sumOf { it.amountMinor }),
+                                    money(line.minor, line.currency),
                                     style = giInter(13, FontWeight.SemiBold),
                                     color = GIVE.navy,
                                 )
@@ -353,7 +358,10 @@ fun GivingStatementScreen(
                     ) {
                         Text(hero.footLabel, style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.navy)
                         Spacer(Modifier.weight(1f))
-                        Text(ksh(split.giftsMinor), style = giSerif(18, FontWeight.Bold), color = GIVE.gold)
+                        Text(
+                            moneyTotals(split.giftsSums), style = giSerif(18, FontWeight.Bold), color = GIVE.gold,
+                            textAlign = TextAlign.End, modifier = Modifier.weight(2f, fill = false),
+                        )
                     }
                 }
 
@@ -726,6 +734,8 @@ fun GivingReceiptScreen(transactionId: String, onBack: () -> Unit, onOpenStateme
                         .border(1.dp, GIVE.border, RoundedCornerShape(20.dp))
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                 ) {
+                    // Gift · Fee cover · Total when the member covered the fee.
+                    receiptFeeRows(d)?.forEach { (label, value) -> ReceiptRow(label, value) }
                     ReceiptRow("Fund", receiptFundName(d))
                     // Plain for now: the pledge sheet lives inside PartnersScreen
                     // and has no route of its own to navigate to.

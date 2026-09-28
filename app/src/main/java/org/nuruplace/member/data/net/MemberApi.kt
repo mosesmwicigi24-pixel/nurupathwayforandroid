@@ -503,9 +503,11 @@ interface MemberApi {
     // Giving statement / single-gift receipt as PDFs (financial/index.ts:71,88).
     // Fetched through the authed client (never a ?token= browser URL — that
     // would leak the JWT into browser history).
+    // One year when asked (Giving Cycle 2: the year on screen); null = the
+    // complete record.
     @retrofit2.http.Streaming
     @GET("giving/statement.pdf")
-    suspend fun givingStatementPdf(): okhttp3.ResponseBody
+    suspend fun givingStatementPdf(@Query("year") year: Int? = null): okhttp3.ResponseBody
 
     @retrofit2.http.Streaming
     @GET("giving/transactions/{id}/receipt.pdf")

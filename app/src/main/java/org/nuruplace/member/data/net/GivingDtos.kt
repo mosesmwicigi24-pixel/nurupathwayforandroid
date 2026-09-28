@@ -35,6 +35,9 @@ data class GivingRecord(
     /** Why a failed gift failed (Giving Cycle 1). Null unless it failed, and
      *  from an older server. */
     val failure: GiftFailure? = null,
+    /** How much of amount_minor was the fee the member covered (Giving Cycle
+     *  2); null when none. */
+    val feeCoverMinor: Int? = null,
 )
 
 /**
@@ -165,6 +168,9 @@ data class GivingDetail(
     val congregation: String? = null,
     /** Why it failed (status failed), else null — Giving Cycle 1. */
     val failure: GiftFailure? = null,
+    /** How much of amount_minor was the fee the member covered (Giving Cycle
+     *  2); null when none. The receipt reads Gift · Fee cover · Total. */
+    val feeCoverMinor: Int? = null,
 )
 
 @Serializable
@@ -187,6 +193,10 @@ data class GiveBody(
     // the need is its own giving target, written at giving time so progress
     // is exact. 422 server-side unless the need is approved and open.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val needId: String? = null,
+    /** "Cover the fee" (Giving Cycle 2): how much of amount_minor (still the
+     *  TOTAL charged) is the fee the member covered — whole shillings, at most
+     *  half the gift. Omitted when none. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val coverFeeMinor: Int? = null,
 )
 
 /** POST /giving/schedules — a real server-charged recurring gift (money §5.6:

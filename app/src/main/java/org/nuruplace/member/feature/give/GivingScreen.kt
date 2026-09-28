@@ -119,20 +119,11 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.Moment
 import java.time.Instant
 import java.time.LocalDate
-import java.time.OffsetDateTime
 import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
 
 private fun freqLabel(f: Int): String = when (f) { 0 -> "one-time"; 1 -> "weekly"; else -> "monthly" }
-
-/** Parse an ISO-8601 timestamp's year, best-effort. */
-private fun isoYear(iso: String?): Int? =
-    iso?.takeIf { it.isNotBlank() }?.let { s ->
-        runCatching { OffsetDateTime.parse(s).year }.getOrNull()
-            ?: runCatching { LocalDate.parse(s.take(10)).year }.getOrNull()
-            ?: s.take(4).toIntOrNull()
-    }
 
 /** "12 Mar 2026" — an ISO timestamp's Nairobi day (the day the member lives
  *  it, as the statement and receipt date theirs), best-effort — falls back to
@@ -242,7 +233,7 @@ fun GivingScreen(
     if (d == null) {
         // First load only — every later refetch keeps the values on screen.
         Column(Modifier.fillMaxSize().background(GIVE.paper)) {
-            GiveHeaderBand(segmentControl, yearTotalMinor = null, onOpenStatement = onOpenStatement)
+            GiveHeaderBand(segmentControl, yearTotals = null, onOpenStatement = onOpenStatement)
             Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = GIVE.gold)
             }
@@ -254,13 +245,15 @@ fun GivingScreen(
 
 /** The ONE cream band over the Give segment: the segment control, the title,
  *  the subline, then the year pill (→ statement) beside the eye that masks
- *  it. `yearTotalMinor == null` while history is still loading — the pill
- *  waits, the rest does not. A bound gift is said by the PAYING YOUR PLEDGE /
- *  GIVING TO A NEED card in the body, not by a chip here. */
+ *  it. `yearTotals == null` while history is still loading — the pill waits,
+ *  the rest does not. The pill is per currency ("KSh 3,500 + US$ 20.00 given
+ *  this year", Giving Cycle 2) — a dollar gift is never added to shillings.
+ *  A bound gift is said by the PAYING YOUR PLEDGE / GIVING TO A NEED card in
+ *  the body, not by a chip here. */
 @Composable
 private fun GiveHeaderBand(
     segmentControl: @Composable () -> Unit,
-    yearTotalMinor: Int?,
+    yearTotals: List<CurrencyAmount>?,
     onOpenStatement: () -> Unit,
 ) {
     val hidden = AppPrefs.hideGiveYearTotal
@@ -269,7 +262,7 @@ private fun GiveHeaderBand(
             segmentControl()
             Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 14.dp))
             Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
-            if (yearTotalMinor != null) {
+            if (yearTotals != null) {
                 Row(
                     Modifier.padding(top = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -285,7 +278,7 @@ private fun GiveHeaderBand(
                     ) {
                         Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                         Text(
-                            (if (hidden) "KSh ••••" else ksh(yearTotalMinor)) + " given this year",
+                            (if (hidden) "KSh ••••" else moneyTotals(yearTotals)) + " given this year",
                             style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow,
                         )
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
@@ -376,24 +369,14 @@ private fun GiveTab(
     var target by remember { mutableStateOf(preset?.takeIf { it.isTargeted }) }
     var fundId by remember { mutableStateOf(seed.fundId) }
     var amountMajor by remember { mutableIntStateOf(seed.amountMajor) }
+    // The dollar form's own amount (PayPal, Giving Cycle 2) — kept apart, so
+    // switching back to M-Pesa finds the shillings untouched.
+    var usdCents by remember { mutableIntStateOf(DEFAULT_USD_CENTS) }
     var customOpen by remember { mutableStateOf(false) }
     // "Named giving" (custom sheet, optional): set from the custom-amount
     // dialog. Rides the M-Pesa AccountReference + persists for
     // receipts/statements/portal Finance.
     var accountName by remember { mutableStateOf("") }
-    if (customOpen) {
-        CustomAmountDialog(
-            initial = amountMajor,
-            initialName = accountName.ifBlank { AppPrefs.lastGivingAccountName },
-            onConfirm = { amt, name ->
-                amountMajor = amt
-                accountName = name.orEmpty()
-                if (!name.isNullOrBlank()) AppPrefs.lastGivingAccountName = name
-                customOpen = false
-            },
-            onDismiss = { customOpen = false },
-        )
-    }
     // 0 once / 1 weekly / 2 monthly (FREQ_* in GiveSubmitLogic.kt). Always
     // starts on One-time (Giving Cycle 1): recurring is a deliberate pick,
     // and a bound gift (a pledge's Pay, a need's Give) is one-time anyway.
@@ -401,12 +384,30 @@ private fun GiveTab(
     // The rows keep their look and the member's order (GIVE_METHODS); which
     // are selectable is the server's word, re-read on every refetch
     // (GiveMethodsLogic.kt). A pick stands only while it stays selectable —
-    // otherwise the form falls back to the server's default rail.
+    // otherwise the form falls back to the server's default rail — and a
+    // pledge or need keeps to shillings (no dollar rail while bound).
     val methods = remember { mutableStateListOf(*GIVE_METHODS.toTypedArray()) }
     val options = remember(methodsRes) { giveMethodOptions(methodsRes) }
     var pickedMethod by remember { mutableStateOf<String?>(null) }
-    val method = effectiveGiveMethod(pickedMethod, methodsRes, options)
+    val method = effectiveGiveMethod(pickedMethod, methodsRes, options, bound = target != null)
+    // PayPal settles in US dollars: the amount entry speaks dollars with cents.
+    val inDollars = method?.inDollars == true
     var coverFee by remember { mutableStateOf(false) }
+    if (customOpen) {
+        CustomAmountDialog(
+            initial = amountMajor,
+            initialName = accountName.ifBlank { AppPrefs.lastGivingAccountName },
+            dollars = if (inDollars) DollarEntry(usdCents, method?.minMinor ?: 100, method?.maxMinor ?: 0) else null,
+            onConfirm = { amt, name ->
+                // In dollars the amount is cents; in shillings, whole KSh.
+                if (inDollars) usdCents = amt else amountMajor = amt
+                accountName = name.orEmpty()
+                if (!name.isNullOrBlank()) AppPrefs.lastGivingAccountName = name
+                customOpen = false
+            },
+            onDismiss = { customOpen = false },
+        )
+    }
     // The number the prompt goes to: the member's pick on the number sheet,
     // else the last number this device prompted, else the profile's.
     var chosenPhone by remember { mutableStateOf<String?>(null) }
@@ -420,6 +421,7 @@ private fun GiveTab(
     // it prompted — the sent request's, or the waiting prompt's when the
     // ceremony follows one (GIFT_IN_PROGRESS), whose number is not known.
     var resultAmountMinor by remember { mutableIntStateOf(0) }
+    var resultCurrency by remember { mutableStateOf(GIVE_FORM_CURRENCY) }
     var resultGiftName by remember { mutableStateOf<String?>(null) }
     var resultPhone by remember { mutableStateOf<String?>(null) }
     // The server's words when the ceremony follows a prompt already waiting.
@@ -474,7 +476,7 @@ private fun GiveTab(
         GiveResult(
             // A bound gift's fund is the server's to name (pays_to); the
             // chooser's tile was never shown, so it is never the fallback.
-            r, amountMinor = resultAmountMinor,
+            r, amountMinor = resultAmountMinor, currency = resultCurrency,
             chipFundLabel = if (target != null) target?.paysTo?.name?.takeIf { it.isNotBlank() } else giveFund(fundId).name,
             giftName = resultGiftName,
             promptPhone = resultPhone,
@@ -518,10 +520,9 @@ private fun GiveTab(
         return
     }
 
-    val thisYear = LocalDate.now().year
-    val yearTotalMinor = history
-        .filter { it.status in listOf("succeeded", "settled") && (isoYear(it.settledAt ?: it.createdAt) == thisYear) }
-        .sumOf { it.amountMinor }
+    // This Nairobi year's settled giving, per currency — the statement's rule.
+    val thisYear = LocalDate.now(java.time.ZoneId.of("Africa/Nairobi")).year
+    val yearTotals = currencySums(history.filter { it.status in listOf("succeeded", "settled") && givingYear(it) == thisYear })
 
     // Running or paused — a paused schedule still stands until it is cancelled.
     val liveSchedules = schedules.filter { scheduleCancellable(it.status) }
@@ -556,6 +557,7 @@ private fun GiveTab(
                             onUnbind()
                         }
                         resultAmountMinor = plan.body.amountMinor
+                        resultCurrency = plan.body.currency
                         resultGiftName = plan.body.accountName
                         resultPhone = plan.body.phoneNumber
                         ceremonyNote = null
@@ -596,6 +598,7 @@ private fun GiveTab(
                                 onUnbind()
                             }
                             resultAmountMinor = waiting.amountMinor
+                            resultCurrency = waiting.currency
                             resultGiftName = waiting.accountName?.trim()?.ifBlank { null }
                             resultPhone = null
                             ceremonyNote = next.message
@@ -628,14 +631,17 @@ private fun GiveTab(
             GiveRequestShape(
                 amountMajor = amountMajor, fundId = fundId, methodId = method?.key.orEmpty(),
                 pledgeId = target?.pledgeId, needId = target?.needId, freq = sendFreq,
-                giftName = accountName, coverFee = coverFee, phone = promptPhone.orEmpty(),
+                giftName = accountName, coverFee = coverFee && !inDollars, phone = promptPhone.orEmpty(),
+                usdCents = if (inDollars) usdCents else 0,
             ),
         ) { UUID.randomUUID().toString() }
+        // The method's currency picks the amount: dollars (with cents) for
+        // PayPal, shillings otherwise — never a KSh number with PayPal.
         val plan = planGiveSubmission(
             freq = sendFreq, method = method, fundId = fundId, amountMajor = amountMajor,
-            coverFee = coverFee, phone = promptPhone, accountName = accountName,
+            coverFee = coverFee && !inDollars, phone = promptPhone, accountName = accountName,
             idempotencyKey = attempt.key, pledgeId = target?.pledgeId,
-            needId = target?.needId, phoneOnFile = phoneOnFile,
+            needId = target?.needId, phoneOnFile = phoneOnFile, usdCents = usdCents,
         )
         when (plan) {
             is GiveSubmission.Blocked -> {
@@ -657,7 +663,7 @@ private fun GiveTab(
     Box(Modifier.fillMaxSize().background(GIVE.paper)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             // ── Header — the one cream band (segment control · title · year pill) ──
-            GiveHeaderBand(segmentControl, yearTotalMinor = yearTotalMinor, onOpenStatement = onOpenStatement)
+            GiveHeaderBand(segmentControl, yearTotals = yearTotals, onOpenStatement = onOpenStatement)
 
             // ── Body ──
             Column(
@@ -707,28 +713,40 @@ private fun GiveTab(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
-                        Text("%,d".format(amountMajor), style = giSerif(42, FontWeight.SemiBold, -1.2f), color = GIVE.navy)
+                        // PayPal speaks dollars with cents; everything else whole shillings.
+                        Text(if (inDollars) "US$" else "KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
+                        Text(
+                            if (inDollars) usd(usdCents).removePrefix("US$ ") else "%,d".format(amountMajor),
+                            style = giSerif(42, FontWeight.SemiBold, -1.2f), color = GIVE.navy,
+                        )
                     }
                     Text(
                         targetCopy?.amountSubtitle ?: "${giveFund(fundId).name} · ${freqLabel(freq)}",
                         style = giInter(11), color = GIVE.sub, textAlign = TextAlign.Center,
                         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp),
                     )
+                    if (inDollars) {
+                        Text(
+                            "PayPal gifts are in US dollars",
+                            style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow, textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                     Row(
                         Modifier.padding(top = 16.dp).horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        GIVE_PRESETS.forEach { p ->
-                            val on = amountMajor == p
+                        // Suggested amounts: shillings, or US$ 5 · 10 · 25 · 50 · 100.
+                        (if (inDollars) USD_PRESETS else GIVE_PRESETS).forEach { p ->
+                            val on = if (inDollars) usdCents == p * 100 else amountMajor == p
                             Text(
-                                "%,d".format(p),
+                                if (inDollars) "US$ $p" else "%,d".format(p),
                                 style = giInter(13, FontWeight.SemiBold),
                                 color = if (on) Color.White else GIVE.navy,
                                 modifier = Modifier.clip(Capsule)
                                     .background(if (on) GIVE.navy else GIVE.surface)
                                     .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, Capsule))
-                                    .clickable { amountMajor = p }
+                                    .clickable { if (inDollars) usdCents = p * 100 else amountMajor = p }
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             )
                         }
@@ -769,8 +787,11 @@ private fun GiveTab(
                     }
                 }
 
-                // Recurring summary — what a schedule will do, before it exists.
-                if (freq != FREQ_ONCE && targetCopy == null) {
+                // Recurring summary — what a schedule will do, before it
+                // exists; a method that cannot recur (PayPal) says so instead.
+                if (freq != FREQ_ONCE && targetCopy == null && method?.recurring == false) {
+                    Text(RECURRING_BLOCKED_MESSAGE, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(horizontal = 4.dp))
+                } else if (freq != FREQ_ONCE && targetCopy == null) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.priorityBg)
                             .border(1.dp, GIVE.gold.copy(alpha = 0.25f), RoundedCornerShape(18.dp)).padding(12.dp),
@@ -801,16 +822,24 @@ private fun GiveTab(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     methods.forEachIndexed { i, m ->
-                        // Not selectable here (switched off, a card, PayPal's
-                        // dollars) → the SOON treatment, never a tap.
+                        // Not selectable here (switched off, a card) → the
+                        // SOON treatment, never a tap. PayPal's dollars are
+                        // kept off a bound (shilling) gift, and a tap says why.
                         val option = options.firstOrNull { it.key == m.id }
-                        val soon = option?.selectable != true
+                        val soon = option?.selectableFor(bound = target != null) != true
+                        val keptForShillings = soon && option?.selectable == true
                         val on = m.id == method?.key && !soon
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
                                 .background(if (on) GIVE.priorityBg else GIVE.white)
                                 .border(if (on) 1.5.dp else 1.dp, if (on) GIVE.gold else GIVE.border, RoundedCornerShape(18.dp))
-                                .then(if (soon) Modifier.alpha(0.7f) else Modifier.clickable { pickedMethod = m.id })
+                                .then(
+                                    when {
+                                        keptForShillings -> Modifier.alpha(0.7f).clickable { error = BOUND_IN_SHILLINGS_MESSAGE }
+                                        soon -> Modifier.alpha(0.7f)
+                                        else -> Modifier.clickable { pickedMethod = m.id; if (error == BOUND_IN_SHILLINGS_MESSAGE) error = null }
+                                    },
+                                )
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -835,7 +864,7 @@ private fun GiveTab(
                             }
                             if (soon) {
                                 Box(Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 9.dp, vertical = 4.dp)) {
-                                    Text(methodChipLabel(option), style = giInter(10, FontWeight.Bold, 0.5f), color = GIVE.goldChipText)
+                                    Text(methodChipLabel(option, bound = target != null), style = giInter(10, FontWeight.Bold, 0.5f), color = GIVE.goldChipText)
                                 }
                             }
                             if (on) {
@@ -892,8 +921,8 @@ private fun GiveTab(
                     }
                 }
 
-                // Cover-fee row
-                Row(
+                // Cover-fee row — the M-Pesa fee, in shillings; not for PayPal's dollars.
+                if (!inDollars) Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.white)
                         .border(1.dp, GIVE.border, RoundedCornerShape(18.dp)).padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1009,12 +1038,15 @@ private fun GiveTab(
                     )
                     Spacer(Modifier.width(6.dp))
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.padding(end = 16.dp).size(14.dp))
-                } else if (freq != FREQ_ONCE) {
+                } else if (freq != FREQ_ONCE && !inDollars) {
                     Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Schedule ${kshMajor(chargedAmountMajor(amountMajor, coverFee))} / ${cadenceWord(freq)}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                 } else {
-                    Text("Give ${kshMajor(chargedAmountMajor(amountMajor, coverFee))}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                    Text(
+                        "Give ${if (inDollars) usd(usdCents) else kshMajor(chargedAmountMajor(amountMajor, coverFee))}",
+                        style = giInter(14, FontWeight.Bold), color = GIVE.navy,
+                    )
                     Spacer(Modifier.width(6.dp))
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
@@ -1343,6 +1375,8 @@ private fun ScheduledResult(s: GivingSchedule, body: CreateScheduleBody, phone: 
 private fun GiveResult(
     r: GivingIntentResult,
     amountMinor: Int,
+    /** The gift's currency — a PayPal gift is in US dollars. */
+    currency: String = GIVE_FORM_CURRENCY,
     chipFundLabel: String? = null,
     giftName: String? = null,
     /** The number the prompt went to (E.164), when this gift sent one. */
@@ -1370,11 +1404,46 @@ private fun GiveResult(
     var watchLapsed by remember(r.transactionId) { mutableStateOf(false) }
     // Why it failed, as the watch read it off the transaction (Giving Cycle 1).
     var failure by remember(r.transactionId) { mutableStateOf<GiftFailure?>(null) }
+    // Bumped to read the gift back after a PayPal capture settles it.
+    var watchRun by remember(r.transactionId) { mutableIntStateOf(0) }
+    // The member went to PayPal from here — coming back captures on its own.
+    var openedPayPal by remember(r.transactionId) { mutableStateOf(false) }
     val outcome = giftOutcome(status)
+
+    /** Capture the approved PayPal order. Its own answer is the status —
+     *  "succeeded" confirms; "processing" means PayPal has not released it
+     *  (not approved yet). [quiet] (the automatic capture on return) says
+     *  nothing on "not yet" or a failed call — the button below stays. */
+    fun capture(quiet: Boolean) {
+        val orderId = r.providerRef?.takeIf { it.isNotBlank() } ?: return
+        if (capturing) return
+        capturing = true
+        if (!quiet) captureError = null
+        scope.launch {
+            runCatching { Net.client.api.capturePayPal(PayPalCaptureBody(orderId)) }
+                .onSuccess { res ->
+                    if (res.status.isNotBlank()) status = res.status
+                    if (giftOutcome(res.status) == GiftOutcome.Processing) {
+                        if (!quiet) captureError = "PayPal hasn't confirmed it yet — finish approving there, then try again."
+                    } else {
+                        captureError = null
+                        watchRun++ // settled either way: read it back (the reason, if it failed)
+                    }
+                }
+                .onFailure { if (!quiet) captureError = org.nuruplace.member.data.net.ApiException.message(it) }
+            capturing = false
+        }
+    }
+    // PayPal finishes on its own (Giving Cycle 2, iOS parity): back from
+    // approving — the app resumes — the order is captured without a second tap.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (openedPayPal && r.approveUrl != null && giftOutcome(status) == GiftOutcome.Processing) capture(quiet = true)
+    }
     // The watch (iOS parity): GET /giving/transactions/{id} every 3 s, at most
     // 20 times, while the gift is processing. Ends with the ceremony.
-    LaunchedEffect(r.transactionId) {
+    LaunchedEffect(r.transactionId, watchRun) {
         if (r.transactionId.isBlank()) return@LaunchedEffect
+        watchLapsed = false
         var readings = 0
         while (keepWatchingGift(giftOutcome(status), readings)) {
             delay(CEREMONY_WATCH_INTERVAL_MS)
@@ -1430,7 +1499,7 @@ private fun GiveResult(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                giveCeremonyStatusLine(r, amountMinor, chipFundLabel, outcome, watchLapsed, failure),
+                giveCeremonyStatusLine(r, amountMinor, chipFundLabel, outcome, watchLapsed, failure, currency),
                 style = giInter(13),
                 color = when (outcome) { GiftOutcome.Succeeded -> GIVE.successText; GiftOutcome.Failed -> GIVE.danger; else -> GIVE.sub },
                 textAlign = TextAlign.Center,
@@ -1468,6 +1537,7 @@ private fun GiveResult(
                         .clickable {
                             runCatching {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.approveUrl)))
+                                openedPayPal = true
                             }
                         },
                     verticalAlignment = Alignment.CenterVertically,
@@ -1476,26 +1546,12 @@ private fun GiveResult(
                     Text("Continue on PayPal", style = giInter(14, FontWeight.SemiBold), color = Color.White)
                 }
                 Spacer(Modifier.height(10.dp))
+                // The fallback when the automatic capture on return could not
+                // confirm it (back before approving, or no answer).
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
                         .background(GIVE.white).border(1.dp, GIVE.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                        .clickable(enabled = !capturing && !r.providerRef.isNullOrBlank()) {
-                            capturing = true; captureError = null
-                            scope.launch {
-                                // The capture's own answer is the status —
-                                // "succeeded" confirms; "processing" means
-                                // PayPal hasn't released it yet.
-                                runCatching { Net.client.api.capturePayPal(PayPalCaptureBody(r.providerRef!!)) }
-                                    .onSuccess { res ->
-                                        if (res.status.isNotBlank()) status = res.status
-                                        if (giftOutcome(res.status) == GiftOutcome.Processing) {
-                                            captureError = "PayPal hasn't confirmed it yet — finish approving there, then try again."
-                                        }
-                                    }
-                                    .onFailure { captureError = org.nuruplace.member.data.net.ApiException.message(it) }
-                                capturing = false
-                            }
-                        },
+                        .clickable(enabled = !capturing && !r.providerRef.isNullOrBlank()) { capture(quiet = false) },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
@@ -1537,20 +1593,30 @@ private fun GiveResult(
  *  account name, shown on the church's M-Pesa statement (sanitized server-side). */
 private val GIVE_NAME_PRESETS = listOf("Tithe", "Offering", "Building", "Missions", "Thanksgiving", "First Fruits")
 
+/** The dollar entry's starting amount and PayPal's own range (cents). */
+private data class DollarEntry(val cents: Int, val minMinor: Long, val maxMinor: Long)
+
 // Custom giving amount — a real editor (numeric keyboard, KSh, 1..2,000,000)
-// plus an optional "Name your gift" field (named giving).
+// plus an optional "Name your gift" field (named giving). With [dollars]
+// (PayPal, Giving Cycle 2) it takes US dollars WITH cents inside PayPal's own
+// range, and confirms the amount in cents.
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CustomAmountDialog(
     initial: Int,
     initialName: String = "",
+    dollars: DollarEntry? = null,
     onConfirm: (Int, String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var text by remember { mutableStateOf(initial.toString()) }
+    var text by remember { mutableStateOf(dollars?.let { usdInput(it.cents) } ?: initial.toString()) }
     var name by remember { mutableStateOf(initialName) }
-    val parsed = text.filter { it.isDigit() }.take(7).toIntOrNull() ?: 0
-    val valid = parsed in 1..2_000_000
+    val parsed = if (dollars != null) usdCentsOf(text) ?: 0 else text.filter { it.isDigit() }.take(7).toIntOrNull() ?: 0
+    val valid = if (dollars != null) {
+        parsed >= dollars.minMinor && (dollars.maxMinor <= 0 || parsed <= dollars.maxMinor) && parsed > 0
+    } else {
+        parsed in 1..2_000_000
+    }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = GIVE.white,
@@ -1559,18 +1625,26 @@ private fun CustomAmountDialog(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 androidx.compose.material3.OutlinedTextField(
                     value = text,
-                    onValueChange = { v -> text = v.filter { it.isDigit() }.take(7) },
+                    onValueChange = { v -> text = if (dollars != null) usdTyping(v) else v.filter { it.isDigit() }.take(7) },
                     singleLine = true,
-                    prefix = { Text("KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
+                    prefix = { Text(if (dollars != null) "US$ " else "KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
                     textStyle = giSerif(24, FontWeight.SemiBold).copy(color = GIVE.navy),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                        keyboardType = if (dollars != null) {
+                            androidx.compose.ui.text.input.KeyboardType.Decimal
+                        } else {
+                            androidx.compose.ui.text.input.KeyboardType.Number
+                        },
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (!valid && text.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Enter an amount between KSh 1 and KSh 2,000,000.", style = giInter(12), color = GIVE.sub)
+                    Text(
+                        if (dollars != null) usdRangeMessage(dollars.minMinor, dollars.maxMinor.takeIf { it > 0 } ?: 1_000_000)
+                        else "Enter an amount between KSh 1 and KSh 2,000,000.",
+                        style = giInter(12), color = GIVE.sub,
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -1605,7 +1679,8 @@ private fun CustomAmountDialog(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Shows on the church's M-Pesa statement — like a Paybill account name.",
+                    if (dollars != null) "Shows on your receipt and giving statement."
+                    else "Shows on the church's M-Pesa statement — like a Paybill account name.",
                     style = giInter(10),
                     color = GIVE.tertiary,
                 )

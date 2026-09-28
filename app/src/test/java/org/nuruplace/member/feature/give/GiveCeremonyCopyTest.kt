@@ -45,8 +45,8 @@ class GiveCeremonyCopyTest {
     fun `ceremony line by provider`() {
         assertEquals("Enter your PIN to complete KSh 500 to Tithe.", giveCeremonyLine(fundOnly.copy(provider = "airtel"), 50_000, null))
         assertEquals(
-            "Continue on PayPal to complete KSh 500 to Tithe, then confirm below.",
-            giveCeremonyLine(fundOnly.copy(provider = "paypal", approveUrl = "https://paypal.example/approve"), 50_000, null),
+            "Continue on PayPal to complete US$ 25.00 to Tithe — we'll confirm it when you come back.",
+            giveCeremonyLine(fundOnly.copy(provider = "paypal", approveUrl = "https://paypal.example/approve"), 2_500, null, "USD"),
         )
         assertEquals("KSh 500 to Tithe is being processed.", giveCeremonyLine(fundOnly.copy(provider = "card"), 50_000, null))
     }

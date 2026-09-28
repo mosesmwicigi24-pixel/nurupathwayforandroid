@@ -4,12 +4,13 @@
 // 1. Which methods the form may select. The server says, on GET
 //    /giving/methods, which rails can take a member's money here and on what
 //    terms; this app adds what IT can carry to the end — an STK push (M-Pesa,
-//    Airtel) or PayPal's approve-then-capture — in the form's whole shillings.
-//    A card needs the Stripe SDK this app does not have (its intents sat
-//    "processing" for ever), and PayPal settles in US dollars the KSh form
-//    cannot express, so neither is selectable here even when the server has
-//    it live. A rail the app does not know is dropped; no answer at all (an
-//    older server, a failed call) leaves M-Pesa alone.
+//    Airtel) or PayPal's approve-then-capture — in a currency the form can
+//    express: whole shillings, or (Giving Cycle 2) US dollars with cents for
+//    PayPal. A card needs the Stripe SDK this app does not have (its intents
+//    sat "processing" for ever), so it is never selectable here even when the
+//    server has it live. A pledge or a need is kept in shillings, so a dollar
+//    rail is not offered for one. A rail the app does not know is dropped; no
+//    answer at all (an older server, a failed call) leaves M-Pesa alone.
 //
 // 2. The number the prompt goes to — the server's own Kenyan-mobile rule
 //    (financial/service.ts kenyanMobileNumber over providers.ts toMsisdn), so
@@ -21,8 +22,12 @@ package org.nuruplace.member.feature.give
 import org.nuruplace.member.data.net.GivingMethodInfo
 import org.nuruplace.member.data.net.GivingMethodsRes
 
-/** The one currency this form can express: whole Kenyan shillings. */
+/** The form's home currency: whole Kenyan shillings. */
 const val GIVE_FORM_CURRENCY = "KES"
+
+/** The currencies the form can express: shillings, and PayPal's US dollars
+ *  (with cents, GiveAmountLogic.kt). */
+private val FORM_CURRENCIES = setOf(GIVE_FORM_CURRENCY, USD_CURRENCY)
 
 /** Rails the server may list that this app has a row for. */
 private val KNOWN_METHOD_KEYS = setOf("mpesa", "airtel", "paypal", "card")
@@ -47,9 +52,17 @@ data class GiveMethodOption(
     /** It prompts a phone, so the gift needs a number. */
     val needsPhone: Boolean = false,
 ) {
-    /** Selectable on THIS form: live on the server, carried by this app, in shillings. */
+    /** Selectable on THIS form: live on the server, carried by this app, in
+     *  a currency the form can express. */
     val selectable: Boolean
-        get() = enabled && key in APP_FLOWS && (currency == null || currency.equals(GIVE_FORM_CURRENCY, ignoreCase = true))
+        get() = enabled && key in APP_FLOWS && currency?.uppercase() in FORM_CURRENCIES
+
+    /** Settles in US dollars (PayPal): the form switches to its dollar entry. */
+    val inDollars: Boolean get() = currency.equals(USD_CURRENCY, ignoreCase = true)
+
+    /** Selectable for this gift: a pledge or a need is kept in shillings, so
+     *  a dollar rail is not offered while the form is bound to one. */
+    fun selectableFor(bound: Boolean): Boolean = selectable && !(bound && inDollars)
 }
 
 /** M-Pesa on the server's own terms (FinancialService.RAILS.mpesa) — all the
@@ -82,23 +95,37 @@ private fun GivingMethodInfo.toOption() = GiveMethodOption(
 )
 
 /** Where the form starts: the server's `default_method` when this form can
- *  take it, else the first rail it can, else none at all. */
-fun defaultGiveMethod(res: GivingMethodsRes?, options: List<GiveMethodOption>): String? {
-    val selectable = options.filter { it.selectable }.map { it.key }
+ *  take it (for this gift — [bound] to a pledge or need, or not), else the
+ *  first rail it can, else none at all. */
+fun defaultGiveMethod(res: GivingMethodsRes?, options: List<GiveMethodOption>, bound: Boolean = false): String? {
+    val selectable = options.filter { it.selectableFor(bound) }.map { it.key }
     return res?.defaultMethod?.takeIf { it in selectable } ?: selectable.firstOrNull()
 }
 
 /** The method a gift goes on: the member's pick while the form can still
- *  take it, else the default — a rail switched off mid-visit is never sent. */
-fun effectiveGiveMethod(picked: String?, res: GivingMethodsRes?, options: List<GiveMethodOption>): GiveMethodOption? {
-    val key = picked?.takeIf { p -> options.any { it.key == p && it.selectable } } ?: defaultGiveMethod(res, options)
+ *  take it, else the default — a rail switched off mid-visit is never sent,
+ *  nor a dollar rail once the form is bound to a pledge or need. */
+fun effectiveGiveMethod(
+    picked: String?,
+    res: GivingMethodsRes?,
+    options: List<GiveMethodOption>,
+    bound: Boolean = false,
+): GiveMethodOption? {
+    val key = picked?.takeIf { p -> options.any { it.key == p && it.selectableFor(bound) } } ?: defaultGiveMethod(res, options, bound)
     return options.firstOrNull { it.key == key }
 }
 
 /** The chip on a method the form cannot take: "UNAVAILABLE" when the server
- *  has it switched off, else the existing "SOON". */
-fun methodChipLabel(option: GiveMethodOption?): String =
-    if (option?.unavailableReason == "unavailable") "UNAVAILABLE" else "SOON"
+ *  has it switched off, "USD" for a dollar rail kept off a bound (shilling)
+ *  gift, else the existing "SOON". */
+fun methodChipLabel(option: GiveMethodOption?, bound: Boolean = false): String = when {
+    option?.unavailableReason == "unavailable" -> "UNAVAILABLE"
+    bound && option?.selectable == true && option.inDollars -> "USD"
+    else -> "SOON"
+}
+
+/** Why a dollar rail is not offered for a bound gift — said on a tap. */
+const val BOUND_IN_SHILLINGS_MESSAGE = "PayPal gifts are in US dollars, and this one is in shillings. Choose M-Pesa to give it."
 
 // ── The prompt number ──
 
