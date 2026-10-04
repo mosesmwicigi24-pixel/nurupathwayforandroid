@@ -11,7 +11,9 @@
 // question and line under it; Back and Continue / Create pledge at the foot.
 // A total pledge walks five steps — Back from its review lands on its date.
 // Opened over the Give tab by GiveTabScreen; system back steps back, and on
-// the first step closes the flow.
+// the first step closes the flow. Once anything is entered past the first
+// step, Close (and system back on the first step) asks "Leave this pledge?"
+// first — Keep editing / Leave (EXPERIENCE.md §7.2 #7).
 //
 // "What is this pledge for?" (pledge names, contract 2026-09-25) lays the
 // server's `pledge_options` out on the step itself as grouped, selectable
@@ -71,6 +73,7 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -187,6 +190,9 @@ fun NewPledgeFlow(
     var methods by remember { mutableStateOf<GivingMethodsRes?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // How the flow began, to tell whether leaving would lose anything (§7.2 #7).
+    val began = remember { PledgeEntries(amountMajor, customText, target, customName, dueDay, dueOn, autoCharge) }
+    var confirmLeave by remember { mutableStateOf(false) }
 
     // Options come with the Partners standing; a flow opened before it
     // loaded (or from an older server) asks once itself.
@@ -232,8 +238,15 @@ fun NewPledgeFlow(
         if (idx > 0) step = steps[idx - 1]
     }
     // System back walks back through the steps, as Back does; on the first
-    // step it falls through to GiveTabScreen, which closes the flow.
+    // step it falls through to GiveTabScreen, which closes the flow — unless
+    // something entered would be lost, when it asks first (as ✕ does).
     BackHandler(enabled = idx > 0 && !busy) { back() }
+    val leaveAsks = pledgeLeaveAsks(idx, PledgeEntries(amountMajor, customText, target, customName, dueDay, dueOn, autoCharge), began)
+    BackHandler(enabled = idx == 0 && leaveAsks && !busy) { confirmLeave = true }
+    /** ✕: closes at once on an untouched first step; otherwise asks. */
+    fun close() {
+        if (leaveAsks) confirmLeave = true else onClose()
+    }
 
     fun create() {
         if (busy) return
@@ -277,7 +290,7 @@ fun NewPledgeFlow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier.size(40.dp).clip(CircleShape).background(GIVE.white).border(1.dp, GIVE.border, CircleShape)
-                            .clickable(enabled = !busy) { Haptics.tap(view); onClose() }
+                            .clickable(enabled = !busy) { Haptics.tap(view); close() }
                             .semantics { contentDescription = "Close" },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Filled.Close, null, tint = GIVE.navy, modifier = Modifier.size(16.dp)) }
@@ -590,6 +603,25 @@ fun NewPledgeFlow(
                 }
             }
         }
+    }
+
+    // Leaving part-made asks first (§7.2 #7): Keep editing / Leave.
+    if (confirmLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text(PLEDGE_LEAVE_TITLE, style = NuruType.cardTitle, color = Nuru.navy) },
+            text = { Text(PLEDGE_LEAVE_LINE, style = NuruType.body, color = Nuru.ink600) },
+            confirmButton = {
+                TextButton(onClick = { confirmLeave = false; onClose() }) {
+                    Text(PLEDGE_LEAVE_GO, style = NuruType.cardCta, color = Nuru.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmLeave = false }) {
+                    Text(PLEDGE_LEAVE_STAY, style = NuruType.cardCta, color = Nuru.navy)
+                }
+            },
+        )
     }
 }
 

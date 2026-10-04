@@ -240,4 +240,41 @@ class PledgeRequestLogicTest {
         assertEquals("M-Pesa can't take that amount.", pledgeCreateError(noAnswer = false, serverWords = "M-Pesa can't take that amount."))
         assertEquals("Couldn't create the pledge. Nothing has changed.", pledgeCreateError(noAnswer = false, serverWords = " "))
     }
+
+    // ── leaving a pledge part-made (EXPERIENCE.md §7.2 #7) ──
+
+    private val began = PledgeEntries(
+        amountMajor = NEW_PLEDGE_DEFAULT_AMOUNT, customAmount = "", target = PledgeFor.Option(general), customName = "",
+        dueDay = 4, dueOn = LocalDate.of(2027, 1, 4), autoCharge = false,
+    )
+
+    @Test
+    fun `on the first step with nothing changed, Close closes at once`() {
+        assertFalse(pledgeLeaveAsks(0, began, began))
+    }
+
+    @Test
+    fun `past the first step, Close asks — whatever was chosen`() {
+        for (step in 1..5) assertTrue("step ${step + 1}", pledgeLeaveAsks(step, began, began))
+        assertTrue(pledgeLeaveAsks(4, began.copy(amountMajor = 5_000, autoCharge = true), began))
+    }
+
+    @Test
+    fun `back on the first step after changes, Close still asks`() {
+        assertTrue(pledgeLeaveAsks(0, began.copy(amountMajor = 5_000), began))
+        assertTrue(pledgeLeaveAsks(0, began.copy(customAmount = "7500", amountMajor = 7_500), began))
+        assertTrue(pledgeLeaveAsks(0, began.copy(target = PledgeFor.Option(fund)), began))
+        assertTrue(pledgeLeaveAsks(0, began.copy(target = PledgeFor.Custom("Roof"), customName = "Roof"), began))
+        assertTrue(pledgeLeaveAsks(0, began.copy(dueDay = 15), began))
+        assertTrue(pledgeLeaveAsks(0, began.copy(dueOn = LocalDate.of(2027, 3, 1)), began))
+        assertTrue(pledgeLeaveAsks(0, began.copy(autoCharge = true), began))
+    }
+
+    @Test
+    fun `the question, in both apps' words`() {
+        assertEquals("Leave this pledge?", PLEDGE_LEAVE_TITLE)
+        assertEquals("What you entered won't be kept.", PLEDGE_LEAVE_LINE)
+        assertEquals("Keep editing", PLEDGE_LEAVE_STAY)
+        assertEquals("Leave", PLEDGE_LEAVE_GO)
+    }
 }

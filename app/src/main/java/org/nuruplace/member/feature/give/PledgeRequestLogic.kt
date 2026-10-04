@@ -238,6 +238,36 @@ internal fun newPledgeDefaultDueOn(today: LocalDate): LocalDate = today.plusMont
 
 internal fun newPledgeDueOnAllowed(d: LocalDate, today: LocalDate): Boolean = d.isAfter(today)
 
+// ── Leaving a pledge part-made (EXPERIENCE.md §7.2 #7 — rule 4: leaving
+// never loses what you typed without asking) ──
+
+/** What a pledge in progress holds past its first step: the amount (a
+ *  preset or the member's own), what it is for, its day or date, and
+ *  whether it is collected automatically. */
+internal data class PledgeEntries(
+    val amountMajor: Int,
+    val customAmount: String,
+    val target: PledgeFor,
+    val customName: String,
+    val dueDay: Int,
+    val dueOn: LocalDate,
+    val autoCharge: Boolean,
+)
+
+/** ✕ — and system back on the first step — asks before the pledge is thrown
+ *  away once the member is past the first step, or back on it after
+ *  changing anything a later step holds ([now] is not how the flow
+ *  [began]). On the first step with nothing changed it closes at once. It
+ *  used to close silently from step 5. */
+internal fun pledgeLeaveAsks(stepIndex: Int, now: PledgeEntries, began: PledgeEntries): Boolean =
+    stepIndex > 0 || now != began
+
+/** The question, in both apps' words. */
+internal const val PLEDGE_LEAVE_TITLE = "Leave this pledge?"
+internal const val PLEDGE_LEAVE_LINE = "What you entered won't be kept."
+internal const val PLEDGE_LEAVE_STAY = "Keep editing"
+internal const val PLEDGE_LEAVE_GO = "Leave"
+
 /** The two rails a pledge's collection accepts (`auto_schedule.method`). */
 private val PLEDGE_AUTO_METHODS = setOf("mpesa", "airtel")
 
