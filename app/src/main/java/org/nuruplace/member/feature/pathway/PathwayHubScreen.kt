@@ -1,8 +1,10 @@
 // Pathway tab — a faithful port of the iOS PathwayView "PathwayHub" (Features/
 // Pathway/PathwayView.swift): a light cream hero (streak · bell · progress ring ·
 // greeting · active level · progress · navy Continue card), a horizontal journey
-// rail of tappable level nodes, the selected level's real module trail (with a
-// mid-trail "Pause & surrender" image and an exam-gate row), a "Walk with your
+// rail of tappable level nodes ("You" on the member's level, "Next" on the one
+// after), the selected level's real module trail (with a mid-trail "Pause &
+// surrender" image) — folded into "20 of 20 modules done · Show" once the member
+// is past learning it (EXPERIENCE.md §6.3, PathwayTrail.kt) — a "Walk with your
 // discipler" row, a milestones badge rail, and the Summit destination card. The
 // calm all-levels list lives behind the "Map view" link (LevelsMapScreen).
 package org.nuruplace.member.feature.pathway
@@ -50,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,14 +64,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LevelModule
-import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.ModuleStatus
 import org.nuruplace.member.data.net.Net
@@ -237,7 +242,7 @@ fun PathwayHubScreen(
                 }
                 // Studying together, apart (Wave 2) — renders nothing when quiet.
                 CellPresenceLine()
-                JourneyRail(levels, selNum ?: -1, onSelect = { selected = it }, onMap = onOpenMap)
+                JourneyRail(levels, selNum ?: -1, current = currentNum, onSelect = { selected = it }, onMap = onOpenMap)
                 selLevel?.let { lv ->
                     SelectedModules(
                         level = lv,
@@ -392,7 +397,7 @@ private fun PWBar(pct: Int, fill: Brush, track: Color, height: androidx.compose.
 // ─────────────────────────── Journey rail ───────────────────────────
 
 @Composable
-private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (Int) -> Unit, onMap: () -> Unit) {
+private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, current: Int?, onSelect: (Int) -> Unit, onMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(9, 1.62f), color = PW.goldDeep)
@@ -400,14 +405,15 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
             Text("Map view", style = PW.over(9, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp)) {
-            // "Up next" — the level right after the active one (or the one
-            // whose exam is passed, waiting to be ushered), only while it is
-            // still locked: a gold ring + NEXT marker so the rail reads as a
-            // path with a visible next step, not a row of greys.
-            val activeIdx = levels.indexOfFirst { it.status == LevelStatus.ACTIVE || it.isAwaitingReview }
-            val upNextIdx = (activeIdx + 1).takeIf { activeIdx >= 0 && it < levels.size && levels[it].status == LevelStatus.LOCKED } ?: -1
+            // "You" on the member's own level — the journey's, whatever its
+            // status (walking it, every module done, its exam passed) — and
+            // "Next" on the level after it while still locked: a gold ring so
+            // the rail reads as a path with a visible next step (§6.3, iOS).
+            // It used to key on status "active" alone, so a member at their
+            // exam saw neither mark.
+            val marks = railMarks(levels, current)
             levels.forEachIndexed { i, lvl ->
-                JourneyNode(lvl, i + 1, lvl.levelNumber == selected, upNext = i == upNextIdx) { onSelect(lvl.levelNumber) }
+                JourneyNode(lvl, i + 1, lvl.levelNumber == selected, isCurrent = i == marks.you, upNext = i == marks.next) { onSelect(lvl.levelNumber) }
                 if (i < levels.size - 1) {
                     // Uncompleted connectors at 28% navy — 12% vanished on cream.
                     Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.walked) PW.gold else PW.navy.copy(alpha = 0.28f)))
@@ -418,14 +424,23 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
 }
 
 @Composable
-private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upNext: Boolean = false, onTap: () -> Unit) {
+private fun JourneyNode(
+    level: PathwayLevel,
+    number: Int,
+    selected: Boolean,
+    /** The member's own level — "▾ You" and the navy ring. */
+    isCurrent: Boolean = false,
+    /** The locked level after the member's — "▾ Next" and a gold ring. */
+    upNext: Boolean = false,
+    onTap: () -> Unit,
+) {
     // A passed exam awaiting the usher is walked ground, never a lock.
     val done = level.walked
-    val active = level.status == LevelStatus.ACTIVE
+    val active = isCurrent
     val locked = !done && !active
     Column(Modifier.width(68.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            when { active -> "▾ You"; upNext -> "▾ NEXT"; else -> " " },
+            when { active -> "▾ You"; upNext -> "▾ Next"; else -> " " },
             style = PW.over(7, 0.7f),
             color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
             modifier = Modifier.height(12.dp),
@@ -493,17 +508,23 @@ private fun SelectedModules(
         fun rank(m: LevelModule) = if (m.status == ModuleStatus.COMPLETED) 0 else if (m.status == ModuleStatus.NEXT) 1 else 2
         modules.sortedWith(compareBy({ rank(it) }, { it.moduleSequenceNumber }))
     }
-    val resume = ordered.firstOrNull { it.status == ModuleStatus.NEXT }
     // When the level owns an exam container it IS the exam entry (a visible,
-    // locked-until-ready row) — the separate gate only serves levels that have
-    // no exam module authored. Whether the gate is open, or already passed, is
-    // the journey's call (§3) — the member's own level only. (It used to hide
-    // whenever the level read "completed", which is exactly when a Level 1
-    // finisher's exam is ready.)
+    // locked-until-ready row). A level with none gets the journey's waiting
+    // step at the foot once its exam is passed — the member's own level only
+    // (§3). The open-exam gate that stood there is gone: it showed only while
+    // the hero above already showed the exam step (§6.3).
     val hasExamModule = ordered.any { it.isExam }
-    val gateStage = journey?.takeIf { !hasExamModule && ordered.isNotEmpty() && it.levelNumber == level.levelNumber }?.stage
-    val examReady = gateStage == JourneyStage.EXAM_READY
-    val examPassed = gateStage == JourneyStage.AWAITING_USHER
+    val examPassed = journey?.takeIf { !hasExamModule && ordered.isNotEmpty() && it.levelNumber == level.levelNumber }
+        ?.stage == JourneyStage.AWAITING_USHER
+    // §6.3: the trail's own exam row is not shown again while the hero shows
+    // the exam step; and once the member is past learning this level, its
+    // list folds into one row — "20 of 20 modules done · Show" — that expands.
+    val shown = if (examRowHidden(journey, level.levelNumber)) ordered.filter { !it.isExam } else ordered
+    val folds = trailFolds(journey, level.levelNumber, ordered)
+    // "Continue →" goes where the list's open row goes — never to an exam
+    // the hero already offers.
+    val resume = shown.firstOrNull { it.status == ModuleStatus.NEXT }
+    var expanded by rememberSaveable(level.levelNumber) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
@@ -519,16 +540,19 @@ private fun SelectedModules(
                 loading -> repeat(3) { ModuleSkeletonRow() }
                 ordered.isEmpty() -> Text("Modules open as you progress.", style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 else -> {
-                    ordered.forEachIndexed { i, m ->
-                        ModuleRow(m, last = (i == ordered.size - 1) && !examReady && !examPassed) {
-                            if (m.status != ModuleStatus.LOCKED) {
-                                if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
+                    if (folds) FoldedTrailRow(foldedTrailLine(ordered), expanded) { expanded = !expanded }
+                    if (!folds || expanded) {
+                        if (folds) Box(Modifier.fillMaxWidth().height(1.dp).background(PW.border))
+                        shown.forEachIndexed { i, m ->
+                            ModuleRow(m, last = (i == shown.size - 1) && !examPassed) {
+                                if (m.status != ModuleStatus.LOCKED) {
+                                    if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
+                                }
                             }
+                            if (i == 3 && shown.size > 4) SurrenderFigure()
                         }
-                        if (i == 3 && ordered.size > 4) SurrenderFigure()
+                        if (examPassed) journey?.next?.let { step -> ExamPassedRow(step) }
                     }
-                    if (examReady) journey?.next?.let { step -> ExamGateRow(step) { onOpenExam(level.levelNumber) } }
-                    if (examPassed) journey?.next?.let { step -> ExamPassedRow(step) }
                 }
             }
         }
@@ -618,29 +642,28 @@ private fun ModuleSkeletonRow() {
     }
 }
 
-/** The exam gate at the foot of the trail — the journey's own step, word for
- *  word ("Take the Level 1 exam" · its line · Begin the exam). */
+/** A finished level's trail, folded (§6.3): "20 of 20 modules done · Show"
+ *  — the whole row opens the list, and folds it again ("· Hide"). */
 @Composable
-private fun ExamGateRow(step: JourneyStep, onTap: () -> Unit) {
-    Column {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(PW.gold.copy(alpha = 0.35f)))
-        Row(
-            Modifier.fillMaxWidth().background(PW.gold.copy(alpha = 0.10f)).clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldGrad), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.EmojiEvents, null, tint = PW.navy, modifier = Modifier.size(16.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
-                Text(step.line, style = PW.t(9, FontWeight.SemiBold), color = PW.goldDeep)
-            }
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) {
-                Text(step.action?.label ?: "Begin", style = PW.over(9, 0f), color = PW.gold, maxLines = 1)
-            }
+private fun FoldedTrailRow(line: String, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(onClickLabel = if (expanded) "Hide the modules" else "Show the modules") { onToggle() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.gold.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Check, null, tint = PW.goldDeep, modifier = Modifier.size(16.dp))
         }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = PW.navy)) { append("$line · ") }
+                withStyle(SpanStyle(color = PW.gold, fontWeight = FontWeight.Bold)) { append(if (expanded) "Hide" else "Show") }
+            },
+            style = PW.t(13, FontWeight.SemiBold),
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
