@@ -877,13 +877,33 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // (never rendered long enough to need its own back-stack entry —
             // it immediately replaces itself), or back to Home (which shows
             // its own banner/mini-window) if nothing is watchable anymore.
-            composable("live-now") {
-                androidx.compose.runtime.LaunchedEffect(Unit) {
+            // `?streamId=` names the stream to open instead of the newest —
+            // a ringing Live invite's Join (LiveInvite.kt), which has already
+            // accepted by the time it lands here, so the player's first pulse
+            // finds this member on the stage; an ended stream goes Home, never
+            // to some other stream in its place.
+            composable(
+                "live-now?streamId={streamId}",
+                arguments = listOf(navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                val wanted = entry.arguments?.getString("streamId")
+                androidx.compose.runtime.LaunchedEffect(wanted) {
+                    // Already watching the invited stream: go back to THAT
+                    // player, whose own pulse picks the accept up. Opening a
+                    // second one would dispose the first — and a player that
+                    // had already started for the stage leaves it as it goes.
+                    val below = nav.previousBackStackEntry
+                    if (!wanted.isNullOrBlank() && below?.destination?.route?.startsWith("live-player") == true &&
+                        below.arguments?.getString("streamId") == wanted
+                    ) {
+                        nav.popBackStack()
+                        return@LaunchedEffect
+                    }
                     LiveDiscoveryCenter.refresh()
-                    val newest = LiveDiscoveryCenter.newestWatchable
-                    if (newest != null) {
-                        LiveDiscoveryCenter.markSeen(newest.streamId)
-                        nav.navigate(liveNowRoute(newest)) { popUpTo("home") }
+                    val target = org.nuruplace.member.feature.live.liveForwardTarget(LiveDiscoveryCenter.streams.value, wanted)
+                    if (target != null) {
+                        LiveDiscoveryCenter.markSeen(target.streamId)
+                        nav.navigate(liveNowRoute(target)) { popUpTo("home") }
                     } else {
                         nav.navigate("home") { popUpTo("home") { inclusive = true } }
                     }

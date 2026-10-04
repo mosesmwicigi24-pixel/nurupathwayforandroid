@@ -1,5 +1,5 @@
 // Push registration — runs once inside the authed shell: ensures the notification
-// channel, asks for POST_NOTIFICATIONS on Android 13+, fetches the current FCM
+// channels, asks for POST_NOTIFICATIONS on Android 13+, fetches the current FCM
 // token and registers it with the backend (POST /me/devices). No-ops when
 // Firebase isn't configured or there's no backend session. Add-alongside.
 package org.nuruplace.member.data.firebase
@@ -27,7 +27,7 @@ fun PushRegistration() {
     LaunchedEffect(Unit) {
         if (!FirebaseAuthService.isConfigured(context)) return@LaunchedEffect
         if (!Net.client.vault.hasSession) return@LaunchedEffect
-        NuruMessagingService.ensureChannel(context)
+        NotificationChannels.ensure(context)
 
         // Android 13+ needs the runtime notification permission to DISPLAY pushes;
         // token registration proceeds either way so the server can target the device.

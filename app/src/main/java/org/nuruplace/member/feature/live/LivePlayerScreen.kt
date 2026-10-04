@@ -380,6 +380,15 @@ fun LivePlayerScreen(
     }
 
     val myGuestState = myGuestStatus(pulse?.guests ?: emptyList(), myUserId)
+    // An invite to this stream that this member has accepted — here, from its
+    // ring, or on another of their phones — clears from the tray too, ringing
+    // or quiet. (The pulse lists only invited and accepted guests; a decline
+    // clears its own notification wherever it is made.)
+    LaunchedEffect(streamId, myGuestState) {
+        if (streamId != null && myGuestState != null && myGuestState != "invited") {
+            LiveInviteNotifications.cancel(context, streamId)
+        }
+    }
 
     // ── L6b — real guest video (docs/LIVE_INTERACTIVE.md): the moment
     // `myGuestState` reports "accepted", this device checks camera/mic
@@ -577,8 +586,16 @@ fun LivePlayerScreen(
             ) {
                 GuestStageBanner(
                     status = myGuestState,
-                    onAccept = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } } },
-                    onDecline = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } } },
+                    // Answered here, the same invite stops ringing on the
+                    // phone at once (LiveInviteNotifications).
+                    onAccept = {
+                        LiveInviteNotifications.cancel(context, streamId)
+                        scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } }
+                    },
+                    onDecline = {
+                        LiveInviteNotifications.cancel(context, streamId)
+                        scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } }
+                    },
                 )
                 when (val s = guestStageState) {
                     is GuestStageState.Connecting -> GuestConnectingChip("Joining the stage…", Modifier.padding(top = 8.dp))

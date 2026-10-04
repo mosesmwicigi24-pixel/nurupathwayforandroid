@@ -13,6 +13,9 @@ class NuruApp : Application() {
         super.onCreate()
         Net.init(this)
         AppPrefs.init(this)
+        // Every notification channel, before anything can post — this also
+        // runs when FCM starts the process to show a push (NotificationChannels.kt).
+        org.nuruplace.member.data.firebase.NotificationChannels.ensure(this)
         org.nuruplace.member.data.QuizDraftStore.init(this)
         CelebrationCenter.init(this) // once-only celebration memory (§human moments)
         // Home-screen widgets (Pathway + Radio, Glance) — belt-and-suspenders

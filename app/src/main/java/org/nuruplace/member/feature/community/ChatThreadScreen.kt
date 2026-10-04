@@ -116,6 +116,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.OpenConversation
 import org.nuruplace.member.data.PastoralLock
 import org.nuruplace.member.data.net.ChatInviteMeta
 import org.nuruplace.member.data.net.ChatMessage
@@ -211,6 +212,23 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             "PASTORAL" -> "pastoral"
             "DISCIPLER" -> "discipler"
             else -> preloadCtx
+        }
+        // This thread is the open one while it is on screen in the
+        // foreground: a push about a new message in it posts no notification
+        // (NuruMessagingService) and lands here instead — the thread has no
+        // live feed, so it refreshes to show the message, with a light tick
+        // unless the member turned Sound and vibration off.
+        androidx.lifecycle.compose.LifecycleResumeEffect(conversationId) {
+            OpenConversation.opened(conversationId)
+            onPauseOrDispose { OpenConversation.closed(conversationId) }
+        }
+        val latestReload by rememberUpdatedState(reload)
+        LaunchedEffect(conversationId) {
+            OpenConversation.arrivals.collect { arrival ->
+                if (arrival.conversationId != conversationId) return@collect
+                latestReload()
+                if (arrival.buzz) Haptics.tap(view)
+            }
         }
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
@@ -393,7 +411,14 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
         // endpoint) sees the same state without a second round trip.) ──
         var biometricOn by remember { mutableStateOf(PastoralLock.enabled) }
         var muted by remember(conversationId) { mutableStateOf(thread.muted) }
-        LaunchedEffect(thread.muted) { muted = thread.muted; AppPrefs.pastoralMuted = thread.muted }
+        // Mirrored only from the PASTORAL thread: the flag means "the pastoral
+        // thread is muted" (the Chat tab's badge, and the push service drops
+        // pastoral pushes while it is set), so opening some other muted — or
+        // unmuted — thread must not flip it.
+        LaunchedEffect(thread.muted) {
+            muted = thread.muted
+            if (ctx == "pastoral") AppPrefs.pastoralMuted = thread.muted
+        }
         var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
         var showPrivacyInfo by remember { mutableStateOf(false) }
 

@@ -33,6 +33,15 @@ import org.nuruplace.member.data.net.Net
 internal fun filterOutSelfStream(rows: List<LiveNowRow>, selfStreamId: String?): List<LiveNowRow> =
     if (selfStreamId == null) rows else rows.filterNot { it.streamId == selfStreamId }
 
+/** Where MainShell's "live-now" forwarder goes, over the (already
+ *  self-filtered) `/live/now` rows: the newest watchable stream when no
+ *  stream was named (a live_stream_started tap, the Radio widget's LIVE
+ *  line), and exactly [wantedStreamId] when one was (a Live invite's Join,
+ *  LiveInvite.kt) — never some OTHER stream in its place: null (→ Home)
+ *  when the named one has ended or isn't watchable. */
+internal fun liveForwardTarget(rows: List<LiveNowRow>, wantedStreamId: String?): LiveNowRow? =
+    if (wantedStreamId.isNullOrBlank()) rows.firstOrNull() else rows.firstOrNull { it.streamId == wantedStreamId }
+
 object LiveDiscoveryCenter {
     private val _streams = MutableStateFlow<List<LiveNowRow>>(emptyList())
     val streams: StateFlow<List<LiveNowRow>> = _streams.asStateFlow()
