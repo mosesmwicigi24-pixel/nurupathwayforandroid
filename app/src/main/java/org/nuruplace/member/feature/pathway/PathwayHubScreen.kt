@@ -352,17 +352,18 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                if (journey.stage == JourneyStage.LEARNING) "CONTINUE WHERE YOU LEFT OFF" else journey.pill.uppercase(),
-                style = PW.over(8, 1.28f), color = PW.goldLight,
-            )
+            Text(journey.kicker.uppercase(), style = PW.over(8, 1.28f), color = PW.goldLight, maxLines = 1)
             Text(step.title, style = PW.t(14, FontWeight.SemiBold), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
-        }
-        if (action != null) {
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                Text(action.label, style = PW.over(9, 0f), color = PW.navy, maxLines = 1)
+            if (action != null) {
+                Row(
+                    Modifier.padding(top = 8.dp).clip(RoundedCornerShape(999.dp)).background(PW.gold)
+                        .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(action.label, style = PW.t(11, FontWeight.Bold), color = PW.navy, maxLines = 1)
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PW.navy, modifier = Modifier.size(14.dp))
+                }
             }
         }
     }

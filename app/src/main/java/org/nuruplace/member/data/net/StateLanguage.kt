@@ -14,6 +14,9 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 
+/** What happened (§4's Cause column) — it picks the state card's glyph. */
+enum class StateCause { OFFLINE, SESSION_ENDED, SERVER, NOT_FOUND, REFUSAL }
+
 /** What a member can do about a state (§4's Action column). */
 enum class StateAction(val label: String) {
     RETRY("Try again"),
@@ -23,7 +26,7 @@ enum class StateAction(val label: String) {
 }
 
 /** One state, in the shared language. */
-data class StateMessage(val title: String, val line: String?, val action: StateAction) {
+data class StateMessage(val cause: StateCause, val title: String, val line: String?, val action: StateAction) {
     /** The one-line form, for a note under a button or a toast: "Title. Line"
      *  — or the title alone, when it is a whole sentence of the server's. */
     val sentence: String get() = if (line.isNullOrBlank()) title else "$title. $line"
@@ -38,6 +41,7 @@ object StateLanguage {
     /** No network, or no answer (§4 row 1). [hasSavedCopy]: the screen still
      *  shows what the member last saw. */
     fun offline(hasSavedCopy: Boolean = false) = StateMessage(
+        StateCause.OFFLINE,
         OFFLINE_TITLE,
         if (hasSavedCopy) OFFLINE_LINE_KEPT else OFFLINE_LINE_EMPTY,
         StateAction.RETRY,
@@ -45,6 +49,7 @@ object StateLanguage {
 
     /** The session is over — a 401 the token refresh could not mend (§4 row 2). */
     val sessionEnded = StateMessage(
+        StateCause.SESSION_ENDED,
         "Your session has ended",
         "Sign in again to pick up where you left off.",
         StateAction.SIGN_IN,
@@ -52,6 +57,7 @@ object StateLanguage {
 
     /** Our side failed — a 5xx, an answer we could not read (§4 row 3). */
     val serverError = StateMessage(
+        StateCause.SERVER,
         "Something went wrong on our side",
         "It isn't you — please try again in a moment.",
         StateAction.RETRY,
@@ -59,6 +65,7 @@ object StateLanguage {
 
     /** A 404 (§4 row 4). */
     val notFound = StateMessage(
+        StateCause.NOT_FOUND,
         "This isn't here any more",
         "It may have been moved or removed.",
         StateAction.BACK,
@@ -66,13 +73,14 @@ object StateLanguage {
 
     /** A refusal in our API's own words (§4 row 5) — the screen decides what
      *  to offer; a full-screen load offers Try again (and Go back). */
-    fun refusal(words: String) = StateMessage(words.trim(), null, StateAction.RETRY)
+    fun refusal(words: String) = StateMessage(StateCause.REFUSAL, words.trim(), null, StateAction.RETRY)
 
     /**
-     * An HTTP answer by its status. [serverWords] — the envelope's message —
-     * is shown only for a member-facing refusal (any other 4xx); a 401's
-     * "Invalid or expired access token" or a 5xx's "Internal server error"
-     * never reaches the member.
+     * An HTTP answer by its status. [serverWords] — the message of OUR error
+     * envelope (one with a code; a proxy's page or a bare status is not
+     * something we said) — is shown only for a member-facing refusal (any
+     * other 4xx); a 401's "Invalid or expired access token" or a 5xx's
+     * "Internal server error" never reaches the member.
      */
     fun forStatus(status: Int, serverWords: String?): StateMessage = when {
         status == 401 -> sessionEnded

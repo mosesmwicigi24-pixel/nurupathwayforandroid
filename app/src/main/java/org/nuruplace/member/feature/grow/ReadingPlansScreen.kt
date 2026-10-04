@@ -80,6 +80,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanPromo as PlanPromoDto
 import org.nuruplace.member.data.net.ReadingPlanRow
 import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.EmptyState
 import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
@@ -198,6 +199,9 @@ fun ReadingPlansScreen(
                 }
             } else if (failed != null) {
                 FailedState(failed, onRetry = { attempt++ })
+            } else if (plans.isEmpty()) {
+                // Nothing published yet — the shared empty card, iOS's words.
+                EmptyState("Plans are being prepared — check back soon.")
             } else {
                 if (!searching) StreakStrip(count = streak, todayDone = todayWordDone)
                 if (!searching && continueReading.isNotEmpty()) {

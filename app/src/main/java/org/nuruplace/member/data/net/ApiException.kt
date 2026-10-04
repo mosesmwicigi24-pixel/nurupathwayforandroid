@@ -25,7 +25,7 @@ object ApiException {
      * full WiFi/4G is never told the fault is their connection.
      */
     fun state(e: Throwable, context: Context? = null): StateMessage =
-        StateLanguage.forError(e, deviceOnline(context), (e as? HttpException)?.let(::envelopeWords))
+        StateLanguage.forError(e, deviceOnline(context), (e as? HttpException)?.let(::refusalWords))
 
     /**
      * The one-line form of [state], for a note under a button or a toast.
@@ -47,6 +47,14 @@ object ApiException {
 
     private fun envelopeWords(e: HttpException): String? =
         parseEnvelope(runCatching { e.response()?.errorBody()?.string() }.getOrNull())
+
+    /** A refusal's own words — only from OUR envelope (`{ error: { code,
+     *  message } }`): a bare `{ message }`, a proxy's page or an empty body is
+     *  not something our API said to the member (iOS NuruStateCopy, the same rule). */
+    private fun refusalWords(e: HttpException): String? {
+        val err = parseServerError(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull())
+        return err.message.takeIf { err.code != null }
+    }
 
     private fun parseEnvelope(body: String?): String? {
         if (body.isNullOrBlank()) return null

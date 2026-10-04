@@ -10,6 +10,8 @@
 // FailedState directly, so every state looks and reads the same.
 package org.nuruplace.member.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -19,10 +21,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -37,13 +48,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.StateAction
+import org.nuruplace.member.data.net.StateCause
 import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -84,44 +102,65 @@ fun NuruRefreshBox(
 }
 
 /**
- * The shared state card (§4): full width, the app's white card — a title, a
- * line, one primary action and, where needed, a quiet secondary one. Every
- * loading-failed, empty and offline state renders through this, so a member
- * meets one look and one voice everywhere.
+ * The shared state card (§4): full width, the app's white card — a glyph for
+ * what happened, a title, a line, one action and, where a screen would
+ * otherwise trap the member, a quiet way back. Every failed and empty state
+ * renders through this, so a member meets one look and one voice everywhere
+ * (iOS NuruStateView, the same card).
  */
 @Composable
 fun StateCard(
     title: String,
     modifier: Modifier = Modifier,
     line: String? = null,
+    glyph: ImageVector? = Icons.Filled.AutoAwesome,
+    glyphTint: Color = Nuru.gold,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     secondaryLabel: String? = null,
     onSecondary: (() -> Unit)? = null,
 ) {
-    NuruCard(modifier = modifier.fillMaxWidth(), padding = PaddingValues(Spacing.lg)) {
-        Text(title, style = NuruType.cardTitle, color = Nuru.ink)
-        line?.takeIf { it.isNotBlank() }?.let {
-            Spacer(Modifier.height(Spacing.sm))
-            Text(it, style = NuruType.body, color = Nuru.ink600)
-        }
-        if (actionLabel != null && onAction != null) {
-            Spacer(Modifier.height(Spacing.base))
-            PrimaryButton(actionLabel, onClick = onAction)
-        }
-        if (secondaryLabel != null && onSecondary != null) {
-            Spacer(Modifier.height(Spacing.xs))
-            TextButton(onClick = onSecondary, modifier = Modifier.fillMaxWidth()) {
-                Text(secondaryLabel, style = NuruType.cardCta, color = Nuru.ink600)
+    NuruCard(modifier = modifier.fillMaxWidth(), padding = PaddingValues(horizontal = Spacing.screen, vertical = 28.dp)) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            glyph?.let {
+                Box(
+                    Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.surface),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(it, contentDescription = null, tint = glyphTint, modifier = Modifier.size(20.dp)) }
+                Spacer(Modifier.height(14.dp))
+            }
+            Text(title, style = NuruType.cardTitle, color = Nuru.navy, textAlign = TextAlign.Center)
+            line?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center)
+            }
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(18.dp))
+                Box(
+                    Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
+                        .clickable { onAction() }.padding(horizontal = 22.dp, vertical = 11.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(actionLabel, style = NuruType.cardCta, color = Nuru.gold) }
+            }
+            if (secondaryLabel != null && onSecondary != null) {
+                Spacer(Modifier.height(Spacing.xs))
+                TextButton(onClick = onSecondary) {
+                    Text(secondaryLabel, style = NuruType.cardCta, color = Nuru.ink600)
+                }
             }
         }
     }
 }
 
+/** An empty screen, in the shared card — the screen's own words, no action. */
+@Composable
+fun EmptyState(title: String, modifier: Modifier = Modifier, line: String? = null) =
+    StateCard(title = title, line = line, modifier = modifier)
+
 /**
- * A failed load in the state language: [message]'s title and line, and its
- * one action — Try again ([onRetry]), Sign in (back to the sign-in screen by
- * the existing sign-out path) or Go back ([onBack], else the system back).
+ * A failed load in the state language: [message]'s glyph, title and line, and
+ * its one action — Try again ([onRetry]), Sign in (back to the sign-in screen
+ * by the existing sign-out path) or Go back ([onBack], else the system back).
  * [onBack] also adds a quiet "Go back" under any other action, for a screen
  * that would otherwise trap the member (no header of its own).
  */
@@ -141,10 +180,18 @@ fun FailedState(
         StateAction.BACK -> back
         StateAction.NONE -> null
     }
+    val (glyph, tint) = when (message.cause) {
+        StateCause.OFFLINE -> Icons.Filled.WifiOff to Nuru.ink600
+        StateCause.SESSION_ENDED -> Icons.Filled.Lock to Nuru.goldLo
+        StateCause.NOT_FOUND -> Icons.Filled.Search to Nuru.ink600
+        StateCause.SERVER, StateCause.REFUSAL -> Icons.AutoMirrored.Filled.HelpOutline to Nuru.ink600
+    }
     StateCard(
         title = message.title,
         line = message.line,
         modifier = modifier,
+        glyph = glyph,
+        glyphTint = tint,
         actionLabel = message.action.label.takeIf { primary != null },
         onAction = primary,
         secondaryLabel = StateAction.BACK.label.takeIf { onBack != null && message.action != StateAction.BACK },

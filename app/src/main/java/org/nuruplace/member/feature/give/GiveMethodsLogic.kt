@@ -159,13 +159,16 @@ fun giveSecureNote(options: List<GiveMethodOption>): String {
 }
 
 /** Home's giving card, under Give now (pathway docs/EXPERIENCE.md §2,
- *  "promise only what works"): the same rails Give's footer names —
- *  "Tithe & offering · M-Pesa", "Tithe & offering · M-Pesa & PayPal" — never
- *  a card or a rail that is off (it promised "M-Pesa, card and more");
- *  none at all: "Tithe & offering". */
-fun giveRailsLine(options: List<GiveMethodOption>): String {
-    val names = workingRailNames(options)
-    return if (names.isEmpty()) "Tithe & offering" else "Tithe & offering · ${names.joinToString(" & ")}"
+ *  "promise only what works"): the rails GET /giving/methods says can take a
+ *  gift here AND this app can carry — "Tithe & offering · M-Pesa",
+ *  "Tithe & offering · M-Pesa, PayPal" — never a card or a rail that is off
+ *  (it promised "M-Pesa, card and more"). Just "Tithe & offering" until the
+ *  methods have answered, or when none can (iOS homeGiveLine, word for word). */
+fun giveRailsLine(res: GivingMethodsRes?): String {
+    val names = workingRailNames(
+        res?.methods.orEmpty().filter { it.key in KNOWN_METHOD_KEYS }.distinctBy { it.key }.map { it.toOption() },
+    )
+    return if (names.isEmpty()) "Tithe & offering" else "Tithe & offering · ${names.joinToString(", ")}"
 }
 
 /** The rails that can take a gift here, by name, in the server's order. */

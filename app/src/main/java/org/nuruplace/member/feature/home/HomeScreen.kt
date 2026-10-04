@@ -59,10 +59,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -93,11 +96,11 @@ import org.nuruplace.member.data.net.VerseReactionBody
 import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
-import org.nuruplace.member.feature.give.giveMethodOptions
 import org.nuruplace.member.feature.give.giveRailsLine
 import org.nuruplace.member.feature.grow.PLCover
 import org.nuruplace.member.feature.pathway.Journey
 import org.nuruplace.member.feature.pathway.JourneyDestination
+import org.nuruplace.member.feature.pathway.JourneyLine
 import org.nuruplace.member.feature.pathway.JourneyStage
 import org.nuruplace.member.feature.pathway.JourneyState
 import org.nuruplace.member.ui.components.FitImage
@@ -167,7 +170,8 @@ fun HomeScreen(
     var pathway by remember { mutableStateOf<PathwaySummary?>(null) }
     var currentTrail by remember { mutableStateOf<List<LevelModule>?>(null) }
     // The rails GET /giving/methods says can take a gift — the giving card
-    // names only those (null = no answer yet: M-Pesa alone, as Give's form).
+    // names only those (null = no answer yet: no rail named). A failed
+    // refresh keeps the last answer.
     var giveRails by remember { mutableStateOf<org.nuruplace.member.data.net.GivingMethodsRes?>(null) }
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
@@ -556,7 +560,7 @@ fun HomeScreen(
                 UpcomingSection(homeEvents, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode("")}") })
                 EncouragementCard(prayers.size)
                 CohortSection(cohort) { onNavigate("cell-info") }
-                GiveCard(railsLine = giveRailsLine(giveMethodOptions(giveRails))) { onSelectTab("give") }
+                GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
                 // Scaffold already reserves the bottom bar; tabBarSpace here
                 // double-counted it and left a hole under the Give card.
                 Spacer(Modifier.height(Spacing.base))
@@ -1660,7 +1664,7 @@ private fun ContinueLevelCard(journey: Journey, onGo: (JourneyDestination) -> Un
             }
             Spacer(Modifier.width(Spacing.md))
             Column(Modifier.weight(1f)) {
-                CardKicker("Level ${journey.levelNumber}")
+                CardKicker(journey.kicker)
                 Text(step.title, style = NuruType.rowTitle, color = Nuru.ink)
                 Text(step.line, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.padding(top = 2.dp))
             }
@@ -1677,7 +1681,7 @@ private fun ContinueLevelCard(journey: Journey, onGo: (JourneyDestination) -> Un
 }
 
 @Composable
-private fun ProgressCard(s: ScoresSummary, journeyLine: String?, onView: () -> Unit) {
+private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: () -> Unit) {
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Your progress", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
@@ -1712,7 +1716,8 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: String?, onView: () -> U
         ScoreBar("Prayer", s.prayer.score, Nuru.scorePrayer, d?.get("prayer"))
         ScoreBar("Curriculum", s.curriculum.score, Nuru.homeNavy, d?.get("curriculum"))
         ScoreBar("Attendance", s.attendance.score, Nuru.success, d?.get("attendance"))
-        // The journey, counted in levels (§3): "Level 1 of 6 · 17% of your journey".
+        // The journey's next step in one line (§3) — "3 of 10 modules in
+        // Level 2", "Take the Level 1 exam" — never "0 modules left".
         journeyLine?.let { line ->
             Spacer(Modifier.height(Spacing.md))
             Row(
@@ -1723,7 +1728,13 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: String?, onView: () -> U
                     Text("◎", style = NuruType.body, color = Nuru.goldChipText)
                 }
                 Spacer(Modifier.width(Spacing.sm))
-                Text(line, style = NuruType.caption, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Nuru.ink)) { append(line.bold) }
+                        withStyle(SpanStyle(color = Nuru.ink600)) { append(line.rest) }
+                    },
+                    style = NuruType.caption,
+                )
             }
         }
     }

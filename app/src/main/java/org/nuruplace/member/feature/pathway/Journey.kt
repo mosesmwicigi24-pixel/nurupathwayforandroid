@@ -60,6 +60,12 @@ data class JourneyAction(val label: String, val destination: JourneyDestination)
 /** The member's next step: a title, one line, and at most one action. */
 data class JourneyStep(val title: String, val line: String, val action: JourneyAction?)
 
+/** Home's progress line: the bold fact, then the rest ("3 of 10 modules" ·
+ *  " in Level 2"; or the step's own title — "Take the Level 1 exam"). */
+data class JourneyLine(val bold: String, val rest: String) {
+    val text: String get() = bold + rest
+}
+
 data class Journey(
     val stage: JourneyStage,
     /** The current level's number (the server's level_number). */
@@ -72,6 +78,8 @@ data class Journey(
     val totalModules: Int,
     /** "X of Y modules" · "Exam ready" · "Exam opens soon" · "Exam passed" · "Commissioned". */
     val pill: String,
+    /** The next step's kicker — "Continue · Level 1", "Exam ready · Level 1"… */
+    val kicker: String,
     val next: JourneyStep,
     /** Journey progress in levels, 0.0–1.0 — 1.0 only at the summit. */
     val progress: Double,
@@ -85,8 +93,12 @@ data class Journey(
     /** The summit card and the commissioned celebration — only at the end. */
     val summitReached: Boolean get() = stage == JourneyStage.FINISHED
 
-    /** The Home progress line: "Level 1 of 6 · 17% of your journey". */
-    val progressLine: String get() = "Level $levelNumber of $levelCount · $percent% of your journey"
+    /** Home's progress line: the modules while they are being walked, else
+     *  the step itself — never "0 modules left before Level 2". */
+    val progressLine: JourneyLine
+        get() = if (stage == JourneyStage.LEARNING && totalModules > 0)
+            JourneyLine("$completedModules of $totalModules modules", " in Level $levelNumber")
+        else JourneyLine(next.title, "")
 }
 
 object JourneyState {
@@ -135,20 +147,37 @@ object JourneyState {
 
         val done = current.completedModules
         val total = current.totalModules
+        // A level the member was ushered into before any module was published
+        // (Levels 2–6 today): no "0 of 0 modules", no step to take yet.
+        val preparing = stage == JourneyStage.LEARNING && total <= 0
         val pill = when (stage) {
-            JourneyStage.LEARNING -> "$done of $total modules"
+            JourneyStage.LEARNING -> if (preparing) "Modules open soon" else "$done of $total modules"
             JourneyStage.EXAM_READY -> "Exam ready"
             JourneyStage.EXAM_SOON -> "Exam opens soon"
             JourneyStage.AWAITING_USHER -> "Exam passed"
             JourneyStage.FINISHED -> "Commissioned"
         }
+        val verb = if (done == 0) "Start" else "Continue"
+        val kicker = when (stage) {
+            JourneyStage.LEARNING -> if (preparing) "Modules open soon · Level $n" else "$verb · Level $n"
+            JourneyStage.EXAM_READY -> "Exam ready · Level $n"
+            JourneyStage.EXAM_SOON -> "Exam opens soon · Level $n"
+            JourneyStage.AWAITING_USHER -> "Exam passed · Level $n"
+            JourneyStage.FINISHED -> "Commissioned"
+        }
         val next = when (stage) {
-            JourneyStage.LEARNING -> learningStep(current, nextModule(trail), done, total)
+            JourneyStage.LEARNING ->
+                if (preparing) JourneyStep(
+                    title = "Level $n is being prepared",
+                    line = "Its modules open soon — we'll let you know.",
+                    action = null,
+                )
+                else learningStep(current, nextModule(trail), verb, done, total)
             JourneyStage.EXAM_READY -> JourneyStep(
                 title = "Take the Level $n exam",
                 // §3 names Level N+1; the last level has none — its exam opens
                 // the way to the summit itself.
-                line = if (isLast) "Every module is done — the exam opens the way to your commissioning."
+                line = if (isLast) "Every module is done — the exam opens the way to being sent."
                 else "Every module is done — the exam opens the way to Level $nextLevel.",
                 action = JourneyAction("Begin the exam", JourneyDestination.Exam(n)),
             )
@@ -169,10 +198,11 @@ object JourneyState {
             )
         }
 
-        // (levels before the current + the current level's fraction) / all levels.
+        // (levels before the current + the current level's fraction) / all
+        // levels — the fraction is whole once every module is done.
         val fraction = when (stage) {
-            JourneyStage.AWAITING_USHER, JourneyStage.FINISHED -> 1.0
-            else -> if (total > 0) (done.toDouble() / total).coerceIn(0.0, 1.0) else 0.0
+            JourneyStage.LEARNING -> if (total > 0) (done.toDouble() / total).coerceIn(0.0, 1.0) else 0.0
+            else -> 1.0
         }
         val progress = if (stage == JourneyStage.FINISHED) 1.0
         else ((position - 1 + fraction) / levels.size).coerceIn(0.0, 1.0)
@@ -186,6 +216,7 @@ object JourneyState {
             completedModules = done,
             totalModules = total,
             pill = pill,
+            kicker = kicker,
             next = next,
             progress = progress,
         )
@@ -200,16 +231,18 @@ object JourneyState {
             ?: lessons.firstOrNull { !it.completed }
     }
 
-    private fun learningStep(level: PathwayLevel, module: LevelModule?, done: Int, total: Int): JourneyStep {
-        val verb = if (done == 0) "Start" else "Continue"
+    /** §3's learning row: "Continue (or Start, when X = 0): «module title»"
+     *  — the verb leads the kicker and names the action, the module is the
+     *  title. */
+    private fun learningStep(level: PathwayLevel, module: LevelModule?, verb: String, done: Int, total: Int): JourneyStep {
         // A module still locked (its gate not yet met) opens the level page,
         // where the member sees what stands before it.
         val opensModule = module != null && module.status != ModuleStatus.LOCKED && !module.locked
         return JourneyStep(
-            title = "$verb: ${module?.title ?: level.title}",
+            title = module?.title ?: level.title,
             line = "$done of $total modules in Level ${level.levelNumber}",
             action = JourneyAction(
-                "Continue",
+                verb,
                 if (opensModule) JourneyDestination.Module(module!!.moduleId) else JourneyDestination.Level(level.levelNumber),
             ),
         )

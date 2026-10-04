@@ -69,20 +69,26 @@ class JourneyTest {
         val j = JourneyState.derive(summary(done = 5), trail(done = 5))!!
         assertEquals(JourneyStage.LEARNING, j.stage)
         assertEquals("5 of 20 modules", j.pill)
-        assertEquals("Continue: Module 6", j.next.title)
+        // §3: "Continue (or Start, when X = 0): «module title»" — the verb
+        // leads the kicker and names the action; the module is the title.
+        assertEquals("Continue · Level 1", j.kicker)
+        assertEquals("Module 6", j.next.title)
         assertEquals("5 of 20 modules in Level 1", j.next.line)
         assertEquals("Continue", j.next.action?.label)
         assertEquals(JourneyDestination.Module("m1-6"), j.next.action?.destination)
         assertEquals("module/m1-6", j.next.action?.destination?.route)
+        assertEquals(JourneyLine("5 of 20 modules", " in Level 1"), j.progressLine)
+        assertEquals("5 of 20 modules in Level 1", j.progressLine.text)
         assertFalse(j.summitReached)
     }
 
     @Test fun `learning — nothing done yet says Start`() {
         val j = JourneyState.derive(summary(done = 0), trail(done = 0))!!
         assertEquals("0 of 20 modules", j.pill)
-        assertEquals("Start: Module 1", j.next.title)
+        assertEquals("Start · Level 1", j.kicker)
+        assertEquals("Module 1", j.next.title)
         assertEquals("0 of 20 modules in Level 1", j.next.line)
-        assertEquals("Continue", j.next.action?.label)
+        assertEquals("Start", j.next.action?.label)
         assertEquals(JourneyDestination.Module("m1-1"), j.next.action?.destination)
     }
 
@@ -92,27 +98,27 @@ class JourneyTest {
         val allDone = trail(done = 20)
         val j = JourneyState.derive(summary(done = 19), allDone)!!
         assertEquals(JourneyStage.LEARNING, j.stage)
-        assertEquals("Continue: Foundations of Faith", j.next.title)
+        assertEquals("Foundations of Faith", j.next.title)
         assertEquals(JourneyDestination.Level(1), j.next.action?.destination)
     }
 
     @Test fun `learning — a locked next module opens the level page`() {
         val gated = trail(done = 5).map { if (it.moduleSequenceNumber == 6) it.copy(status = ModuleStatus.LOCKED, locked = true) else it }
         val j = JourneyState.derive(summary(done = 5), gated)!!
-        assertEquals("Continue: Module 6", j.next.title)
+        assertEquals("Module 6", j.next.title)
         assertEquals(JourneyDestination.Level(1), j.next.action?.destination)
     }
 
     @Test fun `learning — before the trail loads the level names the step`() {
         val j = JourneyState.derive(summary(done = 5))!!
         assertEquals(JourneyStage.LEARNING, j.stage)
-        assertEquals("Continue: Foundations of Faith", j.next.title)
+        assertEquals("Foundations of Faith", j.next.title)
         assertEquals("level/1", j.next.action?.destination?.route)
     }
 
     @Test fun `learning — a trail for another level is not this level's`() {
         val j = JourneyState.derive(summary(done = 5), trail(level = 2, done = 0))!!
-        assertEquals("Continue: Foundations of Faith", j.next.title)
+        assertEquals("Foundations of Faith", j.next.title)
     }
 
     // ── the exam ──
@@ -121,6 +127,7 @@ class JourneyTest {
         val j = JourneyState.derive(summary(status = LevelStatus.COMPLETED, done = 20), trail(done = 20))!!
         assertEquals(JourneyStage.EXAM_READY, j.stage)
         assertEquals("Exam ready", j.pill)
+        assertEquals("Exam ready · Level 1", j.kicker)
         assertEquals("Take the Level 1 exam", j.next.title)
         assertEquals("Every module is done — the exam opens the way to Level 2.", j.next.line)
         assertEquals("Begin the exam", j.next.action?.label)
@@ -129,7 +136,8 @@ class JourneyTest {
         // Level 1 of 6 — not 100%, and not the summit.
         assertEquals(17, j.percent)
         assertFalse(j.summitReached)
-        assertEquals("Level 1 of 6 · 17% of your journey", j.progressLine)
+        // Home's progress line is the step — never "0 modules left before Level 2".
+        assertEquals(JourneyLine("Take the Level 1 exam", ""), j.progressLine)
     }
 
     @Test fun `exam ready — a level whose exam row counts among its modules (20 of 21)`() {
@@ -138,30 +146,33 @@ class JourneyTest {
         assertEquals(JourneyStage.EXAM_READY, j.stage)
         assertEquals("Exam ready", j.pill)
         assertEquals(JourneyDestination.Exam(1), j.next.action?.destination)
+        // Every module done: the level counts whole, exam row or not.
+        assertEquals(17, j.percent)
     }
 
     @Test fun `an exam row still locked is not ready`() {
         val withExam = trail(done = 12) + examRow(status = ModuleStatus.LOCKED)
         val j = JourneyState.derive(summary(done = 12, total = 21), withExam)!!
         assertEquals(JourneyStage.LEARNING, j.stage)
-        assertEquals("Continue: Module 13", j.next.title)
+        assertEquals("Module 13", j.next.title)
     }
 
     @Test fun `exam soon — every module done, the exam not published`() {
         val j = JourneyState.derive(summary(status = LevelStatus.COMPLETED, done = 20, examPublished = false))!!
         assertEquals(JourneyStage.EXAM_SOON, j.stage)
         assertEquals("Exam opens soon", j.pill)
+        assertEquals("Exam opens soon · Level 1", j.kicker)
         assertEquals("Level 1 complete", j.next.title)
         assertEquals("Every module is done. The exam opens soon — we'll let you know.", j.next.line)
         assertNull(j.next.action)
         assertFalse(j.summitReached)
     }
 
-    @Test fun `the last level's exam opens the way to the commissioning, not a Level 7`() {
+    @Test fun `the last level's exam opens the way to being sent, not to a Level 7`() {
         val j = JourneyState.derive(summary(current = 6, status = LevelStatus.COMPLETED, done = 10, total = 10))!!
         assertEquals(JourneyStage.EXAM_READY, j.stage)
         assertEquals("Take the Level 6 exam", j.next.title)
-        assertEquals("Every module is done — the exam opens the way to your commissioning.", j.next.line)
+        assertEquals("Every module is done — the exam opens the way to being sent.", j.next.line)
         // Every module of every level done — still not 100 while the exam waits.
         assertEquals(99, j.percent)
         assertFalse(j.summitReached)
@@ -173,6 +184,7 @@ class JourneyTest {
         val j = JourneyState.derive(summary(status = LevelStatus.AWAITING_REVIEW, done = 20, awaitingFlag = true), trail(done = 20))!!
         assertEquals(JourneyStage.AWAITING_USHER, j.stage)
         assertEquals("Exam passed", j.pill)
+        assertEquals("Exam passed · Level 1", j.kicker)
         assertEquals("Level 2 is next", j.next.title)
         assertEquals("You passed the Level 1 exam. Your leader will open Level 2 — you'll get a notice.", j.next.line)
         assertEquals("See Level 1", j.next.action?.label)
@@ -199,6 +211,7 @@ class JourneyTest {
         val j = JourneyState.derive(summary(current = 6, status = LevelStatus.AWAITING_REVIEW, done = 10, total = 10, awaitingFlag = true))!!
         assertEquals(JourneyStage.FINISHED, j.stage)
         assertEquals("Commissioned", j.pill)
+        assertEquals("Commissioned", j.kicker)
         assertEquals("You have been commissioned", j.next.title)
         assertEquals("Sent to make disciples — Matthew 28:19", j.next.line)
         assertEquals("See your journey", j.next.action?.label)
@@ -206,7 +219,7 @@ class JourneyTest {
         assertEquals("your-walk", j.next.action?.destination?.route)
         assertEquals(100, j.percent)
         assertTrue(j.summitReached)
-        assertEquals("Level 6 of 6 · 100% of your journey", j.progressLine)
+        assertEquals(JourneyLine("You have been commissioned", ""), j.progressLine)
     }
 
     @Test fun `finished — ushered past the last level with its exam row passed`() {
@@ -236,7 +249,7 @@ class JourneyTest {
         // Level 3 of 6, half done: (2 + 0.5) / 6 = 41.67%.
         val j = JourneyState.derive(summary(current = 3, done = 5, total = 10))!!
         assertEquals(42, j.percent)
-        assertEquals("Level 3 of 6 · 42% of your journey", j.progressLine)
+        assertEquals(JourneyLine("5 of 10 modules", " in Level 3"), j.progressLine)
         // Level 1, 5 of 20: 0.25 / 6 = 4.17%.
         assertEquals(4, JourneyState.derive(summary(done = 5))!!.percent)
         assertEquals(0, JourneyState.derive(summary(done = 0))!!.percent)
@@ -245,9 +258,13 @@ class JourneyTest {
     @Test fun `a level with no modules yet — ushered into Level 2 today`() {
         val j = JourneyState.derive(summary(current = 2, done = 0, total = 0), emptyList())!!
         assertEquals(JourneyStage.LEARNING, j.stage)
-        assertEquals("0 of 0 modules", j.pill)
-        assertEquals("Start: Knowing God", j.next.title)
-        assertEquals(JourneyDestination.Level(2), j.next.action?.destination)
+        // Not "0 of 0 modules" — the level is being prepared, and says so.
+        assertEquals("Modules open soon", j.pill)
+        assertEquals("Modules open soon · Level 2", j.kicker)
+        assertEquals("Level 2 is being prepared", j.next.title)
+        assertEquals("Its modules open soon — we'll let you know.", j.next.line)
+        assertNull(j.next.action)
+        assertEquals(JourneyLine("Level 2 is being prepared", ""), j.progressLine)
         // Level 1 behind them: 1 / 6.
         assertEquals(17, j.percent)
         assertFalse(j.summitReached)

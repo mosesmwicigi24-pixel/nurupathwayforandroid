@@ -154,8 +154,11 @@ import org.nuruplace.member.data.net.PledgeDetail
 import org.nuruplace.member.data.net.PledgePayment
 import org.nuruplace.member.data.net.StatementPayment
 import org.nuruplace.member.data.net.StatementPendingPayment
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.UpdatePledgeBody
 import org.nuruplace.member.data.offline.Connectivity
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.theme.Nuru
@@ -176,6 +179,9 @@ class PartnersViewModel : ViewModel() {
     var partnership by mutableStateOf<Partnership?>(null); private set
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
+    /** Why the standing did not load, in the state language (EXPERIENCE.md §4)
+     *  — the shared card says it when there is nothing to show yet. */
+    var failure by mutableStateOf<StateMessage?>(null); private set
     var resuming by mutableStateOf(false); private set
     var joining by mutableStateOf(false); private set
     /** The pledge an action is in flight for — its card shows a spinner. */
@@ -232,11 +238,15 @@ class PartnersViewModel : ViewModel() {
         freshness.fetchStarted()
         val seq = ++partnershipSeq
         viewModelScope.launch {
-            loading = true; error = null
+            loading = true; error = null; failure = null
             val r = runCatching { Net.client.api.partnership() }
             if (seq != partnershipSeq) return@launch // a newer fetch owns the state
             r.getOrNull()?.let { partnership = it }
-            if (r.isFailure) error = ApiException.message(r.exceptionOrNull() ?: Exception())
+            if (r.isFailure) {
+                // Read once (an error body is a one-shot stream): the card and the line.
+                val f = ApiException.state(r.exceptionOrNull() ?: Exception())
+                failure = f; error = f.sentence
+            }
             loading = false
         }
         // What collects each pledge, and whether M-Pesa can take a new
@@ -446,11 +456,9 @@ fun PartnersScreen(
                         p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
                             CircularProgressIndicator(color = GIVE.gold)
                         }
-                        p == null -> PartnerNotice(
-                            "We couldn't load this just now",
-                            vm.error ?: "Your giving is unaffected.",
-                            action = "Try again" to { vm.load() },
-                        )
+                        // Nothing loaded yet and the read failed — what really
+                        // happened, in the shared state card (§4, iOS parity).
+                        p == null -> FailedState(vm.failure ?: StateLanguage.serverError, onRetry = { vm.load() })
                         // iOS's rule: the membership decides; an older server's is_partner otherwise.
                         p.isProgrammeMember -> {
                             StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)

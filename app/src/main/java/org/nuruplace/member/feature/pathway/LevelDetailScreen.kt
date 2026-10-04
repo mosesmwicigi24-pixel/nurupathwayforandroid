@@ -283,31 +283,31 @@ fun LevelDetailScreen(
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.goldTint).padding(Spacing.base),
                     ) {
-                        Text("You've finished every module in this level.", style = NuruType.body, color = Nuru.ink)
-                        Spacer(Modifier.height(Spacing.md))
-                        if (level?.isAwaitingReview == true) {
-                            // Exam passed — "See Level N" lands here from Home and
-                            // the hub, so this must not offer the exam again: it
-                            // says the journey's own words for the wait (§3).
-                            val j = bundle.journey?.takeIf { it.levelNumber == levelNumber }
-                            if (j?.stage == JourneyStage.FINISHED) {
-                                Text(j.next.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
-                                Text(j.next.line, style = NuruType.caption, color = Nuru.ink600)
-                            } else {
-                                Text(
-                                    j?.takeIf { it.stage == JourneyStage.AWAITING_USHER }?.next?.line
-                                        ?: "You passed the Level $levelNumber exam. Your leader will open Level ${levelNumber + 1} — you'll get a notice.",
-                                    style = NuruType.caption, color = Nuru.ink600,
-                                )
+                        // The gate is the journey's (§3), for the member's own
+                        // level only — the same title, line and action the hub
+                        // and Home say. It used to offer the exam on any level
+                        // whose modules were all done: a level already passed,
+                        // or one whose exam was passed and awaits the usher
+                        // (where "See Level N" lands).
+                        val j = bundle.journey?.takeIf { it.levelNumber == levelNumber && it.stage != JourneyStage.LEARNING }
+                        if (j != null) {
+                            Text(j.next.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(Spacing.xs))
+                            Text(j.next.line, style = NuruType.caption, color = Nuru.ink600)
+                            // Only the exam is opened from here; the other
+                            // steps' actions lead back to this very page.
+                            j.next.action?.takeIf { j.stage == JourneyStage.EXAM_READY }?.let { action ->
+                                Spacer(Modifier.height(Spacing.md))
+                                PrimaryButton(action.label, onClick = { onTakeExam(levelNumber) })
                             }
-                        } else if (level?.examPublished != false) {
-                            // The exam gate stays hidden until an admin publishes it.
-                            PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
                         } else {
-                            Text(
-                                "Your discipler is preparing this level's exam. It will appear here once it's ready.",
-                                style = NuruType.caption, color = Nuru.ink600,
-                            )
+                            Text("You've finished every module in this level.", style = NuruType.body, color = Nuru.ink)
+                            // No journey to ask (the pathway read failed):
+                            // the old gate — the server still decides.
+                            if (bundle.journey == null) {
+                                Spacer(Modifier.height(Spacing.md))
+                                PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
+                            }
                         }
                     }
                 }

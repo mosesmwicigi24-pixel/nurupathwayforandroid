@@ -280,18 +280,19 @@ class GiveMethodsLogicTest {
 
     @Test
     fun `Home's giving card names only the rails that work — never a card`() {
-        // It promised "M-Pesa, card and more" while card could not take a gift.
-        val options = giveMethodOptions(json.decodeFromString<GivingMethodsRes>(live))
-        assertEquals("Tithe & offering · M-Pesa & PayPal", giveRailsLine(options))
-        // M-Pesa alone — the server's answer, or no answer at all.
-        val mpesaOnly = options.map { if (it.key == "paypal") it.copy(enabled = false) else it }
+        // It promised "M-Pesa, card and more" while a card could not take a gift.
+        val res = json.decodeFromString<GivingMethodsRes>(live)
+        assertEquals("Tithe & offering · M-Pesa, PayPal", giveRailsLine(res))
+        // M-Pesa alone when PayPal is off.
+        val mpesaOnly = res.copy(methods = res.methods.map { if (it.key == "paypal") it.copy(enabled = false) else it })
         assertEquals("Tithe & offering · M-Pesa", giveRailsLine(mpesaOnly))
-        assertEquals("Tithe & offering · M-Pesa", giveRailsLine(giveMethodOptions(null)))
         // A card the server has live is still not one this app can carry.
-        val card = GiveMethodOption(key = "card", label = "Card", enabled = true, currency = "KES")
-        assertEquals("Tithe & offering · M-Pesa", giveRailsLine(listOf(FALLBACK_MPESA, card)))
-        // Nothing working: no rail is named at all.
-        assertEquals("Tithe & offering", giveRailsLine(listOf(FALLBACK_MPESA.copy(enabled = false), card)))
+        val cardLive = mpesaOnly.copy(methods = mpesaOnly.methods.map { if (it.key == "card") it.copy(enabled = true) else it })
+        assertEquals("Tithe & offering · M-Pesa", giveRailsLine(cardLive))
+        // No answer yet, or nothing that works: no rail is named at all.
+        assertEquals("Tithe & offering", giveRailsLine(null))
+        assertEquals("Tithe & offering", giveRailsLine(res.copy(methods = res.methods.map { it.copy(enabled = false) })))
+        assertEquals("Tithe & offering", giveRailsLine(res.copy(methods = emptyList())))
     }
 
     @Test

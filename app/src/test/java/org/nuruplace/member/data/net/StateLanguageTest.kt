@@ -124,6 +124,7 @@ class StateLanguageTest {
 
     @Test fun `a 422 with our message keeps it, whole`() {
         val s = ApiException.state(http(422, envelope("UNPROCESSABLE", "No exam questions for this level")))
+        assertEquals(StateCause.REFUSAL, s.cause)
         assertEquals("No exam questions for this level", s.title)
         assertNull(s.line)
         assertEquals("No exam questions for this level", s.sentence)
@@ -135,7 +136,8 @@ class StateLanguageTest {
             "Finish every module in this level before the exam",
             ApiException.message(http(409, envelope("GATE_LOCKED", "Finish every module in this level before the exam"))),
         )
-        assertEquals("Nope", ApiException.message(http(400, """{"message":"Nope"}""")))
+        // Only OUR envelope speaks: a bare message, a proxy's page, an empty body do not.
+        assertEquals(StateLanguage.serverError, ApiException.state(http(400, """{"message":"Nope"}""")))
         assertEquals(StateLanguage.serverError, ApiException.state(http(413, "<html>Request Entity Too Large</html>")))
         assertEquals(StateLanguage.serverError, StateLanguage.forStatus(422, "  "))
     }
