@@ -113,6 +113,12 @@ data class NotifPayload(
     // A department need's notices (department_need_*): the office's note
     // when it was not approved. Their `title` is the NEED's name.
     val note: String? = null,
+    // The keys the push router reads beside the ones above (EXPERIENCE.md
+    // §7.2 #3 — the inbox and a tapped push share one router): a Live
+    // notice's stream (live_stream_started / live_guest_invite, live/
+    // service.ts) and a Read-with-a-Friend invite's token (plan_group_*).
+    val streamId: String? = null,
+    val inviteToken: String? = null,
 )
 
 @Serializable

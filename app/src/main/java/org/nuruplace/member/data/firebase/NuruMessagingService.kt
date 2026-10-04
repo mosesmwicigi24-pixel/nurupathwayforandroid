@@ -122,8 +122,11 @@ class NuruMessagingService : FirebaseMessagingService() {
     }
 
     companion object {
-        /** Push data → in-app nav route (mirrors NotificationsScreen.routeFor).
-         *  Null → open Home (nothing to deep-link to).
+        /** Push data → in-app nav route. Null → open Home (nothing to
+         *  deep-link to). The ONE router for a notice: the inbox hands each
+         *  row's payload here too, in the same keys (NotificationsScreen
+         *  .noticeData), so a notice tapped in the inbox lands exactly where
+         *  its push does (EXPERIENCE.md §7.2 #3).
          *
          *  Since 2026-09-28 every push's data also carries its `template`
          *  (plus `nuru_kind` / `nuru_sound`), so the template rules at the
@@ -191,7 +194,7 @@ class NuruMessagingService : FirebaseMessagingService() {
                 // build LiveRoutes.kt's live-player route (no kind/viewers/
                 // startedAt) — "live-now" is a lightweight MainShell destination
                 // that re-fetches GET /live/now and forwards to the newest
-                // watchable stream (or Home if it already ended).
+                // watchable stream (or says the Live has ended).
                 "live" in t -> "live-now"
                 "prayer" in t -> "prayer-room?tab=corporate"
                 "verse" in t || "memory" in t -> "memory-verses"

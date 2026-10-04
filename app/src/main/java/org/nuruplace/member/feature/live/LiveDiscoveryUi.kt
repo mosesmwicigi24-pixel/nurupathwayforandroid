@@ -1,8 +1,9 @@
 // Nuru Live discovery — the two "invite loudly, never hijack" surfaces that
 // aren't the full-screen player itself: [LiveMiniPopup] (Home's floating
 // muted-preview mini-window) and [AppLiveBar] (the slim app-wide strip on
-// every other screen). Both are pure presentation — LiveDiscoveryCenter owns
-// all the state; LivePlayerScreen owns the real (unmuted) playback surface.
+// every other screen) — plus [LiveEndedState], where a Live notice lands once
+// its stream is over. All pure presentation — LiveDiscoveryCenter owns all
+// the state; LivePlayerScreen owns the real (unmuted) playback surface.
 package org.nuruplace.member.feature.live
 
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -49,6 +51,7 @@ import androidx.media3.ui.PlayerView
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.LivePulsingDot
+import org.nuruplace.member.ui.components.StateCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
@@ -172,5 +175,21 @@ fun AppLiveBar(stream: LiveNowRow, modifier: Modifier = Modifier, onClick: () ->
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
         Text("›", style = NuruType.title, color = Color.White.copy(alpha = 0.6f))
+    }
+}
+
+/** Where a Live notice lands once its stream is over — a tapped push or its
+ *  row in the inbox, the same router (EXPERIENCE.md §7.2 #3): a calm "This
+ *  Live has ended" in the shared state card, and the way back. Never an
+ *  error, never a blank, never some other stream in its place. */
+@Composable
+fun LiveEndedState(onBack: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen), contentAlignment = Alignment.Center) {
+        StateCard(
+            title = "This Live has ended",
+            glyph = Icons.Filled.GraphicEq,
+            actionLabel = "Go back",
+            onAction = onBack,
+        )
     }
 }

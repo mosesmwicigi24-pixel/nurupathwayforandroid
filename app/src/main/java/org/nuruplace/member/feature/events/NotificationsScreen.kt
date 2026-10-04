@@ -6,7 +6,9 @@
 // rows carry a GLOWING AMBER dot on a warm wash + amber accent bar; read rows a
 // LUMINOUS GREEN dot beside a double tick. Mark-all and row-open flip
 // OPTIMISTICALLY via a locallyRead override set — the page answers the tap
-// instantly, the API call and a quiet reload confirm. Deep-links mirror iOS.
+// instantly, the API call and a quiet reload confirm. A tapped notice goes
+// through the push router (one router, EXPERIENCE.md §7.2 #3); one with
+// nowhere to go shows only itself and Dismiss.
 package org.nuruplace.member.feature.events
 
 import androidx.compose.animation.AnimatedContent
@@ -45,7 +47,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -58,53 +59,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MarkReadBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationRow
 import org.nuruplace.member.data.net.NotificationsRes
 import org.nuruplace.member.ui.components.AsyncContent
-import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.relTime
 
-/** Map a notification to its EXACT in-app destination (mirrors iOS deep-links).
- *  Returns null when there is no in-app target — the caller then opens the
- *  personalized read-and-continue popup instead of doing nothing. */
-private fun routeFor(n: NotificationRow): String? {
-    n.payload?.moduleId?.let { return "module/$it" }
-    n.payload?.announcementId?.let { return "announcement/$it" }
-    // serve_request_* / department_post / department_need_* (departments/
-    // service.ts) all carry department_id → the department page itself.
-    n.payload?.departmentId?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
-    // Giving: the same place the push itself opens (feature/give/GivingRoutes.kt)
-    // — a Partners notice opens its pledge.
-    org.nuruplace.member.feature.give.givingDest(
-        transactionId = n.payload?.transactionId, failureCode = n.payload?.failureCode,
-        scheduleId = n.payload?.scheduleId, promptAt = n.payload?.promptAt,
-        pledgeId = n.payload?.pledgeId,
-    )?.let { return it }
-    val t = n.template.lowercase()
-    // Level notifications land on the EXACT level (was the bare hub).
-    n.payload?.levelNumber?.let { return "level/$it" }
-    return when {
-        "department" in t || "serve_request" in t -> "departments"
-        "prayer" in t -> "prayer-room?tab=corporate"
-        "verse" in t || "memory" in t -> "memory-verses"
-        "devotional" in t -> "devotional"
-        // pledge_due_soon / pledge_overdue / pledge_fulfilled (Partners
-        // programme §3) → the Give tab on Partners, before the generic give.
-        "pledge" in t || "partner" in t -> "partners"
-        "give" in t || "giving" in t || "payment" in t -> "give"
-        "event" in t -> "events"
-        "badge" in t || "certificate" in t || "cert" in t -> "profile"
-        "reflection" in t -> "pathway"
-        else -> null
-    }
+/** A notice's push data: its template and the payload keys the push router
+ *  reads, spelled as the dispatcher copies them into a push (snake_case —
+ *  workers/dispatch.ts copies the payload JSONB verbatim). */
+internal fun noticeData(n: NotificationRow): Map<String, String> = buildMap {
+    put("template", n.template)
+    val p = n.payload ?: return@buildMap
+    p.moduleId?.let { put("module_id", it) }
+    p.announcementId?.let { put("announcement_id", it) }
+    p.levelNumber?.let { put("level_number", it.toString()) }
+    p.inviteToken?.let { put("invite_token", it) }
+    p.departmentId?.let { put("department_id", it) }
+    p.transactionId?.let { put("transaction_id", it) }
+    p.failureCode?.let { put("failure_code", it) }
+    p.scheduleId?.let { put("schedule_id", it) }
+    p.promptAt?.let { put("prompt_at", it) }
+    p.pledgeId?.let { put("pledge_id", it) }
+    p.streamId?.let { put("stream_id", it) }
 }
+
+/** A notice's in-app destination — the SAME router a tapped push uses
+ *  (NuruMessagingService.destFor; EXPERIENCE.md §7.2 #3), so a notice lands
+ *  exactly where its push does: a Live notice on its stream (the player, or
+ *  "This Live has ended"), a giving notice on its gift or pledge, a level on
+ *  that level. It used to be a second copy of the rules that had drifted —
+ *  no Live, no invite token, no plan_group — so those opened a generic sheet.
+ *  Null when there is nowhere to go: the caller shows the notice itself. */
+internal fun noticeRoute(n: NotificationRow): String? =
+    org.nuruplace.member.data.firebase.NuruMessagingService.destFor(noticeData(n))
 
 /** A row's headline: a giving notice's own words (feature/give/
  *  GivingNotificationCopy.kt — the push's, from dispatch.ts) ahead of the
@@ -182,7 +175,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     runCatching { Net.client.api.markNotificationsRead(MarkReadBody(listOf(n.notificationId))) }
                 }
             }
-            val route = routeFor(n)
+            val route = noticeRoute(n)
             if (route != null) onNavigate(route) else popup = n
         }
         Column(Modifier.fillMaxSize().background(Nuru.paper)) {
@@ -234,78 +227,45 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                 }
             }
         }
-        popup?.let { n ->
-            NotifDetailPopup(n, onContinue = { popup = null; onNavigate("pathway") }, onDismiss = { popup = null })
-        }
+        popup?.let { n -> NotifDetailPopup(n, onDismiss = { popup = null }) }
     }
 }
 
-/** Live quick-stats + name for the popup card (best-effort). */
-private data class PopupStats(val name: String, val streak: Int, val level: String?, val plan: String?)
-
-/** The read-and-continue popup for notifications with no in-app target (iOS
- *  build-33 parity): greets by name, carries the message, shows live quick stats
- *  (streak · level · plan day), a word of encouragement and a gold "Continue my
- *  journey" that opens the Pathway. */
+/** A notice with nowhere to go (EXPERIENCE.md §7 rule 1): only the notice
+ *  itself — its tone, its title, when, and its full words — and Dismiss. No
+ *  greeting, no stats, no "Continue my journey": it used to open the Pathway
+ *  from a notice that had nothing to do with it. */
 @Composable
-private fun NotifDetailPopup(n: NotificationRow, onContinue: () -> Unit, onDismiss: () -> Unit) {
-    val stats by produceState<PopupStats?>(initialValue = null) {
-        value = runCatching {
-            val name = Net.client.api.me().profile.fullName.split(" ").firstOrNull() ?: "Friend"
-            val streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-            val pw = runCatching { Net.client.api.pathway() }.getOrNull()
-            val level = pw?.let { s -> s.levels.firstOrNull { it.status == LevelStatus.ACTIVE } ?: s.levels.firstOrNull { it.levelNumber == s.currentLevel } }
-            val levelStr = level?.let { "Level ${it.levelNumber} · ${it.completedModules}/${it.totalModules}" }
-            val plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled && it.completedAt == null } }.getOrNull()
-            val planStr = plan?.let { "Day ${it.currentDay ?: 1} of ${it.dayCount}" }
-            PopupStats(name, streak, levelStr, planStr)
-        }.getOrNull()
-    }
-    val name = stats?.name ?: "friend"
+private fun NotifDetailPopup(n: NotificationRow, onDismiss: () -> Unit) {
+    val tone = toneFor(n.template)
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.paper).padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Text("Grace and peace, $name.", style = NuruType.display, color = Nuru.navy)
-            // The notification itself, in a white card.
-            Column(
+            Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.control)).background(Nuru.white)
                     .border(1.dp, Nuru.border, RoundedCornerShape(Radii.control)).padding(Spacing.base),
-                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalAlignment = Alignment.Top,
             ) {
-                Text(titleOf(n), style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
-                bodyOf(n)?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
-            }
-            stats?.let { s ->
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    StatChip("🔥", if (s.streak > 0) "${s.streak} days with God" else "Begin today")
-                    s.level?.let { StatChip("📖", it) }
-                    s.plan?.let { StatChip("🔖", it) }
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.control)).background(tone.bg), contentAlignment = Alignment.Center) {
+                    Text(tone.glyph, style = NuruType.body)
+                }
+                Spacer(Modifier.size(Spacing.md))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(titleOf(n), style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.size(Spacing.sm))
+                        Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = Nuru.ink400)
+                    }
+                    // Its full words — the row clips them to two lines.
+                    bodyOf(n)?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
                 }
             }
-            Text(encouragementFor(n), style = NuruType.body, color = Nuru.ink600)
-            PrimaryButton("Continue my journey", onClick = onContinue)
             Box(Modifier.fillMaxWidth().clickable { onDismiss() }.padding(vertical = Spacing.sm), contentAlignment = Alignment.Center) {
-                Text("Dismiss", style = NuruType.caption, color = Nuru.ink400)
+                Text("Dismiss", style = NuruType.cardCta, color = Nuru.ink600)
             }
         }
-    }
-}
-
-@Composable
-private fun StatChip(glyph: String, label: String) {
-    Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint).padding(horizontal = 10.dp, vertical = 6.dp)) {
-        Text("$glyph  $label", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-private fun encouragementFor(n: NotificationRow): String {
-    val t = n.template.lowercase()
-    return when {
-        "nudge" in t || "miss" in t -> "The road is still yours. One small step today — a verse, a prayer, a page — and you're walking again."
-        "badge" in t || "certificate" in t || "level" in t -> "God is faithful — and so were you. Keep walking; there's more ahead."
-        else -> "Every step counts. Keep going — God isn't finished with you."
     }
 }
 

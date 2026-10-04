@@ -117,6 +117,17 @@ private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile", "departme
 private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE, GIVE_GIFT_ROUTE, PARTNERS_PLEDGE_ROUTE)
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
 
+/** The Live forwarder a tapped Live notice lands on (see its composable). */
+private const val LIVE_NOW_ROUTE = "live-now?streamId={streamId}"
+
+/** Where the Live forwarder stopped short of the player. */
+private sealed interface LiveNowOutcome {
+    /** The stream is over (or nothing is live): "This Live has ended". */
+    data object Ended : LiveNowOutcome
+    /** GET /live/now didn't answer — said in the state language (§4). */
+    data class Failed(val message: org.nuruplace.member.data.net.StateMessage) : LiveNowOutcome
+}
+
 /** The partners statement for one year (docs/PARTNERS_PROGRAMME.md §3; owner
  *  2026-09-25) — built by feature/give/PartnersStatementScreen.partnersStatementRoute. */
 private const val PARTNERS_STATEMENT_ROUTE = "partners-statement?year={year}"
@@ -870,24 +881,31 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.live.LiveTabScreen(me = me, onNavigate = { nav.navigate(it) })
             }
             // Nuru Live discovery — the lightweight forwarding destination a
-            // routed live_stream_started notification tap lands on (see
-            // NuruMessagingService.destFor). The push payload alone lacks
-            // kind/viewers/startedAt, so this re-fetches GET /live/now itself
-            // and forwards straight into the newest watchable stream's player
-            // (never rendered long enough to need its own back-stack entry —
-            // it immediately replaces itself), or back to Home (which shows
-            // its own banner/mini-window) if nothing is watchable anymore.
-            // `?streamId=` names the stream to open instead of the newest —
-            // a ringing Live invite's Join (LiveInvite.kt), which has already
-            // accepted by the time it lands here, so the player's first pulse
-            // finds this member on the stage; an ended stream goes Home, never
-            // to some other stream in its place.
+            // tapped Live notice lands on: a push, or its row in the inbox —
+            // one router (NuruMessagingService.destFor, EXPERIENCE.md §7.2
+            // #3). A notice alone lacks kind/viewers/startedAt, so this
+            // re-fetches GET /live/now itself and forwards straight into the
+            // player — replacing itself, so Back returns to wherever the tap
+            // came from (the inbox, Home) — or, once the stream is over, says
+            // so calmly: "This Live has ended" (LiveEndedState), never a
+            // bounce to Home. `?streamId=` names the stream to open — a Live
+            // notice's own stream, or a ringing invite's Join (LiveInvite.kt),
+            // which has already accepted by the time it lands here, so the
+            // player's first pulse finds this member on the stage; without it,
+            // the newest watchable one. A named stream that has ended is never
+            // swapped for some other stream. A fetch that fails says what
+            // happened (§4) — never "ended" on a guess.
             composable(
-                "live-now?streamId={streamId}",
+                LIVE_NOW_ROUTE,
                 arguments = listOf(navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null }),
             ) { entry ->
                 val wanted = entry.arguments?.getString("streamId")
-                androidx.compose.runtime.LaunchedEffect(wanted) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                // null while looking; then the Live has ended, or the fetch failed.
+                var outcome by remember { androidx.compose.runtime.mutableStateOf<LiveNowOutcome?>(null) }
+                var attempt by remember { mutableIntStateOf(0) }
+                androidx.compose.runtime.LaunchedEffect(wanted, attempt) {
+                    outcome = null
                     // Already watching the invited stream: go back to THAT
                     // player, whose own pulse picks the accept up. Opening a
                     // second one would dispose the first — and a player that
@@ -899,17 +917,30 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         nav.popBackStack()
                         return@LaunchedEffect
                     }
-                    LiveDiscoveryCenter.refresh()
+                    val failed = LiveDiscoveryCenter.refresh()
+                    if (failed != null) {
+                        outcome = LiveNowOutcome.Failed(org.nuruplace.member.data.net.ApiException.state(failed, context))
+                        return@LaunchedEffect
+                    }
                     val target = org.nuruplace.member.feature.live.liveForwardTarget(LiveDiscoveryCenter.streams.value, wanted)
                     if (target != null) {
                         LiveDiscoveryCenter.markSeen(target.streamId)
-                        nav.navigate(liveNowRoute(target)) { popUpTo("home") }
+                        nav.navigate(liveNowRoute(target)) { popUpTo(LIVE_NOW_ROUTE) { inclusive = true } }
                     } else {
-                        nav.navigate("home") { popUpTo("home") { inclusive = true } }
+                        outcome = LiveNowOutcome.Ended
                     }
                 }
-                Box(Modifier.fillMaxSize().background(Nuru.paper), contentAlignment = Alignment.Center) {
-                    androidx.compose.material3.CircularProgressIndicator(color = Nuru.gold)
+                when (val o = outcome) {
+                    LiveNowOutcome.Ended -> org.nuruplace.member.feature.live.LiveEndedState(onBack = { nav.popBackStack() })
+                    is LiveNowOutcome.Failed -> Box(
+                        Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        org.nuruplace.member.ui.components.FailedState(o.message, onRetry = { attempt++ }, onBack = { nav.popBackStack() })
+                    }
+                    null -> Box(Modifier.fillMaxSize().background(Nuru.paper), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.CircularProgressIndicator(color = Nuru.gold)
+                    }
                 }
             }
             composable(
