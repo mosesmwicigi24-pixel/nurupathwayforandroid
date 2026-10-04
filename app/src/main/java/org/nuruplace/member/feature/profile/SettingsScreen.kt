@@ -89,7 +89,7 @@ import org.nuruplace.member.data.net.NotificationPreferences
  * @param embedded true when hosted as the You tab's Settings segment
  *   (YouScreen, docs/PARTNERS_PROGRAMME.md §0) — the capsule above is the
  *   chrome, so the cream header with its back button is skipped. The pushed
- *   "settings" route (Profile's gear) still renders the full header.
+ *   "settings" route (kept for links) still renders the full header.
  */
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: Boolean = false) {

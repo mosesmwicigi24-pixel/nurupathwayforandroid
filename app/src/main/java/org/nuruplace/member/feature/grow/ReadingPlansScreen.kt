@@ -183,6 +183,9 @@ fun ReadingPlansScreen(
             query = query,
             onQuery = { query = it },
             onOpenNotifications = onOpenNotifications,
+            // One header on every tab (EXPERIENCE.md §6.2): its line is the
+            // plan being read — the same plan and day Home's week row says.
+            line = activePlanLine(plans) ?: "A little every day — with the whole family of God.",
         )
 
         Column(
@@ -254,7 +257,7 @@ fun ReadingPlansScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications: () -> Unit) {
+private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications: () -> Unit, line: String) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -275,7 +278,7 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Text(
-                    "A little every day — with the whole family of God.",
+                    line,
                     style = plInter(12),
                     color = PL.ink2,
                     modifier = Modifier.padding(top = 4.dp),

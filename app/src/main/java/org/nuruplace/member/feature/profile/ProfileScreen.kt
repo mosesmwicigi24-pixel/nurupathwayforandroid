@@ -1,8 +1,9 @@
 // Profile — the iOS "Account" tab. Identity header (avatar + level), personal
 // information card, achievements, growth scores, milestones, and certificates.
 // Ported 1:1 from the iOS Profile RootView. Uses the shared PROF palette + primitives
-// from ProfileShared.kt (same package). The gear opens Settings (which owns sign-out);
-// the old menu rows + body sign-out button are dropped to match iOS.
+// from ProfileShared.kt (same package). Settings (which owns sign-out) is the You
+// tab's own segment — its gear is the tab's one (EXPERIENCE.md §6.2); the old menu
+// rows + body sign-out button are dropped to match iOS.
 package org.nuruplace.member.feature.profile
 
 import android.content.Intent
@@ -54,7 +55,6 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.TrendingUp
@@ -197,21 +197,10 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
         // ── Header ──────────────────────────────────────────────────────────
         ProfCreamHeaderBox {
             Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("ACCOUNT", style = pInter(11, FontWeight.Bold, 1.98f), color = PROF.eyebrow)
-                    Spacer(Modifier.weight(1f))
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(PROF.white)
-                            .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
-                            .clickable { onOpen("settings") },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = PROF.navy, modifier = Modifier.size(18.dp))
-                    }
-                }
+                // One settings gear on the You tab (EXPERIENCE.md §6.2): the
+                // segment bar's. Profile's own gear, a second door to the
+                // same Settings, is gone.
+                Text("ACCOUNT", style = pInter(11, FontWeight.Bold, 1.98f), color = PROF.eyebrow)
                 Row(
                     Modifier.padding(top = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,

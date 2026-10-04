@@ -55,8 +55,9 @@ import org.nuruplace.member.ui.theme.Spacing
 private val Capsule = RoundedCornerShape(999.dp)
 
 /** The four segments — `route` is the NavHost route that pre-selects it (see
- *  MainShell) for Chat, Departments and Profile; "settings" is ALSO the
- *  pushed full-screen route behind Profile's gear. */
+ *  MainShell) for Chat, Departments and Profile; "settings" is ALSO a pushed
+ *  full-screen route (kept for links). The Settings segment's gear is the
+ *  tab's one gear (EXPERIENCE.md §6.2) — Profile no longer carries its own. */
 enum class YouSegment(val route: String, val label: String, val icon: ImageVector) {
     Chat("chat", "Community", Icons.Filled.Groups),   // name + route stay: deep links resolve to them
     Departments("departments", "Departments", Icons.Filled.Diversity3),

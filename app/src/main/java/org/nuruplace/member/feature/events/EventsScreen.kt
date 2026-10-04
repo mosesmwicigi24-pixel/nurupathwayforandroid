@@ -2,6 +2,12 @@
 // calendar card + segmented control + search + category chips + gatherings list, then
 // "Series you follow" and "Announcements" rails. Shared chrome (palette, cream header,
 // event card, date fns) lives in EventsShared.kt (same package — no import needed).
+//
+// One header (pathway docs/EXPERIENCE.md §6.2): "EVENTS", the title, and one line —
+// "Next: «title» · EEE d MMM" or "Nothing planned this week" (EventsHeader.kt). A
+// quiet week (§6.5, nothing in range) is quiet: the week strip, one calm card, and the
+// calendar and check-in as two compact rows — the tabs, search and filters show only
+// when there is something to filter.
 package org.nuruplace.member.feature.events
 
 import androidx.compose.foundation.background
@@ -115,6 +121,9 @@ fun EventsScreen(
         val rsvpMap = rsvps.associate { it.eventId to it.status }
         val going = rsvpMap.values.count { it == "going" }
         val upcoming = events.count { val d = occDate(it); d != null && !d.isBefore(today) }
+        // A quiet week is quiet (EXPERIENCE.md §6.5): nothing in range → the
+        // calm card, and no tabs, search or filters with nothing to filter.
+        val quiet = eventsQuiet(events, today)
 
         Column(
             Modifier
@@ -124,16 +133,15 @@ fun EventsScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             // ── 1. Header ──────────────────────────────────────────────────────
+            // One header on every tab (EXPERIENCE.md §6.2): the eyebrow, the
+            // serif title, one line of what matters now, the bell at the right.
             EvCreamHeaderBox {
                 Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
-                            Text("📅 EVENTS", style = evInter(11, FontWeight.Bold, 2f), color = EV.eyebrowGold)
+                            Text("EVENTS", style = evInter(11, FontWeight.Bold, 2f), color = EV.eyebrowGold)
                             Text("Gathered together", style = evSerif(28, FontWeight.SemiBold), color = EV.navy)
-                            Text(
-                                "Today · " + today.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.ENGLISH)) + " · East Africa Time",
-                                style = evInter(11), color = EV.secondary,
-                            )
+                            Text(eventsHeaderLine(events, today), style = evInter(11), color = EV.secondary)
                         }
                         Box(
                             Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(EV.white)
@@ -146,9 +154,13 @@ fun EventsScreen(
                             )
                         }
                     }
-                    Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HeaderPill("$thisWeek this week", Icons.Filled.CalendarMonth)
-                        HeaderPill("$going you're going", Icons.Filled.Check)
+                    // The counts only when there is something to count — a quiet
+                    // week's header line already says it.
+                    if (!quiet) {
+                        Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            HeaderPill("$thisWeek this week", Icons.Filled.CalendarMonth)
+                            HeaderPill("$going you're going", Icons.Filled.Check)
+                        }
                     }
                 }
             }
@@ -218,190 +230,197 @@ fun EventsScreen(
                     }
                 }
 
-                // CALENDAR dark card
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
-                        .clickable { onOpenCalendar() },
-                ) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Box(
-                            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("CALENDAR", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
-                            Text("All events & calendar", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
-                            Text(
-                                "See the whole month at a glance · $upcoming upcoming",
-                                style = evInter(11), color = Color.White.copy(alpha = 0.55f),
-                            )
-                        }
-                        Box(
-                            Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                    }
-                }
-
-                // CHURCH ATTENDANCE dark card — scan into today's service, and the
-                // streak that comes out of showing up. Same visual weight as
-                // CALENDAR: on a Sunday morning this is the reason to open the app.
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
-                        .clickable { onOpenAttendance() },
-                ) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Box(
-                            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.QrCodeScanner, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("CHURCH ATTENDANCE", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
-                            Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
-                            Text(
-                                "Scan the QR at church · see your streak",
-                                style = evInter(11), color = Color.White.copy(alpha = 0.55f),
-                            )
-                        }
-                        Box(
-                            Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                    }
-                }
-
-                // Segmented control
-                val segTodayCount = events.count { occDate(it) == selectedDay }
-                val segUpcomingCount = upcoming
-                val segRsvpCount = events.count { rsvpMap.containsKey(it.occurrenceId) }
-                Row(
-                    Modifier.fillMaxWidth().clip(Capsule).background(EV.white)
-                        .border(1.dp, EV.border, Capsule).padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    SegmentPill("Today", segTodayCount, segment == 0, Modifier.weight(1f)) { segment = 0 }
-                    SegmentPill("Upcoming", segUpcomingCount, segment == 1, Modifier.weight(1f)) { segment = 1 }
-                    SegmentPill("My RSVPs", segRsvpCount, segment == 2, Modifier.weight(1f)) { segment = 2 }
-                }
-
-                // Search field
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(EV.white)
-                        .border(1.dp, EV.border, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 11.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Filled.Search, null, tint = EV.tertiary, modifier = Modifier.size(15.dp))
-                        BasicTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            textStyle = evInter(13).copy(color = EV.navy),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            decorationBox = { inner ->
-                                if (query.isBlank()) {
-                                    Text("Search events by name or place", style = evInter(13), color = EV.tertiary)
-                                }
-                                inner()
-                            },
-                        )
-                    }
-                }
-
-                // Category chips
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    listOf("All", "Worship", "Cell", "Leaders", "Youth").forEach { c ->
-                        val on = category == c
-                        val color = if (c == "All") EV.navy else evCategory(c)
-                        Text(
-                            c,
-                            style = evInter(12, if (on) FontWeight.SemiBold else FontWeight.Medium),
-                            color = if (on) Color.White else EV.secondary,
-                            modifier = Modifier.clip(Capsule)
-                                .background(if (on) color else EV.white)
-                                .then(if (on) Modifier else Modifier.border(1.dp, EV.border, Capsule))
-                                .clickable { category = c }
-                                .padding(horizontal = 16.dp, vertical = 9.dp),
-                        )
-                    }
-                }
-
-                // "Today's gatherings" header
-                val sectionTitle = when {
-                    selectedDay == today && segment == 0 -> "Today's gatherings"
-                    segment == 1 -> "Coming up"
-                    segment == 2 -> "Your RSVPs"
-                    else -> "Events on " + selectedDay.format(DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(sectionTitle, style = evSerif(18, FontWeight.SemiBold), color = EV.ink)
-                    Spacer(Modifier.weight(1f))
-                    Row(
-                        Modifier.clickable { onOpenCalendar() },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        Text("All & calendar", style = evInter(11, FontWeight.SemiBold), color = EV.navy)
-                        Icon(Icons.Filled.ChevronRight, null, tint = EV.navy, modifier = Modifier.size(12.dp))
-                    }
-                }
-
-                // Filtered list
-                val filtered = events.filter { occ ->
-                    val d = occDate(occ)
-                    val segOk = when (segment) {
-                        0 -> d == selectedDay
-                        1 -> d != null && !d.isBefore(today)
-                        else -> rsvpMap.containsKey(occ.occurrenceId)
-                    }
-                    val catOk = category == "All" || occ.category?.equals(category, ignoreCase = true) == true
-                    val q = query.trim()
-                    val queryOk = q.isBlank() ||
-                        occ.title.contains(q, ignoreCase = true) ||
-                        (occ.location?.contains(q, ignoreCase = true) == true)
-                    segOk && catOk && queryOk
-                }
-
-                if (filtered.isEmpty()) {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
-                            .border(1.dp, EV.border, RoundedCornerShape(22.dp))
-                            .padding(vertical = 32.dp, horizontal = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Box(
-                            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.tile),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(20.dp)) }
-                        Text("Nothing on this day", style = evInter(12, FontWeight.SemiBold), color = EV.navy)
-                        Text(
-                            "Browse the full calendar to find a gathering.",
-                            style = evInter(11), color = EV.tertiary,
-                        )
-                        Row(
-                            Modifier.clip(Capsule).background(EV.navy).clickable { onOpenCalendar() }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(Icons.Filled.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(13.dp))
-                            Text("View calendar", style = evInter(11, FontWeight.SemiBold), color = Color.White)
-                        }
-                    }
+                if (quiet) {
+                    // A quiet week (§6.5): one calm card, then the calendar and
+                    // check-in as two compact rows — nothing to filter.
+                    QuietWeekCard()
+                    QuietEntries(onOpenCalendar = onOpenCalendar, onOpenAttendance = onOpenAttendance)
                 } else {
-                    filtered.forEach { occ ->
-                        EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
+                    // CALENDAR dark card
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
+                            .clickable { onOpenCalendar() },
+                    ) {
+                        Row(
+                            Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(
+                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text("CALENDAR", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
+                                Text("All events & calendar", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
+                                Text(
+                                    "See the whole month at a glance · $upcoming upcoming",
+                                    style = evInter(11), color = Color.White.copy(alpha = 0.55f),
+                                )
+                            }
+                            Box(
+                                Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                        }
+                    }
+
+                    // CHURCH ATTENDANCE dark card — scan into today's service, and the
+                    // streak that comes out of showing up. Same visual weight as
+                    // CALENDAR: on a Sunday morning this is the reason to open the app.
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
+                            .clickable { onOpenAttendance() },
+                    ) {
+                        Row(
+                            Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(
+                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.QrCodeScanner, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text("CHURCH ATTENDANCE", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
+                                Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
+                                Text(
+                                    "Scan the QR at church · see your streak",
+                                    style = evInter(11), color = Color.White.copy(alpha = 0.55f),
+                                )
+                            }
+                            Box(
+                                Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                        }
+                    }
+
+                    // Segmented control
+                    val segTodayCount = events.count { occDate(it) == selectedDay }
+                    val segUpcomingCount = upcoming
+                    val segRsvpCount = events.count { rsvpMap.containsKey(it.occurrenceId) }
+                    Row(
+                        Modifier.fillMaxWidth().clip(Capsule).background(EV.white)
+                            .border(1.dp, EV.border, Capsule).padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SegmentPill("Today", segTodayCount, segment == 0, Modifier.weight(1f)) { segment = 0 }
+                        SegmentPill("Upcoming", segUpcomingCount, segment == 1, Modifier.weight(1f)) { segment = 1 }
+                        SegmentPill("My RSVPs", segRsvpCount, segment == 2, Modifier.weight(1f)) { segment = 2 }
+                    }
+
+                    // Search field
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(EV.white)
+                            .border(1.dp, EV.border, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 11.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Filled.Search, null, tint = EV.tertiary, modifier = Modifier.size(15.dp))
+                            BasicTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                textStyle = evInter(13).copy(color = EV.navy),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                decorationBox = { inner ->
+                                    if (query.isBlank()) {
+                                        Text("Search events by name or place", style = evInter(13), color = EV.tertiary)
+                                    }
+                                    inner()
+                                },
+                            )
+                        }
+                    }
+
+                    // Category chips
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf("All", "Worship", "Cell", "Leaders", "Youth").forEach { c ->
+                            val on = category == c
+                            val color = if (c == "All") EV.navy else evCategory(c)
+                            Text(
+                                c,
+                                style = evInter(12, if (on) FontWeight.SemiBold else FontWeight.Medium),
+                                color = if (on) Color.White else EV.secondary,
+                                modifier = Modifier.clip(Capsule)
+                                    .background(if (on) color else EV.white)
+                                    .then(if (on) Modifier else Modifier.border(1.dp, EV.border, Capsule))
+                                    .clickable { category = c }
+                                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                            )
+                        }
+                    }
+
+                    // "Today's gatherings" header
+                    val sectionTitle = when {
+                        selectedDay == today && segment == 0 -> "Today's gatherings"
+                        segment == 1 -> "Coming up"
+                        segment == 2 -> "Your RSVPs"
+                        else -> "Events on " + selectedDay.format(DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(sectionTitle, style = evSerif(18, FontWeight.SemiBold), color = EV.ink)
+                        Spacer(Modifier.weight(1f))
+                        Row(
+                            Modifier.clickable { onOpenCalendar() },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            Text("All & calendar", style = evInter(11, FontWeight.SemiBold), color = EV.navy)
+                            Icon(Icons.Filled.ChevronRight, null, tint = EV.navy, modifier = Modifier.size(12.dp))
+                        }
+                    }
+
+                    // Filtered list
+                    val filtered = events.filter { occ ->
+                        val d = occDate(occ)
+                        val segOk = when (segment) {
+                            0 -> d == selectedDay
+                            1 -> d != null && !d.isBefore(today)
+                            else -> rsvpMap.containsKey(occ.occurrenceId)
+                        }
+                        val catOk = category == "All" || occ.category?.equals(category, ignoreCase = true) == true
+                        val q = query.trim()
+                        val queryOk = q.isBlank() ||
+                            occ.title.contains(q, ignoreCase = true) ||
+                            (occ.location?.contains(q, ignoreCase = true) == true)
+                        segOk && catOk && queryOk
+                    }
+
+                    if (filtered.isEmpty()) {
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
+                                .border(1.dp, EV.border, RoundedCornerShape(22.dp))
+                                .padding(vertical = 32.dp, horizontal = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Box(
+                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.tile),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(20.dp)) }
+                            Text("Nothing on this day", style = evInter(12, FontWeight.SemiBold), color = EV.navy)
+                            Text(
+                                "Browse the full calendar to find a gathering.",
+                                style = evInter(11), color = EV.tertiary,
+                            )
+                            Row(
+                                Modifier.clip(Capsule).background(EV.navy).clickable { onOpenCalendar() }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(Icons.Filled.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                                Text("View calendar", style = evInter(11, FontWeight.SemiBold), color = Color.White)
+                            }
+                        }
+                    } else {
+                        filtered.forEach { occ ->
+                            EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
+                        }
                     }
                 }
 
@@ -547,6 +566,56 @@ fun EventsScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 // Local building blocks
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** The quiet week's one calm card (EXPERIENCE.md §6.5). */
+@Composable
+private fun QuietWeekCard() {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
+            .border(1.dp, EV.border, RoundedCornerShape(22.dp)).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(EV.tile),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(18.dp)) }
+        Text(
+            "The calendar is quiet this week — gatherings the church posts appear here.",
+            style = evInter(12), color = EV.secondary, modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** The calendar and check-in entries as two compact rows — the quiet week's
+ *  doors to the whole calendar and to a service's check-in (§6.5). */
+@Composable
+private fun QuietEntries(onOpenCalendar: () -> Unit, onOpenAttendance: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
+            .border(1.dp, EV.border, RoundedCornerShape(22.dp)),
+    ) {
+        QuietEntryRow(Icons.Filled.CalendarMonth, "All events & calendar", onOpenCalendar)
+        Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(EV.border))
+        QuietEntryRow(Icons.Filled.QrCodeScanner, "Check in to a service", onOpenAttendance)
+    }
+}
+
+@Composable
+private fun QuietEntryRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(EV.goldTile),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(16.dp)) }
+        Text(title, style = evInter(13, FontWeight.SemiBold), color = EV.navy, modifier = Modifier.weight(1f))
+        Icon(Icons.Filled.ChevronRight, null, tint = EV.tertiary, modifier = Modifier.size(16.dp))
+    }
+}
 
 @Composable
 private fun HeaderPill(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {

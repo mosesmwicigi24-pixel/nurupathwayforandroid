@@ -2,11 +2,13 @@
 // ONE bottom-bar destination: Give (the giving screen) · Partners (the
 // programme, PartnersScreen.kt).
 //
-// The control is a FULL-WIDTH pill split in two equal halves (GIVE · PARTNERS,
-// navy fill + gold text when selected) and it is the FIRST ROW INSIDE each
-// screen's cream header band — one band, not a segment strip over a second
-// header. The selection state lives here; the control itself is handed to
-// each screen as a composable slot so the band scrolls with the page.
+// The control is a pill split in two equal halves (GIVE · PARTNERS, navy fill
+// + gold text when selected), the tab's bell at its right (EXPERIENCE.md §6.2
+// — the same notifications inbox as every other tab's bell), and it is the
+// FIRST ROW INSIDE each screen's cream header band — one band, not a segment
+// strip over a second header. The selection state lives here; the control
+// itself is handed to each screen as a composable slot so the band scrolls
+// with the page.
 //
 // Two routes wear this tab: "give" opens on Give, "partners" opens on Partners
 // — so every existing nav.navigate("give") (Home's Give card, pushes,
@@ -50,11 +52,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -113,6 +122,22 @@ internal fun GiveSegmentControl(segment: GiveSegment, onSelect: (GiveSegment) ->
                 )
             }
         }
+    }
+}
+
+/** The tab's bell, at the right of the switch — the notifications inbox, as
+ *  on every other tab: white, a hairline, the gold dot the other bells wear,
+ *  and the switch's own height. */
+@Composable
+private fun GiveBell(onClick: () -> Unit) {
+    Box(
+        Modifier.size(46.dp).clip(CircleShape).background(GIVE.white)
+            .border(1.dp, GIVE.border, CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = GIVE.navy, modifier = Modifier.size(19.dp))
+        Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(8.dp).clip(CircleShape).background(GIVE.gold))
     }
 }
 
@@ -180,11 +205,19 @@ fun GiveTabScreen(
     }
 
     // One control, rendered by whichever screen is showing, as the first row
-    // of its header band.
+    // of its header band — with the tab's bell at its right (EXPERIENCE.md
+    // §6.2: one header on every tab, the bell always at the far right),
+    // opening the same inbox every other bell opens.
     val segmentControl: @Composable () -> Unit = {
-        GiveSegmentControl(segment) { s ->
-            if (segment != s) Haptics.tick(view)
-            segment = s
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                GiveSegmentControl(segment) { s ->
+                    if (segment != s) Haptics.tick(view)
+                    segment = s
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            GiveBell { onNavigate("notifications") }
         }
     }
 
