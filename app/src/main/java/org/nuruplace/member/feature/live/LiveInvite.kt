@@ -69,8 +69,16 @@ fun ringRemainingMs(postedAtMs: Long, nowMs: Long, timeoutMs: Long = RING_TIMEOU
 
 /** MainShell's route into [streamId]'s player: the live-now forwarder, told
  *  which stream (the push alone can't build the player's route — no url,
- *  kind or start time — so the forwarder fetches GET /live/now first). */
-fun liveInviteRoute(streamId: String): String = "live-now?streamId=$streamId"
+ *  kind or start time — so the forwarder fetches GET /live/now first). Any
+ *  notice that names its stream opens it this way — an invite, a stream
+ *  starting (EXPERIENCE.md §7.3) — with the stream's [title] when the notice
+ *  carries it, so a Live that has ended can still be named. */
+fun liveInviteRoute(streamId: String, title: String? = null): String =
+    "live-now?streamId=$streamId" + (title?.trim()?.takeIf { it.isNotEmpty() }?.let { "&title=${routeArg(it)}" }.orEmpty())
+
+/** A route argument, percent-encoded (spaces as %20, which the nav graph
+ *  decodes) — plain JVM, so the routes are testable off-device. */
+private fun routeArg(s: String): String = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
 /** Whether the full screen rings aloud and whether it buzzes. */
 data class RingPlan(val sound: Boolean, val vibrate: Boolean)

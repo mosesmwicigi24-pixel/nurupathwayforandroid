@@ -2,9 +2,9 @@
 // The ONE app-wide source of truth for "what's watchable right now", feeding:
 //   1. A tapped Live notice — a push, or its row in the inbox (one router,
 //      EXPERIENCE.md §7.2 #3) — MainShell's "live-now" route re-checks GET
-//      /live/now and forwards to the newest watchable stream (an invite's,
-//      the stream it names), or says "This Live has ended" (LiveEndedState)
-//      once there is nothing left to join by the time the tap lands.
+//      /live/now and forwards to the stream the notice names (§7.3), or says
+//      "This Live has ended" with its name (LiveEndedState) once it is over;
+//      a notice naming none forwards to the newest watchable stream.
 //   2. Home's mini-window pop-up for a stream this session hasn't seen yet.
 //   3. The app-wide LIVE bar shown on every screen but Home while the player
 //      isn't already open.
@@ -35,11 +35,12 @@ internal fun filterOutSelfStream(rows: List<LiveNowRow>, selfStreamId: String?):
     if (selfStreamId == null) rows else rows.filterNot { it.streamId == selfStreamId }
 
 /** Where MainShell's "live-now" forwarder goes, over the (already
- *  self-filtered) `/live/now` rows: the newest watchable stream when no
- *  stream was named (a live_stream_started tap, the Radio widget's LIVE
- *  line), and exactly [wantedStreamId] when one was (a Live invite's Join,
- *  LiveInvite.kt) — never some OTHER stream in its place: null (→ "This
- *  Live has ended") when nothing is watchable, or the named one has ended. */
+ *  self-filtered) `/live/now` rows: exactly [wantedStreamId] when a stream
+ *  was named (a Live notice — a stream starting, an invite, its Join;
+ *  LiveInvite.kt) — never some OTHER stream in its place — and the newest
+ *  watchable stream when none was (the Radio widget's LIVE line, a notice
+ *  without its stream): null (→ "This Live has ended") when the named one
+ *  has ended, or nothing is watchable. */
 internal fun liveForwardTarget(rows: List<LiveNowRow>, wantedStreamId: String?): LiveNowRow? =
     if (wantedStreamId.isNullOrBlank()) rows.firstOrNull() else rows.firstOrNull { it.streamId == wantedStreamId }
 

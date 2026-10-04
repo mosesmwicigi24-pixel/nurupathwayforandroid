@@ -118,7 +118,7 @@ private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUT
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
 
 /** The Live forwarder a tapped Live notice lands on (see its composable). */
-private const val LIVE_NOW_ROUTE = "live-now?streamId={streamId}"
+private const val LIVE_NOW_ROUTE = "live-now?streamId={streamId}&title={title}"
 
 /** Where the Live forwarder stopped short of the player. */
 private sealed interface LiveNowOutcome {
@@ -896,9 +896,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // re-fetches GET /live/now itself and forwards straight into the
             // player — replacing itself, so Back returns to wherever the tap
             // came from (the inbox, Home) — or, once the stream is over, says
-            // so calmly: "This Live has ended" (LiveEndedState), never a
-            // bounce to Home. `?streamId=` names the stream to open — a Live
-            // notice's own stream, or a ringing invite's Join (LiveInvite.kt),
+            // so calmly: "This Live has ended" and its name (LiveEndedState),
+            // never a bounce to Home. `?streamId=` names the stream to open —
+            // a Live notice's own stream (`&title=` its name), or a ringing
+            // invite's Join (LiveInvite.kt),
             // which has already accepted by the time it lands here, so the
             // player's first pulse finds this member on the stage; without it,
             // the newest watchable one. A named stream that has ended is never
@@ -906,9 +907,14 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // happened (§4) — never "ended" on a guess.
             composable(
                 LIVE_NOW_ROUTE,
-                arguments = listOf(navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                arguments = listOf(
+                    navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    // The Live's name, from the notice — said if it has ended.
+                    navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
             ) { entry ->
                 val wanted = entry.arguments?.getString("streamId")
+                val wantedName = entry.arguments?.getString("title")
                 val context = androidx.compose.ui.platform.LocalContext.current
                 // null while looking; then the Live has ended, or the fetch failed.
                 var outcome by remember { androidx.compose.runtime.mutableStateOf<LiveNowOutcome?>(null) }
@@ -940,7 +946,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     }
                 }
                 when (val o = outcome) {
-                    LiveNowOutcome.Ended -> org.nuruplace.member.feature.live.LiveEndedState(onBack = { nav.popBackStack() })
+                    LiveNowOutcome.Ended -> org.nuruplace.member.feature.live.LiveEndedState(name = wantedName, onBack = { nav.popBackStack() })
                     is LiveNowOutcome.Failed -> Box(
                         Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen),
                         contentAlignment = Alignment.Center,

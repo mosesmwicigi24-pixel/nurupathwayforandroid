@@ -92,6 +92,9 @@ class LiveInviteTest {
 
     @Test fun `join routes to the live-now forwarder for that stream`() {
         assertEquals("live-now?streamId=s-42", liveInviteRoute("s-42"))
+        // With the stream's name, for "This Live has ended" (EXPERIENCE.md §7.3).
+        assertEquals("live-now?streamId=s-42&title=Sunday%20service%20%26%20prayer", liveInviteRoute("s-42", "Sunday service & prayer"))
+        assertEquals("live-now?streamId=s-42", liveInviteRoute("s-42", "  "))
     }
 
     private fun row(id: String) = LiveNowRow(streamId = id, title = id, hlsUrl = "/live/$id/index.m3u8")

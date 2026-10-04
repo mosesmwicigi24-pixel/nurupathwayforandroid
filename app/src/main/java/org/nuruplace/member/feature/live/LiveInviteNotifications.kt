@@ -121,7 +121,7 @@ object LiveInviteNotifications {
             context, "open:${invite.streamId}".hashCode(),
             Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra("nuru.dest", liveInviteRoute(invite.streamId)),
+                .putExtra("nuru.dest", liveInviteRoute(invite.streamId, invite.streamTitle)),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(context, NotificationChannels.QUIET)

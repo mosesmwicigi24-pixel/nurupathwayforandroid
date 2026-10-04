@@ -89,6 +89,8 @@ internal fun noticeData(n: NotificationRow): Map<String, String> = buildMap {
     p.promptAt?.let { put("prompt_at", it) }
     p.pledgeId?.let { put("pledge_id", it) }
     p.streamId?.let { put("stream_id", it) }
+    // A Live notice's title is its stream's name — said if it has ended.
+    p.title?.let { put("title", it) }
 }
 
 /** A notice's in-app destination — the SAME router a tapped push uses

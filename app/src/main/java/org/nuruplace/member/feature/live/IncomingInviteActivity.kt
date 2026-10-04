@@ -247,7 +247,7 @@ class IncomingInviteActivity : ComponentActivity() {
             startActivity(
                 Intent(this@IncomingInviteActivity, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    .putExtra("nuru.dest", liveInviteRoute(inv.streamId)),
+                    .putExtra("nuru.dest", liveInviteRoute(inv.streamId, inv.streamTitle)),
             )
             finish()
         }

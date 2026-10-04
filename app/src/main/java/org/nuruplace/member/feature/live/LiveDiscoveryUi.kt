@@ -179,14 +179,16 @@ fun AppLiveBar(stream: LiveNowRow, modifier: Modifier = Modifier, onClick: () ->
 }
 
 /** Where a Live notice lands once its stream is over — a tapped push or its
- *  row in the inbox, the same router (EXPERIENCE.md §7.2 #3): a calm "This
- *  Live has ended" in the shared state card, and the way back. Never an
- *  error, never a blank, never some other stream in its place. */
+ *  row in the inbox, the same router (EXPERIENCE.md §7.2 #3, §7.3): a calm
+ *  "This Live has ended" in the shared state card, the Live's [name] when
+ *  the notice carried it, and Go back. Never an error, never a blank, never
+ *  some other stream in its place. */
 @Composable
-fun LiveEndedState(onBack: () -> Unit) {
+fun LiveEndedState(name: String?, onBack: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen), contentAlignment = Alignment.Center) {
         StateCard(
             title = "This Live has ended",
+            line = name?.trim()?.takeIf { it.isNotEmpty() },
             glyph = Icons.Filled.GraphicEq,
             actionLabel = "Go back",
             onAction = onBack,

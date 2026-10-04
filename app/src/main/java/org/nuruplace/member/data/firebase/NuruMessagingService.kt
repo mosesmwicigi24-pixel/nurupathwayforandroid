@@ -178,13 +178,16 @@ class NuruMessagingService : FirebaseMessagingService() {
             // its collector's (covered / stopped), open that pledge.
             org.nuruplace.member.feature.give.givingPushRoute(data)?.let { return it }
             val t = (data["template"] ?: "").lowercase()
-            // A Live guest invite (live/service.ts inviteGuest, payload
-            // { stream_id, title }) opens ITS stream, not whichever is newest
-            // — only a ring without a usable stream_id reaches the plain
-            // "live" rule below. (A ring is normally shown by
-            // LiveInviteNotifications, never through here.)
-            if (t == "live_guest_invite") {
-                data["stream_id"]?.trim()?.takeIf { isStreamId(it) }?.let { return liveInviteRoute(it) }
+            // A Live notice opens the stream it NAMES, never whichever stream
+            // happens to be live now (EXPERIENCE.md §7.3): a guest invite
+            // (live/service.ts inviteGuest, payload { stream_id, title }) and
+            // a stream starting (notifyStreamStarted, { stream_id, scope,
+            // cell_id, title }) — the player while that stream is live, else
+            // "This Live has ended" with its name. Only a notice without a
+            // usable stream_id reaches the plain "live" rule below. (A ring is
+            // normally shown by LiveInviteNotifications, never through here.)
+            if (t == "live_guest_invite" || t == "live_stream_started") {
+                data["stream_id"]?.trim()?.takeIf { isStreamId(it) }?.let { return liveInviteRoute(it, data["title"]) }
             }
             return when {
                 "department" in t || "serve_request" in t -> "departments"
@@ -194,7 +197,8 @@ class NuruMessagingService : FirebaseMessagingService() {
                 // build LiveRoutes.kt's live-player route (no kind/viewers/
                 // startedAt) — "live-now" is a lightweight MainShell destination
                 // that re-fetches GET /live/now and forwards to the newest
-                // watchable stream (or says the Live has ended).
+                // watchable stream (or says the Live has ended) — only for a
+                // notice that names no stream.
                 "live" in t -> "live-now"
                 "prayer" in t -> "prayer-room?tab=corporate"
                 "verse" in t || "memory" in t -> "memory-verses"

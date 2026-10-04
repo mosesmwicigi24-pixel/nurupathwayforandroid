@@ -18,12 +18,12 @@ class NoticeRoutingTest {
     private fun row(template: String, payload: NotifPayload? = null) =
         NotificationRow(notificationId = "n1", template = template, payload = payload, status = "sent")
 
-    @Test fun `a Live notice opens the Live, as its push does — the player, or This Live has ended`() {
-        // The forwarder: the newest watchable stream, else "This Live has ended".
-        assertEquals("live-now", noticeRoute(row("live_stream_started", NotifPayload(title = "Ring check", streamId = stream))))
+    @Test fun `a Live notice opens the stream it names — the player, or This Live has ended with its name`() {
+        // EXPERIENCE.md §7.3: never whichever stream happens to be live now.
+        assertEquals("live-now?streamId=$stream&title=Ring%20check", noticeRoute(row("live_stream_started", NotifPayload(title = "Ring check", streamId = stream))))
+        assertEquals("live-now?streamId=$stream&title=Ring%20check", noticeRoute(row("live_guest_invite", NotifPayload(title = "Ring check", streamId = stream))))
+        // A notice naming no stream: the newest watchable one, as a push does.
         assertEquals("live-now", noticeRoute(row("live_stream_started")))
-        // An invite opens ITS stream (or says it has ended).
-        assertEquals("live-now?streamId=$stream", noticeRoute(row("live_guest_invite", NotifPayload(title = "Ring check", streamId = stream))))
     }
 
     @Test fun `every notice routes exactly as its push`() {

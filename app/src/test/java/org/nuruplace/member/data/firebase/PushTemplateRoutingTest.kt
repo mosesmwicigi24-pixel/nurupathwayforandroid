@@ -22,7 +22,7 @@ class PushTemplateRoutingTest {
             "stream_id" to "5f0c7a52-2d7e-4a8b-9c1d-0e5b8f3a6d21", "title" to "Sunday service",
             "alert_title" to "You're invited to go live", "alert_body" to "…", "body" to "…",
         )
-        assertEquals("live-now?streamId=5f0c7a52-2d7e-4a8b-9c1d-0e5b8f3a6d21", NuruMessagingService.destFor(invite))
+        assertEquals("live-now?streamId=5f0c7a52-2d7e-4a8b-9c1d-0e5b8f3a6d21&title=Sunday%20service", NuruMessagingService.destFor(invite))
     }
 
     @Test fun `a Live invite with no usable stream falls back to the newest`() {
@@ -30,10 +30,14 @@ class PushTemplateRoutingTest {
         assertEquals("live-now", NuruMessagingService.destFor(push("live_guest_invite", "ring", "stream_id" to "x/y")))
     }
 
-    @Test fun `a stream starting still opens the newest live stream`() {
+    @Test fun `a stream starting opens the stream it names, not whichever is live now`() {
         // live/service.ts notifyStreamStarted: { stream_id, scope, cell_id, title }
+        // — EXPERIENCE.md §7.3: the player while it is live, "This Live has
+        // ended" with its name once it is over.
         val started = push("live_stream_started", "update", "stream_id" to "s-1", "scope" to "church", "title" to "Sunday service")
-        assertEquals("live-now", NuruMessagingService.destFor(started))
+        assertEquals("live-now?streamId=s-1&title=Sunday%20service", NuruMessagingService.destFor(started))
+        // Without a usable stream: the newest watchable one.
+        assertEquals("live-now", NuruMessagingService.destFor(push("live_stream_started", "update", "stream_id" to "a/b")))
     }
 
     @Test fun `the template rules now route the pushes they were written for`() {
