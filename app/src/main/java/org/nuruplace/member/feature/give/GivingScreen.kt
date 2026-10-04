@@ -97,7 +97,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1724,12 +1727,82 @@ private fun ScheduledResult(created: CreatedScheduleRes, body: CreateScheduleBod
     }
 }
 
+/** "Check your phone" (EXPERIENCE.md §7.2 #5, §7.3; iOS StkStage) — the
+ *  wait for a PIN prompt, never a celebration: a waiting indicator, the PIN
+ *  line with its amount in gold, "Prompt sent to …" and a quiet Close from
+ *  the start. Past the minute the line says it is still processing and Done
+ *  leads; either way the watch keeps going while the stage is on screen,
+ *  and closing leaves the gift as it is. */
+@Composable
+private fun StkStage(pin: StkPinLine, note: String?, late: Boolean, promptPhone: String?, onClose: () -> Unit) {
+    val view = LocalView.current
+    Column(
+        Modifier.fillMaxSize().background(GIVE.navy).padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+        Box(Modifier.size(80.dp).clip(CircleShape).background(GIVE.gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(Modifier.size(34.dp), color = GIVE.gold, strokeWidth = 3.dp)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(STK_TITLE, style = giSerif(22, FontWeight.Medium, -0.44f), color = Color.White, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            buildAnnotatedString {
+                append(pin.lead)
+                withStyle(SpanStyle(color = GIVE.gold, fontWeight = FontWeight.SemiBold)) { append(pin.amount) }
+                append(pin.rest)
+            },
+            style = giInter(13), color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center,
+        )
+        note?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = giInter(12), color = Color.White.copy(alpha = 0.6f), textAlign = TextAlign.Center)
+        }
+        promptPhone?.let { phone ->
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.clip(Capsule).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Icons.Filled.Smartphone, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
+                Text("Prompt sent to ${kenyanMobileDisplay(phone)}", style = giInter(11), color = Color.White)
+            }
+        }
+        // True only for the prompt's first minute — gone once it isn't.
+        if (!late) {
+            Spacer(Modifier.height(20.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CircularProgressIndicator(Modifier.size(12.dp), color = Color.White.copy(alpha = 0.5f), strokeWidth = 1.5.dp)
+                Text(STK_WAITING_LINE, style = giInter(11), color = Color.White.copy(alpha = 0.5f))
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (late) {
+            Row(
+                Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp)).background(GIVE.gold)
+                    .clickable { Haptics.tap(view); onClose() },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) { Text("Done", style = giInter(14, FontWeight.Bold), color = GIVE.navy) }
+        } else {
+            Box(
+                Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(16.dp))
+                    .clickable { Haptics.tap(view); onClose() },
+                contentAlignment = Alignment.Center,
+            ) { Text("Close", style = giInter(14, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.7f)) }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
 /** Full-screen generosity ceremony once an intent is created. Its words come
- *  from GiveCeremonyCopy.kt: "Enter your PIN to complete KSh 1,000 toward your
- *  Building pledge." / "… to Tithe." — the RESULT's pledge and fund, never the
- *  chip, which is only the fallback when the result carries no fund — until
- *  the watch reads the transaction's final status: "Gift confirmed" or "The
- *  payment didn't complete". */
+ *  from GiveCeremonyCopy.kt: while a PIN prompt waits, "Check your phone"
+ *  ([StkStage]) — "Enter your PIN to complete KSh 1,000 toward your Building
+ *  pledge." / "… to Tithe." — the RESULT's pledge and fund, never the chip,
+ *  which is only the fallback when the result carries no fund — until the
+ *  watch reads the transaction's final status: "Thank you for your
+ *  generosity · Gift confirmed" (the server's success, and only then) or
+ *  "The payment didn't complete". A PayPal gift keeps its own stage. */
 @Composable
 private fun GiveResult(
     r: GivingIntentResult,
@@ -1767,7 +1840,9 @@ private fun GiveResult(
     // of the same key, read the same way — then what the watch or a PayPal
     // capture reports. Server truth only (§5.6).
     var status by remember(r.transactionId) { mutableStateOf(r.status) }
-    var watchLapsed by remember(r.transactionId) { mutableStateOf(false) }
+    // Past the watch's minute (GiftWatch): the line says it is still
+    // processing and Done leads — while the watch keeps going.
+    var late by remember(r.transactionId) { mutableStateOf(false) }
     // Why it failed, as the watch read it off the transaction (Giving Cycle 1)
     // — or as the server already said when the gift was opened from its push.
     var failure by remember(r.transactionId) { mutableStateOf(initialFailure) }
@@ -1806,21 +1881,26 @@ private fun GiveResult(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         if (openedPayPal && canReopenPayPal(r, status)) capture(quiet = true)
     }
-    // The watch (iOS parity): GET /giving/transactions/{id} every 3 s, at most
-    // 20 times, while the gift is processing. Ends with the ceremony.
+    // The watch (iOS StkWatch, EXPERIENCE.md §7.2 #5): GET /giving/
+    // transactions/{id} every 3 s for the first minute, then every 10 s up to
+    // five, while the gift is processing and the ceremony is on screen — so a
+    // prompt answered late still lands here. Ends with the ceremony. A re-read
+    // after a PayPal capture (watchRun > 0) watches again without turning a
+    // late stage back.
     LaunchedEffect(r.transactionId, watchRun) {
         if (r.transactionId.isBlank()) return@LaunchedEffect
-        watchLapsed = false
-        var readings = 0
-        while (keepWatchingGift(giftOutcome(status), readings)) {
-            delay(CEREMONY_WATCH_INTERVAL_MS)
-            readings++
+        if (watchRun == 0) late = false
+        val started = android.os.SystemClock.elapsedRealtime()
+        fun elapsed() = android.os.SystemClock.elapsedRealtime() - started
+        while (giftOutcome(status) == GiftOutcome.Processing) {
+            delay(GiftWatch.nextDelayMs(elapsed()) ?: break)
+            if (GiftWatch.isLate(elapsed())) late = true
             runCatching { Net.client.api.givingDetail(r.transactionId) }.getOrNull()?.let {
                 status = it.status
                 failure = it.failure
             }
         }
-        if (giftOutcome(status) == GiftOutcome.Processing) watchLapsed = true
+        if (giftOutcome(status) == GiftOutcome.Processing && GiftWatch.isLate(elapsed())) late = true
         // Failed on its very first answer, so never read back: one reading for WHY.
         if (giftOutcome(status) == GiftOutcome.Failed && failure == null) {
             runCatching { Net.client.api.givingDetail(r.transactionId) }.getOrNull()?.let { failure = it.failure }
@@ -1835,6 +1915,20 @@ private fun GiveResult(
             CelebrationCenter.fire(Moment("gift-${r.transactionId.ifBlank { r.providerRef.orEmpty() }}", "Thank you for sowing", "Every gift carries the gospel further."))
         }
         onOutcomeNow(outcome)
+    }
+    // Waiting on the phone's PIN prompt: "Check your phone" — never the
+    // thanks, which waits for the server's confirmed success (§7.3).
+    if (waitsOnPhone(r, status, promptPhone)) {
+        StkStage(
+            pin = stkPinLine(r, amountMinor, chipFundLabel, giftName, currency),
+            // Past the minute the late line; before it, the server's word
+            // about a prompt already waiting, when there is one.
+            note = if (late) GIFT_LATE_LINE else note,
+            late = late,
+            promptPhone = promptPhone,
+            onClose = onDone,
+        )
+        return
     }
     Box(Modifier.fillMaxSize().background(GIVE.paper), contentAlignment = Alignment.Center) {
         Column(
@@ -1866,7 +1960,7 @@ private fun GiveResult(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                giveCeremonyStatusLine(r, amountMinor, chipFundLabel, outcome, watchLapsed, failure, currency),
+                giveCeremonyStatusLine(r, amountMinor, chipFundLabel, outcome, late, failure, currency),
                 style = giInter(13),
                 color = when (outcome) { GiftOutcome.Succeeded -> GIVE.successText; GiftOutcome.Failed -> GIVE.danger; else -> GIVE.sub },
                 textAlign = TextAlign.Center,

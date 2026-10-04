@@ -168,7 +168,9 @@ class GivingCycle6Test {
         assertNull(resend.providerRef)
         // Not an error: still processing, still watched, still the PIN's words.
         assertEquals(GiftOutcome.Processing, giftOutcome(resend.status))
-        assertTrue(keepWatchingGift(giftOutcome(resend.status), readingsDone = 0))
+        // Watched on "Check your phone" (§7.3) — never thanked while it waits.
+        assertTrue(waitsOnPhone(resend, resend.status, promptPhone = null))
+        assertEquals(3_000L, GiftWatch.nextDelayMs(0))
         assertEquals("Enter your PIN to complete KSh 1,000 to Tithe.", giveCeremonyLine(resend, 100_000, chipFundLabel = "Tithe"))
         assertTrue(canRetryGift(resend.provider))
         // Once the prompt is out, a later resend carries its ref.

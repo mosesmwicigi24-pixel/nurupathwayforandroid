@@ -8,13 +8,20 @@
 //   result.fund    → "to <fund.name>"
 //   neither        → "to <chip label>"   (an older server), else nothing
 //
-// The ceremony then WATCHES the real transaction (iOS parity, 2026-09-26):
-// GET /giving/transactions/{id} every 3 s, at most 20 times, until it is
-// final — and says so. The intent's answer is its first reading, read the
-// same way whether fresh or a replay of the same idempotency key (`reused`
-// is never consulted): a replay of a gift that already went through shows
-// "confirmed", one that failed shows "didn't complete" — and, since Giving
-// Cycle 1, WHY, in the server's own words (failure.reason + failure.hint).
+// The ceremony then WATCHES the real transaction (iOS StkWatch, EXPERIENCE.md
+// §7.2 #5, §7.3): GET /giving/transactions/{id} every 3 s for the first
+// minute, then every 10 s up to five, while it is on screen — so an answer
+// that comes late still lands. The intent's answer is its first reading, read
+// the same way whether fresh or a replay of the same idempotency key
+// (`reused` is never consulted): a replay of a gift that already went through
+// shows "confirmed", one that failed shows "didn't complete" — and, since
+// Giving Cycle 1, WHY, in the server's own words (failure.reason + hint).
+//
+// Waiting for M-Pesa is never a celebration (§7.3): while a PIN prompt waits
+// the stage is "Check your phone" — the PIN line, "Prompt sent to …", a quiet
+// Close — and "Thank you for your generosity" with its tick comes only on the
+// server's confirmed success. It used to say "Thank you" while the prompt was
+// still waiting.
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.GiftFailure
@@ -78,31 +85,79 @@ fun giftOutcome(status: String?): GiftOutcome = when (status?.trim()?.lowercase(
     else -> GiftOutcome.Processing
 }
 
-/** The ceremony's watch: one GET /giving/transactions/{id} every 3 s… */
-const val CEREMONY_WATCH_INTERVAL_MS = 3_000L
+/** The ceremony's watch while the gift is processing and on screen (iOS
+ *  StkWatch, §7.2 #5): every 3 s for the first minute, then every 10 s up
+ *  to five minutes. Past the minute the wait is late: its line says so and
+ *  Done leads — while the watch keeps going. */
+object GiftWatch {
+    const val LATE_AFTER_MS = 60_000L
+    const val WATCH_FOR_MS = 300_000L
 
-/** …at most 20 times (~60 s), as iOS. */
-const val CEREMONY_WATCH_MAX = 20
+    /** Milliseconds before the next look, [elapsedMs] into the wait — null
+     *  once the watch is over. */
+    fun nextDelayMs(elapsedMs: Long): Long? = when {
+        elapsedMs >= WATCH_FOR_MS -> null
+        elapsedMs < LATE_AFTER_MS -> 3_000L
+        else -> 10_000L
+    }
 
-/** Watch again only while the gift is still processing and the watch has
- *  readings left. */
-fun keepWatchingGift(outcome: GiftOutcome, readingsDone: Int): Boolean =
-    outcome == GiftOutcome.Processing && readingsDone < CEREMONY_WATCH_MAX
+    /** Past the minute: the late line, and Done as the primary. */
+    fun isLate(elapsedMs: Long): Boolean = elapsedMs >= LATE_AFTER_MS
+}
 
-/** The ceremony's title for where the gift stands. */
+/** The wait for a PIN prompt (§7.3, iOS StkStage) — never a celebration. */
+const val STK_TITLE = "Check your phone"
+
+/** Under the prompt for its first minute, beside a small spinner. */
+const val STK_WAITING_LINE = "Waiting up to 60s…"
+
+/** Past the minute, on both apps (§7.2 #5): where the gift will show —
+ *  RECENT GIVING lists it once it clears. */
+const val GIFT_LATE_LINE = "Still processing — it will show in Recent giving once it clears."
+
+/** A gift waiting on a PIN prompt on the member's phone — an M-Pesa or
+ *  Airtel gift still processing (a provider-less answer that sent a prompt
+ *  counts too): its stage is "Check your phone". A PayPal or card gift keeps
+ *  its own stage. */
+fun waitsOnPhone(r: GivingIntentResult, status: String?, promptPhone: String?): Boolean =
+    giftOutcome(status) == GiftOutcome.Processing && r.approveUrl.isNullOrBlank() &&
+        (r.provider?.lowercase() in PIN_PROVIDERS || (r.provider.isNullOrBlank() && promptPhone != null))
+
+/** "Check your phone"'s line, its amount picked out in gold (iOS StkStage):
+ *  "Enter your PIN to complete " · "KSh 1,000" · " to Tithe — “Tithe”." —
+ *  the RESULT's pledge or fund, then the member's own gift name. */
+data class StkPinLine(val lead: String, val amount: String, val rest: String) {
+    val text: String get() = lead + amount + rest
+}
+
+fun stkPinLine(
+    r: GivingIntentResult,
+    amountMinor: Int,
+    chipFundLabel: String?,
+    giftName: String? = null,
+    currency: String? = null,
+): StkPinLine {
+    val destination = giveDestinationPhrase(r, chipFundLabel)?.let { " $it" }.orEmpty()
+    val name = giftName?.trim()?.takeIf { it.isNotEmpty() }?.let { " — “$it”" }.orEmpty()
+    return StkPinLine("Enter your PIN to complete ", money(amountMinor, currency), "$destination$name.")
+}
+
+/** The ceremony's title for where the gift stands — for every stage but
+ *  "Check your phone" ([STK_TITLE]): the server's confirmed success, a gift
+ *  that didn't go through, and a PayPal gift's own wait. */
 fun giveCeremonyTitle(outcome: GiftOutcome): String =
     if (outcome == GiftOutcome.Failed) "Your gift didn't go through" else "Thank you for your generosity"
 
 /** The ceremony's one line for where the gift stands: confirmed, didn't
  *  complete — in the server's words when it named why ([failure]'s reason)
- *  — still out of reach of the watch, or, while processing, the
+ *  — past the watch's minute ([late]), or, while processing, the
  *  instruction line ([giveCeremonyLine]). */
 fun giveCeremonyStatusLine(
     r: GivingIntentResult,
     amountMinor: Int,
     chipFundLabel: String?,
     outcome: GiftOutcome,
-    watchLapsed: Boolean,
+    late: Boolean,
     failure: GiftFailure? = null,
     currency: String? = null,
 ): String = when (outcome) {
@@ -110,9 +165,7 @@ fun giveCeremonyStatusLine(
     GiftOutcome.Failed -> failure?.reason?.trim()?.takeIf { it.isNotEmpty() }
         ?: "The payment didn't complete — no charge was made."
     GiftOutcome.Processing ->
-        // EXPERIENCE.md §7.2 #5 — the same line on both apps, naming where
-        // the gift will show: RECENT GIVING lists it once it clears.
-        if (watchLapsed) "Still processing — it will show in Recent giving once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel, currency)
+        if (late) GIFT_LATE_LINE else giveCeremonyLine(r, amountMinor, chipFundLabel, currency)
 }
 
 /** The failed ceremony's second line: what to do next and whether money

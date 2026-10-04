@@ -105,13 +105,13 @@ class GiftFailureTest {
     fun `the failed ceremony says the server's reason, then its hint`() {
         assertEquals(
             "The M-Pesa prompt was cancelled.",
-            giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Failed, watchLapsed = false, failure = cancelled),
+            giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Failed, late = false, failure = cancelled),
         )
         assertEquals("Nothing was taken. Give again whenever you're ready.", giveCeremonyHint(GiftOutcome.Failed, cancelled))
         // No failure named (an older server): the line it always said, no hint.
         assertEquals(
             "The payment didn't complete — no charge was made.",
-            giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Failed, watchLapsed = false, failure = null),
+            giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Failed, late = false, failure = null),
         )
         assertNull(giveCeremonyHint(GiftOutcome.Failed, null))
         // Anything but a failure never shows one.
@@ -119,7 +119,7 @@ class GiftFailureTest {
         assertNull(giveCeremonyHint(GiftOutcome.Succeeded, cancelled))
         assertEquals(
             "Gift confirmed — receipt on its way. 🎉",
-            giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Succeeded, watchLapsed = false, failure = cancelled),
+            giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Succeeded, late = false, failure = cancelled),
         )
     }
 

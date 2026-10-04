@@ -95,24 +95,49 @@ class GiveCeremonyCopyTest {
     }
 
     @Test
-    fun `the watch reads every 3 s while processing, at most 20 times`() {
-        assertEquals(3_000L, CEREMONY_WATCH_INTERVAL_MS)
-        assertTrue(keepWatchingGift(GiftOutcome.Processing, 0))
-        assertTrue(keepWatchingGift(GiftOutcome.Processing, CEREMONY_WATCH_MAX - 1))
-        assertFalse(keepWatchingGift(GiftOutcome.Processing, CEREMONY_WATCH_MAX))
-        assertFalse(keepWatchingGift(GiftOutcome.Succeeded, 0))
-        assertFalse(keepWatchingGift(GiftOutcome.Failed, 0))
+    fun `the watch reads every 3 s for a minute, then every 10 s up to five minutes`() {
+        // iOS StkWatch (EXPERIENCE.md §7.2 #5): a prompt answered late still lands.
+        assertEquals(3_000L, GiftWatch.nextDelayMs(0))
+        assertEquals(3_000L, GiftWatch.nextDelayMs(59_999))
+        assertEquals(10_000L, GiftWatch.nextDelayMs(60_000))
+        assertEquals(10_000L, GiftWatch.nextDelayMs(299_999))
+        assertNull(GiftWatch.nextDelayMs(300_000))
+        assertFalse(GiftWatch.isLate(59_999))
+        assertTrue(GiftWatch.isLate(60_000))
+    }
+
+    @Test
+    fun `waiting for M-Pesa is never a celebration — Check your phone until the server confirms`() {
+        val mpesa = GivingIntentResult(transactionId = "t1", status = "processing", provider = "mpesa", fund = FundRef("tithe", "Tithe"))
+        assertTrue(waitsOnPhone(mpesa, "processing", "+254700000000"))
+        assertTrue(waitsOnPhone(mpesa.copy(provider = "airtel"), "requires_action", null))
+        // Only the server's confirmed outcome ends the wait.
+        assertFalse(waitsOnPhone(mpesa, "succeeded", "+254700000000"))
+        assertFalse(waitsOnPhone(mpesa, "failed", "+254700000000"))
+        // A provider-less answer that sent a prompt waits on the phone too.
+        assertTrue(waitsOnPhone(mpesa.copy(provider = null), "processing", "+254700000000"))
+        // PayPal (its approval page) and card keep their own stage.
+        assertFalse(waitsOnPhone(mpesa.copy(provider = "paypal", approveUrl = "https://paypal.test/a"), "processing", null))
+        assertFalse(waitsOnPhone(mpesa.copy(provider = "card"), "processing", null))
+        assertEquals("Check your phone", STK_TITLE)
+        assertEquals("Waiting up to 60s…", STK_WAITING_LINE)
+        assertEquals("Still processing — it will show in Recent giving once it clears.", GIFT_LATE_LINE)
+        // The PIN line names the money, where it goes and the gift's own name.
+        val line = stkPinLine(mpesa, 100_000, "Tithe", giftName = "For Mom")
+        assertEquals("KSh 1,000", line.amount)
+        assertEquals("Enter your PIN to complete KSh 1,000 to Tithe — “For Mom”.", line.text)
+        assertEquals("Enter your PIN to complete KSh 1,000 to Tithe.", stkPinLine(mpesa, 100_000, "Tithe").text)
     }
 
     @Test
     fun `the ceremony says where the gift stands`() {
         assertEquals(
             "Enter your PIN to complete KSh 1,000 toward your School fees pledge.",
-            giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, watchLapsed = false),
+            giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, late = false),
         )
         assertEquals(
             "Still processing — it will show in Recent giving once it clears.",
-            giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, watchLapsed = true),
+            giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, late = true),
         )
         assertEquals("Gift confirmed — receipt on its way. 🎉", giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Succeeded, false))
         assertEquals("The payment didn't complete — no charge was made.", giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Failed, false))
