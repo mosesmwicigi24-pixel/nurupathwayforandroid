@@ -1416,6 +1416,9 @@ private fun PledgeActionsCard(
 ) {
     val view = LocalView.current
     val shape = RoundedCornerShape(12.dp)
+    // "Remind me before it's due" needs this phone's notification permission:
+    // asked when it is turned on, with why (EXPERIENCE.md §7.2 #12).
+    val notifyAsk = org.nuruplace.member.data.firebase.rememberNotificationAsk()
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // The page's one gold button — unless the pledge is collected
@@ -1475,7 +1478,11 @@ private fun PledgeActionsCard(
             Text("Remind me before it's due", style = giInter(13), color = GIVE.ink, modifier = Modifier.weight(1f))
             Switch(
                 checked = reminders, enabled = !busy,
-                onCheckedChange = { Haptics.tick(view); onReminders(it) },
+                onCheckedChange = { on ->
+                    Haptics.tick(view)
+                    onReminders(on)
+                    if (on) notifyAsk.ask("Allow notifications so your reminder reaches this phone before it's due.")
+                },
                 colors = SwitchDefaults.colors(checkedTrackColor = GIVE.gold, checkedThumbColor = Color.White),
             )
         }

@@ -19,6 +19,9 @@ object AppPrefs {
     private const val KEY_READER_TEXT_SCALE = "nuru.readerTextScale"
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
+    // The notification permission has been asked on this install (data/
+    // firebase/NotificationAsk.kt) — tells "never asked" from "refused for good".
+    private const val KEY_NOTIFICATIONS_ASKED = "nuru.notificationsAsked"
     private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
     private const val KEY_DISCIPLER_REMINDER_DISMISSED_PREFIX = "nuru.discipler.reminder.dismissedAt.level."
     // Broadcast fingerprint unlock (§5.3 step-up, data/BroadcastLock.kt): the
@@ -125,6 +128,13 @@ object AppPrefs {
     var installReferrerChecked: Boolean
         get() = ::prefs.isInitialized && prefs.getBoolean(KEY_INSTALL_REFERRER_CHECKED, false)
         set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_INSTALL_REFERRER_CHECKED, v).apply() }
+
+    /** The notification permission's system prompt has been shown on this
+     *  install (EXPERIENCE.md §7.2 #12) — so a refusal for good is told apart
+     *  from never having asked. */
+    var notificationsAsked: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_NOTIFICATIONS_ASKED, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_NOTIFICATIONS_ASKED, v).apply() }
 
     /** One-time location-first onboarding invite (shown right after first login). */
     var locationInviteShown: Boolean

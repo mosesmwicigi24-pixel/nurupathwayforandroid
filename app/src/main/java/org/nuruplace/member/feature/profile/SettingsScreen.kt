@@ -207,6 +207,9 @@ private fun SecurityCard(onOpenFirebase: () -> Unit) {
 @Composable
 private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (NotificationPreferences) -> Unit) {
     val context = LocalContext.current
+    // Turned on, push notifications need this phone's permission too — asked
+    // now, with why, never cold on launch (EXPERIENCE.md §7.2 #12).
+    val notifyAsk = org.nuruplace.member.data.firebase.rememberNotificationAsk()
     SectionCard {
         SectionTitle(Icons.Filled.Notifications, "NOTIFICATIONS")
         if (prefs != null) {
@@ -215,7 +218,10 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
                 title = "Push notifications",
                 subtitle = "Devotionals, events, reminders",
                 checked = prefs.pushEnabled,
-                onCheckedChange = { onSave(prefs.copy(pushEnabled = it)) },
+                onCheckedChange = { on ->
+                    onSave(prefs.copy(pushEnabled = on))
+                    if (on) notifyAsk.ask("Allow notifications so devotionals, events and reminders reach this phone.")
+                },
             )
             RowDivider()
             // Owner request 2026-09-28: a sound and a buzz on everything that
