@@ -25,6 +25,7 @@
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.DueItem
+import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.PartnerTier
 import org.nuruplace.member.data.net.PartnerTrouble
@@ -383,15 +384,45 @@ internal fun dueWhen(d: DueItem, today: LocalDate): WhenLabel {
  *  not a date. */
 internal fun collectedOnLine(dueOn: String): String? {
     val d = runCatching { LocalDate.parse(dueOn.trim().take(10)) }.getOrNull() ?: return null
-    return "Collected on ${d.format(COLLECTED_ON_FMT)}"
+    return collectedOnLine(d)
 }
+
+/** "Collected on Mon 5 Oct" for a day already on the church's calendar. */
+internal fun collectedOnLine(day: LocalDate): String = "Collected on ${day.format(COLLECTED_ON_FMT)}"
 
 /** The chip a DUE row wears instead of Pay: a RUNNING recurring gift's
  *  "Collected on …" ([collectedOnLine]). Null for a paused gift (it keeps
- *  Resume) and for a pledge row (it keeps Pay — paying a pledge early by
- *  hand is safe: its collector skips a month already covered). */
+ *  Resume) and for a pledge row — a pledge says it only when its collector
+ *  takes the instalment ([pledgeCollectedChip]). */
 internal fun dueCollectedChip(d: DueItem): String? =
     if (d.kind == "schedule" && d.action != "resume") collectedOnLine(d.dueOn) else null
+
+/**
+ * The day a pledge's DUE row is collected automatically (pathway docs/
+ * EXPERIENCE.md §6.4 — the owner's 2026-09-28 rule for a running recurring
+ * gift, extended to a pledge): its collector ([pledgeCollector]) RUNNING,
+ * its next prompt asking for money (`next_amount_minor` > 0 — 0 is a pledge
+ * already covered, null a collector stopping with its pledge or an older
+ * server), and that prompt's Nairobi day on or before the instalment's
+ * (`due_on`). Null for anything else — no collector, a paused one, a prompt
+ * after the instalment (one already past is the member's to pay), a day
+ * that cannot be read, a row that is not a pledge's Pay row — and the row
+ * keeps Pay.
+ */
+internal fun pledgeCollectedOn(d: DueItem, collector: GivingSchedule?): LocalDate? {
+    if (d.kind != "pledge" || d.action != "pay") return null
+    val s = collector?.takeIf { scheduleRunning(it.status) } ?: return null
+    if ((s.nextAmountMinor ?: 0L) <= 0L) return null
+    val prompt = partnerDate(s.nextRunAt) ?: return null
+    val instalment = partnerDate(d.dueOn) ?: return null
+    return prompt.takeIf { !it.isAfter(instalment) }
+}
+
+/** A pledge DUE row's chip in place of Pay — "Collected on Fri 2 Oct", its
+ *  collector's prompt ([pledgeCollectedOn]); a tap opens the pledge. Null
+ *  keeps Pay, and paying early by hand stays on the pledge's page. */
+internal fun pledgeCollectedChip(d: DueItem, collector: GivingSchedule?): String? =
+    pledgeCollectedOn(d, collector)?.let(::collectedOnLine)
 
 /** The DUE row's first line (iOS dueRow): "KSh 5,000 · in 3 days" — or,
  *  part of it already on its way, the uncovered rest: "KSh 3,000 left · in

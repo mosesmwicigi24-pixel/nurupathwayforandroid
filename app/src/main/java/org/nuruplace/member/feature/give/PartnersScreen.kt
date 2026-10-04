@@ -9,8 +9,11 @@ package org.nuruplace.member.feature.give
 //   STANDING   partner since · commitments (or gifts) kept · tier chip ·
 //              Make a pledge (the
 //              ONLY gold-filled button on the page) · Statement
-//   DUE        one row per upcoming due, Pay / Resume — only when there is one;
-//              a failed or paused schedule is a compact amber row under it
+//   DUE        one row per upcoming due, Pay / Resume — or "Collected on …"
+//              when a running recurring gift, or the collector of a pledge
+//              (on or before the instalment's day, EXPERIENCE.md §6.4),
+//              takes it — only when there is one; a failed or paused
+//              schedule is a compact amber row under it
 //   PLEDGES    one card per live pledge: its NAME (the member's own, or the
 //              server's derived one), state chip, amount + due line, gold
 //              progress, "N of M kept this year" or "paid · to go", next
@@ -463,11 +466,16 @@ fun PartnersScreen(
                         p.isProgrammeMember -> {
                             StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
                             if (p.due.isNotEmpty()) {
-                                DueSection(p.due, p, vm, onPayNow) { id ->
-                                    // "Collected on …": the gift's own sheet, here, as the
-                                    // pledge page's collector row opens it.
-                                    vm.schedules?.firstOrNull { it.scheduleId == id }?.let { collector = it } ?: onOpenSchedule(id)
-                                }
+                                DueSection(
+                                    p.due, p, vm, onPayNow,
+                                    onOpenSchedule = { id ->
+                                        // "Collected on …": the gift's own sheet, here, as the
+                                        // pledge page's collector row opens it.
+                                        vm.schedules?.firstOrNull { it.scheduleId == id }?.let { collector = it } ?: onOpenSchedule(id)
+                                    },
+                                    // A pledge its collector takes (§6.4): the pledge's page.
+                                    onOpenPledge = { id -> openPage(id) },
+                                )
                             }
                             // Only when there is something to say — a partner whose
                             // giving is collecting cleanly never sees an amber row.
@@ -688,6 +696,8 @@ private fun DueSection(
     onPayNow: (GivePreset) -> Unit,
     /** A running recurring gift's "Collected on …" chip: open that gift. */
     onOpenSchedule: (String) -> Unit,
+    /** A pledge's "Collected on …" chip (EXPERIENCE.md §6.4): open that pledge. */
+    onOpenPledge: (String) -> Unit,
 ) {
     val view = LocalView.current
     val today = LocalDate.now()
@@ -702,6 +712,12 @@ private fun DueSection(
                 // pending_minor: the part of this instalment already on its
                 // way — Processing instead of Pay once it covers the amount.
                 val shown = dueRowView(d, pendingMethodFor(d.id, vm.statements[today.year]))
+                // The recurring gift that collects this pledge, read with the
+                // standing: when it prompts on or before the instalment's day,
+                // the row says so instead of Pay (§6.4). Gifts not read yet →
+                // no collector, and Pay stays — never a guess.
+                val pledgeCollected = pledge?.let { pl -> vm.schedules?.let { pledgeCollector(pl, it) } }
+                    ?.let { pledgeCollectedChip(d, it) }
                 // "today" · "in 3 days" · "5 Oct" — or, already past,
                 // "overdue since 10 Aug" / "2 overdue since 10 Aug" in amber.
                 val dueWhen = dueWhen(d, today)
@@ -749,17 +765,15 @@ private fun DueSection(
                             // which gave a second, one-time gift (owner,
                             // 2026-09-28). A tap opens the gift (pause, change).
                             val collected = dueCollectedChip(d).orEmpty()
-                            Box(
-                                Modifier.heightIn(min = 32.dp).clip(Capsule).background(GIVE.goldChipBg)
-                                    .clickable { Haptics.tap(view); onOpenSchedule(d.id) }
-                                    .clearAndSetSemantics { contentDescription = "$collected, automatically. Opens the recurring gift." }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    collected, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText,
-                                    maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.85f),
-                                )
+                            CollectedChip(collected, "$collected, automatically. Opens the recurring gift.") {
+                                Haptics.tap(view); onOpenSchedule(d.id)
+                            }
+                        } else if (pledgeCollected != null) {
+                            // The same for a pledge its collector takes on or
+                            // before the instalment's day (§6.4). A tap opens
+                            // the pledge, where paying early by hand stays.
+                            CollectedChip(pledgeCollected, "$pledgeCollected, automatically. Opens the pledge.") {
+                                Haptics.tap(view); onOpenPledge(d.id)
                             }
                         } else {
                             NavyPill("Pay") {
@@ -785,6 +799,25 @@ private fun DueSection(
                 )
             }
         }
+    }
+}
+
+/** A DUE row's "Collected on Mon 5 Oct" in place of Pay — a running
+ *  recurring gift's, or a pledge's its collector takes — one line that
+ *  shrinks rather than splits; [spoken] is what TalkBack reads. */
+@Composable
+private fun CollectedChip(text: String, spoken: String, onTap: () -> Unit) {
+    Box(
+        Modifier.heightIn(min = 32.dp).clip(Capsule).background(GIVE.goldChipBg)
+            .clickable { onTap() }
+            .clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText,
+            maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.85f),
+        )
     }
 }
 
