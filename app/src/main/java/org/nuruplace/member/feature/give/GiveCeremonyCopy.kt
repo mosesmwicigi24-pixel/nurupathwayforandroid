@@ -110,7 +110,9 @@ fun giveCeremonyStatusLine(
     GiftOutcome.Failed -> failure?.reason?.trim()?.takeIf { it.isNotEmpty() }
         ?: "The payment didn't complete — no charge was made."
     GiftOutcome.Processing ->
-        if (watchLapsed) "Still processing — your gift will show once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel, currency)
+        // EXPERIENCE.md §7.2 #5 — the same line on both apps, naming where
+        // the gift will show: RECENT GIVING lists it once it clears.
+        if (watchLapsed) "Still processing — it will show in Recent giving once it clears." else giveCeremonyLine(r, amountMinor, chipFundLabel, currency)
 }
 
 /** The failed ceremony's second line: what to do next and whether money

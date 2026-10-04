@@ -111,7 +111,7 @@ class GiveCeremonyCopyTest {
             giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, watchLapsed = false),
         )
         assertEquals(
-            "Still processing — your gift will show once it clears.",
+            "Still processing — it will show in Recent giving once it clears.",
             giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, watchLapsed = true),
         )
         assertEquals("Gift confirmed — receipt on its way. 🎉", giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Succeeded, false))
