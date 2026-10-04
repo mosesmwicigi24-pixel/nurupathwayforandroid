@@ -47,6 +47,11 @@ object Net {
 
 class ApiClient(context: Context) {
     val vault = TokenVault(context)
+    private val appContext = context.applicationContext
+
+    /** Whether the PHONE has a validated network right now — so a failed call
+     *  is called "offline" only when it truly is (StateLanguage, §4). */
+    fun deviceOnline(): Boolean = NetworkStatus.isOnline(appContext)
 
     /** Invoked when the refresh token itself is dead — the app returns to /login. */
     var onSessionExpired: (() -> Unit)? = null

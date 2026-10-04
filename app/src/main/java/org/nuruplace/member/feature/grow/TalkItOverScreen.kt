@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.TalkAssistBody
 import org.nuruplace.member.data.net.TalkPost
@@ -70,7 +71,8 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
     var posting by remember { mutableStateOf(false) }
-    var postError by remember { mutableStateOf(false) }
+    // What happened to a post that never left — in the state language (§4).
+    var postError by remember { mutableStateOf<String?>(null) }
     var aiBusy by remember { mutableStateOf(false) }
 
     // The day's question(s) come from the plan day's talk segment.
@@ -95,10 +97,10 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
         posting = true
         scope.launch {
             runCatching { Net.client.api.talkPost(planId, dayNumber, TalkPostBody(body)) }
-                .onSuccess { posts.add(it); draft = ""; postError = false }
+                .onSuccess { posts.add(it); draft = ""; postError = null }
                 // The kept draft alone is too quiet a signal that the post
                 // never left the phone — say it.
-                .onFailure { postError = true }
+                .onFailure { postError = "Couldn't send. ${ApiException.message(it)}" }
             posting = false
         }
     }
@@ -172,9 +174,9 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
             }
         }
 
-        if (postError) {
+        postError?.let { err ->
             Text(
-                "Couldn't send — check your connection and try again.",
+                err,
                 style = gInter(11), color = Color(0xFFB91C1C),
                 modifier = Modifier.fillMaxWidth().background(GrowPal.white).padding(horizontal = 16.dp, vertical = 4.dp),
             )

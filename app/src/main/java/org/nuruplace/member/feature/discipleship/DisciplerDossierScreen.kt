@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +57,11 @@ import org.nuruplace.member.data.net.DossierMember
 import org.nuruplace.member.data.net.DossierReflection
 import org.nuruplace.member.data.net.HubProgression
 import org.nuruplace.member.data.net.HubScores
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
@@ -79,7 +84,9 @@ private val Blue = Color(0xFF2563EB)
 @Composable
 fun DisciplerDossierScreen(studentId: String, onBack: () -> Unit, onOpenChat: (String) -> Unit) {
     var dossier by remember { mutableStateOf<Dossier?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A failed load in the state language (§4) — never the exception's own text.
+    var error by remember { mutableStateOf<StateMessage?>(null) }
+    val context = LocalContext.current
     var loading by remember { mutableStateOf(true) }
     var reloadKey by remember { mutableIntStateOf(0) }
     var startingDm by remember { mutableStateOf(false) }
@@ -90,7 +97,7 @@ fun DisciplerDossierScreen(studentId: String, onBack: () -> Unit, onOpenChat: (S
         error = null
         runCatching { Net.client.api.disciple(studentId) }
             .onSuccess { dossier = it.data }
-            .onFailure { error = it.message ?: "Couldn't load this disciple." }
+            .onFailure { error = ApiException.state(it, context) }
         loading = false
     }
 
@@ -123,7 +130,7 @@ fun DisciplerDossierScreen(studentId: String, onBack: () -> Unit, onOpenChat: (S
             when {
                 loading && d == null -> item { LoadingSkeleton() }
                 d == null -> item {
-                    ErrorCard(error ?: "Couldn't load this disciple.") { reloadKey++ }
+                    FailedState(error ?: StateLanguage.serverError, onRetry = { reloadKey++ })
                 }
                 else -> {
                     item {
@@ -486,24 +493,6 @@ private fun LoadingSkeleton() {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.width(120.dp).height(8.dp).clip(RoundedCornerShape(4.dp)).background(GrowPal.surface))
                 Box(Modifier.fillMaxWidth().height(48.dp).clip(ControlShape).background(GrowPal.surface))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ErrorCard(message: String, onRetry: () -> Unit) {
-    // A failed load may be network or FORBIDDEN_SCOPE — say so plainly, offer retry.
-    DossierCard {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(message, style = gInter(13), color = GrowPal.ink600, modifier = Modifier.fillMaxWidth())
-            Box(
-                Modifier.fillMaxWidth().height(44.dp).clip(ControlShape).background(GrowPal.surface)
-                    .border(1.dp, GrowPal.border, ControlShape)
-                    .clickable { onRetry() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Try again", style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
     }

@@ -1,6 +1,7 @@
 // The one distinction that matters during a host outage: a SYN nobody
 // answered ("connect timed out") is the server's absence, not the phone's
-// network, and the member is told so; a read timeout stays the softer line.
+// network, and the member is told so — and since the state language
+// (EXPERIENCE.md §4, StateLanguageTest) a slow answer is our side too.
 //
 // And the error envelope read for its CODE (Giving Cycle 1): `{ error: { code,
 // message, request_id, details? } }` — once, since an error body is a
@@ -24,9 +25,9 @@ class ApiExceptionMessageTest {
         assertTrue(m, m.contains("on our side"))
     }
 
-    @Test fun `a read timeout keeps the softer line`() {
+    @Test fun `a read timeout is our side, not the phone's connection`() {
         assertEquals(
-            "Nuru Place is taking too long to respond. Please try again.",
+            "Something went wrong on our side. It isn't you — please try again in a moment.",
             ApiException.message(SocketTimeoutException("timeout")),
         )
     }

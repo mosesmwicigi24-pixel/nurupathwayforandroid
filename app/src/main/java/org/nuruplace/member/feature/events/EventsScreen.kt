@@ -91,8 +91,11 @@ fun EventsScreen(
      *  Broadcasts (feature/live/BroadcastCard.kt). Null for everyone else. */
     broadcastCard: (@Composable () -> Unit)? = null,
 ) {
-    AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, load = {
-        val cal = runCatching { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }.getOrDefault(emptyList())
+    // A tab root: its failed state offers Try again, not a "Go back" to nowhere.
+    AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, offerBack = false, load = {
+        // The calendar IS the page: when it fails the member is told so (§4)
+        // — it used to read as a week with nothing on. The rest stay accents.
+        val cal = Net.client.api.calendar(todayIso(), isoPlusDays(60)).data
         val series = runCatching { Net.client.api.eventSeries().data }.getOrDefault(emptyList())
         val anns = runCatching { Net.client.api.myAnnouncements().data }.getOrDefault(emptyList())
         // The member's own RSVPs (GET /me/rsvps) — feeds the going-count + My RSVPs tab.

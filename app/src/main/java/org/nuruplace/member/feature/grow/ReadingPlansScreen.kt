@@ -71,12 +71,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanPromo as PlanPromoDto
 import org.nuruplace.member.data.net.ReadingPlanRow
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.Calendar
@@ -96,10 +100,23 @@ fun ReadingPlansScreen(
     var streak by remember { mutableStateOf(0) }
     var todayWordDone by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    // Plans that never loaded say so (§4) — they used to read as a library
+    // with no plans in it.
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(attempt) {
+        loading = true
         // Plans is the blocking load; achievements + rhythm are non-fatal accents.
-        plans = runCatching { Net.client.api.plans().data }.getOrDefault(emptyList())
+        try {
+            plans = Net.client.api.plans().data
+            loadError = null
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (plans.isEmpty()) loadError = ApiException.state(e, context)
+        }
         // The personalized promos are strictly an upgrade: if the route is
         // missing, slow or angry, the page falls back to the local choices
         // below and the member never learns anything went wrong.
@@ -174,10 +191,13 @@ fun ReadingPlansScreen(
                 .padding(top = 20.dp, bottom = Spacing.tabBarSpace + 20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
+            val failed = loadError?.takeIf { plans.isEmpty() }
             if (loading && plans.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = PL.gold)
                 }
+            } else if (failed != null) {
+                FailedState(failed, onRetry = { attempt++ })
             } else {
                 if (!searching) StreakStrip(count = streak, todayDone = todayWordDone)
                 if (!searching && continueReading.isNotEmpty()) {

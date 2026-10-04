@@ -75,6 +75,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.PlanDayUnlockAck
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ScripturePassage
 import org.nuruplace.member.data.net.VerseUpsertBody
@@ -435,11 +436,14 @@ internal fun RLinkedParagraph(text: String, pal: ReaderPalette, onReference: (St
 @Composable
 internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: () -> Unit) {
     var passage by remember(reference) { mutableStateOf<ScripturePassage?>(null) }
-    var failed by remember(reference) { mutableStateOf(false) }
+    // Why the passage did not come, in the state language (§4) — not "check
+    // your connection" whatever the cause.
+    var failure by remember(reference) { mutableStateOf<String?>(null) }
     var attempt by remember(reference) { mutableStateOf(0) }
     LaunchedEffect(reference, attempt) {
-        failed = false
-        ScriptureStore.passage(reference).onSuccess { passage = it }.onFailure { failed = true }
+        failure = null
+        ScriptureStore.passage(reference).onSuccess { passage = it }
+            .onFailure { failure = "Couldn't load this passage. ${ApiException.message(it)}" }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = pal.bg) {
         Column(
@@ -466,8 +470,8 @@ internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: (
                         Text(it.uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
                     }
                 }
-                failed -> {
-                    Text("Couldn't load this passage — check your connection and try again.", style = rInter(13), color = pal.inkDim)
+                failure != null -> {
+                    Text(failure ?: "", style = rInter(13), color = pal.inkDim)
                     Text("Try again", style = rInter(13, FontWeight.Bold), color = pal.goldDeep, modifier = Modifier.clickable { attempt++ }.padding(vertical = 4.dp))
                 }
                 else -> Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), contentAlignment = Alignment.Center) {

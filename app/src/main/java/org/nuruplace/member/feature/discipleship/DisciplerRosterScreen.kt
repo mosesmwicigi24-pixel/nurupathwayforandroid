@@ -35,15 +35,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.RosterRes
 import org.nuruplace.member.data.net.RosterRow
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
@@ -59,7 +64,9 @@ private val Blue = Color(0xFF2563EB)
 @Composable
 fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
     var roster by remember { mutableStateOf<RosterRes?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A failed load in the state language (§4) — never the exception's own text.
+    var error by remember { mutableStateOf<StateMessage?>(null) }
+    val context = LocalContext.current
     var loading by remember { mutableStateOf(true) }
     var reloadKey by remember { mutableIntStateOf(0) }
 
@@ -68,7 +75,7 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
         error = null
         runCatching { Net.client.api.disciples() }
             .onSuccess { roster = it }
-            .onFailure { error = it.message ?: "Couldn't load your disciples." }
+            .onFailure { error = ApiException.state(it, context) }
         loading = false
     }
 
@@ -108,7 +115,7 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
             when {
                 loading && r == null -> item { LoadingSkeleton() }
                 r == null && error != null -> item {
-                    ErrorCard(error ?: "Couldn't load your disciples.") { reloadKey++ }
+                    FailedState(error ?: StateLanguage.serverError, onRetry = { reloadKey++ })
                 }
                 r != null && r.summary.totalStudents == 0 -> item { EmptyCard() }
                 r != null -> {
@@ -240,23 +247,6 @@ private fun LoadingSkeleton() {
                         Box(Modifier.width(90.dp).height(9.dp).clip(RoundedCornerShape(4.dp)).background(GrowPal.surface))
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ErrorCard(message: String, onRetry: () -> Unit) {
-    RosterCard {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(message, style = gInter(13), color = GrowPal.ink600, modifier = Modifier.fillMaxWidth())
-            Box(
-                Modifier.fillMaxWidth().height(44.dp).clip(ControlShape).background(GrowPal.surface)
-                    .border(1.dp, GrowPal.border, ControlShape)
-                    .clickable { onRetry() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Try again", style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
     }

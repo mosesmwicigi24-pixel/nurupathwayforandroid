@@ -72,6 +72,9 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReadingGroupRow
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Spacing
 
@@ -84,7 +87,9 @@ private val heroScrim = Brush.verticalGradient(
 fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Unit, onOpenChat: (String) -> Unit = {}) {
     var loading by remember { mutableStateOf(true) }
     var detail by remember { mutableStateOf<ReadingPlanDetail?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A plan that did not load, in the state language (§4).
+    var error by remember { mutableStateOf<StateMessage?>(null) }
+    val failContext = androidx.compose.ui.platform.LocalContext.current
     // A segment ack told us this day number should already be open. Kept
     // until a fetch actually shows it unlocked, so a day that still comes
     // back locked (a completion still catching up through the sync path)
@@ -102,7 +107,7 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                     awaitingUnlock = null
                 }
             }
-            .onFailure { error = "Couldn't load this plan." }
+            .onFailure { error = ApiException.state(it, failContext) }
         loading = false
     }
 
@@ -139,11 +144,12 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                 color = PL.gold,
                 modifier = Modifier.align(Alignment.Center),
             )
-            else -> Text(
-                error ?: "Couldn't load this plan.",
-                style = plInter(13),
-                color = PL.ink2,
-                modifier = Modifier.align(Alignment.Center),
+            // Full width, with a way back — this page has no header of its own here.
+            else -> FailedState(
+                error ?: StateLanguage.serverError,
+                onRetry = { scope.launch { reload() } },
+                onBack = onBack,
+                modifier = Modifier.align(Alignment.Center).padding(20.dp),
             )
         }
     }

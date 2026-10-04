@@ -95,18 +95,18 @@ import org.nuruplace.member.data.net.NotificationPreferences
 fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: Boolean = false) {
     val scope = rememberCoroutineScope()
     var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
-    var saveFailed by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { prefs = runCatching { Net.client.api.notificationPreferences() }.getOrNull() }
 
     fun save(p: NotificationPreferences) {
         val previous = prefs
         prefs = p
-        saveFailed = false
+        saveError = null
         scope.launch {
             // A toggle that shows a state the server never recorded is a lie —
             // revert and say so instead.
             runCatching { Net.client.api.updateNotificationPreferences(p) }
-                .onFailure { prefs = previous; saveFailed = true }
+                .onFailure { prefs = previous; saveError = "Couldn't save your preferences. ${ApiException.message(it)}" }
         }
     }
 
@@ -143,9 +143,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
         ) {
             SecurityCard(onOpenFirebase = { onOpen("firebase-account") })
             NotificationsCard(prefs = prefs, onSave = ::save)
-        if (saveFailed) {
+        saveError?.let { err ->
             Text(
-                "Couldn't save your preferences — check your connection and try again.",
+                err,
                 style = pInter(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
@@ -591,7 +591,8 @@ private fun TwoFactorRow() {
                                     twoFAon = true; msg = "2FA is now on."; expanded = false; enrollment = null; code = ""
                                 }
                             } catch (ex: Exception) {
-                                msg = ApiException.message(ex)
+                                // A wrong code is a 401 in the server's words ("Invalid MFA code").
+                                msg = ApiException.message(ex, credentials = true)
                             } finally {
                                 busy = false
                             }
@@ -710,7 +711,7 @@ private fun ChangePasswordSection() {
                                     Net.client.api.changePassword(ChangePasswordBody(current.trim(), next))
                                     success = true
                                 } catch (ex: Exception) {
-                                    error = ApiException.message(ex)
+                                    error = ApiException.message(ex, credentials = true)
                                 } finally {
                                     busy = false
                                 }

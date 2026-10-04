@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LevelModule
 import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MeResponse
@@ -73,6 +74,8 @@ import org.nuruplace.member.data.net.ModuleStatus
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.data.net.PathwaySummary
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.NuruRefreshBox
@@ -145,9 +148,21 @@ fun PathwayHubScreen(
     var refreshTick by remember { mutableIntStateOf(0) }
     var refreshing by remember { mutableStateOf(false) }
     var hubLoaded by remember { mutableStateOf(false) }
+    // A pathway that never loaded says so in the state language (§4) — it
+    // used to render an empty hub ("Level 1 of 1", no trail) as if all was well.
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(refreshTick) {
-        summary = runCatching { Net.client.api.pathway() }.getOrNull()
+        try {
+            summary = Net.client.api.pathway()
+            loadError = null
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A failed refresh keeps what the member last saw.
+            if (summary == null) loadError = ApiException.state(e, context)
+        }
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
         // On refresh, drop the module cache — the trail effect below refetches.
         if (refreshTick > 0) modulesByLevel = emptyMap()
@@ -204,6 +219,11 @@ fun PathwayHubScreen(
 
     NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
+            val failed = loadError?.takeIf { summary == null }
+            if (failed != null) {
+                FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
+                return@Column
+            }
             HubHeader(firstName, streak, active, levels, journey, ::go)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),

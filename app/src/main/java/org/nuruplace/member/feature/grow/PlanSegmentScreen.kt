@@ -62,9 +62,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.InlineVideoPlayer
 import org.nuruplace.member.ui.components.VerseQuoteCard
@@ -108,10 +112,16 @@ fun PlanSegmentScreen(
 
     var detail by remember { mutableStateOf<ReadingPlanDetail?>(null) }
     var loading by remember { mutableStateOf(true) }
+    // A reading that did not load, in the state language (§4).
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val loadContext = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(planId) {
+    LaunchedEffect(planId, attempt) {
         loading = true
-        runCatching { Net.client.api.plan(planId) }.onSuccess { detail = it }
+        runCatching { Net.client.api.plan(planId) }
+            .onSuccess { detail = it; loadError = null }
+            .onFailure { if (it !is kotlin.coroutines.cancellation.CancellationException) loadError = ApiException.state(it, loadContext) }
         loading = false
     }
 
@@ -188,11 +198,11 @@ fun PlanSegmentScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
 
-            else -> Text(
-                "Couldn't load this reading.",
-                style = inter(13),
-                color = Nuru.ink600,
-                modifier = Modifier.align(Alignment.Center),
+            else -> FailedState(
+                loadError ?: StateLanguage.notFound,
+                onRetry = { attempt++ },
+                onBack = onBack,
+                modifier = Modifier.align(Alignment.Center).padding(20.dp),
             )
         }
     }

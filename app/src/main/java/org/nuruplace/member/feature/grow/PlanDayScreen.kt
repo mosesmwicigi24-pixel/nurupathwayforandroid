@@ -90,12 +90,15 @@ import android.media.SoundPool
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.R
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CompleteDayBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
 import kotlin.math.PI
@@ -128,6 +131,10 @@ fun PlanDayScreen(
     var dayCompleted by remember { mutableStateOf(false) }
     var justDone by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    // A day that did not load, in the state language (§4).
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val loadContext = LocalContext.current
 
     // Reflection state (server-backed; GET pre-fills, POST upserts).
     var reflectionText by remember { mutableStateOf("") }
@@ -136,8 +143,11 @@ fun PlanDayScreen(
     var reflectionJustSaved by remember { mutableStateOf(false) }
 
     // Load the plan + isolate this day, then pre-fill the reflection.
-    LaunchedEffect(planId, dayNumber) {
-        val detail: ReadingPlanDetail? = runCatching { Net.client.api.plan(planId) }.getOrNull()
+    LaunchedEffect(planId, dayNumber, attempt) {
+        val loaded = runCatching { Net.client.api.plan(planId) }
+        loaded.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+        loadError = loaded.exceptionOrNull()?.let { ApiException.state(it, loadContext) }
+        val detail: ReadingPlanDetail? = loaded.getOrNull()
         val d = detail?.days?.firstOrNull { it.dayNumber == dayNumber }
         day = d
         val segs = d?.segments ?: emptyList()
@@ -198,7 +208,9 @@ fun PlanDayScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text(
+                    val failed = loadError?.takeIf { day == null }
+                    if (failed != null) FailedState(failed, onRetry = { attempt++ })
+                    else Text(
                         "TODAY'S JOURNEY · ${parts.size} PART${if (parts.size == 1) "" else "S"}",
                         style = plInter(11, Bold, 1.8f), color = PL.catText,
                     )
@@ -211,7 +223,7 @@ fun PlanDayScreen(
                 }
             }
 
-            FooterBar(
+            if (day != null) FooterBar(
                 complete = dayCompleted || justDone,
                 busy = busy,
                 nextPartLabel = nextPart?.label,

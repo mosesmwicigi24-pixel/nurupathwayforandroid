@@ -102,7 +102,9 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         if (busy) return
         busy = true; error = null; info = null
         scope.launch {
-            try { block() } catch (e: Exception) { error = ApiException.message(e, context) } finally { busy = false }
+            // Every call here carries what the member typed: a 401 is "Invalid
+            // email or password", in the server's words — not an ended session.
+            try { block() } catch (e: Exception) { error = ApiException.message(e, context, credentials = true) } finally { busy = false }
         }
     }
 

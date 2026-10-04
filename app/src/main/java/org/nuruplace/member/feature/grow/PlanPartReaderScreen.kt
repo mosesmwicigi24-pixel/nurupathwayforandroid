@@ -56,10 +56,14 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
@@ -81,9 +85,16 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
+    // A part that did not load says so (§4) — it read "Nothing to read here."
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val loadContext = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(planId) {
-        runCatching { Net.client.api.plan(planId) }.onSuccess { detail = it }
+    LaunchedEffect(planId, attempt) {
+        loading = true
+        runCatching { Net.client.api.plan(planId) }
+            .onSuccess { detail = it; loadError = null }
+            .onFailure { if (it !is kotlin.coroutines.cancellation.CancellationException) loadError = ApiException.state(it, loadContext) }
         loading = false
     }
 
@@ -170,6 +181,9 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
 
             when {
                 loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = pal.gold) }
+                detail == null && loadError != null -> Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                    FailedState(loadError ?: StateLanguage.serverError, onRetry = { attempt++ }, onBack = onBack)
+                }
                 group.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nothing to read here.", style = rInter(13), color = pal.inkDim) }
                 else -> Box(Modifier.weight(1f).fillMaxWidth()) {
                     // The reader's text-size step scales every sp in the reading
@@ -313,7 +327,7 @@ private fun ReflectionBox(planId: String, dayNumber: Int, pal: ReaderPalette) {
                             delay(2_200)
                             justSaved = false
                         }.onFailure {
-                            error = "Couldn't save your reflection — check your connection and try again."
+                            error = "Couldn't save your reflection. ${ApiException.message(it)}"
                         }
                     }
                 }.padding(horizontal = 16.dp, vertical = 9.dp),
