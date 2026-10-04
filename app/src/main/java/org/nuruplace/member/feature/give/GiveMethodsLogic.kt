@@ -154,9 +154,23 @@ fun methodUnavailableNote(option: GiveMethodOption): String =
  *  card or a rail that is off; none at all: "Secure · Receipt sent
  *  instantly". */
 fun giveSecureNote(options: List<GiveMethodOption>): String {
-    val names = options.filter { it.selectable }.map { it.label.ifBlank { giveMethodLabel(it.key) } }
+    val names = workingRailNames(options)
     return if (names.isEmpty()) "Secure · Receipt sent instantly" else "Secure · ${names.joinToString(" & ")} · Receipt sent instantly"
 }
+
+/** Home's giving card, under Give now (pathway docs/EXPERIENCE.md §2,
+ *  "promise only what works"): the same rails Give's footer names —
+ *  "Tithe & offering · M-Pesa", "Tithe & offering · M-Pesa & PayPal" — never
+ *  a card or a rail that is off (it promised "M-Pesa, card and more");
+ *  none at all: "Tithe & offering". */
+fun giveRailsLine(options: List<GiveMethodOption>): String {
+    val names = workingRailNames(options)
+    return if (names.isEmpty()) "Tithe & offering" else "Tithe & offering · ${names.joinToString(" & ")}"
+}
+
+/** The rails that can take a gift here, by name, in the server's order. */
+private fun workingRailNames(options: List<GiveMethodOption>): List<String> =
+    options.filter { it.selectable }.map { it.label.ifBlank { giveMethodLabel(it.key) } }
 
 /** "US dollars" · "shillings" — a currency in words. */
 fun currencyWords(code: String?): String = when (currencyCode(code)) {

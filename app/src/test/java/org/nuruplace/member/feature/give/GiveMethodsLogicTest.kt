@@ -279,6 +279,22 @@ class GiveMethodsLogicTest {
     }
 
     @Test
+    fun `Home's giving card names only the rails that work — never a card`() {
+        // It promised "M-Pesa, card and more" while card could not take a gift.
+        val options = giveMethodOptions(json.decodeFromString<GivingMethodsRes>(live))
+        assertEquals("Tithe & offering · M-Pesa & PayPal", giveRailsLine(options))
+        // M-Pesa alone — the server's answer, or no answer at all.
+        val mpesaOnly = options.map { if (it.key == "paypal") it.copy(enabled = false) else it }
+        assertEquals("Tithe & offering · M-Pesa", giveRailsLine(mpesaOnly))
+        assertEquals("Tithe & offering · M-Pesa", giveRailsLine(giveMethodOptions(null)))
+        // A card the server has live is still not one this app can carry.
+        val card = GiveMethodOption(key = "card", label = "Card", enabled = true, currency = "KES")
+        assertEquals("Tithe & offering · M-Pesa", giveRailsLine(listOf(FALLBACK_MPESA, card)))
+        // Nothing working: no rail is named at all.
+        assertEquals("Tithe & offering", giveRailsLine(listOf(FALLBACK_MPESA.copy(enabled = false), card)))
+    }
+
+    @Test
     fun `a schedule carries a number only when it is not the profile's`() {
         assertNull(schedulePhoneFor("+254711222333", "+254711222333"))
         assertNull(schedulePhoneFor("0711 222 333", "+254711222333")) // same number, written locally

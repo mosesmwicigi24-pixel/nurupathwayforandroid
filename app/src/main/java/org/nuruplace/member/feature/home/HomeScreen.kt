@@ -93,6 +93,8 @@ import org.nuruplace.member.data.net.VerseReactionBody
 import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
+import org.nuruplace.member.feature.give.giveMethodOptions
+import org.nuruplace.member.feature.give.giveRailsLine
 import org.nuruplace.member.feature.grow.PLCover
 import org.nuruplace.member.feature.pathway.Journey
 import org.nuruplace.member.feature.pathway.JourneyDestination
@@ -164,6 +166,9 @@ fun HomeScreen(
     // and the progress line, in the words the Pathway hub uses.
     var pathway by remember { mutableStateOf<PathwaySummary?>(null) }
     var currentTrail by remember { mutableStateOf<List<LevelModule>?>(null) }
+    // The rails GET /giving/methods says can take a gift — the giving card
+    // names only those (null = no answer yet: M-Pesa alone, as Give's form).
+    var giveRails by remember { mutableStateOf<org.nuruplace.member.data.net.GivingMethodsRes?>(null) }
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
     // "What needs you today" (GET /me/home/nudges) — empty = nothing waiting OR
@@ -262,6 +267,7 @@ fun HomeScreen(
         val from = today.toString()
         val to = today.plusDays(45).toString()
         upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
+        giveRails = runCatching { Net.client.api.givingMethods() }.getOrNull() ?: giveRails
         // Curated Home rows — server-capped at 5, soonest-first; never re-sort/cap client-side.
         homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrDefault(emptyList())
         refreshing = false
@@ -550,7 +556,7 @@ fun HomeScreen(
                 UpcomingSection(homeEvents, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode("")}") })
                 EncouragementCard(prayers.size)
                 CohortSection(cohort) { onNavigate("cell-info") }
-                GiveCard { onSelectTab("give") }
+                GiveCard(railsLine = giveRailsLine(giveMethodOptions(giveRails))) { onSelectTab("give") }
                 // Scaffold already reserves the bottom bar; tabBarSpace here
                 // double-counted it and left a hole under the Give card.
                 Spacer(Modifier.height(Spacing.base))
@@ -1928,8 +1934,10 @@ private fun StatTile(label: String, value: String, modifier: Modifier) {
     }
 }
 
+/** [railsLine]: "Tithe & offering · M-Pesa" — only the rails that can take a
+ *  gift here (giveRailsLine); it used to promise "M-Pesa, card and more". */
 @Composable
-private fun GiveCard(onGive: () -> Unit) {
+private fun GiveCard(railsLine: String, onGive: () -> Unit) {
     NavyCard(pad = Spacing.screen) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1949,7 +1957,7 @@ private fun GiveCard(onGive: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { Text("🤲  Give now  ›", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold) }
                 Spacer(Modifier.height(Spacing.sm))
-                Text("Tithe & offering · M-Pesa, card and more", style = NuruType.micro, color = Nuru.onNavyFaint)
+                Text(railsLine, style = NuruType.micro, color = Nuru.onNavyFaint)
             }
         }
     }

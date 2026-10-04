@@ -109,6 +109,7 @@ import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ScoresSummary
 import org.nuruplace.member.data.net.UserProfile
+import org.nuruplace.member.feature.give.kenyanMobileDisplay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -707,7 +708,13 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
         InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—", onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
         InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", onEdit = { onEdit(EditField.NAME) })
-        InfoRow(Icons.Filled.Call, "PHONE", p?.phoneNumber ?: "—", onEdit = { onEdit(EditField.PHONE) })
+        // Read the Kenyan way, as Give shows it ("0700 000 000", not "+254700000000");
+        // the edit sheet still starts from the stored number.
+        InfoRow(
+            Icons.Filled.Call, "PHONE",
+            p?.phoneNumber?.takeIf { it.isNotBlank() }?.let(::kenyanMobileDisplay) ?: "—",
+            onEdit = { onEdit(EditField.PHONE) },
+        )
         InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", p?.dateOfBirth ?: "Not set", onEdit = { onEdit(EditField.DOB) })
         InfoRow(Icons.Filled.Group, "GENDER", p?.gender ?: "—", onEdit = { onEdit(EditField.GENDER) })
         InfoRow(
