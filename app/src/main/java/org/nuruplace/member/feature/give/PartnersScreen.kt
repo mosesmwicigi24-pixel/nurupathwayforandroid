@@ -1481,7 +1481,7 @@ private fun PledgeActionsCard(
                 onCheckedChange = { on ->
                     Haptics.tick(view)
                     onReminders(on)
-                    if (on) notifyAsk.ask("Allow notifications so your reminder reaches this phone before it's due.")
+                    if (on) notifyAsk.ask(org.nuruplace.member.data.firebase.NotificationWhy.PLEDGE_REMINDER)
                 },
                 colors = SwitchDefaults.colors(checkedTrackColor = GIVE.gold, checkedThumbColor = Color.White),
             )

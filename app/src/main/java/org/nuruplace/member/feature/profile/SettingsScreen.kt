@@ -220,7 +220,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
                 checked = prefs.pushEnabled,
                 onCheckedChange = { on ->
                     onSave(prefs.copy(pushEnabled = on))
-                    if (on) notifyAsk.ask("Allow notifications so devotionals, events and reminders reach this phone.")
+                    if (on) notifyAsk.ask(org.nuruplace.member.data.firebase.NotificationWhy.SETTINGS_PUSH)
                 },
             )
             RowDivider()

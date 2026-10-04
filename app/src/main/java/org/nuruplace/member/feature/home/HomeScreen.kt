@@ -370,6 +370,8 @@ fun HomeScreen(
     }
 
     val pendingSync by Net.client.offline.pending.collectAsState()
+    // "Turn on notifications" — Home's one card while the phone has them off.
+    val notificationsCard = org.nuruplace.member.data.firebase.rememberNotificationsCard()
     val level = me?.enrollment?.currentLevel ?: 1
     val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
     // YOUR WEEK (§6.1): the five rows, in the journey's order.
@@ -569,14 +571,20 @@ fun HomeScreen(
                 // same letter sheet the knock card does, in place.
                 // The exam's own nudge only while that exam can be taken (§7.2 #1).
                 val shownNudges = nudges.filter { nudgeOffered(it, pathway) }
-                if (shownNudges.isNotEmpty()) {
+                // Android only (§7.3): while the phone has notifications off,
+                // "Turn on notifications" goes first.
+                val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
+                    { NotificationsOffCard(onTurnOn = notificationsCard.turnOn, onNotNow = notificationsCard.notNow) }
+                } else null
+                if (shownNudges.isNotEmpty() || notifyLead != null) {
                     Entrance(entrance, 2) {
-                        NeedsYouRail(shownNudges) { n ->
+                        NeedsYouRail(shownNudges, lead = notifyLead) { n ->
                             if (n.route == "letter" && letter != null) showLetter = true
                             else onNavigate(nudgeRouteFor(n))
                         }
                     }
-                } else if (reflectionDue) {
+                }
+                if (shownNudges.isEmpty() && reflectionDue) {
                     // Reflection due — deep-links to the devotional's reflection
                     // composer, the one act that ticks the rhythm and clears this.
                     Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }

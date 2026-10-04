@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.School
@@ -45,6 +46,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.data.firebase.NOTIFICATIONS_CARD_LINE
+import org.nuruplace.member.data.firebase.NOTIFICATIONS_CARD_TITLE
 import org.nuruplace.member.data.net.HomeNudge
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.pressScale
@@ -55,19 +58,25 @@ import org.nuruplace.member.ui.theme.nuruSans
 // The letter nudge keeps the Sunday Letter's own gold wax-seal disc (LetterScreen.kt).
 private val NudgeSealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
+/** [lead]: a card of the app's own that goes first (Android's "Turn on
+ *  notifications", EXPERIENCE.md §7.3), full width above the server's. */
 @Composable
-fun NeedsYouRail(nudges: List<HomeNudge>, onOpen: (HomeNudge) -> Unit) {
-    if (nudges.isEmpty()) return
+fun NeedsYouRail(nudges: List<HomeNudge>, lead: (@Composable () -> Unit)? = null, onOpen: (HomeNudge) -> Unit) {
+    if (nudges.isEmpty() && lead == null) return
+    val count = nudges.size + if (lead != null) 1 else 0
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("WHAT NEEDS YOU TODAY", style = nuruSans(9, FontWeight.Bold, tracking = 1.6f), color = Nuru.eyebrow)
-            if (nudges.size > 1) {
+            if (count > 1) {
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 7.dp, vertical = 2.dp),
-                ) { Text("${nudges.size}", style = nuruSans(9, FontWeight.Bold), color = Nuru.goldSoft) }
+                ) { Text("$count", style = nuruSans(9, FontWeight.Bold), color = Nuru.goldSoft) }
             }
         }
-        if (nudges.size == 1) {
+        lead?.invoke()
+        if (nudges.isEmpty()) {
+            // The lead alone.
+        } else if (nudges.size == 1) {
             NudgeCard(nudges[0], Modifier.fillMaxWidth()) { onOpen(nudges[0]) }
         } else {
             // Index in the key: ids are server-minted but a defensive rail must
@@ -107,6 +116,47 @@ private fun NudgeCard(n: HomeNudge, modifier: Modifier, onClick: () -> Unit) {
             Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 12.dp, vertical = 7.dp)) {
                 Text(n.ctaLabel.ifBlank { "Open" }, style = nuruSans(11, FontWeight.SemiBold), color = Nuru.gold, maxLines = 1)
             }
+        }
+    }
+}
+
+/** "Turn on notifications" (Android only, EXPERIENCE.md §7.3) — one calm
+ *  card, first among what needs the member today, while the phone has
+ *  notifications off: Android carries real pushes (messages, Live invites,
+ *  giving notices) and no longer asks at launch. Turn on asks the phone (or
+ *  opens its settings once refused for good); Not now hides it 14 days. */
+@Composable
+fun NotificationsOffCard(onTurnOn: () -> Unit, onNotNow: () -> Unit) {
+    val view = LocalView.current
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        Modifier.fillMaxWidth().clip(shape).background(Nuru.priorityBg)
+            .border(1.dp, Nuru.gold.copy(alpha = 0.33f), shape)
+            .padding(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.white), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.NotificationsActive, null, tint = Nuru.goldDeep, modifier = Modifier.size(19.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(NOTIFICATIONS_CARD_TITLE, style = nuruSans(13, FontWeight.SemiBold), color = Nuru.navy)
+                Text(NOTIFICATIONS_CARD_LINE, style = nuruSans(11), color = Nuru.metaGray)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Not now", style = nuruSans(11, FontWeight.SemiBold), color = Nuru.metaGray,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).clickable { Haptics.tap(view); onNotNow() }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy)
+                    .clickable { Haptics.tap(view); onTurnOn() }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            ) { Text("Turn on", style = nuruSans(11, FontWeight.SemiBold), color = Nuru.gold, maxLines = 1) }
         }
     }
 }

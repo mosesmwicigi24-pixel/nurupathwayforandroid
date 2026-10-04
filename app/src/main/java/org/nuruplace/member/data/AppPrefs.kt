@@ -22,6 +22,9 @@ object AppPrefs {
     // The notification permission has been asked on this install (data/
     // firebase/NotificationAsk.kt) — tells "never asked" from "refused for good".
     private const val KEY_NOTIFICATIONS_ASKED = "nuru.notificationsAsked"
+    // When Home's "Turn on notifications" card was last put off ("Not now",
+    // EXPERIENCE.md §7.3) — it stays hidden for 14 days after.
+    private const val KEY_NOTIFICATIONS_CARD_SNOOZED_AT = "nuru.notificationsCard.snoozedAt"
     private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
     private const val KEY_DISCIPLER_REMINDER_DISMISSED_PREFIX = "nuru.discipler.reminder.dismissedAt.level."
     // Broadcast fingerprint unlock (§5.3 step-up, data/BroadcastLock.kt): the
@@ -135,6 +138,12 @@ object AppPrefs {
     var notificationsAsked: Boolean
         get() = ::prefs.isInitialized && prefs.getBoolean(KEY_NOTIFICATIONS_ASKED, false)
         set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_NOTIFICATIONS_ASKED, v).apply() }
+
+    /** When Home's "Turn on notifications" card was last put off — epoch
+     *  millis, 0 never (EXPERIENCE.md §7.3: hidden for 14 days after). */
+    var notificationsCardSnoozedAt: Long
+        get() = if (::prefs.isInitialized) prefs.getLong(KEY_NOTIFICATIONS_CARD_SNOOZED_AT, 0L) else 0L
+        set(v) { if (::prefs.isInitialized) prefs.edit().putLong(KEY_NOTIFICATIONS_CARD_SNOOZED_AT, v).apply() }
 
     /** One-time location-first onboarding invite (shown right after first login). */
     var locationInviteShown: Boolean

@@ -378,7 +378,7 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             fun toggleReminder() {
                 val next = nextScheduled ?: return
                 reminderOn = RadioReminder.toggle(context, next)
-                if (reminderOn) notifyAsk.ask("Allow notifications so we can tell you when the radio goes live.")
+                if (reminderOn) notifyAsk.ask(org.nuruplace.member.data.firebase.NotificationWhy.RADIO)
             }
 
             // Radio home-screen widget (Glance) — this screen has the richest
