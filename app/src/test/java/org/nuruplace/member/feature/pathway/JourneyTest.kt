@@ -33,6 +33,7 @@ class JourneyTest {
         done: Int = 0,
         total: Int = 20,
         examPublished: Boolean = true,
+        examAvailable: Boolean? = null,
         awaitingFlag: Boolean = false,
     ) = PathwaySummary(
         currentLevel = current,
@@ -41,7 +42,7 @@ class JourneyTest {
                 n < current -> PathwayLevel(n, titles[n - 1], totalModules = 10, completedModules = 10, status = LevelStatus.COMPLETED)
                 n == current -> PathwayLevel(
                     n, titles[n - 1], totalModules = total, completedModules = done, status = status,
-                    examPublished = examPublished, awaitingReview = awaitingFlag,
+                    examPublished = examPublished, examAvailable = examAvailable, awaitingReview = awaitingFlag,
                 )
                 else -> PathwayLevel(n, titles[n - 1], totalModules = 0, completedModules = 0, status = LevelStatus.LOCKED)
             }
@@ -58,9 +59,9 @@ class JourneyTest {
         )
     }
 
-    private fun examRow(level: Int = 1, status: ModuleStatus, completed: Boolean = false) = LevelModule(
+    private fun examRow(level: Int = 1, status: ModuleStatus, completed: Boolean = false, available: Boolean? = null) = LevelModule(
         moduleId = "exam$level", levelNumber = level, moduleSequenceNumber = 99, title = "Level $level exam",
-        evaluationKind = "exit_exam", completed = completed, status = status,
+        evaluationKind = "exit_exam", completed = completed, status = status, examAvailable = available,
     )
 
     // ── learning ──
@@ -166,6 +167,72 @@ class JourneyTest {
         assertEquals("Every module is done. The exam opens soon — we'll let you know.", j.next.line)
         assertNull(j.next.action)
         assertFalse(j.summitReached)
+    }
+
+    // ── the exam can be taken (EXPERIENCE.md §7.2 #1) ──
+    // Published is not enough: an exam published with no questions answered
+    // 422 behind "Exam ready". The server says `exam_available` on each level
+    // and on the trail's exam row; absent (an older server) = available.
+
+    @Test fun `exam available — published with questions is ready`() {
+        val j = JourneyState.derive(summary(status = LevelStatus.COMPLETED, done = 20, examAvailable = true), trail(done = 20))!!
+        assertEquals(JourneyStage.EXAM_READY, j.stage)
+        assertEquals("Exam ready", j.pill)
+        assertEquals(JourneyDestination.Exam(1), j.next.action?.destination)
+    }
+
+    @Test fun `exam unavailable — published with nothing to ask opens soon, with no action`() {
+        val j = JourneyState.derive(summary(status = LevelStatus.COMPLETED, done = 20, examAvailable = false), trail(done = 20))!!
+        assertEquals(JourneyStage.EXAM_SOON, j.stage)
+        assertEquals("Exam opens soon", j.pill)
+        assertEquals("Exam opens soon · Level 1", j.kicker)
+        assertEquals("Level 1 complete", j.next.title)
+        assertEquals("Every module is done. The exam opens soon — we'll let you know.", j.next.line)
+        // Nothing offers the exam: no action, so no route to it anywhere.
+        assertNull(j.next.action)
+        assertEquals(JourneyLine("Level 1 complete", ""), j.progressLine)
+        assertEquals(17, j.percent)
+        assertFalse(j.summitReached)
+    }
+
+    @Test fun `exam availability absent — an older server — behaves as before`() {
+        val j = JourneyState.derive(summary(status = LevelStatus.COMPLETED, done = 20, examAvailable = null), trail(done = 20))!!
+        assertEquals(JourneyStage.EXAM_READY, j.stage)
+        // Not published is still soon, whatever availability says.
+        val unpublished = JourneyState.derive(summary(status = LevelStatus.COMPLETED, done = 20, examPublished = false, examAvailable = true))!!
+        assertEquals(JourneyStage.EXAM_SOON, unpublished.stage)
+    }
+
+    @Test fun `the open exam row — available, unavailable, absent`() {
+        fun stage(rowAvailable: Boolean?, levelAvailable: Boolean? = null) = JourneyState.derive(
+            summary(status = LevelStatus.ACTIVE, done = 20, total = 21, examAvailable = levelAvailable),
+            trail(done = 20) + examRow(status = ModuleStatus.NEXT, available = rowAvailable),
+        )!!.stage
+        assertEquals(JourneyStage.EXAM_READY, stage(rowAvailable = true))
+        assertEquals(JourneyStage.EXAM_SOON, stage(rowAvailable = false))
+        assertEquals(JourneyStage.EXAM_READY, stage(rowAvailable = null))
+        // Either word from the server is enough to hold it back.
+        assertEquals(JourneyStage.EXAM_SOON, stage(rowAvailable = null, levelAvailable = false))
+        val soon = JourneyState.derive(
+            summary(status = LevelStatus.ACTIVE, done = 20, total = 21),
+            trail(done = 20) + examRow(status = ModuleStatus.NEXT, available = false),
+        )!!
+        assertEquals("Level 1 complete", soon.next.title)
+        assertNull(soon.next.action)
+    }
+
+    @Test fun `the exam row with nothing to ask reads Opens soon — never a lesson, never a passed exam`() {
+        assertTrue(examRow(status = ModuleStatus.NEXT, available = false).examOpensSoon)
+        assertFalse(examRow(status = ModuleStatus.NEXT, available = true).examOpensSoon)
+        assertFalse(examRow(status = ModuleStatus.NEXT, available = null).examOpensSoon)
+        assertFalse(examRow(status = ModuleStatus.COMPLETED, completed = true, available = false).examOpensSoon)
+        assertFalse(trail(done = 3).first().copy(examAvailable = false).examOpensSoon)
+        // A passed exam still ushers on, whatever availability says now.
+        val passed = JourneyState.derive(
+            summary(status = LevelStatus.ACTIVE, done = 20, total = 21, examAvailable = false),
+            trail(done = 20) + examRow(status = ModuleStatus.COMPLETED, completed = true, available = false),
+        )!!
+        assertEquals(JourneyStage.AWAITING_USHER, passed.stage)
     }
 
     @Test fun `the last level's exam opens the way to being sent, not to a Level 7`() {
@@ -296,5 +363,29 @@ class JourneyTest {
         // A vocabulary this client predates still reads as locked.
         assertEquals(LevelStatus.LOCKED, s.levels[2].status)
         assertEquals(JourneyStage.AWAITING_USHER, JourneyState.derive(s)!!.stage)
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    @Test fun `exam_available decodes on the level and the exam row — absent is null`() {
+        val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; namingStrategy = JsonNamingStrategy.SnakeCase }
+        val s = json.decodeFromString(
+            PathwaySummary.serializer(),
+            """{"current_level":1,"levels":[
+                {"level_number":1,"title":"Foundations","total_modules":20,"completed_modules":20,"status":"completed","awaiting_review":false,"exam_published":true,"exam_available":false},
+                {"level_number":2,"title":"Inner Transformation","total_modules":0,"completed_modules":0,"status":"locked","exam_published":true,"exam_available":true},
+                {"level_number":3,"title":"Older server","status":"locked","exam_published":true}
+            ]}""",
+        )
+        assertEquals(false, s.levels[0].examAvailable)
+        assertFalse(s.levels[0].examOffered)
+        assertEquals(true, s.levels[1].examAvailable)
+        assertNull(s.levels[2].examAvailable)
+        assertTrue(s.levels[2].examOffered)
+        assertEquals(JourneyStage.EXAM_SOON, JourneyState.derive(s)!!.stage)
+        val row = json.decodeFromString(
+            LevelModule.serializer(),
+            """{"module_id":"x","level_number":1,"module_sequence_number":900,"title":"Level 1 exam","evaluation_kind":"exit_exam","quiz_pass_mark":"70.00","completed":false,"status":"next","progress":0,"locked":false,"exam_available":false}""",
+        )
+        assertTrue(row.examOpensSoon)
     }
 }

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.OutlinedTextField
@@ -54,6 +55,7 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.QKind
 import org.nuruplace.member.data.net.QuizAnswer
 import org.nuruplace.member.data.net.QuizQuestion
+import org.nuruplace.member.data.net.StateAction
 import org.nuruplace.member.data.QuizDraftStore
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.Moment
@@ -84,12 +86,52 @@ fun QuizScreen(
     onPassed: (() -> Unit)? = null,   // level exam: route to the level-complete ceremony
     moduleId: String? = null,         // module quizzes only: unlocks "Review with Nuru" on a fail
     draftKey: String,                 // "module:<id>" | "level:<n>" — where saved answers live
+    onBack: () -> Unit = onDone,      // the back at the top — every answer is already saved
 ) {
-    AsyncContent(key = title, load = { loadQuestions() }) { questions, _ ->
+    AsyncContent(
+        key = title,
+        load = { loadQuestions() },
+        // A refusal in the server's words — "Your Level 1 exam isn't ready
+        // yet…", "Finish every module…" — offers Go back alone: trying again
+        // would only be refused again (EXPERIENCE.md §7.2 #1).
+        refusalAction = StateAction.BACK,
+        // The way out, from the first frame (§7 rule 3).
+        header = { QuizHeader(title, onBack) },
+    ) { questions, _ ->
         if (questions.isEmpty()) {
-            EmptyQuiz(onDone)
+            EmptyQuiz(title, onBack, onDone)
         } else {
-            QuizFlow(title, questions, submit, onDone, onPassed, moduleId, draftKey)
+            QuizFlow(title, questions, submit, onDone, onPassed, moduleId, draftKey, onBack)
+        }
+    }
+}
+
+/** The quiz's cream band: the back at the top — in every state, from the
+ *  first frame (EXPERIENCE.md §7 rule 3) — the title, and while answering the
+ *  progress dots. Leaving loses nothing: each answer is saved as it is given
+ *  (QuizDraftStore), and the test picks up where it was left. */
+@Composable
+private fun QuizHeader(title: String, onBack: () -> Unit, progress: (@Composable () -> Unit)? = null) {
+    GrowCreamHeader {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(top = Spacing.md, bottom = Spacing.base),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.white)
+                        .border(1.dp, Nuru.border, RoundedCornerShape(16.dp))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(Spacing.md))
+                Kicker(title)
+            }
+            progress?.let {
+                Spacer(Modifier.height(Spacing.md))
+                it()
+            }
         }
     }
 }
@@ -103,6 +145,7 @@ private fun QuizFlow(
     onPassed: (() -> Unit)?,
     moduleId: String? = null,
     draftKey: String,
+    onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     // A draft left mid-test wins over the fresh fetch: the server randomises
@@ -186,21 +229,15 @@ private fun QuizFlow(
     Column(
         Modifier.fillMaxSize().background(Nuru.coolPaper).imePadding(),
     ) {
-        GrowCreamHeader {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.screen).padding(top = Spacing.lg, bottom = Spacing.base),
-            ) {
-                Kicker(title)
-                // Gold progress dots — active dot widened, completed gold (Figma).
-                Spacer(Modifier.height(Spacing.md))
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                    questions.indices.forEach { i ->
-                        Box(
-                            Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
-                                .clip(RoundedCornerShape(Radii.pill))
-                                .background(if (i <= idx) Nuru.gold else Nuru.navy.copy(alpha = 0.18f)),
-                        )
-                    }
+        QuizHeader(title, onBack) {
+            // Gold progress dots — active dot widened, completed gold (Figma).
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                questions.indices.forEach { i ->
+                    Box(
+                        Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
+                            .clip(RoundedCornerShape(Radii.pill))
+                            .background(if (i <= idx) Nuru.gold else Nuru.navy.copy(alpha = 0.18f)),
+                    )
                 }
             }
         }
@@ -407,16 +444,19 @@ private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, on
 }
 
 @Composable
-private fun EmptyQuiz(onDone: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("This assessment has no questions yet.", style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(Spacing.md))
-        Box(Modifier.clickable { onDone() }.padding(Spacing.md)) {
-            Text("Go back", style = NuruType.cardCta, color = Nuru.gold)
+private fun EmptyQuiz(title: String, onBack: () -> Unit, onDone: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Nuru.paper)) {
+        QuizHeader(title, onBack)
+        Column(
+            Modifier.fillMaxWidth().weight(1f).padding(Spacing.screen),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("This assessment has no questions yet.", style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(Spacing.md))
+            Box(Modifier.clickable { onDone() }.padding(Spacing.md)) {
+                Text("Go back", style = NuruType.cardCta, color = Nuru.gold)
+            }
         }
     }
 }

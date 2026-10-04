@@ -552,9 +552,11 @@ fun HomeScreen(
                 // purpose reflection strip stands in, so Home never loses the
                 // nudge that ticks the rhythm. The unread-letter nudge opens the
                 // same letter sheet the knock card does, in place.
-                if (nudges.isNotEmpty()) {
+                // The exam's own nudge only while that exam can be taken (§7.2 #1).
+                val shownNudges = nudges.filter { nudgeOffered(it, pathway) }
+                if (shownNudges.isNotEmpty()) {
                     Entrance(entrance, 2) {
-                        NeedsYouRail(nudges) { n ->
+                        NeedsYouRail(shownNudges) { n ->
                             if (n.route == "letter" && letter != null) showLetter = true
                             else onNavigate(nudgeRouteFor(n))
                         }
@@ -1790,6 +1792,17 @@ private fun nudgeRouteFor(n: HomeNudge): String = when (n.route.ifBlank { n.kind
     // nudge opens the Give tab on Partners, where Pay now lives.
     "partners", "pledge", "pledge_due", "pledge_due_soon", "pledge_overdue", "pledge_fulfilled" -> "partners"
     else -> "pathway"
+}
+
+/** Whether Home shows a nudge. The exam's own nudge ("Level 1 review is open"
+ *  → the exam) only while the server says that exam can be taken: a level
+ *  whose `exam_available` is false would only refuse it — the journey says
+ *  "Exam opens soon" instead (EXPERIENCE.md §7.2 #1). Without the pathway
+ *  read the nudge stands: the server sent it. Every other nudge, always. */
+internal fun nudgeOffered(n: HomeNudge, pathway: PathwaySummary?): Boolean {
+    if (n.route.ifBlank { n.kind } !in setOf("level_exam", "level_review")) return true
+    val level = n.levelNumber ?: return true
+    return pathway?.levels?.firstOrNull { it.levelNumber == level }?.examAvailable != false
 }
 
 private fun parseZdt(s: String?): ZonedDateTime? {

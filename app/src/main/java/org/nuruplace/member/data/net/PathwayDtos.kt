@@ -59,12 +59,21 @@ data class PathwayLevel(
     // The level's final exam is live only once an admin publishes it. Defaults
     // TRUE so payloads from a server that predates the gate keep showing the exam.
     val examPublished: Boolean = true,
+    // The exam can be TAKEN: published AND with at least one active question
+    // in a published module of the level (EXPERIENCE.md §7.2 #1) — published
+    // with none, the exam answers 422. Null from a server that predates it:
+    // available, as before.
+    val examAvailable: Boolean? = null,
     // The server's own flag beside `status: awaiting_review` (curriculum
     // getPathwaySummary) — exam passed, not yet ushered on.
     val awaitingReview: Boolean = false,
 ) {
     /** Exam passed, waiting on the discipler — by the status or its flag. */
     val isAwaitingReview: Boolean get() = status == LevelStatus.AWAITING_REVIEW || awaitingReview
+
+    /** The server says the exam can be taken: published, and not said to be
+     *  unavailable. Only then is it offered (§7 rule 2). */
+    val examOffered: Boolean get() = examPublished && examAvailable != false
 
     /** Walked: every module done (the server's "completed"), or the exam
      *  passed and waiting to be ushered on. Drives the rail's seals, the
@@ -118,10 +127,18 @@ data class LevelModule(
     val status: ModuleStatus = ModuleStatus.LOCKED,
     val progress: Double = 0.0,
     val locked: Boolean = false,
+    // The exam row's own word (only on `exit_exam`): its exam can be taken —
+    // published and with questions (EXPERIENCE.md §7.2 #1). Null from an
+    // older server, and on a lesson: available, as before.
+    val examAvailable: Boolean? = null,
 ) {
     /** The level's capstone exam container — a visible, locked-until-ready row that
      *  opens the level exam rather than a lesson reader. */
     val isExam: Boolean get() = evaluationKind == "exit_exam"
+
+    /** The exam row whose exam is not open yet (it has no questions): it
+     *  reads "Opens soon" and opens nothing. Never a lesson, never a passed exam. */
+    val examOpensSoon: Boolean get() = isExam && !completed && examAvailable == false
 }
 
 /** GET /levels/{n}/encouragements → { data: [...] } rows from level_encouragements

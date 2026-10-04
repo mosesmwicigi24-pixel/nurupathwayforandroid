@@ -522,8 +522,8 @@ private fun SelectedModules(
     val shown = if (examRowHidden(journey, level.levelNumber)) ordered.filter { !it.isExam } else ordered
     val folds = trailFolds(journey, level.levelNumber, ordered)
     // "Continue →" goes where the list's open row goes — never to an exam
-    // the hero already offers.
-    val resume = shown.firstOrNull { it.status == ModuleStatus.NEXT }
+    // the hero already offers, nor to one with nothing to ask yet (§7.2 #1).
+    val resume = shown.firstOrNull { it.status == ModuleStatus.NEXT && !it.examOpensSoon }
     var expanded by rememberSaveable(level.levelNumber) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
@@ -545,7 +545,7 @@ private fun SelectedModules(
                         if (folds) Box(Modifier.fillMaxWidth().height(1.dp).background(PW.border))
                         shown.forEachIndexed { i, m ->
                             ModuleRow(m, last = (i == shown.size - 1) && !examPassed) {
-                                if (m.status != ModuleStatus.LOCKED) {
+                                if (m.status != ModuleStatus.LOCKED && !m.examOpensSoon) {
                                     if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
                                 }
                             }
@@ -562,11 +562,14 @@ private fun SelectedModules(
 @Composable
 private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
     val done = m.status == ModuleStatus.COMPLETED
-    val active = m.status == ModuleStatus.NEXT
+    // An exam with nothing to ask yet is not open: "Opens soon", no tap (§7.2 #1).
+    val soon = m.examOpensSoon
+    val active = m.status == ModuleStatus.NEXT && !soon
     val locked = m.status == ModuleStatus.LOCKED
     val exam = m.isExam
     val caption = when {
         exam && done -> "Level exam · passed"
+        soon -> "Level exam · opens soon"
         exam && active -> "Level exam · ready — tap to begin"
         exam -> "Finish every module to unlock the exam"
         done -> "Completed"
@@ -575,9 +578,9 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
     }
     Column {
         Row(
-            Modifier.fillMaxWidth().pressScale(0.98f)
+            Modifier.fillMaxWidth().then(if (soon) Modifier else Modifier.pressScale(0.98f))
                 .background(if (active) PW.gold.copy(alpha = 0.05f) else if (exam) PW.gold.copy(alpha = 0.03f) else Color.Transparent)
-                .clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                .clickable(enabled = !soon) { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The module NUMBER stays put; state moves to a corner seal. The
@@ -623,6 +626,7 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             }
             when {
                 active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(if (exam) "Start exam" else "Resume", style = PW.over(9, 0f), color = PW.gold) }
+                soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(9, 0f), color = PW.goldDeep) }
                 done -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
             }
         }

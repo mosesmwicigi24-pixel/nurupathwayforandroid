@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.nuruplace.member.ui.components.offering
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
@@ -140,5 +141,28 @@ class StateLanguageTest {
         assertEquals(StateLanguage.serverError, ApiException.state(http(400, """{"message":"Nope"}""")))
         assertEquals(StateLanguage.serverError, ApiException.state(http(413, "<html>Request Entity Too Large</html>")))
         assertEquals(StateLanguage.serverError, StateLanguage.forStatus(422, "  "))
+    }
+
+    // ── the exam's refusal (EXPERIENCE.md §7.2 #1) ──
+
+    @Test fun `the exam's refusal offers Go back only — never Try again`() {
+        // The exam screen asks for refusalAction = BACK: the server's words,
+        // and the way out — trying again would only be refused again.
+        val notReady = ApiException.state(
+            http(422, envelope("UNPROCESSABLE", "Your Level 1 exam isn't ready yet — we'll let you know when it opens.")),
+        ).offering(StateAction.BACK)
+        assertEquals("Your Level 1 exam isn't ready yet — we'll let you know when it opens.", notReady.title)
+        assertNull(notReady.line)
+        assertEquals(StateAction.BACK, notReady.action)
+        assertEquals("Go back", notReady.action.label)
+        val gate = ApiException.state(http(409, envelope("GATE_LOCKED", "Finish every module in this level before the exam")))
+            .offering(StateAction.BACK)
+        assertEquals(StateAction.BACK, gate.action)
+        // Not a refusal: what happened keeps its own action.
+        assertEquals(StateAction.RETRY, StateLanguage.serverError.offering(StateAction.BACK).action)
+        assertEquals(StateAction.RETRY, StateLanguage.offline().offering(StateAction.BACK).action)
+        assertEquals(StateAction.SIGN_IN, StateLanguage.sessionEnded.offering(StateAction.BACK).action)
+        // Every other screen keeps Try again on a refusal, as before.
+        assertEquals(StateAction.RETRY, StateLanguage.refusal("Nope").offering(StateAction.RETRY).action)
     }
 }

@@ -1,6 +1,6 @@
 // The member's journey state (pathway docs/EXPERIENCE.md §3, Cycle 1) — derived
 // ONCE from GET /me/pathway (the current level's row: status, exam_published,
-// completed/total modules) and the next incomplete module, then shown in the
+// exam_available, completed/total modules) and the next incomplete module, then shown in the
 // same words on the Home header pill, the Home continue card, the Home progress
 // line, the Pathway hero, the Pathway ring and the summit.
 //
@@ -26,9 +26,11 @@ import kotlin.math.roundToInt
 enum class JourneyStage {
     /** The current level is open: modules to read. */
     LEARNING,
-    /** Every module is done and the level's exam is published. */
+    /** Every module is done and the level's exam can be taken (published,
+     *  with questions — `exam_available`). */
     EXAM_READY,
-    /** Every module is done; the exam is not published yet. */
+    /** Every module is done; the exam is not published yet, or has nothing
+     *  to ask yet (§7.2 #1). */
     EXAM_SOON,
     /** The exam is passed; the member's leader opens the next level. */
     AWAITING_USHER,
@@ -132,16 +134,21 @@ object JourneyState {
         val exam = trail.firstOrNull { it.isExam }
         val examPassed = exam?.completed == true
         val examOpen = exam != null && !exam.completed && exam.status == ModuleStatus.NEXT
+        // Published is not enough: the exam is offered only when the server
+        // says it can be taken — it has questions (`exam_available`, on the
+        // level and on its exam row; absent = available, an older server).
+        // An exam published with none answered 422 behind "Exam ready" (§7.2 #1).
+        val examAvailable = current.examAvailable != false && exam?.examAvailable != false
 
         val stage = when {
             pastTheEnd -> JourneyStage.FINISHED
             current.isAwaitingReview || examPassed ->
                 if (isLast) JourneyStage.FINISHED else JourneyStage.AWAITING_USHER
             current.status == LevelStatus.COMPLETED ->
-                if (current.examPublished) JourneyStage.EXAM_READY else JourneyStage.EXAM_SOON
+                if (current.examPublished && examAvailable) JourneyStage.EXAM_READY else JourneyStage.EXAM_SOON
             // A level with an exam container counts it among its modules, so it
             // stays "active" at 20 of 21 — the open exam row is the truth.
-            examOpen -> JourneyStage.EXAM_READY
+            examOpen -> if (examAvailable) JourneyStage.EXAM_READY else JourneyStage.EXAM_SOON
             else -> JourneyStage.LEARNING
         }
 

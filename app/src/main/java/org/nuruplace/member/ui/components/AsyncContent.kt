@@ -206,7 +206,13 @@ fun signInAgain() {
 }
 
 /** [offerBack]: the failed state adds a quiet "Go back" (default) — a tab
- *  root, with nowhere to go back to, turns it off. */
+ *  root, with nowhere to go back to, turns it off. [refusalAction]: what a
+ *  refusal in the server's own words offers — Try again by default; a screen
+ *  whose load the server refuses for a reason trying again can't change (the
+ *  exam not ready, its gate not met) offers Go back alone (EXPERIENCE.md §7.2
+ *  #1). [header]: the screen's own top bar — its way out — shown above the
+ *  loading and failed states too, so the screen has an exit from its first
+ *  frame (§7 rule 3); the content draws its own once loaded. */
 @Composable
 fun <T> AsyncContent(
     key: Any? = Unit,
@@ -214,6 +220,8 @@ fun <T> AsyncContent(
     loading: (@Composable () -> Unit)? = null,
     refreshable: Boolean = false,
     offerBack: Boolean = true,
+    refusalAction: StateAction = StateAction.RETRY,
+    header: (@Composable () -> Unit)? = null,
     content: @Composable (value: T, reload: () -> Unit) -> Unit,
 ) {
     var state by remember(key) { mutableStateOf<LoadState<T>>(LoadState.Loading) }
@@ -240,22 +248,27 @@ fun <T> AsyncContent(
     }
 
     when (val s = state) {
-        is LoadState.Loading -> loading?.invoke() ?: Box(Modifier.fillMaxSize(), Alignment.Center) {
-            CircularProgressIndicator(color = Nuru.gold)
+        is LoadState.Loading -> WithHeader(header) {
+            loading?.invoke() ?: Box(Modifier.fillMaxSize(), Alignment.Center) {
+                CircularProgressIndicator(color = Nuru.gold)
+            }
         }
         // The error state must NEVER trap the member: screens whose whole body
         // is AsyncContent lose their own header here, so it always offers a
         // way back via the activity's back dispatcher (fixes the "failed quiz
         // / missing event → restart the app" trap).
-        is LoadState.Err -> Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
-            val backDispatcher =
-                androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                FailedState(
-                    s.message,
-                    onRetry = { attempt++ },
-                    onBack = if (offerBack) ({ backDispatcher?.onBackPressed() }) else null,
-                )
+        is LoadState.Err -> WithHeader(header) {
+            Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
+                val backDispatcher =
+                    androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+                val message = s.message.offering(refusalAction)
+                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    FailedState(
+                        message,
+                        onRetry = { attempt++ },
+                        onBack = if (offerBack) ({ backDispatcher?.onBackPressed() }) else null,
+                    )
+                }
             }
         }
         is LoadState.Ok ->
@@ -264,5 +277,24 @@ fun <T> AsyncContent(
             } else {
                 content(s.value, reload)
             }
+    }
+}
+
+/** What a failed load offers: a refusal in the server's own words offers
+ *  [refusalAction]; every other state keeps its own (Try again for offline
+ *  or our side, Sign in, Go back for a 404). */
+internal fun StateMessage.offering(refusalAction: StateAction): StateMessage =
+    if (cause == StateCause.REFUSAL) copy(action = refusalAction) else this
+
+/** [body] under the screen's [header], when it has one. */
+@Composable
+private fun WithHeader(header: (@Composable () -> Unit)?, body: @Composable () -> Unit) {
+    if (header == null) {
+        body()
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        header()
+        Box(Modifier.fillMaxWidth().weight(1f)) { body() }
     }
 }

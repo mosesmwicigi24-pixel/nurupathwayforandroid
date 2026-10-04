@@ -181,7 +181,8 @@ fun LevelDetailScreen(
         val hasExamModule = modules.any { it.isExam }
         val content = modules.filter { !it.isExam }
         val allDone = content.isNotEmpty() && content.all { it.completed }
-        val nextIdx = modules.indexOfFirst { !it.completed && !(it.locked || it.status == ModuleStatus.LOCKED) }
+        // An exam that has nothing to ask yet is never the next step (§7.2 #1).
+        val nextIdx = modules.indexOfFirst { !it.completed && !(it.locked || it.status == ModuleStatus.LOCKED) && !it.examOpensSoon }
 
         // Within-level "walk with your discipler" reminder — eligible once the
         // member is genuinely mid-level (≥3 modules done, not yet at the level's
@@ -360,6 +361,9 @@ private fun DisciplerCard(m: MentorInfo.Mentor) {
 private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean, onOpen: () -> Unit) {
     val locked = module.locked || module.status == ModuleStatus.LOCKED
     val done = module.completed
+    // The exam row whose exam has nothing to ask yet: "Opens soon", and
+    // nothing to tap — the exam would only refuse (§7.2 #1).
+    val soon = module.examOpensSoon
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         // Node + connector column.
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -406,7 +410,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                 .clip(RoundedCornerShape(20.dp))
                 .background(if (locked) Nuru.surface else Nuru.white)
                 .border(1.dp, if (isNext) Nuru.gold.copy(alpha = 0.4f) else Nuru.border, RoundedCornerShape(20.dp))
-                .then(if (locked) Modifier.alpha(0.85f) else Modifier.clickable { onOpen() })
+                .then(if (locked) Modifier.alpha(0.85f) else if (soon) Modifier else Modifier.clickable { onOpen() })
                 .padding(Spacing.base),
         ) {
             Row(verticalAlignment = Alignment.Top) {
@@ -414,7 +418,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                     Kicker(if (module.isExam) "Level exam" else "Module ${module.moduleSequenceNumber}")
                     Text(module.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 }
-                ModuleStatusPill(done, isNext)
+                ModuleStatusPill(done, isNext, soon)
             }
             module.summary?.let {
                 Spacer(Modifier.height(Spacing.xs))
@@ -443,6 +447,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
             Text(
                 when {
                     module.isExam && done -> "Level exam · passed."
+                    soon -> "Level exam · opens soon."
                     module.isExam && isNext -> "Level exam · ready — tap to begin."
                     module.isExam -> "Unlocks when you finish every module."
                     done -> "Completed — nicely done."
@@ -693,9 +698,10 @@ private fun encouragementKicker(kind: String?): String = when (kind?.lowercase()
 }
 
 @Composable
-private fun ModuleStatusPill(done: Boolean, isNext: Boolean) {
+private fun ModuleStatusPill(done: Boolean, isNext: Boolean, soon: Boolean = false) {
     val (label, bg, fg) = when {
         done -> Triple("Done", Nuru.successBg, Nuru.successText)
+        soon -> Triple("Opens soon", Nuru.goldTint, Nuru.goldChipText)
         isNext -> Triple("In progress", Nuru.goldTint, Nuru.goldChipText)
         else -> Triple("Locked", Nuru.inputBg, Nuru.ink400)
     }

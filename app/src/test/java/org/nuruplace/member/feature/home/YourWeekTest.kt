@@ -63,6 +63,12 @@ class YourWeekTest {
             it.copy(levels = it.levels.map { l -> if (l.levelNumber == 1) l.copy(examPublished = false) else l })
         }), 1)
         assertEquals(WeekRow(WeekForm.JOURNEY, "Level 1 complete", "Level 1 · Exam opens soon", WeekDest.Tab("pathway")), soon)
+        // Published with nothing to ask yet (`exam_available` false, §7.2 #1):
+        // the same row — it never opens the exam, which would only refuse.
+        val noQuestions = YourWeek.pathway(JourneyState.derive(summary(LevelStatus.COMPLETED, 20).let {
+            it.copy(levels = it.levels.map { l -> if (l.levelNumber == 1) l.copy(examAvailable = false) else l })
+        }, trail(20)), 1)
+        assertEquals(WeekRow(WeekForm.JOURNEY, "Level 1 complete", "Level 1 · Exam opens soon", WeekDest.Tab("pathway")), noQuestions)
     }
 
     @Test
