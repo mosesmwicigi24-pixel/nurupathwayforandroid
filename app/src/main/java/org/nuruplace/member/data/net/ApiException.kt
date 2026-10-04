@@ -50,11 +50,10 @@ object ApiException {
 
     /** A refusal's own words — only from OUR envelope (`{ error: { code,
      *  message } }`): a bare `{ message }`, a proxy's page or an empty body is
-     *  not something our API said to the member (iOS NuruStateCopy, the same rule). */
-    private fun refusalWords(e: HttpException): String? {
-        val err = parseServerError(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull())
-        return err.message.takeIf { err.code != null }
-    }
+     *  not something our API said to the member (iOS NuruStateCopy, the same
+     *  rule) — and neither is VALIDATION_FAILED ([ServerError.refusalWords]). */
+    private fun refusalWords(e: HttpException): String? =
+        parseServerError(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull()).refusalWords
 
     private fun parseEnvelope(body: String?): String? {
         if (body.isNullOrBlank()) return null
@@ -95,25 +94,35 @@ object ApiException {
         )
     }
 
-    /** What [ServerError.displayMessage] says for an HTTP status when the body
-     *  says nothing — Give's own refusal path (its giving cycles pin it). */
-    internal fun statusMessage(status: Int): String = when (status) {
-        401 -> "Your session has expired. Please sign in again."
-        else -> "Something went wrong ($status)."
-    }
 }
+
+/** The envelope code of a request the server could not parse: the APP built
+ *  it wrong, so it is our side's fault, not a refusal in a member's words
+ *  (EXPERIENCE.md §7.3) — "Request body failed validation" is never shown. */
+const val VALIDATION_FAILED = "VALIDATION_FAILED"
 
 /** A server refusal, as [ApiException.serverError] read it. */
 data class ServerError(
     val status: Int,
     /** The envelope's machine code (e.g. GIFT_IN_PROGRESS); null when absent. */
     val code: String?,
-    /** Member-facing — shown as-is. Null when the body carried none. */
+    /** The envelope's words — member-facing only as [refusalWords]. Null
+     *  when the body carried none. */
     val message: String?,
     val details: JsonObject?,
 ) {
-    /** The server's words, else [ApiException.statusMessage]'s status line. */
-    val displayMessage: String get() = message ?: ApiException.statusMessage(status)
+    /** The server's own words for the member: a refusal in our envelope (a
+     *  4xx with its code) — never [VALIDATION_FAILED]'s parse message, a
+     *  5xx's "Internal server error", or a proxy's page. Null otherwise. */
+    val refusalWords: String?
+        get() = message?.takeIf { code != null && code != VALIDATION_FAILED && status in 400..499 && status != 401 }
+
+    /** What the member reads (EXPERIENCE.md §4): [refusalWords] when there
+     *  are any, else the state language's sentence for the status — "Something
+     *  went wrong on our side. It isn't you — please try again in a moment.",
+     *  "Your session has ended. …", "This isn't here any more. …". Never raw
+     *  server text. */
+    val displayMessage: String get() = StateLanguage.forStatus(status, refusalWords).sentence
 
     /** A string detail (`details.transaction_id`), null when absent or blank. */
     fun detail(key: String): String? =

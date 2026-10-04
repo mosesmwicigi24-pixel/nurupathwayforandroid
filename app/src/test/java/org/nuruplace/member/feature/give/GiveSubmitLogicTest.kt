@@ -540,7 +540,11 @@ class GiveSubmitLogicTest {
         assertEquals(GiveErrorAction.Say("You appear to be offline."), giveErrorAction(null, "You appear to be offline."))
         val silent = ApiException.parseServerError(502, "<html>Bad gateway</html>")
         assertEquals(GiveErrorAction.Say(silent.displayMessage), giveErrorAction(silent, silent.displayMessage))
-        assertEquals("Something went wrong (502).", silent.displayMessage)
+        assertEquals("Something went wrong on our side. It isn't you — please try again in a moment.", silent.displayMessage)
+        // "Request body failed validation" is never said: the fallback speaks (§7.3).
+        val parse = ApiException.parseServerError(400, """{"error":{"code":"VALIDATION_FAILED","message":"Request body failed validation"}}""")
+        assertEquals(GiveErrorAction.Say(parse.displayMessage), giveErrorAction(parse, parse.displayMessage))
+        assertEquals(GiveErrorAction.Say("Something went wrong on our side. It isn't you — please try again in a moment."), giveErrorAction(parse, parse.displayMessage))
     }
 
     private val waiting = GivingDetail(

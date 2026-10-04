@@ -51,7 +51,8 @@ class ApiExceptionMessageTest {
         assertEquals("PHONE_REQUIRED", bare.code)
         assertNull(bare.message)
         assertNull(bare.details)
-        assertEquals("Something went wrong (422).", bare.displayMessage)
+        // No words of its own: the state language (§4), never a status code.
+        assertEquals(StateLanguage.serverError.sentence, bare.displayMessage)
         // The older flat shape still gives its message.
         assertEquals("Nope", ApiException.parseServerError(400, """{"message":"Nope"}""").message)
         // Not JSON, empty, or absent.
@@ -59,9 +60,34 @@ class ApiExceptionMessageTest {
             val e = ApiException.parseServerError(502, body)
             assertNull(body, e.code)
             assertNull(body, e.message)
-            assertEquals("Something went wrong (502).", e.displayMessage)
+            assertEquals(StateLanguage.serverError.sentence, e.displayMessage)
         }
-        assertEquals("Your session has expired. Please sign in again.", ApiException.parseServerError(401, null).displayMessage)
+        assertEquals(StateLanguage.sessionEnded.sentence, ApiException.parseServerError(401, null).displayMessage)
+    }
+
+    @Test fun `raw server text never reaches the member — a parse failure and a 5xx are our side`() {
+        // EXPERIENCE.md §7.3: "Request body failed validation" is our side's fault.
+        val parse = ApiException.parseServerError(
+            400, """{"error":{"code":"VALIDATION_FAILED","message":"Request body failed validation","details":{"fields":[]}}}""",
+        )
+        assertEquals("VALIDATION_FAILED", parse.code)
+        assertNull(parse.refusalWords)
+        assertEquals("Something went wrong on our side. It isn't you — please try again in a moment.", parse.displayMessage)
+        val crash = ApiException.parseServerError(500, """{"error":{"code":"INTERNAL","message":"Internal server error"}}""")
+        assertNull(crash.refusalWords)
+        assertEquals(StateLanguage.serverError.sentence, crash.displayMessage)
+        // A refusal in our own words keeps them.
+        val refusal = ApiException.parseServerError(422, """{"error":{"code":"AMOUNT_OUT_OF_RANGE","message":"M-Pesa gifts are from KSh 1 to KSh 250,000."}}""")
+        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", refusal.refusalWords)
+        assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", refusal.displayMessage)
+        // The one-line form says the same (Partners' actions, the claim form, PayPal's capture).
+        val http = HttpException(
+            Response.error<Any>(
+                400,
+                """{"error":{"code":"VALIDATION_FAILED","message":"Request body failed validation"}}""".toResponseBody("application/json".toMediaType()),
+            ),
+        )
+        assertEquals(StateLanguage.serverError.sentence, ApiException.message(http))
     }
 
     @Test fun `serverError reads an HTTP refusal and nothing else`() {

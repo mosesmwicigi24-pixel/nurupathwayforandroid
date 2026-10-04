@@ -327,11 +327,13 @@ sealed interface GiveErrorAction {
  * to a number not the member's own — its words name the minutes; Giving
  * Cycle 6), any other code — says the server's message as-is (it is written
  * for the member) and is never sent again by itself. [fallback] speaks when
- * there is no server message: a transport failure (err == null) or a body
- * that said nothing.
+ * there are no member-facing words: a transport failure (err == null), a
+ * body that said nothing, a 5xx's "Internal server error", or "Request body
+ * failed validation" (VALIDATION_FAILED — a request the app built wrong is
+ * our side, EXPERIENCE.md §7.3) — never raw server text.
  */
 fun giveErrorAction(err: ServerError?, fallback: String): GiveErrorAction {
-    val message = err?.message ?: fallback
+    val message = err?.refusalWords ?: fallback
     if (err?.code == "GIFT_IN_PROGRESS") {
         err.detail("transaction_id")?.let { return GiveErrorAction.FollowPrompt(it, message) }
     }
