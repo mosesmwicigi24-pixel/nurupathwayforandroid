@@ -158,6 +158,10 @@ fun LevelDetailScreen(
 ) {
     AsyncContent(
         key = levelNumber,
+        // Held by the page (EXPERIENCE.md §7.2 #8): Back from a module or the
+        // exam finds the same trail at the same scroll, refreshed in place —
+        // a module just finished reads done.
+        heldAs = "LevelDetail",
         load = {
             val modules = Net.client.api.levelModules(levelNumber).data
             val summary = runCatching { Net.client.api.pathway() }.getOrNull()

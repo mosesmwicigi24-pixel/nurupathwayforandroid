@@ -61,6 +61,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +83,7 @@ import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.ui.components.EmptyState
 import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.InboxBell
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.Calendar
@@ -96,14 +98,16 @@ fun ReadingPlansScreen(
     onOpenNotifications: () -> Unit = {},
     onOpenReadWithFriend: () -> Unit = {},
 ) {
-    var plans by remember { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
-    var promos by remember { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
-    var streak by remember { mutableStateOf(0) }
-    var todayWordDone by remember { mutableStateOf(false) }
+    // Held by the tab (rememberHeld, EXPERIENCE.md §7.2 #8): Back from a plan
+    // finds the same library at the same scroll, refreshed in place.
+    var plans by rememberHeld("Plans.plans") { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
+    var promos by rememberHeld("Plans.promos") { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
+    var streak by rememberHeld("Plans.streak") { mutableStateOf(0) }
+    var todayWordDone by rememberHeld("Plans.todayWordDone") { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     // Plans that never loaded say so (§4) — they used to read as a library
     // with no plans in it.
-    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var loadError by rememberHeld("Plans.loadError") { mutableStateOf<StateMessage?>(null) }
     var attempt by remember { mutableStateOf(0) }
     val context = LocalContext.current
 
@@ -121,14 +125,15 @@ fun ReadingPlansScreen(
         // The personalized promos are strictly an upgrade: if the route is
         // missing, slow or angry, the page falls back to the local choices
         // below and the member never learns anything went wrong.
-        promos = runCatching { Net.client.api.planPromos().data }.getOrNull().orEmpty()
-        streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-        todayWordDone = runCatching { Net.client.api.rhythmToday().word }.getOrDefault(false)
+        // A part that fails keeps what is on screen.
+        promos = runCatching { Net.client.api.planPromos().data }.getOrElse { promos }
+        streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
+        todayWordDone = runCatching { Net.client.api.rhythmToday().word }.getOrElse { todayWordDone }
         loading = false
     }
 
-    var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("all") }
+    var query by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("all") }
 
     val q = query.trim().lowercase()
     val searching = q.isNotEmpty() || category != "all"

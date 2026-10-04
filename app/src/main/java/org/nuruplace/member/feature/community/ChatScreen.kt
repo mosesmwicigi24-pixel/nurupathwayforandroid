@@ -57,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -169,7 +170,8 @@ fun ChatInboxScreen(
     // default keeps every other caller (none today) unaffected.
     onUnreadChange: (Int) -> Unit = {},
 ) {
-    AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, load = {
+    // Held by the tab (§7.2 #8): Back from a thread finds the same list.
+    AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, heldAs = "Community", load = {
         val inbox = Net.client.api.chatInbox()
         val people = runCatching { Net.client.api.chatPeople(null).people }.getOrDefault(emptyList())
         val name = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("")
@@ -192,8 +194,8 @@ fun ChatInboxScreen(
         HubData(inbox, people, name, verse, connections, incoming, outgoing, discipler, disciplerConversationId, pastoralConversationId)
     }) { (inbox, people, name, verse, connections, incoming, outgoing, discipler, disciplerConversationId, pastoralConversationId), reload ->
         val scope = rememberCoroutineScope()
-        var tab by remember { mutableStateOf(ChatTab.MySpace) }
-        var query by remember { mutableStateOf("") }
+        var tab by rememberSaveable { mutableStateOf(ChatTab.MySpace) }
+        var query by rememberSaveable { mutableStateOf("") }
         // Person a connection action is in flight for (Connect / cancel /
         // accept / decline) — mirrors `busy` DM-creation below.
         var connectingUserId by remember { mutableStateOf<String?>(null) }

@@ -67,6 +67,9 @@ fun DepartmentsSegment(onOpen: (String) -> Unit) {
     AsyncContent(
         load = { Net.client.api.departments().data },
         refreshable = true,
+        // Held by the tab (EXPERIENCE.md §7.2 #8): Back from a department
+        // finds the same list at the same scroll, refreshed in place.
+        heldAs = "Departments",
     ) { departments, _ ->
         if (departments.isEmpty()) {
             DepartmentsEmpty()

@@ -206,7 +206,11 @@ fun signInAgain() {
 }
 
 /** [offerBack]: the failed state adds a quiet "Go back" (default) — a tab
- *  root, with nowhere to go back to, turns it off. [refusalAction]: what a
+ *  root, with nowhere to go back to, turns it off. [heldAs]: hold what loaded
+ *  at the screen's destination under this name (rememberHeld), so Back from
+ *  a route pushed over it finds it at once, at the same scroll, and it
+ *  refreshes in place — no spinner, no skeleton (EXPERIENCE.md §7 rule 5);
+ *  the tab roots and the level page use it. [refusalAction]: what a
  *  refusal in the server's own words offers — Try again by default; a screen
  *  whose load the server refuses for a reason trying again can't change (the
  *  exam not ready, its gate not met) offers Go back alone (EXPERIENCE.md §7.2
@@ -222,9 +226,14 @@ fun <T> AsyncContent(
     offerBack: Boolean = true,
     refusalAction: StateAction = StateAction.RETRY,
     header: (@Composable () -> Unit)? = null,
+    heldAs: String? = null,
     content: @Composable (value: T, reload: () -> Unit) -> Unit,
 ) {
-    var state by remember(key) { mutableStateOf<LoadState<T>>(LoadState.Loading) }
+    var state by if (heldAs != null) {
+        rememberHeld("AsyncContent.$heldAs", key) { mutableStateOf<LoadState<T>>(LoadState.Loading) }
+    } else {
+        remember(key) { mutableStateOf<LoadState<T>>(LoadState.Loading) }
+    }
     var attempt by remember(key) { mutableIntStateOf(0) }
     var refreshing by remember(key) { mutableStateOf(false) }
     val reload: () -> Unit = { attempt++ }

@@ -133,6 +133,7 @@ import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.feature.live.GoLiveButton
 import org.nuruplace.member.feature.live.GoLiveSetupSheet
 import org.nuruplace.member.feature.live.canGoLive
@@ -163,49 +164,55 @@ fun HomeScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    var rhythm by remember { mutableStateOf<RhythmToday?>(null) }
-    var verse by remember { mutableStateOf<TailoredVerse?>(null) }
-    var streak by remember { mutableStateOf<Achievements?>(null) }
-    var welcomeVideo by remember { mutableStateOf<WelcomeVideo?>(null) }
-    var announcement by remember { mutableStateOf<FeaturedAnnouncement?>(null) }
-    var scores by remember { mutableStateOf<ScoresSummary?>(null) }
-    var upcoming by remember { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
-    var homeEvents by remember { mutableStateOf<List<HomeEventRow>>(emptyList()) }
-    var cohort by remember { mutableStateOf<CellSummary?>(null) }
+    // Home's server data is HELD by the "home" destination (rememberHeld),
+    // not the composition: a full-screen route pushed over Home — the exam, a
+    // module, an event, a pledge — no longer throws it away, so Back returns
+    // to the same page at the same scroll and refreshes it in place: no
+    // skeleton, no score of "0" (EXPERIENCE.md §7.2 #8). Transient UI state
+    // (a sheet open, the video playing) still starts fresh.
+    var rhythm by rememberHeld("Home.rhythm") { mutableStateOf<RhythmToday?>(null) }
+    var verse by rememberHeld("Home.verse") { mutableStateOf<TailoredVerse?>(null) }
+    var streak by rememberHeld("Home.streak") { mutableStateOf<Achievements?>(null) }
+    var welcomeVideo by rememberHeld("Home.welcomeVideo") { mutableStateOf<WelcomeVideo?>(null) }
+    var announcement by rememberHeld("Home.announcement") { mutableStateOf<FeaturedAnnouncement?>(null) }
+    var scores by rememberHeld("Home.scores") { mutableStateOf<ScoresSummary?>(null) }
+    var upcoming by rememberHeld("Home.upcoming") { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
+    var homeEvents by rememberHeld("Home.homeEvents") { mutableStateOf<List<HomeEventRow>>(emptyList()) }
+    var cohort by rememberHeld("Home.cohort") { mutableStateOf<CellSummary?>(null) }
     // YOUR WEEK's own reads (EXPERIENCE.md §6.1): the plans, the member's
     // RSVPs, the partnership (its DUE rows and pledges) and the recurring
     // gifts. Null = never answered — that row says its "none" form; a failed
     // refresh keeps the last answer.
-    var plans by remember { mutableStateOf<List<ReadingPlanRow>?>(null) }
-    var rsvps by remember { mutableStateOf<List<MyRsvp>?>(null) }
-    var partnership by remember { mutableStateOf<Partnership?>(null) }
-    var gifts by remember { mutableStateOf<List<GivingSchedule>?>(null) }
-    var prayers by remember { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
-    var radio by remember { mutableStateOf<RadioProgram?>(null) }
+    var plans by rememberHeld("Home.plans") { mutableStateOf<List<ReadingPlanRow>?>(null) }
+    var rsvps by rememberHeld("Home.rsvps") { mutableStateOf<List<MyRsvp>?>(null) }
+    var partnership by rememberHeld("Home.partnership") { mutableStateOf<Partnership?>(null) }
+    var gifts by rememberHeld("Home.gifts") { mutableStateOf<List<GivingSchedule>?>(null) }
+    var prayers by rememberHeld("Home.prayers") { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
+    var radio by rememberHeld("Home.radio") { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
-    var personalWord by remember { mutableStateOf<String?>(null) }
-    var verseReactions by remember { mutableStateOf<VerseReactions?>(null) }
-    var verseSaved by remember { mutableStateOf(false) }
-    var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
+    var personalWord by rememberHeld("Home.personalWord") { mutableStateOf<String?>(null) }
+    var verseReactions by rememberHeld("Home.verseReactions") { mutableStateOf<VerseReactions?>(null) }
+    var verseSaved by rememberHeld("Home.verseSaved") { mutableStateOf(false) }
+    var featuredEvent by rememberHeld("Home.featuredEvent") { mutableStateOf<FeaturedEvent?>(null) }
     // The member's journey (docs/EXPERIENCE.md §3): the pathway summary and
     // the current level's trail — one truth for the pill, the continue card
     // and the progress line, in the words the Pathway hub uses.
-    var pathway by remember { mutableStateOf<PathwaySummary?>(null) }
-    var currentTrail by remember { mutableStateOf<List<LevelModule>?>(null) }
+    var pathway by rememberHeld("Home.pathway") { mutableStateOf<PathwaySummary?>(null) }
+    var currentTrail by rememberHeld("Home.currentTrail") { mutableStateOf<List<LevelModule>?>(null) }
     // The rails GET /giving/methods says can take a gift — the giving card
     // names only those (null = no answer yet: no rail named). A failed
     // refresh keeps the last answer.
-    var giveRails by remember { mutableStateOf<org.nuruplace.member.data.net.GivingMethodsRes?>(null) }
-    var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
+    var giveRails by rememberHeld("Home.giveRails") { mutableStateOf<org.nuruplace.member.data.net.GivingMethodsRes?>(null) }
+    var letter by rememberHeld("Home.letter") { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
     // "What needs you today" (GET /me/home/nudges) — empty = nothing waiting OR
     // the endpoint is unreachable; either way the old reflection strip stands in.
-    var nudges by remember { mutableStateOf<List<HomeNudge>>(emptyList()) }
+    var nudges by rememberHeld("Home.nudges") { mutableStateOf<List<HomeNudge>>(emptyList()) }
     // Nuru Live (L2, viewer-only) — GET /live/now returns church streams
     // always plus cell streams scoped to the caller's own cell; Home only
     // ever renders the church-scope one (CellInfoScreen renders the cell one
     // off this SAME shape from its own fetch).
-    var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
+    var liveNow by rememberHeld("Home.liveNow") { mutableStateOf<List<LiveNowRow>>(emptyList()) }
     // Nuru Live (L3) — the "Go Live" setup sheet; Home offers whichever of
     // church/my-cell the member is eligible for (see GoLiveShared.kt for the
     // exact eligibility rule and its reasoning).
@@ -257,11 +264,14 @@ fun HomeScreen(
         )
     }
 
-    // One tick per full load — pull-to-refresh bumps it to re-run the batch;
-    // `loadedOnce` keeps the skeleton from ever returning after first paint.
+    // One tick per full load — pull-to-refresh bumps it to re-run the batch,
+    // and so does every return to Home (the tick starts again at 0 while the
+    // data is held). Each read refreshes its part IN PLACE: a part that fails
+    // keeps what is on screen — never blanked, never back to "0". `loadedOnce`
+    // keeps the skeleton from ever returning after first paint.
     var refreshTick by remember { mutableIntStateOf(0) }
     var refreshing by remember { mutableStateOf(false) }
-    var loadedOnce by remember { mutableStateOf(false) }
+    var loadedOnce by rememberHeld("Home.loadedOnce") { mutableStateOf(false) }
     LaunchedEffect(refreshTick) {
         // YOUR WEEK's giving and RSVPs, side by side with everything below —
         // they add no wait to the page; the card is drawn once all answer.
@@ -270,37 +280,39 @@ fun HomeScreen(
         val rsvpsRead = async { runCatching { Net.client.api.myRsvps().data }.getOrNull() }
         // The bell's one count, beside them — pulled down, it asks again too.
         launch { org.nuruplace.member.ui.components.InboxUnread.refresh() }
-        rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
-        nudges = runCatching { Net.client.api.nudges().nudges }.getOrDefault(emptyList())
+        rhythm = runCatching { Net.client.api.rhythmToday() }.getOrElse { rhythm }
+        nudges = runCatching { Net.client.api.nudges().nudges }.getOrElse { nudges }
         // Nuru's daily word — a blessing written for THIS member (server-side,
         // grounded in their streak/level/prayers, cached per day). iOS parity.
-        personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
-        verseReactions = runCatching { Net.client.api.verseReactions() }.getOrNull()
-        featuredEvent = runCatching { Net.client.api.featuredEvent().data }.getOrNull()
-        verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
-        streak = runCatching { Net.client.api.achievements() }.getOrNull()
-        welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrNull()
-        scores = runCatching { Net.client.api.scores() }.getOrNull()
-        pathway = runCatching { Net.client.api.pathway() }.getOrNull()
+        personalWord = runCatching { Net.client.api.homeGreeting().greeting.takeIf { it.isNotBlank() } }.getOrElse { personalWord }
+        verseReactions = runCatching { Net.client.api.verseReactions() }.getOrElse { verseReactions }
+        featuredEvent = runCatching { Net.client.api.featuredEvent().data }.getOrElse { featuredEvent }
+        verse = runCatching { Net.client.api.homeVerse() }.getOrElse { verse }
+        streak = runCatching { Net.client.api.achievements() }.getOrElse { streak }
+        welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrElse { welcomeVideo }
+        scores = runCatching { Net.client.api.scores() }.getOrElse { scores }
+        pathway = runCatching { Net.client.api.pathway() }.getOrElse { pathway }
         currentTrail = JourneyState.derive(pathway)?.levelNumber
-            ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
-        letter = runCatching { Net.client.api.latestLetter().letter }.getOrNull()
-        announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrNull()
-        cohort = runCatching { Net.client.api.cellSummary() }.getOrNull()
+            ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrElse { currentTrail } }
+        letter = runCatching { Net.client.api.latestLetter().letter }.getOrElse { letter }
+        announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrElse { announcement }
+        cohort = runCatching { Net.client.api.cellSummary() }.getOrElse { cohort }
         plans = runCatching { Net.client.api.plans().data }.getOrNull() ?: plans
         // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
         // parity) — distinct from the community/prayer-wall feed's sort query.
-        prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
-        radio = runCatching { Net.client.api.radioNowPlaying() }.getOrNull()
-        liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
-        org.nuruplace.member.feature.live.LiveDiscoveryCenter.ingest(liveNow)
+        prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrElse { prayers }
+        radio = runCatching { Net.client.api.radioNowPlaying() }.getOrElse { radio }
+        runCatching { Net.client.api.getLiveNow().data }.onSuccess { rows ->
+            liveNow = rows
+            org.nuruplace.member.feature.live.LiveDiscoveryCenter.ingest(rows)
+        }
         val today = LocalDate.now()
         val from = today.toString()
         val to = today.plusDays(45).toString()
-        upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrDefault(emptyList())
+        upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrElse { upcoming }
         giveRails = runCatching { Net.client.api.givingMethods() }.getOrNull() ?: giveRails
         // Curated Home rows — server-capped at 5, soonest-first; never re-sort/cap client-side.
-        homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrDefault(emptyList())
+        homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrElse { homeEvents }
         partnership = partnershipRead.await() ?: partnership
         gifts = giftsRead.await() ?: gifts
         rsvps = rsvpsRead.await() ?: rsvps
@@ -390,7 +402,8 @@ fun HomeScreen(
                 streak = streak?.streak?.current ?: 0,
                 level = journey?.levelNumber ?: level,
                 journeyPill = journey?.pill,
-                growthScore = scores?.overall?.score ?: 0,
+                // Unknown until the scores answer — never a "0" that isn't true.
+                growthScore = scores?.overall?.score,
                 trend = scores?.trend,
                 personalWord = personalWord,
                 onBell = onOpenNotifications,
@@ -669,8 +682,9 @@ private fun HomeHeader(
     level: Int,
     /** The journey's pill (§3) — "12 of 20 modules", "Exam ready", … — null until it loads. */
     journeyPill: String?,
-    /** The overall growth score, 0–100 — a score, never a percent. */
-    growthScore: Int,
+    /** The overall growth score, 0–100 — a score, never a percent; null
+     *  until it is known (the ring waits, empty, with no number). */
+    growthScore: Int?,
     trend: org.nuruplace.member.data.net.ScoreTrend? = null,
     personalWord: String? = null,
     onBell: () -> Unit,
@@ -727,8 +741,10 @@ private fun HomeHeader(
             }
             Box {
                 // The growth score — "45", never "45%" (§3).
-                ProgressRing(pct = growthScore, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
-                    Text("$growthScore", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold)
+                // Not yet known: the empty ring, no number — never a "0"
+                // that isn't true (§7 rule 5).
+                ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
+                    growthScore?.let { Text("$it", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold) }
                 }
                 trend?.takeIf { it.delta != 0 }?.let { t ->
                     TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
@@ -886,7 +902,8 @@ private fun ProgressRing(
             val inset = sw / 2
             val arcSize = Size(this.size.width - sw, this.size.height - sw)
             drawArc(track, 0f, 360f, false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(sw, cap = StrokeCap.Round))
-            drawArc(arc, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+            // Nothing to draw at 0 — a round cap would leave a dot.
+            if (pct > 0) drawArc(arc, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(sw, cap = StrokeCap.Round))
         }
         center()
     }

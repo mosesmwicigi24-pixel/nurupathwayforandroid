@@ -84,6 +84,7 @@ import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
@@ -145,18 +146,24 @@ fun PathwayHubScreen(
     /** The header's bell — the inbox, as on every tab (§7.2 #4). */
     onOpenNotifications: () -> Unit = {},
 ) {
-    var summary by remember { mutableStateOf<PathwaySummary?>(null) }
-    var streak by remember { mutableIntStateOf(0) }
-    var selected by remember { mutableStateOf<Int?>(null) }
-    var modulesByLevel by remember { mutableStateOf<Map<Int, List<LevelModule>>>(emptyMap()) }
-    // One tick per full load — pull-to-refresh bumps it; `hubLoaded` keeps the
-    // first-paint skeleton from returning once the wire has answered.
+    // The hub's server data is HELD by the "pathway" destination
+    // (rememberHeld): Back from a level, a module or the exam finds the same
+    // hub at the same scroll, refreshed in place — no skeleton, no ring at
+    // "0%" (EXPERIENCE.md §7.2 #8). The level picked on the rail is saved too.
+    var summary by rememberHeld("PathwayHub.summary") { mutableStateOf<PathwaySummary?>(null) }
+    var streak by rememberHeld("PathwayHub.streak") { mutableIntStateOf(0) }
+    var selected by rememberSaveable { mutableStateOf<Int?>(null) }
+    var modulesByLevel by rememberHeld("PathwayHub.modulesByLevel") { mutableStateOf<Map<Int, List<LevelModule>>>(emptyMap()) }
+    // One tick per full load — pull-to-refresh bumps it, and every return to
+    // the hub loads again (the tick starts at 0 while the data is held);
+    // `hubLoaded` keeps the first-paint skeleton from returning once the
+    // wire has answered.
     var refreshTick by remember { mutableIntStateOf(0) }
     var refreshing by remember { mutableStateOf(false) }
-    var hubLoaded by remember { mutableStateOf(false) }
+    var hubLoaded by rememberHeld("PathwayHub.hubLoaded") { mutableStateOf(false) }
     // A pathway that never loaded says so in the state language (§4) — it
     // used to render an empty hub ("Level 1 of 1", no trail) as if all was well.
-    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var loadError by rememberHeld("PathwayHub.loadError") { mutableStateOf<StateMessage?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(refreshTick) {
@@ -169,9 +176,13 @@ fun PathwayHubScreen(
             // A failed refresh keeps what the member last saw.
             if (summary == null) loadError = ApiException.state(e, context)
         }
-        streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-        // On refresh, drop the module cache — the trail effect below refetches.
-        if (refreshTick > 0) modulesByLevel = emptyMap()
+        streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
+        // The trails already on screen refresh in place — a module just
+        // finished reads done on Back — and one that fails keeps its rows.
+        // (They were dropped and re-fetched behind skeleton rows.)
+        for (n in modulesByLevel.keys.toList()) {
+            runCatching { Net.client.api.levelModules(n).data }.onSuccess { modulesByLevel = modulesByLevel + (n to it) }
+        }
         refreshing = false
         hubLoaded = true
     }
@@ -312,8 +323,9 @@ private fun HubHeader(
             )
             Spacer(Modifier.width(Spacing.sm))
             // Journey progress, counted in levels (§3) — not a share of
-            // published modules, which read 100% at Level 1 of 6.
-            HubRing(journey?.percent ?: 0)
+            // published modules, which read 100% at Level 1 of 6. Empty, with
+            // no number, until the journey is known (§7 rule 5).
+            HubRing(journey?.percent)
         }
         Text("${pwGreeting()}, $firstName · Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}", style = PW.t(10), color = PW.ink2, modifier = Modifier.padding(top = 16.dp))
         Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
@@ -379,15 +391,17 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
 }
 
 @Composable
-private fun HubRing(pct: Int) {
+private fun HubRing(pct: Int?) {
     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(40.dp)) {
             val sw = 3.dp.toPx(); val inset = sw / 2
             val arc = Size(size.width - sw, size.height - sw)
             drawArc(PW.navy.copy(alpha = 0.12f), 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(sw))
-            drawArc(PW.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = StrokeCap.Round))
+            if (pct != null && pct > 0) {
+                drawArc(PW.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = StrokeCap.Round))
+            }
         }
-        Text("$pct%", style = PW.over(10, 0f), color = PW.eyebrow)
+        pct?.let { Text("$it%", style = PW.over(10, 0f), color = PW.eyebrow) }
     }
 }
 

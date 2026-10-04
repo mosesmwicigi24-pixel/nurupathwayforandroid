@@ -47,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -98,7 +99,9 @@ fun EventsScreen(
     broadcastCard: (@Composable () -> Unit)? = null,
 ) {
     // A tab root: its failed state offers Try again, not a "Go back" to nowhere.
-    AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, offerBack = false, load = {
+    // Held by the tab (§7.2 #8): Back from an event finds the same list at the
+    // same scroll, refreshed in place.
+    AsyncContent(loading = { ListSkeleton(rows = 7) }, refreshable = true, offerBack = false, heldAs = "Events", load = {
         // The calendar IS the page: when it fails the member is told so (§4)
         // — it used to read as a week with nothing on. The rest stay accents.
         val cal = Net.client.api.calendar(todayIso(), isoPlusDays(60)).data
@@ -110,10 +113,11 @@ fun EventsScreen(
     }) { (events, series, anns, rsvps), reload ->
         val scope = rememberCoroutineScope()
         val today = remember { LocalDate.now(EV_ZONE) }
-        var selectedDay by remember { mutableStateOf(today) }
-        var segment by remember { mutableStateOf(0) } // 0=Today, 1=Upcoming, 2=My RSVPs
-        var category by remember { mutableStateOf("All") }
-        var query by remember { mutableStateOf("") }
+        // What the member picked stays picked across Back (§7 rule 5).
+        var selectedDay by rememberSaveable { mutableStateOf(today) }
+        var segment by rememberSaveable { mutableStateOf(0) } // 0=Today, 1=Upcoming, 2=My RSVPs
+        var category by rememberSaveable { mutableStateOf("All") }
+        var query by rememberSaveable { mutableStateOf("") }
 
         // date helpers over events
         fun occDate(occ: CalendarOccurrence): LocalDate? = evZdt(occ.startAt)?.toLocalDate()

@@ -72,6 +72,7 @@ import org.nuruplace.member.data.net.HomeEcho
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.feature.community.Avatar
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
@@ -89,8 +90,11 @@ private val LitDeepGold = Color(0xFFA8861C)
 
 @Composable
 fun LiturgyCard(canManageRecordings: Boolean = false) {
-    var lit by remember { mutableStateOf<HomeLiturgy?>(null) }
-    LaunchedEffect(Unit) { lit = runCatching { Net.client.api.homeLiturgy() }.getOrNull() }
+    // Held by Home's destination, so Back finds the card already there — it
+    // never pops in late and shifts the page (EXPERIENCE.md §7.2 #8); a
+    // refresh that fails keeps it.
+    var lit by rememberHeld("LiturgyCard.lit") { mutableStateOf<HomeLiturgy?>(null) }
+    LaunchedEffect(Unit) { lit = runCatching { Net.client.api.homeLiturgy() }.getOrElse { lit } }
 
     // Spoken liturgy (LiturgyVoice.kt) — bound as soon as the card mounts so
     // the engine is already warm by the time a member reads the line and
@@ -449,9 +453,10 @@ private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int
 @Composable
 fun CelebrationsRail() {
     val scope = rememberCoroutineScope()
-    var moments by remember { mutableStateOf<List<CommunityMoment>>(emptyList()) }
+    // Held by the destination, like the liturgy card (§7.2 #8).
+    var moments by rememberHeld("CelebrationsRail.moments") { mutableStateOf<List<CommunityMoment>>(emptyList()) }
     LaunchedEffect(Unit) {
-        moments = runCatching { Net.client.api.communityMoments().data }.getOrDefault(emptyList())
+        moments = runCatching { Net.client.api.communityMoments().data }.getOrElse { moments }
     }
     if (moments.isEmpty()) return
     Column {
@@ -534,8 +539,9 @@ private fun BlessChip(emoji: String, count: Int, mine: Boolean, onTap: () -> Uni
 // server-side from the member's own history; renders nothing on null.
 @Composable
 fun HomeEchoCard() {
-    var echo by remember { mutableStateOf<HomeEcho?>(null) }
-    LaunchedEffect(Unit) { echo = runCatching { Net.client.api.homeEcho().echo }.getOrNull() }
+    // Held by the destination, like the liturgy card (§7.2 #8).
+    var echo by rememberHeld("HomeEchoCard.echo") { mutableStateOf<HomeEcho?>(null) }
+    LaunchedEffect(Unit) { echo = runCatching { Net.client.api.homeEcho().echo }.getOrElse { echo } }
     val e = echo ?: return
     val kicker = when (e.kind) {
         "welcome_back" -> "WELCOME BACK"

@@ -101,6 +101,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.net.Achievements
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Badge
 import org.nuruplace.member.data.net.Certificate
@@ -125,19 +126,22 @@ private val Capsule = RoundedCornerShape(999.dp)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Unit) {
-    var scores by remember { mutableStateOf<ScoresSummary?>(null) }
-    var achievements by remember { mutableStateOf<Achievements?>(null) }
-    var badgeGallery by remember { mutableStateOf<List<Badge>>(emptyList()) }
-    var certs by remember { mutableStateOf<List<Certificate>>(emptyList()) }
+    // Held by the destination (rememberHeld, EXPERIENCE.md §7.2 #8): Back
+    // from a score, Settings or a certificate finds the same page, refreshed
+    // in place — never back to zeros. A part that fails keeps what is shown.
+    var scores by rememberHeld("Profile.scores") { mutableStateOf<ScoresSummary?>(null) }
+    var achievements by rememberHeld("Profile.achievements") { mutableStateOf<Achievements?>(null) }
+    var badgeGallery by rememberHeld("Profile.badgeGallery") { mutableStateOf<List<Badge>>(emptyList()) }
+    var certs by rememberHeld("Profile.certs") { mutableStateOf<List<Certificate>>(emptyList()) }
     // Departments I actively serve in (GET /me/departments, spec §4) — the
     // "Serving in" card below; requests-in-waiting live on the Departments
     // segment, not here.
-    var serving by remember { mutableStateOf<List<Department>>(emptyList()) }
+    var serving by rememberHeld("Profile.serving") { mutableStateOf<List<Department>>(emptyList()) }
     LaunchedEffect(Unit) {
-        scores = runCatching { Net.client.api.scores() }.getOrNull()
-        achievements = runCatching { Net.client.api.achievements() }.getOrNull()
-        certs = runCatching { Net.client.api.certificates().data }.getOrDefault(emptyList())
-        serving = runCatching { Net.client.api.myDepartments().data.filter { it.isActive } }.getOrDefault(emptyList())
+        scores = runCatching { Net.client.api.scores() }.getOrElse { scores }
+        achievements = runCatching { Net.client.api.achievements() }.getOrElse { achievements }
+        certs = runCatching { Net.client.api.certificates().data }.getOrElse { certs }
+        serving = runCatching { Net.client.api.myDepartments().data.filter { it.isActive } }.getOrElse { serving }
         // GET /badges catalogue merged with earned awards (iOS ProfileView.loadExtras):
         // earned first (with awarded_at), then locked — so the rail shows what's
         // still ahead, not just trophies already won.
@@ -953,8 +957,9 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
                     .border(1.5.dp, PROF.gold.copy(alpha = 0.5f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
+                // Unknown until the scores answer: "—", never a "0" (§7 rule 5).
                 Text(
-                    (scores?.overall?.score ?: 0).toString(),
+                    scores?.overall?.score?.toString() ?: "—",
                     style = pSerif(16, FontWeight.SemiBold),
                     color = PROF.navy,
                     textAlign = TextAlign.Center,
@@ -970,15 +975,15 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
             }
         }
         HairlineDivider()
-        ScoreRow("Word", scores?.word?.score ?: 0, "word", Icons.Filled.MenuBook, onOpen)
+        ScoreRow("Word", scores?.word?.score, "word", Icons.Filled.MenuBook, onOpen)
         HairlineDivider()
-        ScoreRow("Prayer", scores?.prayer?.score ?: 0, "prayer", Icons.Filled.FavoriteBorder, onOpen)
+        ScoreRow("Prayer", scores?.prayer?.score, "prayer", Icons.Filled.FavoriteBorder, onOpen)
         HairlineDivider()
-        ScoreRow("Habits", scores?.habits?.score ?: 0, "habits", Icons.Filled.LocalFireDepartment, onOpen)
+        ScoreRow("Habits", scores?.habits?.score, "habits", Icons.Filled.LocalFireDepartment, onOpen)
         HairlineDivider()
-        ScoreRow("Curriculum", scores?.curriculum?.score ?: 0, "curriculum", Icons.Filled.School, onOpen)
+        ScoreRow("Curriculum", scores?.curriculum?.score, "curriculum", Icons.Filled.School, onOpen)
         HairlineDivider()
-        ScoreRow("Attendance", scores?.attendance?.score ?: 0, "attendance", Icons.Filled.Group, onOpen)
+        ScoreRow("Attendance", scores?.attendance?.score, "attendance", Icons.Filled.Group, onOpen)
 
         Text(
             "Tap a score to see why — scores are formative, never a leaderboard.",
@@ -990,7 +995,7 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
 }
 
 @Composable
-private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector, onOpen: (String) -> Unit) {
+private fun ScoreRow(name: String, value: Int?, pillar: String, icon: ImageVector, onOpen: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -1013,7 +1018,7 @@ private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
                 Spacer(Modifier.weight(1f))
-                Text(value.toString(), style = pInter(13, FontWeight.Bold), color = PROF.kicker)
+                Text(value?.toString() ?: "—", style = pInter(13, FontWeight.Bold), color = PROF.kicker)
             }
             Box(
                 Modifier
@@ -1023,7 +1028,7 @@ private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector
                     .clip(Capsule)
                     .background(PROF.surface),
             ) {
-                if (value > 0) {
+                if (value != null && value > 0) {
                     Box(
                         Modifier
                             .fillMaxWidth(fraction = value.coerceIn(0, 100) / 100f)
