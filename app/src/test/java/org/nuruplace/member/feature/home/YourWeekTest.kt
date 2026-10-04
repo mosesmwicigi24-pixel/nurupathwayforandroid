@@ -228,6 +228,39 @@ class YourWeekTest {
     }
 
     @Test
+    fun `Giving — money already on its way is not asked for twice`() {
+        // iOS HomeWeek's rule (EXPERIENCE.md §7.2 #10), its tests mirrored:
+        // every shilling on its way is not owed; part of it, only the rest.
+        val roofOn6 = roofDue(dueOn = "2026-10-06")
+        val onItsWay = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofOn6.copy(pendingMinor = 500_000)))
+        assertEquals(give, YourWeek.giving(onItsWay, emptyList(), rails, today))
+        val partly = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofOn6.copy(pendingMinor = 200_000)))
+        assertEquals(
+            WeekRow(WeekForm.PLEDGE_DUE, "Roof", "KSh 3,000 due Tue 6 Oct", WeekDest.Tab("partners")),
+            YourWeek.giving(partly, emptyList(), rails, today),
+        )
+        // A paused pledge's Resume is not a payment.
+        val paused = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofOn6.copy(action = "resume")))
+        assertEquals(give, YourWeek.giving(paused, emptyList(), rails, today))
+        // Overdue, part on its way: the rest, overdue.
+        val late = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue(dueOn = "2026-10-01", overdue = true).copy(pendingMinor = 100_000)))
+        assertEquals("KSh 4,000 overdue since Thu 1 Oct", YourWeek.giving(late, emptyList(), rails, today).line)
+    }
+
+    @Test
+    fun `the DUE row's in-flight money — uncovered rest, fully pending`() {
+        val due = roofDue()
+        assertEquals(500_000, due.uncoveredMinor)
+        assertEquals(300_000, due.copy(pendingMinor = 200_000).uncoveredMinor)
+        assertEquals(0, due.copy(pendingMinor = 600_000).uncoveredMinor)
+        assertEquals(false, due.fullyPending)
+        assertEquals(false, due.copy(pendingMinor = 200_000).fullyPending)
+        assertEquals(true, due.copy(pendingMinor = 500_000).fullyPending)
+        assertEquals(false, due.copy(pendingMinor = 500_000, action = "resume").fullyPending)
+        assertEquals(false, due.copy(pendingMinor = 500_000, kind = "schedule").fullyPending)
+    }
+
+    @Test
     fun `Giving — the table's order, a collection this week before a pledge owed by hand`() {
         val p = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue()))
         assertEquals(WeekForm.GIFT_COLLECTED, YourWeek.giving(p, listOf(gift(id = "tithe", next = "2026-10-09T06:00:00Z")), rails, today).form)

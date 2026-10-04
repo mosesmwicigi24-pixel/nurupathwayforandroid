@@ -177,7 +177,10 @@ object YourWeek {
      *     it is due (2).
      *  2. a pledge instalment is due that no collector takes: the pledge's
      *     title; "KSh X due EEE d MMM", "KSh X overdue since EEE d MMM" once
-     *     the server says it is past; Partners.
+     *     the server says it is past; Partners. Money already on its way is
+     *     never asked for twice (iOS HomeWeek's rule, EXPERIENCE.md §7.2
+     *     #10): X is only the uncovered rest, and an instalment every
+     *     shilling of which is on its way is not owed at all.
      *  3. otherwise "Give", the rails line ([railsLine]), Give.
      *
      * Either read failed → "Give": nothing about a gift or a pledge is said
@@ -188,9 +191,10 @@ object YourWeek {
         val p = partnership ?: return give
         val gifts = schedules ?: return give
         val pledgeOf = p.pledges.associateBy { it.pledgeId }
-        // The instalments Partners lists as due, less those a collector takes.
+        // The instalments Partners lists as due, less those already fully on
+        // their way, less those a collector takes.
         val owedByHand = p.due
-            .filter { it.kind == "pledge" && it.action == "pay" }
+            .filter { it.kind == "pledge" && it.action == "pay" && !it.fullyPending }
             .filter { d -> pledgeCollectedOn(d, pledgeOf[d.id]?.let { pledgeCollector(it, gifts) }) == null }
         val owedIds = owedByHand.map { it.id }.toSet()
         val lastDay = today.plusDays(WEEK_DAYS)
@@ -218,7 +222,8 @@ object YourWeek {
         }
         owedByHand.firstOrNull()?.let { d ->
             val title = d.title.ifBlank { null } ?: pledgeOf[d.id]?.displayTitle ?: "Pledge"
-            val amount = money(d.amountMinor, d.currency)
+            // Only what is still uncovered — part of it may be on its way.
+            val amount = money(d.uncoveredMinor, d.currency)
             val line = if (dueOverdue(d, today)) {
                 "$amount overdue" + ((partnerDate(d.overdueSince) ?: partnerDate(d.dueOn))?.let { " since ${it.format(DAY)}" } ?: "")
             } else {

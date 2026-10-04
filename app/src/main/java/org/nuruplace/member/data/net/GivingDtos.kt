@@ -484,7 +484,16 @@ data class DueItem(
      *  false on a schedule row). Null from an older server that does not
      *  send it — the row then reads its own due date. */
     val overdue: Boolean? = null,
-)
+) {
+    /** What is still uncovered once the money already on its way lands
+     *  (iOS DueItem.uncoveredMinor). */
+    val uncoveredMinor: Int get() = maxOf(0, amountMinor - pendingMinor)
+
+    /** Every shilling of this pledge instalment is already on its way — a
+     *  payment started in the last 15 minutes covers it (iOS
+     *  DueItem.fullyPending). Never a Resume row, never a schedule. */
+    val fullyPending: Boolean get() = kind == "pledge" && action != "resume" && pendingMinor > 0 && pendingMinor >= amountMinor
+}
 
 /** POST /giving/partners/join `{}` — joining needs no fund, no campaign and no
  *  money (spec §1). An empty @Serializable class encodes as `{}`. */
