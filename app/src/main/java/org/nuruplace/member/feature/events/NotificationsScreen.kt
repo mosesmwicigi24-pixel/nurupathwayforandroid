@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +65,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationRow
 import org.nuruplace.member.data.net.NotificationsRes
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.InboxUnread
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
@@ -153,6 +155,8 @@ private val LumGreen = Color(0xFF22C55E)
 
 @Composable
 fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
+    // Leaving the inbox, every bell asks again (§7.2 #4) — whatever was read here.
+    DisposableEffect(Unit) { onDispose { InboxUnread.refreshSoon() } }
     AsyncContent(load = { Net.client.api.notifications() }) { res: NotificationsRes, reload ->
         val scope = rememberCoroutineScope()
         // The notification opened in the read-and-continue popup (unroutable ones).
@@ -168,11 +172,15 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
         val unreadCount =
             if (markedAll) 0
             else (res.unread - res.data.count { it.isUnread && it.notificationId in locallyRead }).coerceAtLeast(0)
+        // Every bell's dot follows this page: its count, and each mark-read
+        // the moment it is made; the server's word once it has answered.
+        LaunchedEffect(unreadCount) { InboxUnread.set(unreadCount) }
         fun open(n: NotificationRow) {
             if (isUnread(n)) {
                 locallyRead = locallyRead + n.notificationId
                 scope.launch {
                     runCatching { Net.client.api.markNotificationsRead(MarkReadBody(listOf(n.notificationId))) }
+                    InboxUnread.refresh()
                 }
             }
             val route = noticeRoute(n)
@@ -201,6 +209,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                                 markedAll = true
                                 scope.launch {
                                     runCatching { Net.client.api.markNotificationsRead(MarkReadBody(null)) }
+                                    InboxUnread.refresh()
                                     reload()
                                 }
                             }

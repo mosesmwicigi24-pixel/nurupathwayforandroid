@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Verified
@@ -66,6 +65,7 @@ import org.nuruplace.member.data.net.MyAnnouncement
 import org.nuruplace.member.data.net.MyRsvp
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
+import org.nuruplace.member.ui.components.InboxBell
 import org.nuruplace.member.ui.components.ListSkeleton
 import org.nuruplace.member.util.isoPlusDays
 import org.nuruplace.member.util.relTime
@@ -143,16 +143,11 @@ fun EventsScreen(
                             Text("Gathered together", style = evSerif(28, FontWeight.SemiBold), color = EV.navy)
                             Text(eventsHeaderLine(events, today), style = evInter(11), color = EV.secondary)
                         }
-                        Box(
-                            Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(EV.white)
-                                .border(1.dp, EV.border, RoundedCornerShape(16.dp)).clickable { onOpenNotifications() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Filled.Notifications, "Notifications", tint = EV.navy, modifier = Modifier.size(19.dp))
-                            Box(
-                                Modifier.align(Alignment.TopEnd).padding(9.dp).size(8.dp).clip(CircleShape).background(EV.gold),
-                            )
-                        }
+                        // The one bell (§7.2 #4): a dot only while something is unread.
+                        InboxBell(
+                            onClick = onOpenNotifications, size = 44.dp, shape = RoundedCornerShape(16.dp),
+                            container = EV.white, border = EV.border, tint = EV.navy, iconSize = 19.dp, dotInset = 9.dp,
+                        )
                     }
                     // The counts only when there is something to count — a quiet
                     // week's header line already says it.

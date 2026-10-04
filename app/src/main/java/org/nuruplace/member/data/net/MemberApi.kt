@@ -394,8 +394,10 @@ interface MemberApi {
     suspend fun myRsvps(): Envelope<MyRsvp>
 
     // --- Notification center ---
+    /** [limit]: how many rows (the server's default, 50, when null) — the
+     *  bells ask for one: `unread` counts every unread notice regardless. */
     @GET("me/notifications")
-    suspend fun notifications(): NotificationsRes
+    suspend fun notifications(@Query("limit") limit: Int? = null): NotificationsRes
 
     @POST("me/notifications/read")
     suspend fun markNotificationsRead(@Body body: MarkReadBody): Unit

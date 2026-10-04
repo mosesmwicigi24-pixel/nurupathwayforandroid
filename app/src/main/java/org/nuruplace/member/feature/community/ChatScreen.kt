@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -335,25 +334,11 @@ fun ChatInboxScreen(
                                     modifier = Modifier.padding(top = 6.dp),
                                 )
                             }
-                            Box(
-                                Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(CHAT.white)
-                                    .border(1.dp, CHAT.border, RoundedCornerShape(16.dp))
-                                    .clickable { onOpenNotifications() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = CHAT.navy, modifier = Modifier.size(19.dp))
-                                Box(
-                                    Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(6.dp)
-                                        .size(8.dp)
-                                        .clip(androidx.compose.foundation.shape.CircleShape)
-                                        .background(CHAT.gold),
-                                )
-                            }
+                            // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
+                            org.nuruplace.member.ui.components.InboxBell(
+                                onClick = onOpenNotifications, size = 44.dp, shape = RoundedCornerShape(16.dp),
+                                container = CHAT.white, border = CHAT.border, tint = CHAT.navy, iconSize = 19.dp, dotInset = 6.dp,
+                            )
                         }
                         // Search field
                         Row(

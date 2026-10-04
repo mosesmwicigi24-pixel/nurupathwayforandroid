@@ -268,6 +268,8 @@ fun HomeScreen(
         val partnershipRead = async { runCatching { Net.client.api.partnership() }.getOrNull() }
         val giftsRead = async { runCatching { Net.client.api.schedules().data }.getOrNull() }
         val rsvpsRead = async { runCatching { Net.client.api.myRsvps().data }.getOrNull() }
+        // The bell's one count, beside them — pulled down, it asks again too.
+        launch { org.nuruplace.member.ui.components.InboxUnread.refresh() }
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
         nudges = runCatching { Net.client.api.nudges().nudges }.getOrDefault(emptyList())
         // Nuru's daily word — a blessing written for THIS member (server-side,
@@ -703,7 +705,13 @@ private fun HomeHeader(
             // through tabs.
             ScanHeaderButton(onClick = onScan)
             Spacer(Modifier.width(Spacing.sm))
-            CircleButton("🔔", Nuru.goldChipBg, onBell)
+            // The one bell (EXPERIENCE.md §7.2 #4): the inbox, a dot only
+            // while something is unread — in the scan button's gold circle.
+            org.nuruplace.member.ui.components.InboxBell(
+                onClick = onBell, size = 40.dp, shape = RoundedCornerShape(999.dp),
+                container = Nuru.goldChipBg, border = Nuru.gold.copy(alpha = 0.35f),
+                tint = Nuru.goldChipText, iconSize = 20.dp, dotInset = 6.dp,
+            )
             Spacer(Modifier.width(Spacing.sm))
             // Nuru Live (L2) — a church stream is live right now. Same 40dp
             // circle language as the buttons either side of it, so the row reads
@@ -760,18 +768,8 @@ private fun HomeHeader(
     }
 }
 
-@Composable
-private fun CircleButton(glyph: String, bg: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(bg)
-            .border(1.dp, Nuru.gold.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
-    ) { Text(glyph, style = NuruType.body) }
-}
-
-/** Church check-in from the header — same 40dp circle as [CircleButton], but a
- *  real vector glyph because no emoji reads as "scan". Sits first in the row:
+/** Church check-in from the header — the same 40dp gold circle as the bell
+ *  beside it (InboxBell), a real vector glyph because no emoji reads as "scan". Sits first in the row:
  *  a member using this is standing in the doorway with the QR already in front
  *  of them, so it must not cost a trip through the You tab to reach. */
 @Composable
@@ -792,7 +790,7 @@ private fun ScanHeaderButton(onClick: () -> Unit) {
 }
 
 /** The header's LIVE entry point (owner ask: "re-imagine this part" of the
- *  bell/radio row) — same 40dp circle as [CircleButton], a dark navy fill
+ *  bell/radio row) — the same 40dp circle as the bell, a dark navy fill
  *  (echoing [LiveStreamBanner]'s navy card) with a breathing red ring instead
  *  of a static border, so it visually says "live" before you even read it. */
 @Composable

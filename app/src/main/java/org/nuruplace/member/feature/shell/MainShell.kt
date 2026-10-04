@@ -207,6 +207,14 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
         org.nuruplace.member.data.ScreenTracker.appDidEnterBackground()
     }
+    // The bells' one count (InboxUnread, EXPERIENCE.md §7.2 #4): asked every
+    // time the app comes to the foreground — and nobody's once signed out.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) {
+        org.nuruplace.member.ui.components.InboxUnread.refreshSoon()
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { org.nuruplace.member.ui.components.InboxUnread.clear() }
+    }
 
     // Launcher-shortcut / notification destination (long-press icon → Radio,
     // Pathway, Prayer Wall, Give; nuru://join/{token} deep links). Keyed off
@@ -382,6 +390,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenMentor = { nav.navigate("discipleship") },
                     onOpenMap = { nav.navigate("pathway-map") },
                     onOpenWalk = { nav.navigate("your-walk") },
+                    onOpenNotifications = { nav.navigate("notifications") },
                 )
             }
             composable("your-walk") {

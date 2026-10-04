@@ -50,7 +50,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -82,6 +81,7 @@ import org.nuruplace.member.data.net.ReadingPlanRow
 import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.ui.components.EmptyState
 import org.nuruplace.member.ui.components.FailedState
+import org.nuruplace.member.ui.components.InboxBell
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.Calendar
@@ -285,36 +285,14 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
                 )
             }
             Spacer(Modifier.width(8.dp))
-            BellButton(onClick = onOpenNotifications)
+            // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
+            InboxBell(
+                onClick = onOpenNotifications, size = 40.dp, shape = RoundedCornerShape(16.dp),
+                container = Color.White, border = PL.border, tint = PL.navy, iconSize = 18.dp, dotInset = 8.dp,
+            )
         }
         Spacer(Modifier.height(16.dp))
         SearchBar(query = query, onQuery = onQuery)
-    }
-}
-
-@Composable
-private fun BellButton(onClick: () -> Unit) {
-    Box(Modifier.size(40.dp)) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
-                .border(1.dp, PL.border, RoundedCornerShape(16.dp))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = PL.navy, modifier = Modifier.size(18.dp))
-        }
-        // Gold unread dot, 8dp, inset 8dp from the top-trailing corner.
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp)
-                .size(8.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(PL.gold),
-        )
     }
 }
 

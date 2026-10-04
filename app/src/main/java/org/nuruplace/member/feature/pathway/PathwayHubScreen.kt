@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
@@ -143,6 +142,8 @@ fun PathwayHubScreen(
     onOpenMentor: () -> Unit,
     onOpenMap: () -> Unit,
     onOpenWalk: () -> Unit,
+    /** The header's bell — the inbox, as on every tab (§7.2 #4). */
+    onOpenNotifications: () -> Unit = {},
 ) {
     var summary by remember { mutableStateOf<PathwaySummary?>(null) }
     var streak by remember { mutableIntStateOf(0) }
@@ -229,7 +230,7 @@ fun PathwayHubScreen(
                 FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
                 return@Column
             }
-            HubHeader(firstName, streak, active, levels, journey, ::go)
+            HubHeader(firstName, streak, active, levels, journey, ::go, onOpenNotifications)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -273,6 +274,7 @@ private fun HubHeader(
     levels: List<PathwayLevel>,
     journey: Journey?,
     onGo: (JourneyDestination) -> Unit,
+    onBell: () -> Unit,
 ) {
     val idx = levels.indexOfFirst { it.levelNumber == active?.levelNumber }.coerceAtLeast(0)
     val pct = active?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
@@ -302,10 +304,12 @@ private fun HubHeader(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(999.dp)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Notifications, null, tint = PW.navy, modifier = Modifier.size(17.dp))
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(999.dp)).background(PW.gold).align(Alignment.TopEnd))
-            }
+            // The one bell (EXPERIENCE.md §7.2 #4) — it used to open nothing,
+            // under a dot that was always there.
+            org.nuruplace.member.ui.components.InboxBell(
+                onClick = onBell, size = 36.dp, shape = RoundedCornerShape(999.dp),
+                container = Color.White, border = PW.border, tint = PW.navy, iconSize = 17.dp, dotInset = 5.dp,
+            )
             Spacer(Modifier.width(Spacing.sm))
             // Journey progress, counted in levels (§3) — not a share of
             // published modules, which read 100% at Level 1 of 6.

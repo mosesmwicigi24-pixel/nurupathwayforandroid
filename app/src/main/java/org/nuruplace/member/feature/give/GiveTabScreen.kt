@@ -57,13 +57,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -81,6 +77,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.InboxBell
 import org.nuruplace.member.ui.theme.Nuru
 
 private val Capsule = RoundedCornerShape(999.dp)
@@ -125,20 +122,16 @@ internal fun GiveSegmentControl(segment: GiveSegment, onSelect: (GiveSegment) ->
     }
 }
 
-/** The tab's bell, at the right of the switch — the notifications inbox, as
- *  on every other tab: white, a hairline, the gold dot the other bells wear,
- *  and the switch's own height. */
+/** The tab's bell, at the right of the switch — the one bell every tab
+ *  wears (EXPERIENCE.md §7.2 #4): the notifications inbox, white, a
+ *  hairline, the switch's own height, and the gold dot only while
+ *  something is unread. */
 @Composable
 private fun GiveBell(onClick: () -> Unit) {
-    Box(
-        Modifier.size(46.dp).clip(CircleShape).background(GIVE.white)
-            .border(1.dp, GIVE.border, CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = GIVE.navy, modifier = Modifier.size(19.dp))
-        Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(8.dp).clip(CircleShape).background(GIVE.gold))
-    }
+    InboxBell(
+        onClick = onClick, size = 46.dp, shape = CircleShape,
+        container = GIVE.white, border = GIVE.border, tint = GIVE.navy, iconSize = 19.dp, dotInset = 10.dp,
+    )
 }
 
 @Composable
