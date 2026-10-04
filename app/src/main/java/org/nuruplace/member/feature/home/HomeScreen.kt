@@ -1,9 +1,25 @@
 // Home — the server-driven dashboard, a faithful port of the iOS HomeView feed.
-// Order and styling mirror NuruMember/Features/Home/HomeView.swift + HomeCards.swift:
-// cream header (date · bell/radio/progress · greeting · level jewel), then the card
-// stack — reflection strip, For-You resume hero, today's rhythm, featured video,
-// verse, prayer wall, reading/journal minis, this-week cell, disciplers, featured
-// announcement, continue-level, progress ring, grow grid, upcoming, cohort, give.
+// Styling mirrors NuruMember/Features/Home/HomeView.swift + HomeCards.swift: the
+// cream header (date · scan/bell/live/score · greeting · level jewel), then the
+// feed in pathway docs/EXPERIENCE.md §6.1's order — each pillar has one home,
+// and Home points to it once:
+//
+//   1. live and on-air banners, only while live;
+//   2. the owner's opening, in his order — verse → featured video → the
+//      Sunday letter → what needs you today (or the reflection strip) → the
+//      liturgy;
+//   3. YOUR WEEK — Pathway · Plans · Events · Giving · Cell (YourWeek.kt);
+//   4. the day — today's rhythm (and today's echo);
+//   5. the family — the prayer wall, celebrations, the featured carousel,
+//      the featured gathering;
+//   6. growing — your progress, grow your faith, the encouragement banner;
+//   7. support God's work — the giving banner, only while the Giving row
+//      says "Give" (a member already giving isn't asked twice).
+//
+// The week block replaced the "For you today" hero, the continue-level card,
+// the minis row, the plan-resume banner, the this-week cell and "Your cell"
+// cards, the disciplers card (now grow's "Your discipler") and the
+// upcoming-events list — every place they opened is a week row or a tab.
 package org.nuruplace.member.feature.home
 
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -36,7 +52,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -65,25 +86,30 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Achievements
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.CellSummary
-import org.nuruplace.member.data.net.Discipler
 import org.nuruplace.member.data.net.FeaturedAnnouncement
 import org.nuruplace.member.data.net.FeaturedEvent
-import org.nuruplace.member.data.net.FeaturedCell
+import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.HomeEventRow
 import org.nuruplace.member.data.net.HomeNudge
 import org.nuruplace.member.data.net.LevelModule
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.MeResponse
+import org.nuruplace.member.data.net.MyRsvp
 import org.nuruplace.member.data.net.Net
-import org.nuruplace.member.data.net.NextAction
+import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.PathwaySummary
 import org.nuruplace.member.data.net.PrayerWallPost
 import org.nuruplace.member.data.net.RadioProgram
@@ -97,13 +123,8 @@ import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.feature.give.giveRailsLine
-import org.nuruplace.member.feature.grow.PLCover
-import org.nuruplace.member.feature.pathway.Journey
-import org.nuruplace.member.feature.pathway.JourneyDestination
 import org.nuruplace.member.feature.pathway.JourneyLine
-import org.nuruplace.member.feature.pathway.JourneyStage
 import org.nuruplace.member.feature.pathway.JourneyState
-import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideoPlayer
 import org.nuruplace.member.ui.components.VideoPosterFrame
@@ -117,9 +138,7 @@ import org.nuruplace.member.feature.live.GoLiveSetupSheet
 import org.nuruplace.member.feature.live.canGoLive
 import org.nuruplace.member.feature.live.liveBroadcastRoute
 import org.nuruplace.member.feature.live.liveNowRoute
-import org.nuruplace.member.feature.events.EV
-import org.nuruplace.member.feature.events.evCountdown
-import org.nuruplace.member.feature.events.evTime
+import org.nuruplace.member.feature.events.EV_ZONE
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
@@ -145,18 +164,22 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     var rhythm by remember { mutableStateOf<RhythmToday?>(null) }
-    var next by remember { mutableStateOf<NextAction?>(null) }
     var verse by remember { mutableStateOf<TailoredVerse?>(null) }
     var streak by remember { mutableStateOf<Achievements?>(null) }
-    var featuredCell by remember { mutableStateOf<FeaturedCell?>(null) }
-    var disciplers by remember { mutableStateOf<List<Discipler>>(emptyList()) }
     var welcomeVideo by remember { mutableStateOf<WelcomeVideo?>(null) }
     var announcement by remember { mutableStateOf<FeaturedAnnouncement?>(null) }
     var scores by remember { mutableStateOf<ScoresSummary?>(null) }
     var upcoming by remember { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
     var homeEvents by remember { mutableStateOf<List<HomeEventRow>>(emptyList()) }
     var cohort by remember { mutableStateOf<CellSummary?>(null) }
-    var plan by remember { mutableStateOf<ReadingPlanRow?>(null) }
+    // YOUR WEEK's own reads (EXPERIENCE.md §6.1): the plans, the member's
+    // RSVPs, the partnership (its DUE rows and pledges) and the recurring
+    // gifts. Null = never answered — that row says its "none" form; a failed
+    // refresh keeps the last answer.
+    var plans by remember { mutableStateOf<List<ReadingPlanRow>?>(null) }
+    var rsvps by remember { mutableStateOf<List<MyRsvp>?>(null) }
+    var partnership by remember { mutableStateOf<Partnership?>(null) }
+    var gifts by remember { mutableStateOf<List<GivingSchedule>?>(null) }
     var prayers by remember { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
     var radio by remember { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
@@ -240,6 +263,11 @@ fun HomeScreen(
     var refreshing by remember { mutableStateOf(false) }
     var loadedOnce by remember { mutableStateOf(false) }
     LaunchedEffect(refreshTick) {
+        // YOUR WEEK's giving and RSVPs, side by side with everything below —
+        // they add no wait to the page; the card is drawn once all answer.
+        val partnershipRead = async { runCatching { Net.client.api.partnership() }.getOrNull() }
+        val giftsRead = async { runCatching { Net.client.api.schedules().data }.getOrNull() }
+        val rsvpsRead = async { runCatching { Net.client.api.myRsvps().data }.getOrNull() }
         rhythm = runCatching { Net.client.api.rhythmToday() }.getOrNull()
         nudges = runCatching { Net.client.api.nudges().nudges }.getOrDefault(emptyList())
         // Nuru's daily word — a blessing written for THIS member (server-side,
@@ -247,7 +275,6 @@ fun HomeScreen(
         personalWord = runCatching { Net.client.api.homeGreeting().greeting }.getOrNull()?.takeIf { it.isNotBlank() }
         verseReactions = runCatching { Net.client.api.verseReactions() }.getOrNull()
         featuredEvent = runCatching { Net.client.api.featuredEvent().data }.getOrNull()
-        next = runCatching { Net.client.api.nextAction().action }.getOrNull()
         verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
         welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrNull()
@@ -257,10 +284,8 @@ fun HomeScreen(
             ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
         letter = runCatching { Net.client.api.latestLetter().letter }.getOrNull()
         announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrNull()
-        featuredCell = runCatching { Net.client.api.featuredCell() }.getOrNull()
-        disciplers = runCatching { Net.client.api.disciplers().data }.getOrDefault(emptyList())
         cohort = runCatching { Net.client.api.cellSummary() }.getOrNull()
-        plan = runCatching { Net.client.api.plans().data.firstOrNull { it.enrolled } ?: Net.client.api.plans().data.firstOrNull() }.getOrNull()
+        plans = runCatching { Net.client.api.plans().data }.getOrNull() ?: plans
         // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
         // parity) — distinct from the community/prayer-wall feed's sort query.
         prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrDefault(emptyList())
@@ -274,6 +299,9 @@ fun HomeScreen(
         giveRails = runCatching { Net.client.api.givingMethods() }.getOrNull() ?: giveRails
         // Curated Home rows — server-capped at 5, soonest-first; never re-sort/cap client-side.
         homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrDefault(emptyList())
+        partnership = partnershipRead.await() ?: partnership
+        gifts = giftsRead.await() ?: gifts
+        rsvps = rsvpsRead.await() ?: rsvps
         refreshing = false
         loadedOnce = true
 
@@ -330,6 +358,23 @@ fun HomeScreen(
     val pendingSync by Net.client.offline.pending.collectAsState()
     val level = me?.enrollment?.currentLevel ?: 1
     val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
+    // YOUR WEEK (§6.1): the five rows, in the journey's order.
+    val week = remember(journey, plans, upcoming, homeEvents, rsvps, partnership, gifts, giveRails, cohort, me) {
+        listOf(
+            YourWeek.pathway(journey, me?.enrollment?.currentLevel),
+            YourWeek.plans(plans),
+            YourWeek.events(upcoming, homeEvents, rsvps, ZonedDateTime.now(EV_ZONE)),
+            YourWeek.giving(partnership, gifts, giveRailsLine(giveRails), LocalDate.now(EV_ZONE)),
+            YourWeek.cell(cohort),
+        )
+    }
+    // A member already giving isn't asked twice: the banner only with "Give".
+    val askToGive = week.any { it.form == WeekForm.GIVE }
+    fun openWeek(dest: WeekDest) = when (dest) {
+        is WeekDest.Screen -> onNavigate(dest.route)
+        is WeekDest.Tab -> onSelectTab(dest.route)
+        is WeekDest.Event -> onNavigate("event/${dest.occurrenceId}?end=${android.net.Uri.encode(dest.endAt.orEmpty())}")
+    }
     val reflectionDue = rhythm?.reflection == false
     // Entrance choreography — the decision is captured once and the process
     // flag flips, so a later return to Home composes instantly.
@@ -382,7 +427,7 @@ fun HomeScreen(
                 }
                 // First paint with nothing loaded yet → hold the page's shape (no
                 // spinner, no pop); cards stagger in once the wire answers.
-                if (!loadedOnce && rhythm == null && next == null && verse == null && streak == null) {
+                if (!loadedOnce && rhythm == null && verse == null && streak == null) {
                     HomeSkeleton()
                     // The Scaffold already insets the NavHost by the bottom bar,
                     // so only a breath of air is needed here, not tabBarSpace.
@@ -523,24 +568,22 @@ fun HomeScreen(
                 Entrance(entrance, 0) {
                     LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
                 }
-                // 0d · Today's echo — the app remembers you (Wave 1).
-                Entrance(entrance, 1) { HomeEchoCard() }
-                next?.let { a -> Entrance(entrance, 3) { ResumeHero(a, level) { onNavigate(routeFor(a)) } } }
+                // 3 · YOUR WEEK — one card, each pillar's next thing (§6.1). It
+                // took the place of the "For you today" hero, the continue-level
+                // card, the plan-resume banner, the minis row, the this-week and
+                // "Your cell" cards, and the upcoming list.
+                Entrance(entrance, 3) { YourWeekCard(week) { openWeek(it) } }
+                // 4 · The day — today's rhythm, then today's echo (the app
+                // remembers you, Wave 1; nothing at all on a day without one).
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
+                Entrance(entrance, 5) { HomeEchoCard() }
                 if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
-                // 2c · Continue your plan (resume nudge) — the member's in-progress
-                // plan (enrolled, not yet finished), iOS HomeView planResumeBanner parity.
-                plan?.takeIf { it.enrolled && it.completedAt == null }?.let { rp ->
-                    Entrance(entrance, 5) { PlanResumeBanner(rp) { onNavigate("plan/${rp.planId}") } }
-                }
-                // Both open My Prayer Room — the wall preview on its Corporate
-                // tab, the post itself pushed directly (deep-link parity).
+                // 5 · The family. Both prayer-wall taps open My Prayer Room — the
+                // wall preview on its Corporate tab, the post itself pushed
+                // directly (deep-link parity).
                 if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-room?tab=corporate") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
-                MinisRow(plan, prayers.firstOrNull(), onReading = { onNavigate("plans") }, onJournal = { onNavigate("prayer-room") })
-                featuredCell?.let { c -> FeaturedCellCard(c) { onNavigate("cell-info") } }
-                if (disciplers.isNotEmpty()) DisciplersCard(disciplers) { onNavigate("mentor") }
                 FeaturedCarousel(
                     announcement = announcement,
                     featuredEvent = featuredEvent,
@@ -549,18 +592,15 @@ fun HomeScreen(
                     onOpenAnnouncement = { id -> onNavigate("announcement/$id") },
                     onOpenEvent = { id -> onNavigate("event/$id?end=") },
                 )
-                // The journey's next step (§3) — the server's own state, in the
-                // words the Pathway hub says. It used to carry the For-you
-                // suggestion's title under "Continue · Level N", whatever it was.
-                journey?.let { j -> ContinueLevelCard(j) { onNavigate(it.route) } }
+                featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
+                // 6 · Growing — the scores (with the journey's one-line step),
+                // grow your faith, and the encouragement.
                 scores?.let { ProgressCard(it, journey?.progressLine) { onNavigate("pathway") } }
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
                 GrowSection(onNavigate)
-                featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
-                UpcomingSection(homeEvents, onSeeAll = { onSelectTab("events") }, onEvent = { onNavigate("event/${it.occurrenceId}?end=${android.net.Uri.encode("")}") })
                 EncouragementCard(prayers.size)
-                CohortSection(cohort) { onNavigate("cell-info") }
-                GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
+                // 7 · Support God's work — only while the Giving row says "Give".
+                if (askToGive) GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
                 // Scaffold already reserves the bottom bar; tabBarSpace here
                 // double-counted it and left a hole under the Give card.
                 Spacer(Modifier.height(Spacing.base))
@@ -978,23 +1018,51 @@ private fun ReflectionStrip(onClick: () -> Unit) {
     }
 }
 
+/** YOUR WEEK (EXPERIENCE.md §6.1): one card, five rows in the journey's
+ *  order — an icon, the next thing, one line of when or where it stands, a
+ *  chevron; a tap opens that place. The rows are YourWeek's. */
 @Composable
-private fun ResumeHero(a: NextAction, level: Int, onClick: () -> Unit) {
-    NavyCard(pad = Spacing.base) {
-        CardKicker("For you today", Nuru.goldSoft)
-        Spacer(Modifier.height(Spacing.sm))
-        Text(a.title, style = NuruType.featureTitle, color = Nuru.onNavy)
-        a.body.takeIf { it.isNotBlank() }?.let {
-            Spacer(Modifier.height(Spacing.xs))
-            Text(it, style = NuruType.caption, color = Nuru.onNavyDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
+private fun YourWeekCard(rows: List<WeekRow>, onOpen: (WeekDest) -> Unit) {
+    HomeCard(pad = 0.dp) {
+        Box(Modifier.padding(start = Spacing.base, end = Spacing.base, top = Spacing.base, bottom = Spacing.xs)) {
+            CardKicker("Your week")
         }
-        Spacer(Modifier.height(Spacing.md))
-        Box(
-            Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onClick() }.padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text((a.ctaLabel.ifBlank { "Continue" }) + "  ›", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold)
+        rows.forEachIndexed { i, row ->
+            // Inset to the text, as the Partners rows draw it.
+            if (i > 0) Box(Modifier.padding(start = 68.dp, end = Spacing.base).fillMaxWidth().height(1.dp).background(Nuru.border))
+            WeekRowView(row) { onOpen(row.dest) }
         }
+        Spacer(Modifier.height(Spacing.xs))
+    }
+}
+
+@Composable
+private fun WeekRowView(row: WeekRow, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = Spacing.base, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
+            Icon(
+                when (row.form.pillar) {
+                    WeekPillar.PATHWAY -> Icons.AutoMirrored.Filled.MenuBook
+                    WeekPillar.PLANS -> Icons.Filled.Bookmark
+                    WeekPillar.EVENTS -> Icons.Filled.Event
+                    WeekPillar.GIVING -> Icons.Filled.VolunteerActivism
+                    WeekPillar.CELL -> Icons.Filled.Groups
+                },
+                contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (row.line.isNotBlank()) {
+                Text(row.line, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+        Spacer(Modifier.width(Spacing.sm))
+        Text("›", style = NuruType.title, color = Nuru.ink300)
     }
 }
 
@@ -1302,221 +1370,6 @@ private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
     }
 }
 
-/** 2c — "Continue your plan" resume banner (iOS HomeView.planResumeBanner
- *  parity): a navy card showing the plan's own cover (the same PLCover the
- *  Plans tab draws) with a gold progress bar, "Day N of M" + plan title;
- *  a plan with no cover keeps the gold circular progress ring. Tapping opens
- *  that plan on the Plans tab. */
-@Composable
-private fun PlanResumeBanner(p: ReadingPlanRow, onClick: () -> Unit) {
-    val day = p.currentDay ?: 1
-    val done = p.completedDays?.size ?: (day - 1).coerceAtLeast(0)
-    val pct = if (p.dayCount > 0) (done * 100 / p.dayCount).coerceIn(0, 100) else 0
-    val hasCover = !p.imageUrl.isNullOrBlank()
-    NavyCard(modifier = Modifier.pressScale().clickable { onClick() }, pad = Spacing.base) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (hasCover) {
-                // THE plan, not a generic book: its cover as a rounded tile.
-                val tile = RoundedCornerShape(14.dp)
-                Box(Modifier.size(64.dp).clip(tile).border(1.dp, Color.White.copy(alpha = 0.14f), tile)) {
-                    PLCover(url = p.imageUrl, modifier = Modifier.matchParentSize())
-                }
-            } else {
-                ProgressRing(pct = pct, size = 48.dp, stroke = 4.dp, track = Color.White.copy(alpha = 0.22f), arc = Nuru.gold) {
-                    Text("📖", style = NuruType.body)
-                }
-            }
-            Spacer(Modifier.width(Spacing.md))
-            Column(Modifier.weight(1f)) {
-                CardKicker("Continue your plan", Nuru.goldSoft)
-                Text(p.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    "Day $day of ${p.dayCount} · pick up where you left off",
-                    style = NuruType.micro, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                if (hasCover) {
-                    // The ring's job, now that the cover has its spot.
-                    Spacer(Modifier.height(6.dp))
-                    ProgressBar(pct, Nuru.gold, track = Color.White.copy(alpha = 0.22f), height = 4.dp)
-                }
-            }
-            Spacer(Modifier.width(Spacing.sm))
-            Text("›", style = NuruType.title, color = Nuru.gold)
-        }
-    }
-}
-
-@Composable
-private fun MinisRow(plan: ReadingPlanRow?, journal: PrayerWallPost?, onReading: () -> Unit, onJournal: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        // Reading plan
-        MiniCard(Modifier.weight(1f).clickable { onReading() }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.indigoBg), contentAlignment = Alignment.Center) { Text("📖", style = NuruType.body) }
-                Spacer(Modifier.weight(1f))
-                val pct = plan?.let { if (it.dayCount > 0) ((it.currentDay ?: 0) * 100 / it.dayCount) else 0 } ?: 0
-                Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.indigoBg).padding(horizontal = 8.dp, vertical = 3.dp)) { Text("$pct%", style = NuruType.micro, color = Nuru.indigo, fontWeight = FontWeight.SemiBold) }
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            CardKicker("Reading plan", Nuru.indigo)
-            Text(plan?.title ?: "Start a plan", style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            plan?.let { Text("Day ${it.currentDay ?: 1} of ${it.dayCount}", style = NuruType.micro, color = Nuru.ink600) }
-            Spacer(Modifier.height(Spacing.sm))
-            ProgressBar(plan?.let { if (it.dayCount > 0) ((it.currentDay ?: 0) * 100 / it.dayCount) else 0 } ?: 0, Nuru.indigo, height = 6.dp)
-        }
-        // Prayer journal
-        MiniCard(Modifier.weight(1f).clickable { onJournal() }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.dangerBg), contentAlignment = Alignment.Center) { Text("🤍", style = NuruType.body) }
-                Spacer(Modifier.weight(1f))
-                Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp)) { Text("journal", style = NuruType.micro, color = Nuru.answeredText, fontWeight = FontWeight.SemiBold) }
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            CardKicker("My Prayer Room", Nuru.danger)
-            Text(journal?.title ?: "Your prayers", style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(journal?.body ?: "Keep a record of what you're praying for.", style = NuruType.micro, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun MiniCard(modifier: Modifier, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
-    Column(
-        modifier.shadow(6.dp, shape, spotColor = Color(0x140A2540)).clip(shape).background(Nuru.white).border(1.dp, Nuru.border, shape).padding(Spacing.base),
-        content = content,
-    )
-}
-
-@Composable
-private fun FeaturedCellCard(c: FeaturedCell, onClick: () -> Unit) {
-    HomeCard(modifier = Modifier.clickable { onClick() }, pad = 0.dp) {
-        Box {
-            FitImage(c.imageUrl, modifier = Modifier.clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)))
-            Box(Modifier.padding(Spacing.md).clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text("● This week", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Column(Modifier.padding(Spacing.base)) {
-            CardKicker("This week at Nuru")
-            Spacer(Modifier.height(Spacing.xs))
-            Text(c.name, style = NuruType.featureTitle, color = Nuru.ink)
-            c.disciplerName?.let { Text(it + (c.disciplerRole?.let { r -> " · $r" } ?: ""), style = NuruType.caption, color = Nuru.ink600) }
-            Row(Modifier.padding(top = Spacing.sm), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                c.focus?.let { Chip(it) }
-                c.levelLabel?.let { Chip(it) }
-            }
-            c.meets?.let {
-                Spacer(Modifier.height(Spacing.md))
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.verseBg).padding(Spacing.sm)) {
-                    Text("📅  $it" + (c.nextSession?.let { n -> " · Next: $n" } ?: ""), style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                c.room?.let { Text("📍 $it", style = NuruType.micro, color = Nuru.ink400) }
-                Spacer(Modifier.weight(1f))
-                Text(if (c.members > 0) "👥 ${c.members} members" else "👥 Be the first to join 🔥", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun Chip(text: String) {
-    Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
-        Text(text, style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.Medium)
-    }
-}
-
-// MEET YOUR DISCIPLER — a member can have several (cell leader, multiplier,
-// pastoral). This used to render `list.first()` only, silently hiding the rest;
-// it now pages through them all, matching iOS HomeView.disciplersCard: ONE
-// discipler hugs its content with no pager and no dead band, several page with
-// OUR gold dots (the platform indicator is a foreign style, and on iOS the
-// system dots were white-on-white and invisible).
-@Composable
-private fun DisciplersCard(list: List<Discipler>, onView: () -> Unit) {
-    HomeCard(modifier = Modifier.clickable { onView() }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CardKicker("Meet your discipler")
-            Spacer(Modifier.weight(1f))
-            RowScopeLink("View ›", onView)
-        }
-        Spacer(Modifier.height(Spacing.md))
-        if (list.size == 1) {
-            DisciplerPage(list.first(), inPager = false)
-        } else {
-            val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { list.size })
-            androidx.compose.foundation.pager.HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth(),
-                pageSpacing = Spacing.base,
-            ) { i ->
-                DisciplerPage(list[i], inPager = true)
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = Spacing.sm),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                list.indices.forEach { i ->
-                    val on = i == pagerState.currentPage
-                    Box(
-                        Modifier.padding(horizontal = 2.5.dp)
-                            .size(width = if (on) 16.dp else 6.dp, height = 6.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (on) Nuru.gold else Nuru.gold.copy(alpha = 0.22f)),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** One discipler slide — avatar, name, role caps, quoted word, and the "Message
- *  · walk together" pill that previews the hub's hero CTA (iOS disciplerView). */
-@Composable
-private fun DisciplerPage(d: Discipler, inPager: Boolean) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(d.avatarUrl, 52.dp)
-            Spacer(Modifier.width(Spacing.md))
-            Column(Modifier.weight(1f)) {
-                Text(d.fullName, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(3.dp))
-                Text(d.roleLabel.uppercase(), style = NuruType.kicker, color = Nuru.goldLo)
-            }
-            Text("›", style = NuruType.title, color = Nuru.ink300)
-        }
-        val quote = d.message?.takeIf { it.isNotBlank() }
-        // In the pager every slide reserves the same three lines (minLines), so
-        // the card doesn't jump height as you swipe between a chatty leader and
-        // a silent one. A lone discipler hugs whatever it actually has.
-        if (quote != null || inPager) {
-            Spacer(Modifier.height(Spacing.md))
-            Text(
-                quote?.let { "“$it”" } ?: "",
-                style = nuruSerif(14).copy(fontStyle = FontStyle.Italic, lineHeight = scaledLineHeight(20)),
-                color = Nuru.dayWord,
-                minLines = if (inPager) 3 else 1,
-                maxLines = if (inPager) 3 else Int.MAX_VALUE,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.height(Spacing.md))
-        Row(
-            Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.gold.copy(alpha = 0.10f))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("💬", style = NuruType.micro)
-            Spacer(Modifier.width(6.dp))
-            Text("Message · walk together", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
 // Featured carousel (owner's revision, 2026-08-24 — iOS parity): one sliding
 // rail for everything the portal has marked or scheduled — the featured
 // announcement, the featured gathering, and the next few events. Auto-advances
@@ -1652,34 +1505,6 @@ private fun FeaturedPageCard(
     }
 }
 
-/** The journey's next step (§3), verbatim: its title, its line and its one
- *  action — none at all while the exam is not yet open. */
-@Composable
-private fun ContinueLevelCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
-    val step = journey.next
-    HomeCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.goldGradient), contentAlignment = Alignment.Center) {
-                Text(if (journey.stage == JourneyStage.LEARNING) "▶" else "✦", color = Nuru.homeNavy, style = NuruType.heading)
-            }
-            Spacer(Modifier.width(Spacing.md))
-            Column(Modifier.weight(1f)) {
-                CardKicker(journey.kicker)
-                Text(step.title, style = NuruType.rowTitle, color = Nuru.ink)
-                Text(step.line, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.padding(top = 2.dp))
-            }
-        }
-        step.action?.let { action ->
-            Spacer(Modifier.height(Spacing.md))
-            Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.homeNavy)
-                    .clickable { onGo(action.destination) }.padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center,
-            ) { Text("${action.label}  ›", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
-        }
-    }
-}
-
 @Composable
 private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: () -> Unit) {
     HomeCard {
@@ -1711,11 +1536,27 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
         }
         Spacer(Modifier.height(Spacing.base))
         val d = s.trend?.domains
-        ScoreBar("Habits", s.habits.score, Nuru.gold, d?.get("habits"))
-        ScoreBar("Word", s.word.score, Nuru.scoreWord, d?.get("word"))
-        ScoreBar("Prayer", s.prayer.score, Nuru.scorePrayer, d?.get("prayer"))
-        ScoreBar("Curriculum", s.curriculum.score, Nuru.homeNavy, d?.get("curriculum"))
-        ScoreBar("Attendance", s.attendance.score, Nuru.success, d?.get("attendance"))
+        val bars = listOf(
+            ScoreLine("Habits", s.habits.score, Nuru.gold, d?.get("habits")),
+            ScoreLine("Word", s.word.score, Nuru.scoreWord, d?.get("word")),
+            ScoreLine("Prayer", s.prayer.score, Nuru.scorePrayer, d?.get("prayer")),
+            ScoreLine("Curriculum", s.curriculum.score, Nuru.homeNavy, d?.get("curriculum")),
+            ScoreLine("Attendance", s.attendance.score, Nuru.success, d?.get("attendance")),
+        )
+        // The figures' columns (EXPERIENCE.md §6.6) are as wide as their
+        // widest figure at the member's text size — never narrower than they
+        // were — and the bar takes what is left (FairSplitRow's rule: each
+        // side gets what it needs, the flexible one yields). A fixed 28dp
+        // column broke "▲100" into "▲10" / "0"; every row's bar still lines up.
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        fun widest(figures: List<String>, style: TextStyle, floor: Dp): Dp = with(density) {
+            figures.maxOfOrNull { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width.toDp() }
+                ?.let { maxOf(it, floor) } ?: floor
+        }
+        val deltaWidth = widest(bars.mapNotNull { scoreDelta(it.delta) }, SCORE_DELTA_STYLE, 28.dp)
+        val valueWidth = widest(bars.map { "${it.value}" }, SCORE_VALUE_STYLE, 32.dp)
+        bars.forEach { ScoreBar(it, deltaWidth, valueWidth) }
         // The journey's next step in one line (§3) — "3 of 10 modules in
         // Level 2", "Take the Level 1 exam" — never "0 modules left".
         journeyLine?.let { line ->
@@ -1740,26 +1581,48 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
     }
 }
 
+/** One discipline's score, its colour and its movement vs the previous 28 days. */
+private data class ScoreLine(val label: String, val value: Int, val color: Color, val delta: Int?)
+
+/** "▲6" · "▼4" — a discipline's movement; null when it held steady. */
+private fun scoreDelta(delta: Int?): String? =
+    delta?.takeIf { it != 0 }?.let { (if (it < 0) "▼" else "▲") + kotlin.math.abs(it) }
+
+private val SCORE_DELTA_STYLE: TextStyle get() = NuruType.micro.copy(fontWeight = FontWeight.Bold)
+private val SCORE_VALUE_STYLE: TextStyle get() = NuruType.caption.copy(fontWeight = FontWeight.SemiBold)
+
+/** A score row: the label, the bar (it yields), the movement and the score —
+ *  the two figures one line each, in the columns ProgressCard measured. */
 @Composable
-private fun ScoreBar(label: String, value: Int, color: Color, delta: Int? = null) {
+private fun ScoreBar(line: ScoreLine, deltaWidth: Dp, valueWidth: Dp) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.width(84.dp))
-        Box(Modifier.weight(1f)) { ProgressBar(value, color, height = 8.dp) }
+        Text(line.label, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.width(84.dp))
+        Box(Modifier.weight(1f)) { ProgressBar(line.value, line.color, height = 8.dp) }
         // A whisper of movement vs the previous 28 days, next to the score.
-        if (delta != null && delta != 0) {
+        val delta = scoreDelta(line.delta)
+        if (delta != null) {
             Text(
-                (if (delta < 0) "▼" else "▲") + kotlin.math.abs(delta),
-                style = NuruType.micro, fontWeight = FontWeight.Bold,
-                color = if (delta < 0) Color(0xFFDC6B26) else Color(0xFF16A34A),
-                modifier = Modifier.width(28.dp), textAlign = TextAlign.End,
+                delta,
+                style = SCORE_DELTA_STYLE,
+                color = if ((line.delta ?: 0) < 0) Color(0xFFDC6B26) else Color(0xFF16A34A),
+                maxLines = 1, softWrap = false,
+                modifier = Modifier.width(deltaWidth), textAlign = TextAlign.End,
             )
         } else {
-            Spacer(Modifier.width(28.dp))
+            Spacer(Modifier.width(deltaWidth))
         }
-        Text("$value", style = NuruType.caption, color = Nuru.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(32.dp), textAlign = TextAlign.End)
+        Text(
+            "${line.value}", style = SCORE_VALUE_STYLE, color = Nuru.ink,
+            maxLines = 1, softWrap = false,
+            modifier = Modifier.width(valueWidth), textAlign = TextAlign.End,
+        )
     }
 }
 
+/** Grow your faith (EXPERIENCE.md §6.1): devotional, memory verses, prayer
+ *  room, your calling — and your discipler, the row iOS's grow card has.
+ *  The reading plan lives in YOUR WEEK (and the Plans tab); the discipler
+ *  opens Mentor, as the old disciplers card did. */
 @Composable
 private fun GrowSection(onNavigate: (String) -> Unit) {
     Column {
@@ -1767,16 +1630,35 @@ private fun GrowSection(onNavigate: (String) -> Unit) {
         HomeCard(pad = Spacing.md) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 GrowTile("Devotional", "Today's devotional", "🌞", Nuru.goldChipBg, Nuru.eyebrow, Modifier.weight(1f)) { onNavigate("devotional") }
-                GrowTile("Reading plan", "Continue your plan", "📖", Nuru.indigoBg, Nuru.indigo, Modifier.weight(1f)) { onNavigate("plans") }
+                GrowTile("Hide His Word", "Memorize Scripture", "❝", Nuru.warningBg, Nuru.hideWordFg, Modifier.weight(1f)) { onNavigate("memory-verses") }
             }
             Spacer(Modifier.height(Spacing.sm))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                GrowTile("Hide His Word", "Memorize Scripture", "❝", Nuru.warningBg, Nuru.hideWordFg, Modifier.weight(1f)) { onNavigate("memory-verses") }
+                GrowTile("My Prayer Room", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
                 GrowTile("Your Calling", "Discover your gifts", "✨", Nuru.callingBg, Nuru.callingFg, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             Spacer(Modifier.height(Spacing.sm))
-            GrowTile("My Prayer Room", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.fillMaxWidth()) { onNavigate("prayer-room?tab=corporate") }
+            DisciplerRow { onNavigate("mentor") }
         }
+    }
+}
+
+/** "YOUR DISCIPLER · Meet your discipler" (iOS growCard's row) → Mentor. */
+@Composable
+private fun DisciplerRow(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg)
+            .border(1.dp, Nuru.gold.copy(alpha = 0.2f), shape).clickable { onClick() }.padding(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.goldGradient))
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            CardKicker("Your discipler")
+            Text("Meet your discipler", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
+        }
+        Text("›", style = NuruType.title, color = Nuru.ink300)
     }
 }
 
@@ -1825,75 +1707,6 @@ private fun FeaturedGatheringCard(ev: FeaturedEvent, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun UpcomingSection(events: List<HomeEventRow>, onSeeAll: () -> Unit, onEvent: (HomeEventRow) -> Unit) {
-    // Whole section (header included) hides when there's nothing curated to show.
-    if (events.isEmpty()) return
-    Column {
-        SectionLabel("Upcoming")
-        HomeCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.weight(1f))
-                RowScopeLink("See all", onSeeAll)
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                // Render exactly what the server sent, in that order — no client
-                // sort/cap. The server already caps this list at 5.
-                events.forEach { e -> UpcomingEventRow(e, onClick = { onEvent(e) }) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UpcomingEventRow(e: HomeEventRow, onClick: () -> Unit) {
-    val kickerTime = evCountdown(e.startsAt).let { rel ->
-        val time = evTime(e.startsAt)
-        when {
-            rel.isNotBlank() && time.isNotBlank() -> "$rel · $time"
-            rel.isNotBlank() -> rel
-            time.isNotBlank() -> time
-            else -> fmtEvent(e.startsAt)
-        }
-    }
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.surface).clickable { onClick() }.padding(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
-            e.primaryImageUrl?.let { AsyncImage(model = it, contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))) } ?: Text("📅", style = NuruType.title)
-        }
-        Spacer(Modifier.width(Spacing.md))
-        Column(Modifier.weight(1f)) {
-            Text("● $kickerTime", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold)
-            Text(e.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(e.venue ?: "", style = NuruType.micro, color = Nuru.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        RsvpPill(e.myRsvp)
-    }
-}
-
-/** Trailing pill: gold "RSVP" call-to-action when the member hasn't responded,
- *  otherwise a status pill reflecting their `my_rsvp` (EV palette, iOS parity). */
-@Composable
-private fun RsvpPill(myRsvp: String?) {
-    when (myRsvp) {
-        "going" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.going.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
-            Text("Going", style = NuruType.micro, color = EV.goingText, fontWeight = FontWeight.SemiBold)
-        }
-        "maybe" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.maybe.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
-            Text("Maybe", style = NuruType.micro, color = EV.maybe, fontWeight = FontWeight.SemiBold)
-        }
-        "declined" -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(EV.declined.copy(alpha = 0.15f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
-            Text("Can't go", style = NuruType.micro, color = EV.declined, fontWeight = FontWeight.SemiBold)
-        }
-        else -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 14.dp, vertical = 8.dp)) {
-            Text("RSVP", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
 private fun EncouragementCard(prayerCount: Int) {
     if (prayerCount <= 0) return
     Row(
@@ -1905,43 +1718,6 @@ private fun EncouragementCard(prayerCount: Int) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.white), contentAlignment = Alignment.Center) { Text("✦", color = Nuru.gold, style = NuruType.heading) }
         Spacer(Modifier.width(Spacing.md))
         Text("Your community lifted $prayerCount prayers — stand with one of them today.", style = NuruType.body, color = Nuru.navy)
-    }
-}
-
-@Composable
-private fun CohortSection(cohort: CellSummary?, onOpen: () -> Unit) {
-    Column {
-        SectionLabel("Your cell")
-        HomeCard {
-            val cell = cohort?.cell
-            Text(cell?.name ?: "You're not in a cell yet", style = NuruType.cardCta, color = Nuru.ink600)
-            Spacer(Modifier.height(Spacing.md))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                StatTile("Leader", cell?.leader?.name ?: "—", Modifier.weight(1f))
-                StatTile("Next gathering", cell?.next?.startAt?.let { fmtDate(it) } ?: "TBA", Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(Spacing.sm))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                StatTile("Members", "${cell?.members ?: 0}", Modifier.weight(1f))
-                StatTile("Attendance", "${cell?.attendance?.attended ?: 0}/${cell?.attendance?.expected ?: 0}", Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(Spacing.md))
-            Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(14.dp)).clickable { onOpen() }.padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center,
-                // Says what it opens: this link goes to the CELL, not community
-                // (owner audit, 2026-08-26 — iOS parity).
-            ) { Text("Open your cell  →", style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold) }
-        }
-    }
-}
-
-@Composable
-private fun StatTile(label: String, value: String, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(Nuru.surface).padding(Spacing.md)) {
-        Text(label.uppercase(), style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(Spacing.xs))
-        Text(value, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1997,17 +1773,6 @@ private fun Entrance(play: Boolean, index: Int, content: @Composable () -> Unit)
 
 // ─────────────────────────── helpers ───────────────────────────
 
-/** Map a next-action route to an in-app destination. */
-private fun routeFor(a: NextAction): String = when (a.route) {
-    "module" -> a.params?.moduleId?.let { "module/$it" } ?: "pathway"
-    "level", "pathway" -> "pathway"
-    "devotional" -> "devotional"
-    "memory_verse", "verse" -> "memory-verses"
-    "prayer", "reflection" -> "prayer-room"
-    "give" -> "give"
-    else -> "pathway"
-}
-
 /** Map a Home nudge (GET /me/home/nudges) to an in-app destination. Keyed on
  *  `route` with the `kind` as a fallback spelling; every branch has a landing
  *  so a row missing its param still goes somewhere sensible, never to a route
@@ -2032,9 +1797,6 @@ private fun parseZdt(s: String?): ZonedDateTime? {
     return runCatching { java.time.OffsetDateTime.parse(s).atZoneSameInstant(ZoneId.systemDefault()) }.getOrNull()
         ?: runCatching { java.time.Instant.parse(s).atZone(ZoneId.systemDefault()) }.getOrNull()
 }
-
-private fun fmtEvent(s: String?): String =
-    parseZdt(s)?.format(DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.getDefault())) ?: ""
 
 private fun fmtDate(s: String?): String =
     parseZdt(s)?.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())) ?: ""

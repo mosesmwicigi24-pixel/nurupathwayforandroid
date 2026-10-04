@@ -1,0 +1,243 @@
+// YOUR WEEK (pathway docs/EXPERIENCE.md §6.1, Cycle 2) — Home's one week
+// block. Each pillar has one home, and Home points to it once: five rows in
+// the journey's order — Pathway · Plans · Events · Giving · Cell — each the
+// next thing in that pillar, one line of when or where it stands, and the
+// place a tap opens. §6.1's table, word for word; iOS builds the same table.
+//
+// A row reads only what Home already has, or one cheap read beside it (the
+// member's RSVPs, GET /giving/partnership and GET /giving/schedules). When
+// its read failed the row says its "none" form — it never blocks the card.
+// A row's forms are tried in the table's order; the first that holds shows.
+//
+// Pure, so YourWeekTest pins every form.
+package org.nuruplace.member.feature.home
+
+import org.nuruplace.member.data.net.CalendarOccurrence
+import org.nuruplace.member.data.net.CellSummary
+import org.nuruplace.member.data.net.GivingSchedule
+import org.nuruplace.member.data.net.HomeEventRow
+import org.nuruplace.member.data.net.MyRsvp
+import org.nuruplace.member.data.net.Partnership
+import org.nuruplace.member.data.net.ReadingPlanRow
+import org.nuruplace.member.feature.events.evZdt
+import org.nuruplace.member.feature.give.collectedOnLine
+import org.nuruplace.member.feature.give.dueOverdue
+import org.nuruplace.member.feature.give.money
+import org.nuruplace.member.feature.give.partnerDate
+import org.nuruplace.member.feature.give.pledgeCollectedOn
+import org.nuruplace.member.feature.give.pledgeCollector
+import org.nuruplace.member.feature.give.pledgeRoute
+import org.nuruplace.member.feature.give.scheduleRoute
+import org.nuruplace.member.feature.give.scheduleRunning
+import org.nuruplace.member.feature.grow.activePlan
+import org.nuruplace.member.feature.grow.planDay
+import org.nuruplace.member.feature.pathway.Journey
+import java.time.LocalDate
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+/** The five pillars, in the journey's order. */
+enum class WeekPillar { PATHWAY, PLANS, EVENTS, GIVING, CELL }
+
+/** Which of §6.1's forms a row is showing. */
+enum class WeekForm(val pillar: WeekPillar) {
+    /** The journey's next step. */
+    JOURNEY(WeekPillar.PATHWAY),
+    /** The journey not loaded — the level alone. */
+    JOURNEY_UNKNOWN(WeekPillar.PATHWAY),
+    /** An enrolled, unfinished plan: its day. */
+    PLAN_DAY(WeekPillar.PLANS),
+    /** No plan being read. */
+    PLAN_START(WeekPillar.PLANS),
+    /** A gathering this week the member is going to. */
+    EVENT_GOING(WeekPillar.EVENTS),
+    /** A gathering this week, not RSVP'd. */
+    EVENT_NEXT(WeekPillar.EVENTS),
+    /** Nothing this week. */
+    EVENT_NONE(WeekPillar.EVENTS),
+    /** A recurring gift — or a pledge's collector — prompts this week. */
+    GIFT_COLLECTED(WeekPillar.GIVING),
+    /** A pledge instalment due that no collector takes. */
+    PLEDGE_DUE(WeekPillar.GIVING),
+    /** Otherwise — the giving banner shows only with this form. */
+    GIVE(WeekPillar.GIVING),
+    /** In a cell. */
+    CELL(WeekPillar.CELL),
+    /** No cell. */
+    CELL_FIND(WeekPillar.CELL),
+}
+
+/** Where a row's tap goes. */
+sealed interface WeekDest {
+    /** A screen over Home: a module, a plan's day, a pledge, a gift's sheet, the cell. */
+    data class Screen(val route: String) : WeekDest
+
+    /** A tab root, selected: Pathway, Plans, Events, Give, Partners, You (Community). */
+    data class Tab(val route: String) : WeekDest
+
+    /** One gathering — its end rides along (GET /events/{id} carries none). */
+    data class Event(val occurrenceId: String, val endAt: String?) : WeekDest
+}
+
+/** One row: the next thing, one line of when or where it stands, and where a tap goes. */
+data class WeekRow(val form: WeekForm, val title: String, val line: String, val dest: WeekDest)
+
+object YourWeek {
+    /** How far the week looks ahead: today and the seven days after — the
+     *  server's own DUE window (PartnersService.DUE_WINDOW_DAYS). */
+    const val WEEK_DAYS = 7L
+
+    private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+    private val DAY_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.ENGLISH)
+
+    /** Pathway — always: the journey's next-step title, "Level N · " + its
+     *  pill, and the journey's own destination (a step with nothing to tap —
+     *  the exam not yet open, a level being prepared — opens the Pathway tab).
+     *  Without the journey: "Your pathway" and the level alone. */
+    fun pathway(journey: Journey?, enrolledLevel: Int?): WeekRow {
+        val j = journey ?: return WeekRow(
+            WeekForm.JOURNEY_UNKNOWN, "Your pathway", enrolledLevel?.let { "Level $it" }.orEmpty(), WeekDest.Tab("pathway"),
+        )
+        val dest = j.next.action?.destination?.let { WeekDest.Screen(it.route) } ?: WeekDest.Tab("pathway")
+        return WeekRow(WeekForm.JOURNEY, j.next.title, "Level ${j.levelNumber} · ${j.pill}", dest)
+    }
+
+    /** Plans — an enrolled, unfinished plan: its title, "Day X of Y · today's
+     *  reading", that day; else "Start a reading plan" → the Plans tab. */
+    fun plans(plans: List<ReadingPlanRow>?): WeekRow {
+        val p = plans?.let(::activePlan) ?: return WeekRow(
+            WeekForm.PLAN_START, "Start a reading plan", "A few minutes a day — with the whole family of God.", WeekDest.Tab("plans"),
+        )
+        val day = planDay(p)
+        return WeekRow(WeekForm.PLAN_DAY, p.title, "Day $day of ${p.dayCount} · today's reading", WeekDest.Screen("plan/${p.planId}/day/$day"))
+    }
+
+    /** One gathering, from whichever reads know it. */
+    private data class Gathering(val id: String, val title: String, val start: ZonedDateTime, val end: String?, val rsvp: String?)
+
+    /**
+     * Events — this week (from [now] through the seventh day after): the
+     * soonest gathering the member is going to, "EEE d MMM · h:mm a · You're
+     * going"; else the soonest one they have not said no to (one they
+     * declined only when nothing else is on), "EEE d MMM · h:mm a"; else "No
+     * gatherings this week" → the Events tab. The gatherings are the church
+     * calendar Home reads, its curated events and the member's RSVPs — the
+     * member's own answers have the last word. [now] is on the church's
+     * clock (EV_ZONE).
+     */
+    fun events(
+        calendar: List<CalendarOccurrence>?,
+        homeEvents: List<HomeEventRow>?,
+        rsvps: List<MyRsvp>?,
+        now: ZonedDateTime,
+    ): WeekRow {
+        val byId = LinkedHashMap<String, Gathering>()
+        for (o in calendar.orEmpty()) {
+            val start = evZdt(o.startAt) ?: continue
+            byId[o.occurrenceId] = Gathering(o.occurrenceId, o.title, start, o.endAt.takeIf { it.isNotBlank() }, null)
+        }
+        for (e in homeEvents.orEmpty()) {
+            val known = byId[e.occurrenceId]
+            val start = known?.start ?: evZdt(e.startsAt) ?: continue
+            byId[e.occurrenceId] = Gathering(
+                e.occurrenceId, known?.title?.takeIf { it.isNotBlank() } ?: e.title, start, known?.end, e.myRsvp ?: known?.rsvp,
+            )
+        }
+        for (r in rsvps.orEmpty()) {
+            val status = r.status.takeIf { it.isNotBlank() } ?: continue
+            val known = byId[r.eventId]
+            if (known != null) byId[r.eventId] = known.copy(rsvp = status)
+            else evZdt(r.occursAt)?.let { start -> byId[r.eventId] = Gathering(r.eventId, r.title, start, null, status) }
+        }
+        val lastDay = now.toLocalDate().plusDays(WEEK_DAYS)
+        val week = byId.values
+            .filter { it.title.isNotBlank() && !it.start.isBefore(now) && !it.start.toLocalDate().isAfter(lastDay) }
+            .sortedBy { it.start }
+        week.firstOrNull { it.rsvp == "going" }?.let { g ->
+            return WeekRow(WeekForm.EVENT_GOING, g.title, "${g.start.format(DAY_TIME)} · You're going", WeekDest.Event(g.id, g.end))
+        }
+        (week.firstOrNull { it.rsvp != "declined" } ?: week.firstOrNull())?.let { g ->
+            return WeekRow(WeekForm.EVENT_NEXT, g.title, g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end))
+        }
+        return WeekRow(WeekForm.EVENT_NONE, "No gatherings this week", "See the church calendar", WeekDest.Tab("events"))
+    }
+
+    /**
+     * Giving — from GET /giving/partnership (its DUE rows and pledges) and
+     * GET /giving/schedules, by the Give code's own rules ([pledgeCollector],
+     * Partners' "Collected on" rule [pledgeCollectedOn]), so this row and
+     * Partners' DUE row never tell two stories:
+     *
+     *  1. a running recurring gift — or a pledge's collector — prompts this
+     *     week (today through the seventh day after) asking for money: the
+     *     pledge's title, or "Your weekly gift" / "Your monthly gift";
+     *     "Collected on EEE d MMM"; its pledge / the gift's sheet. A pledge
+     *     whose instalment its collector does not reach is not collected —
+     *     it is due (2).
+     *  2. a pledge instalment is due that no collector takes: the pledge's
+     *     title; "KSh X due EEE d MMM", "KSh X overdue since EEE d MMM" once
+     *     the server says it is past; Partners.
+     *  3. otherwise "Give", the rails line ([railsLine]), Give.
+     *
+     * Either read failed → "Give": nothing about a gift or a pledge is said
+     * on a guess. [today] is the church's (Nairobi) day.
+     */
+    fun giving(partnership: Partnership?, schedules: List<GivingSchedule>?, railsLine: String, today: LocalDate): WeekRow {
+        val give = WeekRow(WeekForm.GIVE, "Give", railsLine, WeekDest.Tab("give"))
+        val p = partnership ?: return give
+        val gifts = schedules ?: return give
+        val pledgeOf = p.pledges.associateBy { it.pledgeId }
+        // The instalments Partners lists as due, less those a collector takes.
+        val owedByHand = p.due
+            .filter { it.kind == "pledge" && it.action == "pay" }
+            .filter { d -> pledgeCollectedOn(d, pledgeOf[d.id]?.let { pledgeCollector(it, gifts) }) == null }
+        val owedIds = owedByHand.map { it.id }.toSet()
+        val lastDay = today.plusDays(WEEK_DAYS)
+
+        data class Prompt(val gift: GivingSchedule, val day: LocalDate, val pledgeId: String?)
+        val soonest = gifts.mapNotNull { s ->
+            if (!scheduleRunning(s.status)) return@mapNotNull null
+            val day = partnerDate(s.nextRunAt)?.takeIf { !it.isBefore(today) && !it.isAfter(lastDay) } ?: return@mapNotNull null
+            val pledgeId = s.pledge?.pledgeId?.takeIf { it.isNotBlank() }
+                ?: p.pledges.firstOrNull { !it.scheduleId.isNullOrBlank() && it.scheduleId == s.scheduleId }?.pledgeId
+            // What the prompt asks: 0 is nothing (a pledge already covered);
+            // a pledge's collector with no amount is stopping with its pledge.
+            val asks = if (pledgeId != null) (s.nextAmountMinor ?: 0L) > 0L else s.nextAmountMinor != 0L
+            if (!asks || (pledgeId != null && pledgeId in owedIds)) null else Prompt(s, day, pledgeId)
+        }.minByOrNull { it.day }
+        soonest?.let { pr ->
+            val line = collectedOnLine(pr.day)
+            return if (pr.pledgeId != null) {
+                val title = pledgeOf[pr.pledgeId]?.displayTitle ?: pr.gift.pledge?.title?.takeIf { it.isNotBlank() } ?: "Your pledge"
+                WeekRow(WeekForm.GIFT_COLLECTED, title, line, WeekDest.Screen(pledgeRoute(pr.pledgeId)))
+            } else {
+                val title = if (pr.gift.frequency.equals("weekly", ignoreCase = true)) "Your weekly gift" else "Your monthly gift"
+                WeekRow(WeekForm.GIFT_COLLECTED, title, line, WeekDest.Screen(scheduleRoute(pr.gift.scheduleId)))
+            }
+        }
+        owedByHand.firstOrNull()?.let { d ->
+            val title = d.title.ifBlank { null } ?: pledgeOf[d.id]?.displayTitle ?: "Pledge"
+            val amount = money(d.amountMinor, d.currency)
+            val line = if (dueOverdue(d, today)) {
+                "$amount overdue" + ((partnerDate(d.overdueSince) ?: partnerDate(d.dueOn))?.let { " since ${it.format(DAY)}" } ?: "")
+            } else {
+                "$amount due" + (partnerDate(d.dueOn)?.let { " ${it.format(DAY)}" } ?: "")
+            }
+            return WeekRow(WeekForm.PLEDGE_DUE, title, line, WeekDest.Tab("partners"))
+        }
+        return give
+    }
+
+    /** Cell — the member's own cell (GET /me/cell-summary): its name, "Next
+     *  gathering EEE d MMM" or "Next gathering not set · N members", the cell
+     *  page; no cell (or the read failed): "Find your cell" → Community. */
+    fun cell(summary: CellSummary?): WeekRow {
+        val c = summary?.cell ?: return WeekRow(
+            WeekForm.CELL_FIND, "Find your cell", "Gather with believers near you.", WeekDest.Tab("you"),
+        )
+        val line = evZdt(c.next?.startAt)?.let { "Next gathering ${it.format(DAY)}" }
+            ?: "Next gathering not set · ${c.members} ${if (c.members == 1) "member" else "members"}"
+        return WeekRow(WeekForm.CELL, c.name.ifBlank { "Your cell" }, line, WeekDest.Screen("cell-info"))
+    }
+}
