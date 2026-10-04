@@ -17,8 +17,9 @@
 //
 // Cross-segment handoffs live here, not in either screen: a pledge's "Pay"
 // hands a GivePreset to Give and switches the segment; "Make a pledge" opens
-// the full-screen NewPledgeFlow over the tab (system back steps back through
-// it, and closes it from the first step), and a
+// the full-screen NewPledgeFlow over the tab — and over the tab bar, which
+// it covers while open (TabBarCover, EXPERIENCE.md §7.3) — (system back steps
+// back through it, and closes it from the first step), and a
 // created pledge reloads Partners through the ViewModel hoisted here so it
 // survives the segment switch. That ViewModel is scoped to this destination
 // (viewModel(), not remember) so it outlives a trip to the partners statement
@@ -178,6 +179,9 @@ fun GiveTabScreen(
     var startedSchedule by remember { mutableStateOf<StartedSchedule?>(null) }
 
     if (newPledge) {
+        // Full screen, over the tab bar (EXPERIENCE.md §7.3): a tab switch
+        // can't throw a half-made pledge away — only its Close, which asks.
+        org.nuruplace.member.ui.components.CoverTabBar()
         BackHandler { newPledge = false }
         NewPledgeFlow(
             // The standing is already loaded (Make a pledge lives on it), so

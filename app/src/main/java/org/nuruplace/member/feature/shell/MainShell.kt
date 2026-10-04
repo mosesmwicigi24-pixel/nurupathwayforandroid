@@ -284,13 +284,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         }
     }
 
+    // A full-screen flow over the tab bar (TabBarCover — the new pledge,
+    // EXPERIENCE.md §7.3): no bottom chrome at all while it is open.
+    val covered = org.nuruplace.member.ui.components.TabBarCover.active
     Scaffold(
         containerColor = Nuru.paper,
         bottomBar = {
             // Both bars sit ABOVE the bottom nav (when the bottom nav is
             // even showing — they also float on non-tab screens like a
             // module reader, since "not on Home" is the only scope rule).
-            Column {
+            if (!covered) Column {
                 if (showBroadcastBar) {
                     org.nuruplace.member.feature.live.BroadcastReturnBar(
                         session = activeBroadcast!!, elapsedSec = broadcastElapsed,
