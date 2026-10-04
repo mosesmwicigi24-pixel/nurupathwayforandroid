@@ -94,6 +94,9 @@ private data class LevelBundle(
     /** Current streak in days (GET /me/achievements) — same figure the Pathway
      *  hub header already shows. */
     val streak: Int,
+    /** The member's journey (docs/EXPERIENCE.md §3) — its words for the wait
+     *  after a passed exam, so this page and Home say the same thing. */
+    val journey: Journey? = null,
 )
 
 /** One row of the trail — module cards and authored encouragement cards
@@ -157,13 +160,14 @@ fun LevelDetailScreen(
         key = levelNumber,
         load = {
             val modules = Net.client.api.levelModules(levelNumber).data
-            val level = runCatching { Net.client.api.pathway().levels.firstOrNull { it.levelNumber == levelNumber } }.getOrNull()
+            val summary = runCatching { Net.client.api.pathway() }.getOrNull()
+            val level = summary?.levels?.firstOrNull { it.levelNumber == levelNumber }
             val mentor = runCatching { Net.client.api.mentor().mentor }.getOrNull()
             // Best-effort: no encouragements (unauthored or failed fetch) weaves nothing in.
             val encouragements = runCatching { Net.client.api.levelEncouragements(levelNumber).data }.getOrDefault(emptyList())
             val levelScore = runCatching { Net.client.api.levelScore(levelNumber) }.getOrNull()
             val streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-            LevelBundle(level, modules, mentor, encouragements, levelScore, streak)
+            LevelBundle(level, modules, mentor, encouragements, levelScore, streak, JourneyState.derive(summary, modules))
         },
     ) { bundle: LevelBundle, _ ->
         val modules = bundle.modules
@@ -213,8 +217,9 @@ fun LevelDetailScreen(
                             Text("LEVEL $levelNumber", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.Bold)
                         }
                         val complete = level?.status == LevelStatus.COMPLETED
-                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (complete) Nuru.success else Nuru.white.copy(alpha = 0.22f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text(if (complete) "COMPLETE" else "IN PROGRESS", style = NuruType.micro, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
+                        val passed = level?.isAwaitingReview == true
+                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (complete || passed) Nuru.success else Nuru.white.copy(alpha = 0.22f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text(if (complete) "COMPLETE" else if (passed) "EXAM PASSED" else "IN PROGRESS", style = NuruType.micro, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
                         }
                     }
                     Spacer(Modifier.height(Spacing.sm))
@@ -280,8 +285,23 @@ fun LevelDetailScreen(
                     ) {
                         Text("You've finished every module in this level.", style = NuruType.body, color = Nuru.ink)
                         Spacer(Modifier.height(Spacing.md))
-                        // The exam gate stays hidden until an admin publishes it.
-                        if (level?.examPublished != false) {
+                        if (level?.isAwaitingReview == true) {
+                            // Exam passed — "See Level N" lands here from Home and
+                            // the hub, so this must not offer the exam again: it
+                            // says the journey's own words for the wait (§3).
+                            val j = bundle.journey?.takeIf { it.levelNumber == levelNumber }
+                            if (j?.stage == JourneyStage.FINISHED) {
+                                Text(j.next.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
+                                Text(j.next.line, style = NuruType.caption, color = Nuru.ink600)
+                            } else {
+                                Text(
+                                    j?.takeIf { it.stage == JourneyStage.AWAITING_USHER }?.next?.line
+                                        ?: "You passed the Level $levelNumber exam. Your leader will open Level ${levelNumber + 1} — you'll get a notice.",
+                                    style = NuruType.caption, color = Nuru.ink600,
+                                )
+                            }
+                        } else if (level?.examPublished != false) {
+                            // The exam gate stays hidden until an admin publishes it.
                             PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
                         } else {
                             Text(

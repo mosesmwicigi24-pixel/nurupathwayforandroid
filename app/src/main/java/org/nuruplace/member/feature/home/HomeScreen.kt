@@ -76,10 +76,12 @@ import org.nuruplace.member.data.net.FeaturedEvent
 import org.nuruplace.member.data.net.FeaturedCell
 import org.nuruplace.member.data.net.HomeEventRow
 import org.nuruplace.member.data.net.HomeNudge
+import org.nuruplace.member.data.net.LevelModule
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NextAction
+import org.nuruplace.member.data.net.PathwaySummary
 import org.nuruplace.member.data.net.PrayerWallPost
 import org.nuruplace.member.data.net.RadioProgram
 import org.nuruplace.member.data.net.ReadingPlanRow
@@ -92,6 +94,10 @@ import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.feature.grow.PLCover
+import org.nuruplace.member.feature.pathway.Journey
+import org.nuruplace.member.feature.pathway.JourneyDestination
+import org.nuruplace.member.feature.pathway.JourneyStage
+import org.nuruplace.member.feature.pathway.JourneyState
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideoPlayer
@@ -153,6 +159,11 @@ fun HomeScreen(
     var verseReactions by remember { mutableStateOf<VerseReactions?>(null) }
     var verseSaved by remember { mutableStateOf(false) }
     var featuredEvent by remember { mutableStateOf<FeaturedEvent?>(null) }
+    // The member's journey (docs/EXPERIENCE.md §3): the pathway summary and
+    // the current level's trail — one truth for the pill, the continue card
+    // and the progress line, in the words the Pathway hub uses.
+    var pathway by remember { mutableStateOf<PathwaySummary?>(null) }
+    var currentTrail by remember { mutableStateOf<List<LevelModule>?>(null) }
     var letter by remember { mutableStateOf<org.nuruplace.member.data.net.PastoralLetter?>(null) }
     var showLetter by remember { mutableStateOf(false) }
     // "What needs you today" (GET /me/home/nudges) — empty = nothing waiting OR
@@ -232,6 +243,9 @@ fun HomeScreen(
         streak = runCatching { Net.client.api.achievements() }.getOrNull()
         welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrNull()
         scores = runCatching { Net.client.api.scores() }.getOrNull()
+        pathway = runCatching { Net.client.api.pathway() }.getOrNull()
+        currentTrail = JourneyState.derive(pathway)?.levelNumber
+            ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
         letter = runCatching { Net.client.api.latestLetter().letter }.getOrNull()
         announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrNull()
         featuredCell = runCatching { Net.client.api.featuredCell() }.getOrNull()
@@ -305,6 +319,7 @@ fun HomeScreen(
 
     val pendingSync by Net.client.offline.pending.collectAsState()
     val level = me?.enrollment?.currentLevel ?: 1
+    val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
     val reflectionDue = rhythm?.reflection == false
     // Entrance choreography — the decision is captured once and the process
     // flag flips, so a later return to Home composes instantly.
@@ -316,8 +331,9 @@ fun HomeScreen(
             HomeHeader(
                 firstName = me?.profile?.fullName?.substringBefore(' ') ?: "friend",
                 streak = streak?.streak?.current ?: 0,
-                level = level,
-                overallPct = scores?.overall?.score ?: 0,
+                level = journey?.levelNumber ?: level,
+                journeyPill = journey?.pill,
+                growthScore = scores?.overall?.score ?: 0,
                 trend = scores?.trend,
                 personalWord = personalWord,
                 onBell = onOpenNotifications,
@@ -523,8 +539,11 @@ fun HomeScreen(
                     onOpenAnnouncement = { id -> onNavigate("announcement/$id") },
                     onOpenEvent = { id -> onNavigate("event/$id?end=") },
                 )
-                ContinueLevelCard(next, level) { onNavigate(next?.let { routeFor(it) } ?: "pathway") }
-                scores?.let { ProgressCard(it, level) { onNavigate("pathway") } }
+                // The journey's next step (§3) — the server's own state, in the
+                // words the Pathway hub says. It used to carry the For-you
+                // suggestion's title under "Continue · Level N", whatever it was.
+                journey?.let { j -> ContinueLevelCard(j) { onNavigate(it.route) } }
+                scores?.let { ProgressCard(it, journey?.progressLine) { onNavigate("pathway") } }
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
                 GrowSection(onNavigate)
                 featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
@@ -591,7 +610,10 @@ private fun HomeHeader(
     firstName: String,
     streak: Int,
     level: Int,
-    overallPct: Int,
+    /** The journey's pill (§3) — "12 of 20 modules", "Exam ready", … — null until it loads. */
+    journeyPill: String?,
+    /** The overall growth score, 0–100 — a score, never a percent. */
+    growthScore: Int,
     trend: org.nuruplace.member.data.net.ScoreTrend? = null,
     personalWord: String? = null,
     onBell: () -> Unit,
@@ -641,8 +663,9 @@ private fun HomeHeader(
                 Spacer(Modifier.width(Spacing.sm))
             }
             Box {
-                ProgressRing(pct = overallPct, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
-                    Text("$overallPct", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold)
+                // The growth score — "45", never "45%" (§3).
+                ProgressRing(pct = growthScore, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
+                    Text("$growthScore", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold)
                 }
                 trend?.takeIf { it.delta != 0 }?.let { t ->
                     TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
@@ -669,7 +692,8 @@ private fun HomeHeader(
             }
         }
         Spacer(Modifier.height(Spacing.sm))
-        // Level jewel capsule
+        // Level jewel capsule — the level, the journey's pill (§3), the streak
+        // when there is one ("🔥 0-day" was no streak at all).
         Row(
             Modifier.clip(RoundedCornerShape(999.dp))
                 .background(Nuru.white)
@@ -678,7 +702,8 @@ private fun HomeHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Level $level", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
-            Text("  ·  🔥 $streak-day", style = NuruType.micro, color = Nuru.eyebrow)
+            journeyPill?.let { Text("  ·  $it", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold) }
+            if (streak > 0) Text("  ·  🔥 $streak-day", style = NuruType.micro, color = Nuru.eyebrow)
         }
     }
 }
@@ -1617,27 +1642,36 @@ private fun FeaturedPageCard(
     }
 }
 
+/** The journey's next step (§3), verbatim: its title, its line and its one
+ *  action — none at all while the exam is not yet open. */
 @Composable
-private fun ContinueLevelCard(next: NextAction?, level: Int, onClick: () -> Unit) {
+private fun ContinueLevelCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
+    val step = journey.next
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.goldGradient), contentAlignment = Alignment.Center) { Text("▶", color = Nuru.homeNavy, style = NuruType.heading) }
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.goldGradient), contentAlignment = Alignment.Center) {
+                Text(if (journey.stage == JourneyStage.LEARNING) "▶" else "✦", color = Nuru.homeNavy, style = NuruType.heading)
+            }
             Spacer(Modifier.width(Spacing.md))
             Column(Modifier.weight(1f)) {
-                CardKicker("Continue · Level $level")
-                Text(next?.title ?: "Foundations of Faith", style = NuruType.rowTitle, color = Nuru.ink)
+                CardKicker("Level ${journey.levelNumber}")
+                Text(step.title, style = NuruType.rowTitle, color = Nuru.ink)
+                Text(step.line, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.padding(top = 2.dp))
             }
         }
-        Spacer(Modifier.height(Spacing.md))
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.homeNavy).clickable { onClick() }.padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center,
-        ) { Text("Continue  ›", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
+        step.action?.let { action ->
+            Spacer(Modifier.height(Spacing.md))
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Nuru.homeNavy)
+                    .clickable { onGo(action.destination) }.padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("${action.label}  ›", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
+        }
     }
 }
 
 @Composable
-private fun ProgressCard(s: ScoresSummary, level: Int, onView: () -> Unit) {
+private fun ProgressCard(s: ScoresSummary, journeyLine: String?, onView: () -> Unit) {
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Your progress", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
@@ -1672,6 +1706,20 @@ private fun ProgressCard(s: ScoresSummary, level: Int, onView: () -> Unit) {
         ScoreBar("Prayer", s.prayer.score, Nuru.scorePrayer, d?.get("prayer"))
         ScoreBar("Curriculum", s.curriculum.score, Nuru.homeNavy, d?.get("curriculum"))
         ScoreBar("Attendance", s.attendance.score, Nuru.success, d?.get("attendance"))
+        // The journey, counted in levels (§3): "Level 1 of 6 · 17% of your journey".
+        journeyLine?.let { line ->
+            Spacer(Modifier.height(Spacing.md))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.surface).padding(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
+                    Text("◎", style = NuruType.body, color = Nuru.goldChipText)
+                }
+                Spacer(Modifier.width(Spacing.sm))
+                Text(line, style = NuruType.caption, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 

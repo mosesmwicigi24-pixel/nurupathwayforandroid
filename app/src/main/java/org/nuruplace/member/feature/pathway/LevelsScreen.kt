@@ -58,7 +58,10 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
         val levels = summary.levels
         val totalModules = levels.sumOf { it.totalModules }
         val doneModules = levels.sumOf { it.completedModules }
-        val pct = if (totalModules > 0) (doneModules * 100 / totalModules) else 0
+        // The journey in levels (docs/EXPERIENCE.md §3), the same number the
+        // hub's ring shows — never a share of published modules (20 of 20
+        // read 100% at Level 1 of 6).
+        val pct = JourneyState.derive(summary)?.percent ?: 0
         val levelsDone = levels.count { it.status == LevelStatus.COMPLETED }
         val active = levels.firstOrNull { it.status == LevelStatus.ACTIVE }
         val firstName = me?.profile?.fullName?.substringBefore(' ')
@@ -192,6 +195,8 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit
     val locked = LevelGating.isLevelLocked(level.levelNumber, currentLevel, level.status)
     val done = level.status == LevelStatus.COMPLETED
     val active = level.status == LevelStatus.ACTIVE
+    // Exam passed, waiting on the usher — the journey's own pill (§3).
+    val passed = level.isAwaitingReview
 
     Row(
         modifier.fillMaxWidth()
@@ -217,7 +222,7 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Kicker("Level ${level.levelNumber}", modifier = Modifier.weight(1f))
-                StatusPill(if (done) "Complete" else if (active) "Active" else "Locked", done, active)
+                StatusPill(if (done) "Complete" else if (passed) "Exam passed" else if (active) "Active" else "Locked", done || passed, active)
             }
             Spacer(Modifier.height(Spacing.xs))
             Text(level.title, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Medium, maxLines = 2)

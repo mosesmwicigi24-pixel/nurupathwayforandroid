@@ -40,6 +40,10 @@ enum class LevelStatus {
     @kotlinx.serialization.SerialName("completed") COMPLETED,
     @kotlinx.serialization.SerialName("active") ACTIVE,
     @kotlinx.serialization.SerialName("locked") LOCKED,
+    /** The member passed this level's exam and waits for their discipler to
+     *  usher them on (§1.9 usher gate). Until 2026-10-04 this decoded to
+     *  LOCKED, so the member's own level read as locked. */
+    @kotlinx.serialization.SerialName("awaiting_review") AWAITING_REVIEW,
 }
 
 @Serializable
@@ -55,7 +59,18 @@ data class PathwayLevel(
     // The level's final exam is live only once an admin publishes it. Defaults
     // TRUE so payloads from a server that predates the gate keep showing the exam.
     val examPublished: Boolean = true,
-)
+    // The server's own flag beside `status: awaiting_review` (curriculum
+    // getPathwaySummary) — exam passed, not yet ushered on.
+    val awaitingReview: Boolean = false,
+) {
+    /** Exam passed, waiting on the discipler — by the status or its flag. */
+    val isAwaitingReview: Boolean get() = status == LevelStatus.AWAITING_REVIEW || awaitingReview
+
+    /** Walked: every module done (the server's "completed"), or the exam
+     *  passed and waiting to be ushered on. Drives the rail's seals, the
+     *  milestone badges and the summit's road — never the journey's stage. */
+    val walked: Boolean get() = status == LevelStatus.COMPLETED || isAwaitingReview
+}
 
 @Serializable
 data class PathwaySummary(

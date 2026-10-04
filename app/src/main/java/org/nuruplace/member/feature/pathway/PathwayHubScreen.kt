@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.filled.VolunteerActivism
@@ -155,33 +156,39 @@ fun PathwayHubScreen(
     }
 
     val levels = summary?.levels ?: emptyList()
-    val active = levels.firstOrNull { it.status == LevelStatus.ACTIVE }
-        ?: levels.firstOrNull { it.levelNumber == summary?.currentLevel } ?: levels.firstOrNull()
+    // The journey (docs/EXPERIENCE.md §3): the level from the summary first,
+    // then the full step once that level's trail has loaded.
+    val currentNum = JourneyState.derive(summary)?.levelNumber
+    val journey = JourneyState.derive(summary, currentNum?.let { modulesByLevel[it] })
+    val active = levels.firstOrNull { it.levelNumber == currentNum } ?: levels.firstOrNull()
     val selNum = selected ?: active?.levelNumber
     val selLevel = levels.firstOrNull { it.levelNumber == selNum } ?: active
 
-    LaunchedEffect(selNum, modulesByLevel) {
-        val n = selNum ?: return@LaunchedEffect
-        if (modulesByLevel[n] == null) {
-            val mods = runCatching { Net.client.api.levelModules(n).data }.getOrDefault(emptyList())
-            modulesByLevel = modulesByLevel + (n to mods)
+    // The current level's trail feeds the journey; the selected one feeds the list.
+    LaunchedEffect(currentNum, selNum, modulesByLevel) {
+        for (n in listOfNotNull(currentNum, selNum).distinct()) {
+            if (modulesByLevel[n] == null) {
+                val mods = runCatching { Net.client.api.levelModules(n).data }.getOrDefault(emptyList())
+                modulesByLevel = modulesByLevel + (n to mods)
+            }
         }
     }
 
-    val totalModules = levels.sumOf { it.totalModules }
-    val doneModules = levels.sumOf { it.completedModules }
-    val overallPct = if (totalModules > 0) (doneModules * 100 / totalModules) else 0
     val firstName = me?.profile?.fullName?.substringBefore(' ') ?: "Friend"
-    val activeMods = modulesByLevel[active?.levelNumber]
-    val resume = activeMods?.let { it.firstOrNull { m -> m.status == ModuleStatus.NEXT } ?: it.firstOrNull { m -> !m.completed } ?: it.lastOrNull() }
+    fun go(d: JourneyDestination) = when (d) {
+        is JourneyDestination.Module -> onOpenModule(d.moduleId)
+        is JourneyDestination.Exam -> onOpenExam(d.levelNumber)
+        is JourneyDestination.Level -> onOpenLevel(d.levelNumber)
+        JourneyDestination.Walk -> onOpenWalk()
+    }
 
     // Home-screen Pathway widget (Glance) — mirrors iOS's intended
     // progress-ring/streak/next-module snapshot trigger points. Fires once
     // the active level is known, and again once its module trail resolves
-    // the "resume" module title. Writes only; the widget itself never
+    // the journey's next step. Writes only; the widget itself never
     // touches the network (docs/PARITY_AUDIT.md, widgets entry).
     val widgetContext = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(active?.levelNumber, active?.completedModules, resume?.moduleId, streak) {
+    LaunchedEffect(active?.levelNumber, active?.completedModules, journey?.next?.title, streak) {
         val lvl = active ?: return@LaunchedEffect
         org.nuruplace.member.widget.WidgetSnapshotStore.writePathway(
             context = widgetContext,
@@ -189,14 +196,15 @@ fun PathwayHubScreen(
             levelTitle = lvl.title,
             completedModules = lvl.completedModules,
             totalModules = lvl.totalModules,
-            nextModuleTitle = resume?.title,
+            // The journey's next step — never a module already finished.
+            nextModuleTitle = journey?.next?.title,
             streak = streak,
         )
     }
 
     NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
-            HubHeader(firstName, streak, active, levels, overallPct, resume, onOpenModule)
+            HubHeader(firstName, streak, active, levels, journey, ::go)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -215,6 +223,7 @@ fun PathwayHubScreen(
                         level = lv,
                         modules = modulesByLevel[lv.levelNumber] ?: emptyList(),
                         loading = modulesByLevel[lv.levelNumber] == null,
+                        journey = journey,
                         onOpenModule = onOpenModule,
                         onOpenExam = onOpenExam,
                     )
@@ -222,7 +231,7 @@ fun PathwayHubScreen(
                 DisciplershipRow(onOpenMentor)
                 WalkRow(onOpenWalk)
                 Milestones(levels)
-                SummitCard(overallPct, levels, firstName)
+                SummitCard(journey, levels, firstName)
                 Spacer(Modifier.height(Spacing.tabBarSpace))
             }
         }
@@ -237,13 +246,16 @@ private fun HubHeader(
     streak: Int,
     active: PathwayLevel?,
     levels: List<PathwayLevel>,
-    overallPct: Int,
-    resume: LevelModule?,
-    onOpenModule: (String) -> Unit,
+    journey: Journey?,
+    onGo: (JourneyDestination) -> Unit,
 ) {
     val idx = levels.indexOfFirst { it.levelNumber == active?.levelNumber }.coerceAtLeast(0)
     val pct = active?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
-    val remaining = active?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
+    // Modules still to read — only while learning. A level whose exam
+    // container counts among its modules reads 20 of 21 at the exam, and
+    // "1 module left" there would contradict "Exam ready".
+    val remaining = active?.takeIf { journey?.stage == JourneyStage.LEARNING }
+        ?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
@@ -270,7 +282,9 @@ private fun HubHeader(
                 Box(Modifier.size(8.dp).clip(RoundedCornerShape(999.dp)).background(PW.gold).align(Alignment.TopEnd))
             }
             Spacer(Modifier.width(Spacing.sm))
-            HubRing(overallPct)
+            // Journey progress, counted in levels (§3) — not a share of
+            // published modules, which read 100% at Level 1 of 6.
+            HubRing(journey?.percent ?: 0)
         }
         Text("${pwGreeting()}, $firstName · Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}", style = PW.t(10), color = PW.ink2, modifier = Modifier.padding(top = 16.dp))
         Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
@@ -287,21 +301,49 @@ private fun HubHeader(
                 Text(if (remaining == 1) "Just 1 module left to level up 🎉" else "Only $remaining modules to complete this level", style = PW.t(10, FontWeight.SemiBold), color = PW.eyebrow)
             }
         }
-        // Continue where you left off — navy CTA
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(16.dp)).background(PW.navyGrad)
-                .clickable(enabled = resume != null) { resume?.let { onOpenModule(it.moduleId) } }.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(PW.gold), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, null, tint = PW.navy, modifier = Modifier.size(24.dp))
+        // The member's next step (§3) — the same words Home's continue card says.
+        journey?.let { NextStepCard(it, onGo) }
+    }
+}
+
+/** The hero's navy CTA: the journey's next step — its title, its line and
+ *  its one action. A step with no action (the exam not yet open) is a quiet
+ *  card, not a button. */
+@Composable
+private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
+    val step = journey.next
+    val action = step.action
+    Row(
+        Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(16.dp)).background(PW.navyGrad)
+            .clickable(enabled = action != null) { action?.let { onGo(it.destination) } }.padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(PW.gold), contentAlignment = Alignment.Center) {
+            Icon(
+                when (journey.stage) {
+                    JourneyStage.LEARNING -> Icons.Filled.PlayArrow
+                    JourneyStage.EXAM_READY -> Icons.Filled.EmojiEvents
+                    JourneyStage.EXAM_SOON -> Icons.Filled.Schedule
+                    JourneyStage.AWAITING_USHER -> Icons.Filled.Flag
+                    JourneyStage.FINISHED -> Icons.Filled.WorkspacePremium
+                },
+                null, tint = PW.navy, modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (journey.stage == JourneyStage.LEARNING) "CONTINUE WHERE YOU LEFT OFF" else journey.pill.uppercase(),
+                style = PW.over(8, 1.28f), color = PW.goldLight,
+            )
+            Text(step.title, style = PW.t(14, FontWeight.SemiBold), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
+        }
+        if (action != null) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                Text(action.label, style = PW.over(9, 0f), color = PW.navy, maxLines = 1)
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("CONTINUE WHERE YOU LEFT OFF", style = PW.over(8, 1.28f), color = PW.goldLight)
-                Text(resume?.title ?: "Level complete", style = PW.t(14, FontWeight.SemiBold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -337,16 +379,17 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
             Text("Map view", style = PW.over(9, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp)) {
-            // "Up next" — the level right after the active one, only while it
-            // is still locked: a gold ring + NEXT marker so the rail reads as a
+            // "Up next" — the level right after the active one (or the one
+            // whose exam is passed, waiting to be ushered), only while it is
+            // still locked: a gold ring + NEXT marker so the rail reads as a
             // path with a visible next step, not a row of greys.
-            val activeIdx = levels.indexOfFirst { it.status == LevelStatus.ACTIVE }
+            val activeIdx = levels.indexOfFirst { it.status == LevelStatus.ACTIVE || it.isAwaitingReview }
             val upNextIdx = (activeIdx + 1).takeIf { activeIdx >= 0 && it < levels.size && levels[it].status == LevelStatus.LOCKED } ?: -1
             levels.forEachIndexed { i, lvl ->
                 JourneyNode(lvl, i + 1, lvl.levelNumber == selected, upNext = i == upNextIdx) { onSelect(lvl.levelNumber) }
                 if (i < levels.size - 1) {
                     // Uncompleted connectors at 28% navy — 12% vanished on cream.
-                    Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.status == LevelStatus.COMPLETED) PW.gold else PW.navy.copy(alpha = 0.28f)))
+                    Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.walked) PW.gold else PW.navy.copy(alpha = 0.28f)))
                 }
             }
         }
@@ -355,7 +398,8 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
 
 @Composable
 private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upNext: Boolean = false, onTap: () -> Unit) {
-    val done = level.status == LevelStatus.COMPLETED
+    // A passed exam awaiting the usher is walked ground, never a lock.
+    val done = level.walked
     val active = level.status == LevelStatus.ACTIVE
     val locked = !done && !active
     Column(Modifier.width(68.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -416,7 +460,14 @@ private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upN
 // ─────────────────────────── Selected level's module trail ───────────────────────────
 
 @Composable
-private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loading: Boolean, onOpenModule: (String) -> Unit, onOpenExam: (Int) -> Unit) {
+private fun SelectedModules(
+    level: PathwayLevel,
+    modules: List<LevelModule>,
+    loading: Boolean,
+    journey: Journey?,
+    onOpenModule: (String) -> Unit,
+    onOpenExam: (Int) -> Unit,
+) {
     val ordered = remember(modules) {
         fun rank(m: LevelModule) = if (m.status == ModuleStatus.COMPLETED) 0 else if (m.status == ModuleStatus.NEXT) 1 else 2
         modules.sortedWith(compareBy({ rank(it) }, { it.moduleSequenceNumber }))
@@ -424,10 +475,14 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
     val resume = ordered.firstOrNull { it.status == ModuleStatus.NEXT }
     // When the level owns an exam container it IS the exam entry (a visible,
     // locked-until-ready row) — the separate gate only serves levels that have
-    // no exam module authored.
+    // no exam module authored. Whether the gate is open, or already passed, is
+    // the journey's call (§3) — the member's own level only. (It used to hide
+    // whenever the level read "completed", which is exactly when a Level 1
+    // finisher's exam is ready.)
     val hasExamModule = ordered.any { it.isExam }
-    val examReady = !hasExamModule && ordered.isNotEmpty() && ordered.all { it.completed } &&
-        level.status != LevelStatus.COMPLETED && level.examPublished  // hidden until published
+    val gateStage = journey?.takeIf { !hasExamModule && ordered.isNotEmpty() && it.levelNumber == level.levelNumber }?.stage
+    val examReady = gateStage == JourneyStage.EXAM_READY
+    val examPassed = gateStage == JourneyStage.AWAITING_USHER
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
@@ -444,14 +499,15 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
                 ordered.isEmpty() -> Text("Modules open as you progress.", style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 else -> {
                     ordered.forEachIndexed { i, m ->
-                        ModuleRow(m, last = (i == ordered.size - 1) && !examReady) {
+                        ModuleRow(m, last = (i == ordered.size - 1) && !examReady && !examPassed) {
                             if (m.status != ModuleStatus.LOCKED) {
                                 if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
                             }
                         }
                         if (i == 3 && ordered.size > 4) SurrenderFigure()
                     }
-                    if (examReady) ExamGateRow(level.levelNumber) { onOpenExam(level.levelNumber) }
+                    if (examReady) journey?.next?.let { step -> ExamGateRow(step) { onOpenExam(level.levelNumber) } }
+                    if (examPassed) journey?.next?.let { step -> ExamPassedRow(step) }
                 }
             }
         }
@@ -541,8 +597,10 @@ private fun ModuleSkeletonRow() {
     }
 }
 
+/** The exam gate at the foot of the trail — the journey's own step, word for
+ *  word ("Take the Level 1 exam" · its line · Begin the exam). */
 @Composable
-private fun ExamGateRow(levelNumber: Int, onTap: () -> Unit) {
+private fun ExamGateRow(step: JourneyStep, onTap: () -> Unit) {
     Column {
         Box(Modifier.fillMaxWidth().height(1.dp).background(PW.gold.copy(alpha = 0.35f)))
         Row(
@@ -554,10 +612,36 @@ private fun ExamGateRow(levelNumber: Int, onTap: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Take the Level $levelNumber exam", style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
-                Text("Every module is done — the gate is open", style = PW.t(9, FontWeight.SemiBold), color = PW.goldDeep)
+                Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
+                Text(step.line, style = PW.t(9, FontWeight.SemiBold), color = PW.goldDeep)
             }
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Begin", style = PW.over(9, 0f), color = PW.gold) }
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                Text(step.action?.label ?: "Begin", style = PW.over(9, 0f), color = PW.gold, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** Where the gate stood, once the exam is passed: the journey's waiting step
+ *  ("Level 2 is next" · "You passed the Level 1 exam…") — nothing to tap; the
+ *  member's leader opens the next level. */
+@Composable
+private fun ExamPassedRow(step: JourneyStep) {
+    Column {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(PW.gold.copy(alpha = 0.35f)))
+        Row(
+            Modifier.fillMaxWidth().background(PW.gold.copy(alpha = 0.06f)).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.gold.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Check, null, tint = PW.goldDeep, modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
+                Text(step.line, style = PW.t(9, FontWeight.SemiBold), color = PW.goldDeep)
+            }
         }
     }
 }
@@ -598,8 +682,8 @@ private fun DisciplershipRow(onTap: () -> Unit) {
 
 @Composable
 private fun Milestones(levels: List<PathwayLevel>) {
-    val earned = levels.count { it.status == LevelStatus.COMPLETED }
-    val rewardIdx = levels.indexOfFirst { it.status != LevelStatus.COMPLETED }
+    val earned = levels.count { it.walked }
+    val rewardIdx = levels.indexOfFirst { !it.walked }
     val reward = rewardIdx.takeIf { it >= 0 }?.let { levels[it] }
     val remaining = reward?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
     val rewardPct = reward?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
@@ -630,7 +714,7 @@ private fun Milestones(levels: List<PathwayLevel>) {
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            levels.forEachIndexed { i, lvl -> RewardBadge(pwShort(lvl.title), PW.badge[i % PW.badge.size], lvl.status == LevelStatus.COMPLETED) }
+            levels.forEachIndexed { i, lvl -> RewardBadge(pwShort(lvl.title), PW.badge[i % PW.badge.size], lvl.walked) }
         }
     }
 }
@@ -656,9 +740,12 @@ private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
 }
 
 @Composable
-private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: String) {
-    val reached = overallPct >= 100
-    val levelsLeft = levels.count { it.status != LevelStatus.COMPLETED }
+private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName: String) {
+    // Only at the journey's end — the LAST level's exam passed (§3). It used
+    // to be "every published module done", which commissioned Level 1
+    // finishers while Levels 2–6 had no modules yet.
+    val reached = journey?.summitReached == true
+    val levelsLeft = levels.count { !it.walked }
     // First time the summit is truly reached → a real celebration (once ever).
     if (reached) {
         androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -724,7 +811,7 @@ private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: S
                 // The road itself: one dot per level, gold when walked.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     levels.forEach { lv ->
-                        val done = lv.status == LevelStatus.COMPLETED
+                        val done = reached || lv.walked
                         Box(
                             Modifier.size(if (done) 9.dp else 7.dp).clip(RoundedCornerShape(999.dp))
                                 .background(if (done) PW.gold else Color.White.copy(alpha = 0.28f))
