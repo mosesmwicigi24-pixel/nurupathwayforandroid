@@ -23,8 +23,9 @@ package org.nuruplace.member.feature.give
 // A pledge's card opens its own PAGE over the list (iOS PledgeDetailView):
 // "YOUR PLEDGE" and its name; the promise, what counts toward it and a total
 // pledge's pace; the recurring gift that collects it — any pledge — or the
-// offer to collect it at its pace; Pay now · Pause, Edit | Cancel, I paid
-// another way, reminders; PAYMENTS; PAID ANOTHER WAY. Back returns to the
+// offer to collect it at its pace; Pay now · Pause (Pay early · Pause, both
+// quiet, while a gift collects it — EXPERIENCE.md §7 rule 6), Edit | Cancel,
+// I paid another way, reminders; PAYMENTS; PAID ANOTHER WAY. Back returns to the
 // list where it was.
 //
 // The Statement button and that link open the PARTNERS statement
@@ -1128,7 +1129,8 @@ internal fun DueDayPicker(selected: Int, onSelect: (Int) -> Unit) {
  *  band ("YOUR PLEDGE", the pledge's name); the promise card ("KSh 5,000
  *  monthly · due on the 5th" · "KSh 0 of KSh 5,000 this month · KSh 0 given
  *  in all", and a total pledge's pace); the recurring gift that collects it,
- *  or "Collect it automatically at this pace"; the actions (Pay now · Pause,
+ *  or "Collect it automatically at this pace"; the actions (Pay now — or Pay
+ *  early while a gift collects it — · Pause,
  *  Edit | Cancel, I paid another way, Remind me); PAYMENTS (GET
  *  /giving/pledges/{id}); PAID ANOTHER WAY — what the member told the office
  *  (…/claims, Giving Cycle 5). A cancelled or fulfilled pledge shows its
@@ -1243,7 +1245,8 @@ private fun PledgePage(
                 // The recurring gift that collects it — ANY pledge, monthly or
                 // total — or, for a total pledge with a pace, the offer
                 // (PledgePaceLogic.pledgeCollection).
-                when (val c = pledgeCollection(pl, methods, schedules)) {
+                val collection = pledgeCollection(pl, methods, schedules)
+                when (val c = collection) {
                     is PledgeCollection.Collected -> CollectorCard(collectedLine(c.schedule, today)) {
                         Haptics.tap(view); onOpenCollector(c.schedule)
                     }
@@ -1258,6 +1261,8 @@ private fun PledgePage(
                 if (!fulfilled && !cancelled) {
                     PledgeActionsCard(
                         paused = pl.status == "paused", busy = busy, online = online, reminders = pl.remindersEnabled,
+                        // Collected automatically: "Pay early", not the call to action (§7 rule 6).
+                        pay = pledgePayButton(collection),
                         onPayNow = onPayNow, onPauseResume = onPauseResume, onEdit = onEdit, onCancel = onCancel,
                         onPaidAnotherWay = { claiming = true }, onReminders = onReminders,
                     )
@@ -1390,15 +1395,18 @@ private fun PaceOfferCard(starting: Boolean, enabled: Boolean, online: Boolean, 
     }
 }
 
-/** The pledge's actions, in one card (iOS): Pay now → beside Pause (Resume);
- *  Edit | Cancel; "I paid another way" — online only, a claim about money is
- *  never queued; and "Remind me before it's due". */
+/** The pledge's actions, in one card (iOS): Pay now → beside Pause (Resume)
+ *  — or, while a running gift collects the pledge, "Pay early" beside Pause,
+ *  both secondary ([pay], §7 rule 6); Edit | Cancel; "I paid another way" —
+ *  online only, a claim about money is never queued; and "Remind me before
+ *  it's due". */
 @Composable
 private fun PledgeActionsCard(
     paused: Boolean,
     busy: Boolean,
     online: Boolean,
     reminders: Boolean,
+    pay: PledgePayButton,
     onPayNow: () -> Unit,
     onPauseResume: () -> Unit,
     onEdit: () -> Unit,
@@ -1410,15 +1418,21 @@ private fun PledgeActionsCard(
     val shape = RoundedCornerShape(12.dp)
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // The page's one gold button; a paused pledge takes nothing.
+            // The page's one gold button — unless the pledge is collected
+            // automatically, when paying early is a choice and wears Pause's
+            // quiet style beside it. A paused pledge takes nothing.
             Row(
                 Modifier.weight(1f).heightIn(min = 40.dp).alpha(if (paused) 0.5f else 1f)
-                    .clip(shape).background(GIVE.gold)
+                    .clip(shape)
+                    .then(if (pay.primary) Modifier.background(GIVE.gold) else Modifier.background(GIVE.surface).border(1.dp, GIVE.border, shape))
                     .clickable(enabled = !paused && !busy) { Haptics.tap(view); onPayNow() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                Text("Pay now", style = giInter(13, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
+                Text(
+                    pay.label, style = giInter(13, if (pay.primary) FontWeight.Bold else FontWeight.SemiBold),
+                    color = GIVE.navy, textAlign = TextAlign.Center,
+                )
                 Spacer(Modifier.width(6.dp))
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
             }

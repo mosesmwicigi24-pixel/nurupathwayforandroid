@@ -90,6 +90,19 @@ fun pledgeCollection(pl: Pledge, methods: GivingMethodsRes?, schedules: List<Giv
     return if (paceOfferAvailable(pl, methods, known)) PledgeCollection.Offer else PledgeCollection.None
 }
 
+/** The pledge page's pay button — its words and its weight. */
+data class PledgePayButton(val label: String, val primary: Boolean)
+
+/** EXPERIENCE.md §7 rule 6 — the primary action is the member's real next
+ *  step: when a running recurring gift collects the pledge ("Collected
+ *  automatically — next …"), paying by hand is a choice, not the call to
+ *  action — "Pay early", secondary, beside Pause. With none, or a paused one
+ *  (it collects nothing until resumed), "Pay now" stays the page's one gold
+ *  button. Only the words and the weight: the tap is the same. */
+fun pledgePayButton(collection: PledgeCollection): PledgePayButton =
+    if (collection is PledgeCollection.Collected && scheduleRunning(collection.schedule.status)) PledgePayButton("Pay early", primary = false)
+    else PledgePayButton("Pay now", primary = true)
+
 /** POST /giving/schedules for "Collect it automatically at this pace": the
  *  pledge's pace, monthly, on M-Pesa, bound to the pledge, its first prompt
  *  now. The fund is where the pledge's money goes (`pays_to` — the server

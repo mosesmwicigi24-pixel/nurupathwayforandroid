@@ -203,4 +203,26 @@ class PledgePaceTest {
         val both = listOf(collector(status = "paused").copy(scheduleId = "s-old"), collector())
         assertEquals("s1", pledgeCollector(roof, both)?.scheduleId)
     }
+
+    // ── the pay button (EXPERIENCE.md §7.2 #2, rule 6) ──
+
+    @Test
+    fun `collected automatically, paying is a choice — Pay early, secondary — otherwise Pay now, the gold primary`() {
+        val kenya = Pledge(
+            pledgeId = "p-kenya", shape = "monthly", amountMinor = 500_000, dueDay = 5, currency = "KES",
+            status = "active", title = "Kenya trip",
+        )
+        // A running gift collects it ("Collected automatically — next KSh 5,000 on 28 Oct").
+        val running = pledgeCollection(kenya, methods(), listOf(collector(pledgeId = "p-kenya")))
+        assertEquals(PledgePayButton("Pay early", primary = false), pledgePayButton(running))
+        // Paid ahead ("nothing to pay next time") — still collected automatically.
+        assertEquals(PledgePayButton("Pay early", primary = false), pledgePayButton(pledgeCollection(kenya, methods(), listOf(collector(pledgeId = "p-kenya", next = 0)))))
+        // A paused gift collects nothing until resumed: the member's to pay.
+        val paused = pledgeCollection(kenya, methods(), listOf(collector(status = "paused", pledgeId = "p-kenya")))
+        assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(paused))
+        // No collector, the pace offer, or the gifts not known: Pay now stays the primary.
+        assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(pledgeCollection(kenya, methods(), emptyList())))
+        assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(pledgeCollection(roof, methods(), emptyList())))
+        assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(pledgeCollection(kenya, methods(), null)))
+    }
 }
