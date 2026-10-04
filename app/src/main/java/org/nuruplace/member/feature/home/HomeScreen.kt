@@ -592,6 +592,9 @@ fun HomeScreen(
                     announcement = announcement,
                     featuredEvent = featuredEvent,
                     events = homeEvents,
+                    // The featured gathering has its own card just below:
+                    // never twice on one screen (§7.2 #9).
+                    ownCardSeries = featuredEvent?.seriesId,
                     onAll = { onNavigate("events-calendar") },
                     onOpenAnnouncement = { id -> onNavigate("announcement/$id") },
                     onOpenEvent = { id -> onNavigate("event/$id?end=") },
@@ -1374,10 +1377,31 @@ private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
 // rail for everything the portal has marked or scheduled — the featured
 // announcement, the featured gathering, and the next few events. Auto-advances
 // gently; a swipe is always respected. "View all" opens the full events list.
-private sealed interface FeaturedPage {
+internal sealed interface FeaturedPage {
     data class Ann(val a: FeaturedAnnouncement) : FeaturedPage
     data class Fev(val e: FeaturedEvent) : FeaturedPage
     data class Occ(val o: HomeEventRow) : FeaturedPage
+}
+
+/** The carousel's slides: the featured announcement, the featured
+ *  gathering, then the next three events — never an event that has its own
+ *  card on the same screen (EXPERIENCE.md §7.2 #9). [ownCardSeries]: the
+ *  series of the gathering shown in its own card (Home's featured-gathering
+ *  card) — neither it nor another occurrence of it slides here too; the
+ *  featured gathering's other occurrences never repeat it either. */
+internal fun featuredPages(
+    announcement: FeaturedAnnouncement?,
+    featuredEvent: FeaturedEvent?,
+    events: List<HomeEventRow>,
+    ownCardSeries: String?,
+): List<FeaturedPage> {
+    val own = ownCardSeries?.takeIf { it.isNotBlank() }
+    return buildList {
+        announcement?.let { add(FeaturedPage.Ann(it)) }
+        featuredEvent?.takeIf { own == null || it.seriesId != own }?.let { add(FeaturedPage.Fev(it)) }
+        events.filter { it.seriesId != featuredEvent?.seriesId && (own == null || it.seriesId != own) }
+            .take(3).forEach { add(FeaturedPage.Occ(it)) }
+    }
 }
 
 @Composable
@@ -1385,16 +1409,14 @@ private fun FeaturedCarousel(
     announcement: FeaturedAnnouncement?,
     featuredEvent: FeaturedEvent?,
     events: List<HomeEventRow>,
+    /** The gathering that has its own card below — never slid here too. */
+    ownCardSeries: String?,
     onAll: () -> Unit,
     onOpenAnnouncement: (String) -> Unit,
     onOpenEvent: (String) -> Unit,
 ) {
-    val pages = remember(announcement, featuredEvent, events) {
-        buildList {
-            announcement?.let { add(FeaturedPage.Ann(it)) }
-            featuredEvent?.let { add(FeaturedPage.Fev(it)) }
-            events.filter { it.seriesId != featuredEvent?.seriesId }.take(3).forEach { add(FeaturedPage.Occ(it)) }
-        }
+    val pages = remember(announcement, featuredEvent, events, ownCardSeries) {
+        featuredPages(announcement, featuredEvent, events, ownCardSeries)
     }
     if (pages.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {

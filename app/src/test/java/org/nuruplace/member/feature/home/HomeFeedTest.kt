@@ -4,9 +4,13 @@ package org.nuruplace.member.feature.home
 
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.nuruplace.member.data.net.FeaturedAnnouncement
+import org.nuruplace.member.data.net.FeaturedEvent
+import org.nuruplace.member.data.net.HomeEventRow
 import org.nuruplace.member.data.net.HomeNudge
 import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.PathwayLevel
@@ -44,5 +48,32 @@ class HomeFeedTest {
     @Test fun `every other nudge is unaffected`() {
         val reflection = HomeNudge(id = "reflection_due", kind = "reflection_due", route = "devotional")
         assertTrue(nudgeOffered(reflection, pathway(available = false)))
+    }
+
+    // ── the featured event, never twice on one screen (§7.2 #9) ──
+
+    private val ann = FeaturedAnnouncement(announcementId = "a1", title = "Harvest week")
+    private val retreat = FeaturedEvent(seriesId = "s-retreat", title = "Leaders' Retreat")
+    private fun occ(id: String, series: String) = HomeEventRow(occurrenceId = id, seriesId = series, title = id)
+
+    @Test fun `the featured gathering with its own card never slides in the carousel too`() {
+        val events = listOf(occ("retreat-fri", "s-retreat"), occ("youth", "s-youth"), occ("prayer", "s-prayer"), occ("choir", "s-choir"))
+        val pages = featuredPages(ann, retreat, events, ownCardSeries = retreat.seriesId)
+        assertEquals(
+            listOf(FeaturedPage.Ann(ann), FeaturedPage.Occ(events[1]), FeaturedPage.Occ(events[2]), FeaturedPage.Occ(events[3])),
+            pages,
+        )
+        assertTrue(pages.none { it is FeaturedPage.Fev })
+    }
+
+    @Test fun `without a card of its own, the featured gathering slides as before`() {
+        val events = listOf(occ("retreat-fri", "s-retreat"), occ("youth", "s-youth"))
+        assertEquals(
+            listOf(FeaturedPage.Ann(ann), FeaturedPage.Fev(retreat), FeaturedPage.Occ(events[1])),
+            featuredPages(ann, retreat, events, ownCardSeries = null),
+        )
+        // No featured gathering at all: the announcement and the next three events.
+        val four = (1..4).map { occ("e$it", "s$it") }
+        assertEquals(listOf(FeaturedPage.Ann(ann)) + four.take(3).map { FeaturedPage.Occ(it) }, featuredPages(ann, null, four, ownCardSeries = null))
     }
 }
