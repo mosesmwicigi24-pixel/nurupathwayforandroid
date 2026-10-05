@@ -157,8 +157,11 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
     val partLabel = when (l.part) {
         "morning" -> "MORNING"; "midday" -> "MIDDAY"; "evening" -> "EVENING"; else -> "NIGHT"
     }
-    val partEmoji = when (l.part) {
-        "morning" -> "🌅"; "midday" -> "☀️"; "evening" -> "🌆"; else -> "🌙"
+    // The hour's glyph — Lucide on a gold-tint tile, never a colour emoji
+    // (§8.1 rule 7; Cycle 4 walk 02's 🌆): the sun by day, the first star at
+    // evening, the moon at night — iOS's marks (ea37d94).
+    val partGlyph = when (l.part) {
+        "morning", "midday" -> Lucide.Sun; "evening" -> Lucide.Sparkle; else -> Lucide.Moon
     }
     // Scripture First under the hour's photograph (owner's pick, 2026-08-25,
     // then refined same day; iOS feat/liturgy-scripture-first parity): the
@@ -200,7 +203,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 )
                 Column(Modifier.align(Alignment.TopStart).padding(16.dp)) {
                     LitKicker(
-                        Modifier, partEmoji, partLabel, l.isSunday, onArt = true, textShadow = textShadow,
+                        Modifier, partGlyph, partLabel, l.isSunday, onArt = true, textShadow = textShadow,
                         speaking = listenSpeaking, onToggleVoice = onToggleListen,
                         canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
                     )
@@ -217,7 +220,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             if (art == null) {
                 LitKicker(
-                    Modifier, partEmoji, partLabel, l.isSunday, onArt = false, textShadow = textShadow,
+                    Modifier, partGlyph, partLabel, l.isSunday, onArt = false, textShadow = textShadow,
                     speaking = listenSpeaking, onToggleVoice = onToggleListen,
                     canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
                 )
@@ -299,7 +302,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
 @Composable
 private fun LitKicker(
     modifier: Modifier = Modifier,
-    partEmoji: String,
+    partGlyph: androidx.compose.ui.graphics.vector.ImageVector,
     partLabel: String,
     isSunday: Boolean,
     onArt: Boolean,
@@ -310,7 +313,9 @@ private fun LitKicker(
     onOpenRecorder: (() -> Unit)? = null,
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(partEmoji, style = NuruType.body)
+        Box(Modifier.size(24.dp).clip(RoundedCornerShape(8.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(partGlyph, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
+        }
         Spacer(Modifier.width(7.dp))
         Text(
             if (isSunday) "SUNDAY · $partLabel" else partLabel,

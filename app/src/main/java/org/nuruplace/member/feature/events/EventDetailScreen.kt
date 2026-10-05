@@ -301,7 +301,8 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         .background(Color.White.copy(alpha = 0.15f))
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                // One back control on every pushed page: the arrow (Cycle 4 walk 36).
+                ) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
                 Box(
                     Modifier
                         .size(40.dp)

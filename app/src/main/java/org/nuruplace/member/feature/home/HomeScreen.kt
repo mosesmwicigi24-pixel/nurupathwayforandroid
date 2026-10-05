@@ -1089,8 +1089,9 @@ private fun ReflectionStrip(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
+        // Lucide, not a colour emoji (§8.1 rule 7) — iOS's priority strip glyph.
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.white), contentAlignment = Alignment.Center) {
-            Text("💬", style = NuruType.body)
+            Icon(Lucide.MessageSquareText, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("Reflection due today", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -1364,7 +1365,10 @@ private fun VerseCard(
             // No art (offline first paint / older backend): the classic cream reading.
             Column(Modifier.padding(horizontal = Spacing.base).padding(top = Spacing.base)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "📖  Verse for today · $it" } ?: "📖  Verse for today")
+                    // Lucide book-open, not a colour emoji (§8.1 rule 7; Cycle 4 walk 01) — as iOS.
+                    Icon(Lucide.BookOpen, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    CardKicker(v.mood?.takeIf { it.isNotBlank() }?.let { "Verse for today · $it" } ?: "Verse for today")
                     Spacer(Modifier.weight(1f))
                     Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.white).border(1.dp, Nuru.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 3.dp)) {
                         Text(v.version, style = NuruType.micro, color = Nuru.ink600)
@@ -1746,7 +1750,8 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
-                    Text("◎", style = NuruType.body, color = Nuru.goldChipText)
+                    // Lucide's target, not a "◎" typed in a text face (§8.1 rule 7; iOS the same).
+                    Icon(Lucide.Target, null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(Spacing.sm))
                 // The next step is a thing: the content row title, Fraunces 15,

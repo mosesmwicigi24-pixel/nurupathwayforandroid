@@ -178,7 +178,8 @@ fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> 
                     Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(EV.white)
                         .border(1.dp, EV.border, RoundedCornerShape(16.dp)).clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.ChevronLeft, "Back", tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                // One back control on every pushed page: the arrow (Cycle 4 walk 63).
+                ) { Icon(Lucide.ArrowLeft, "Back", tint = EV.navy, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.weight(1f))
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(EV.white)

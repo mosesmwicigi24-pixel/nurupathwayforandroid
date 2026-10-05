@@ -213,7 +213,8 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Box(Modifier.size(40.dp).clip(CircleShape).background(GrowPal.gold.copy(alpha = 0.16f)).border(1.dp, GrowPal.gold.copy(alpha = 0.4f), CircleShape), contentAlignment = Alignment.Center) {
-                    Text("💬", style = gInter(16))
+                    // Lucide, not a colour emoji (§8.1 rule 7; Cycle 4 walk 29) — iOS's Talk glyph.
+                    Icon(Lucide.MessageCircle, null, tint = GrowPal.gold, modifier = Modifier.size(18.dp))
                 }
                 Column {
                     Text("Talk it Over", style = gSerif(26, FontWeight.Medium), color = Color.White)
@@ -334,7 +335,7 @@ private fun EmptyTalk() {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GrowPal.white).border(1.dp, GrowPal.border, RoundedCornerShape(18.dp)).padding(vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("💬", style = gInter(22))
+        Icon(Lucide.MessageCircle, null, tint = GrowPal.gold, modifier = Modifier.size(22.dp))
         Text("No responses yet", style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)
         Text("Share what God is showing you — your voice encourages the family.", style = gInter(12), color = GrowPal.ink400, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
     }

@@ -100,7 +100,13 @@ fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: S
             Modifier.align(Alignment.TopStart).fillMaxWidth().padding(Spacing.base),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("📖  VERSE FOR TODAY", style = NuruType.micro, color = GoldLight, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+            // Lucide book-open, not a colour emoji (§8.1 rule 7; Cycle 4 walk 01) — as iOS.
+            androidx.compose.material3.Icon(
+                org.nuruplace.member.ui.icons.Lucide.BookOpen, null, tint = GoldLight,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("VERSE FOR TODAY", style = NuruType.micro, color = GoldLight, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier.clip(RoundedCornerShape(999.dp))
