@@ -444,7 +444,7 @@ private fun StreakStrip(view: StreakView) {
                 Spacer(Modifier.width(4.dp))
                 Text(
                     if (toReward == 0) "Reward ready!" else "$toReward day${if (toReward == 1) "" else "s"} to a badge",
-                    style = plInter(10, FontWeight.Bold),
+                    style = plInter(11, FontWeight.Bold),
                     color = PL.catText,
                     maxLines = 1,
                 )
@@ -456,7 +456,7 @@ private fun StreakStrip(view: StreakView) {
 @Composable
 private fun WeekDot(label: String, done: Boolean, today: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = plInter(8, FontWeight.Bold), color = PL.ink3)
+        Text(label, style = plInter(11, FontWeight.Bold), color = PL.ink3)
         Spacer(Modifier.height(4.dp))
         Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
             when {
@@ -548,7 +548,7 @@ private fun ContinueRow(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
                     )
                 }
                 Spacer(Modifier.width(8.dp))
-                Text("Day $day/$total", style = plInter(9, FontWeight.SemiBold), color = PL.ink2)
+                Text("Day $day/$total", style = plInter(11, FontWeight.SemiBold), color = PL.ink2)
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -741,7 +741,7 @@ private fun PlanPromo(
             Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(plan.title, style = plSerif(19, FontWeight.Medium, -0.3f), color = PL.navy)
+            Text(plan.title, style = plSerif(18, FontWeight.Medium, -0.3f), color = PL.navy)
             plan.subtitle?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = plInter(12, FontWeight.SemiBold), color = PL.gold)
             }
@@ -800,7 +800,7 @@ private fun PromoKicker(label: String, shimmer: Boolean) {
         ) {
             Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = PL.navy, modifier = Modifier.size(9.dp))
             Spacer(Modifier.width(4.dp))
-            Text(label, style = plInter(9, FontWeight.Bold, 1.26f), color = PL.navy)
+            Text(label, style = plInter(11, FontWeight.Bold, 1.26f), color = PL.navy)
         }
         // A slow white sweep across the pill — the iOS PLShimmer.
         if (shimmer) ShimmerSweep(Modifier.matchParentSize())
@@ -954,7 +954,7 @@ private fun FilteredResults(category: String, plans: List<ReadingPlanRow>, onOpe
             PLOverline(if (category == "all") "RESULTS" else category, modifier = Modifier.weight(1f))
             // No zero counts (§7.4 #9): the empty state below says it.
             org.nuruplace.member.util.ZeroCounts.count(plans.size, "plan", "plans")?.let {
-                Text(it, style = plInter(10, FontWeight.SemiBold), color = PL.ink3)
+                Text(it, style = plInter(11, FontWeight.SemiBold), color = PL.ink3)
             }
         }
         if (plans.isEmpty()) {
@@ -1042,15 +1042,15 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
             when {
                 reading -> Text(
                     "Day ${plan.currentDay ?: 1} of ${plan.dayCount}",
-                    style = plInter(9, FontWeight.Bold, 0.5f),
+                    style = plInter(11, FontWeight.Bold, 0.5f),
                     color = PL.goldDeep,
                     maxLines = 1,
                 )
-                done -> Text("COMPLETED", style = plInter(9, FontWeight.Bold, 0.9f), color = PL.goldDeep, maxLines = 1)
+                done -> Text("COMPLETED", style = plInter(11, FontWeight.Bold, 0.9f), color = PL.goldDeep, maxLines = 1)
                 else -> plan.category?.takeIf { it.isNotEmpty() }?.let {
                     Text(
                         it.uppercase(),
-                        style = plInter(9, FontWeight.Bold, 0.9f),
+                        style = plInter(11, FontWeight.Bold, 0.9f),
                         color = PL.catText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

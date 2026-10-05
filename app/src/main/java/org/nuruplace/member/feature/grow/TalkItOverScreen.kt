@@ -211,7 +211,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
                 Spacer(Modifier.weight(1f))
-                Text("DAY $dayNumber", style = gInter(10, FontWeight.Bold, 1.6f), color = GrowPal.gold)
+                Text("DAY $dayNumber", style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.gold)
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.size(40.dp))
             }
@@ -220,7 +220,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                     Text("💬", style = gInter(16))
                 }
                 Column {
-                    Text("Talk it Over", style = gSerif(24, FontWeight.Medium), color = Color.White)
+                    Text("Talk it Over", style = gSerif(26, FontWeight.Medium), color = Color.White)
                     Text(if (posts.isEmpty()) "Be the first to respond" else "${posts.size} response${if (posts.size == 1) "" else "s"}",
                         style = gInter(11), color = Color.White.copy(alpha = 0.65f))
                 }
@@ -318,7 +318,7 @@ private fun EmptyTalk() {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GrowPal.white).border(1.dp, GrowPal.border, RoundedCornerShape(18.dp)).padding(vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("💬", style = gInter(24))
+        Text("💬", style = gInter(22))
         Text("No responses yet", style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)
         Text("Share what God is showing you — your voice encourages the family.", style = gInter(12), color = GrowPal.ink400, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
     }
@@ -337,7 +337,7 @@ private fun TalkRow(p: TalkPost, onLike: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(p.name, style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy, modifier = Modifier.weight(1f))
-                Text(relTime(p.createdAt), style = gInter(10), color = GrowPal.ink300)
+                Text(relTime(p.createdAt), style = gInter(11), color = GrowPal.ink300)
             }
             Text(p.body, style = gInter(13).copy(lineHeight = 18.sp), color = GrowPal.ink)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.clickable { onLike() }.padding(vertical = 4.dp)) {

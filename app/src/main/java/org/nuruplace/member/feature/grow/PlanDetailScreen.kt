@@ -372,7 +372,7 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
             d.category?.takeIf { it.isNotEmpty() }?.let { c ->
                 Text(
                     c.uppercase(),
-                    style = plInter(9, FontWeight.Bold, 1.26f),
+                    style = plInter(11, FontWeight.Bold, 1.4f),
                     color = PL.navy,
                     maxLines = 1,
                     modifier = Modifier
@@ -475,7 +475,7 @@ private fun WhatYoullRead(
             Spacer(Modifier.weight(1f))
             if (done > 0) {
                 val pct = Math.round(done.toDouble() / maxOf(d.days.size, 1) * 100).toInt()
-                Text("$pct% done", style = plInter(10, FontWeight.Bold), color = PL.catText)
+                Text("$pct% done", style = plInter(11, FontWeight.Bold), color = PL.catText)
             }
         }
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -501,7 +501,7 @@ private fun WhatYoullRead(
             if (!showAll && d.days.size > 4) {
                 Text(
                     "+ ${d.days.size - 4} more days",
-                    style = plInter(10),
+                    style = plInter(11),
                     color = PL.ink3,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -647,7 +647,7 @@ private fun PLFinishEarnCard(category: String?, dayCount: Int) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 "FINISH & EARN",
-                style = plInter(9, FontWeight.Bold, 1.44f),
+                style = plInter(11, FontWeight.Bold, 1.4f),
                 color = PL.goldLight,
             )
             Text(
@@ -699,7 +699,7 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
                 Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("DAY", style = plInter(7, FontWeight.Bold), color = PL.gold)
+                    Text("DAY", style = plInter(11, FontWeight.Bold).copy(lineHeight = 12.sp), color = PL.gold)
                     Text("${day.dayNumber}", style = plSerif(14, FontWeight.SemiBold), color = PL.navy)
                 }
             }
@@ -729,7 +729,7 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
             // ("1 part left"), not "Start" (EXPERIENCE.md §7.4 #2).
             Text(
                 nextDayPill(day),
-                style = plInter(9, FontWeight.Bold),
+                style = plInter(11, FontWeight.Bold),
                 color = PL.navy,
                 modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
             )

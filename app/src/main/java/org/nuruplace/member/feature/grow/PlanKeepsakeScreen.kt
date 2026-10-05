@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.ui.theme.nuruOrnament
 
 @Composable
 fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
@@ -56,7 +57,7 @@ fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
                 Box(Modifier.size(150.dp).clip(CircleShape).border(1.dp, gold.copy(alpha = 0.15f), CircleShape))
                 Box(Modifier.size(122.dp).clip(CircleShape).border(1.dp, gold.copy(alpha = 0.3f), CircleShape))
                 Box(Modifier.size(96.dp).clip(CircleShape).background(gold.copy(alpha = 0.10f)).border(2.dp, gold, CircleShape), contentAlignment = Alignment.Center) {
-                    Text("✦", style = rSerif(40), color = gold)
+                    Text("✦", style = nuruOrnament(40, FontWeight.Normal), color = gold)
                 }
             }
             Spacer(Modifier.height(24.dp))

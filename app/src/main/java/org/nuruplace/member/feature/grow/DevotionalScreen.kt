@@ -179,7 +179,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                                 d.body.split("\n\n").forEach { para ->
                                     Text(
                                         para,
-                                        style = gInter(14).copy(lineHeight = scaledLineHeight(21)),
+                                        style = gInter(16).copy(lineHeight = scaledLineHeight(24)),
                                         color = GrowPal.ink,
                                     )
                                 }
@@ -218,7 +218,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                                 )
                                 Text(
                                     "Submitted",
-                                    style = gInter(10, FontWeight.Bold),
+                                    style = gInter(11, FontWeight.Bold),
                                     color = GrowPal.gold,
                                 )
                             }
@@ -328,7 +328,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         )
                         Text(
                             if (savedFav) "Saved" else "Save",
-                            style = gInter(10, FontWeight.Medium),
+                            style = gInter(11, FontWeight.Medium),
                             color = if (savedFav) GrowPal.gold else GrowPal.navy,
                         )
                     }
@@ -348,7 +348,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         )
                         Text(
                             "Share",
-                            style = gInter(10, FontWeight.Medium),
+                            style = gInter(11, FontWeight.Medium),
                             color = GrowPal.navy,
                         )
                     }

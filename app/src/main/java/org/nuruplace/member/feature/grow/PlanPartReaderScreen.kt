@@ -168,7 +168,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ReaderChip(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(8.dp))
-                    Text("DAY $dayNumber", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
+                    Text("DAY $dayNumber", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
                     // Text size: Small → Regular → Large → Small, one tap each,
                     // remembered per device (AppPrefs.readerTextScale).
                     ReaderChip(onClick = { AppPrefs.updateReaderTextScale(ReaderTextScale.next(AppPrefs.readerTextScale)) }) {
@@ -179,7 +179,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                         Icon(if (ReaderMode.night) Icons.Filled.LightMode else Icons.Filled.DarkMode, "Reader mode", tint = Color.White, modifier = Modifier.size(16.dp))
                     }
                 }
-                Text(partName, style = rSerif(24, FontWeight.Medium), color = Color.White, modifier = Modifier.padding(top = 10.dp))
+                Text(partName, style = rSerif(26, FontWeight.Medium), color = Color.White, modifier = Modifier.padding(top = 10.dp))
                 group.firstOrNull { it.kind.lowercase() == "scripture" }?.reference?.let {
                     Text(it, style = rInter(11), color = Color.White.copy(alpha = 0.65f))
                 }
@@ -289,7 +289,7 @@ private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalet
         else -> {
             val seg = group.first()
             RMediaCard(seg.imageUrl, seg.videoUrl, portrait = true)
-            if (seg.title.isNotEmpty()) Text(seg.title, style = rSerif(20, FontWeight.Medium), color = pal.ink)
+            if (seg.title.isNotEmpty()) Text(seg.title, style = rSerif(18, FontWeight.Medium), color = pal.ink)
             seg.content?.takeIf { it.isNotEmpty() }?.let { RKeynotes(it, pal) }
         }
     }

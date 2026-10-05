@@ -139,7 +139,7 @@ fun ReadWithFriendHubScreen(myUserId: String, onBack: () -> Unit, onOpenGroup: (
             CircleBackBtn(onClick = onBack)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("READ WITH A FRIEND", style = plInter(9, FontWeight.Bold, 1.6f), color = PL.catText)
+                Text("READ WITH A FRIEND", style = plInter(11, FontWeight.Bold, 1.6f), color = PL.catText)
                 Text("Your shared plans", style = plSerif(22, FontWeight.SemiBold, -0.4f), color = PL.navy)
             }
         }
@@ -211,7 +211,7 @@ private fun ReadingGroupCard(group: ReadingGroupRow, myUserId: String, onClick: 
                     Row(Modifier.padding(top = 4.dp)) {
                         others.take(5).forEachIndexed { i, m ->
                             Box(Modifier.padding(start = if (i == 0) 0.dp else (-8).dp)) {
-                                ChatCircleAvatar(name = m.fullName, avatarUrl = m.avatarUrl, size = 24.dp, textSize = 10)
+                                ChatCircleAvatar(name = m.fullName, avatarUrl = m.avatarUrl, size = 24.dp, textSize = 11)
                             }
                         }
                     }
@@ -390,8 +390,8 @@ private fun GroupHeroCard(g: ReadingGroupRow) {
     ) {
         Box(Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(18.dp))) { PLCover(g.plan.imageUrl, modifier = Modifier.fillMaxSize()) }
         Column {
-            Text("READING TOGETHER", style = plInter(9, FontWeight.Bold, 1.5f), color = PL.goldDeep)
-            Text(g.plan.title, style = plSerif(20, FontWeight.SemiBold, -0.4f), color = PL.navy)
+            Text("READING TOGETHER", style = plInter(11, FontWeight.Bold, 1.5f), color = PL.goldDeep)
+            Text(g.plan.title, style = plSerif(18, FontWeight.SemiBold, -0.4f), color = PL.navy)
             Text(
                 org.nuruplace.member.util.ZeroCounts.join("${g.plan.dayCount}-day plan", org.nuruplace.member.util.ZeroCounts.count(g.members.count(ReadingGroupMember::isActive), "reading together", "reading together")),
                 style = plInter(12), color = PL.ink3,
@@ -727,7 +727,7 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                     Box(Modifier.fillMaxWidth().aspectRatio(1.6f).clip(RoundedCornerShape(22.dp))) { PLCover(p.plan.imageUrl, modifier = Modifier.fillMaxSize()) }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("${firstName(p.inviter.fullName)} invited you to read", style = plInter(13, FontWeight.SemiBold), color = PL.ink2)
-                        Text(p.plan.title, style = plSerif(24, FontWeight.SemiBold, -0.5f), color = PL.navy, textAlign = TextAlign.Center)
+                        Text(p.plan.title, style = plSerif(26, FontWeight.SemiBold, -0.5f), color = PL.navy, textAlign = TextAlign.Center)
                         Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Text("${p.plan.dayCount} days", style = plInter(11, FontWeight.SemiBold), color = PL.ink2)
                             Text("${p.memberCount} reading", style = plInter(11, FontWeight.SemiBold), color = PL.ink2)

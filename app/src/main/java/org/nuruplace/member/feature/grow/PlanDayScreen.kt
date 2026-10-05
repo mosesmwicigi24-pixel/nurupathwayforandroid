@@ -295,7 +295,7 @@ private fun DayHeader(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.weight(1f))
-            Text("DAY $dayNumber", style = plInter(10, Bold, 1.8f), color = PL.gold)
+            Text("DAY $dayNumber", style = plInter(11, Bold, 1.8f), color = PL.gold)
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.size(36.dp))
         }
@@ -307,7 +307,7 @@ private fun DayHeader(
         )
         Text(
             title,
-            style = plSerif(23, SemiBold, -0.46f),
+            style = plSerif(26, SemiBold, -0.46f),
             color = Color.White,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -358,7 +358,7 @@ private fun VerseBlock(reference: String, content: String?) {
         if (!content.isNullOrEmpty()) {
             Text(
                 content,
-                style = plSerif(17, Normal, -0.17f, italic = true)
+                style = plSerif(18, Normal, -0.17f, italic = true)
                     .copy(lineHeight = org.nuruplace.member.ui.theme.scaledLineHeight(25)),
                 color = PL.navy,
                 modifier = Modifier.padding(top = 8.dp),
@@ -459,7 +459,7 @@ private fun PLSegmentRow(
                     .background(PL.gold)
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             ) {
-                Text("Start", style = plInter(9, Bold), color = PL.navy)
+                Text("Start", style = plInter(11, Bold), color = PL.navy)
             }
         } else {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
@@ -502,7 +502,7 @@ private fun ReflectionCard(
             AnimatedVisibility(visible = justSaved, enter = fadeIn(), exit = fadeOut()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
-                    Text("Saved", style = plInter(10, Bold), color = Color(0xFF15803D))
+                    Text("Saved", style = plInter(11, Bold), color = Color(0xFF15803D))
                 }
             }
         }
@@ -996,7 +996,7 @@ private fun HubRow(part: HubPart, done: Boolean, isNext: Boolean, onClick: () ->
         when {
             done -> Icon(Icons.Filled.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
             isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text("Next", style = plInter(10, Bold), color = PL.navy)
+                Text("Next", style = plInter(11, Bold), color = PL.navy)
             }
             else -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(20.dp))
         }

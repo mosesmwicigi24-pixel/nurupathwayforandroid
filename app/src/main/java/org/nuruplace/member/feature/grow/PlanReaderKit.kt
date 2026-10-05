@@ -267,7 +267,7 @@ internal fun passageCaption(p: ScripturePassage): String =
 /** One verse's row: the number small, gold and raised, the words in serif. */
 private fun verseRow(v: PassageVerse, pal: ReaderPalette, size: Int): AnnotatedString = buildAnnotatedString {
     v.number?.let { n ->
-        withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("$n ") }
+        withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("$n ") }
     }
     withStyle(SpanStyle(fontFamily = Fraunces, fontWeight = FontWeight.Normal, fontSize = size.sp, color = pal.ink)) { append(v.body) }
 }
@@ -362,8 +362,8 @@ internal fun RScripturePassageText(text: String, pal: ReaderPalette, size: Int =
 internal fun RDayOpening(title: String?, reference: String?, minutes: Int, pal: ReaderPalette) {
     val meta = listOfNotNull(reference?.takeIf { it.isNotEmpty() }, "about $minutes min").joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TODAY'S READING", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(24, FontWeight.Medium), color = pal.ink) }
+        Text("TODAY'S READING", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(22, FontWeight.Medium), color = pal.ink) }
         Text(meta, style = rInter(12, FontWeight.Medium), color = pal.inkDim)
     }
 }
@@ -417,7 +417,7 @@ internal fun RScriptureRefCard(reference: String, pal: ReaderPalette) {
                     Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(pal.gold))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         RScripturePassageText(p.text, pal, reference = reference, version = p.version)
-                        Text(passageCaption(p).uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
+                        Text(passageCaption(p).uppercase(), style = rInter(11, FontWeight.Bold, 1.2f), color = pal.inkDim)
                     }
                 }
             }
@@ -506,8 +506,8 @@ internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: (
                     Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.gold, modifier = Modifier.size(16.dp))
                 }
                 Column {
-                    Text("SCRIPTURE", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-                    Text(reference, style = rSerif(20, FontWeight.Medium), color = pal.ink)
+                    Text("SCRIPTURE", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+                    Text(reference, style = rSerif(18, FontWeight.Medium), color = pal.ink)
                 }
             }
             val p = passage
@@ -515,10 +515,10 @@ internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: (
                 p != null -> {
                     Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(pal.gold))
-                        RScripturePassageText(p.text, pal, size = 17, reference = reference, version = p.version)
+                        RScripturePassageText(p.text, pal, reference = reference, version = p.version)
                     }
                     p.version?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                        Text(it.uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
+                        Text(it.uppercase(), style = rInter(11, FontWeight.Bold, 1.2f), color = pal.inkDim)
                     }
                 }
                 failure != null -> {

@@ -146,7 +146,7 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
                 if (verses.isNotEmpty()) {
                     Text(
                         "YOUR VERSE LIBRARY",
-                        style = gInter(10, FontWeight.SemiBold, 1.8f),
+                        style = gInter(11, FontWeight.SemiBold, 1.8f),
                         color = GrowPal.ink600,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                     )
@@ -255,8 +255,8 @@ private fun ScoreRing(score: Int) {
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
-            Text(score.toString(), style = gSerif(24, FontWeight.SemiBold), color = GrowPal.ink)
-            Text("/100", style = gInter(10, FontWeight.Medium), color = GrowPal.ink600)
+            Text(score.toString(), style = gSerif(22, FontWeight.SemiBold), color = GrowPal.ink)
+            Text("/100", style = gInter(11, FontWeight.Medium), color = GrowPal.ink600)
         }
     }
 }
@@ -319,7 +319,7 @@ private fun ThisWeekCard(verses: List<MemoryVerseRow>, onPractice: (MemoryVerseR
         }
         Text(
             "“" + cur.verseText + "”",
-            style = gSerif(20, FontWeight.Medium).copy(lineHeight = scaledLineHeight(28)),
+            style = gSerif(18, FontWeight.Medium).copy(lineHeight = scaledLineHeight(26)),
             color = GrowPal.navy,
         )
         Text(cur.reference, style = gInter(12, FontWeight.Bold), color = GrowPal.gold)
@@ -373,7 +373,7 @@ private fun StatusChip(v: MemoryVerseRow) {
 @Composable
 private fun Chip(text: String, bg: Color, fg: Color) {
     Box(Modifier.clip(Capsule).background(bg).padding(horizontal = 8.dp, vertical = 3.dp)) {
-        Text(text, style = gInter(10, FontWeight.SemiBold), color = fg)
+        Text(text, style = gInter(11, FontWeight.SemiBold), color = fg)
     }
 }
 
@@ -421,7 +421,7 @@ private fun PracticeSheet(v: MemoryVerseRow, saving: Boolean, error: String?, on
         }
         Text(
             "$pct% match" + if (pct >= 90) " · mastered!" else "",
-            style = gInter(10),
+            style = gInter(11),
             color = if (pct >= 90) GrowPal.successText else GrowPal.ink600,
         )
 
