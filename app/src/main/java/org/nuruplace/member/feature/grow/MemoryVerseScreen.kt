@@ -165,7 +165,12 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
             var saving by remember(v.memoryVerseId) { mutableStateOf(false) }
             var saveError by remember(v.memoryVerseId) { mutableStateOf<String?>(null) }
             // Not dismissed mid-save: the outcome would have nowhere to show.
-            val sheetState = rememberModalBottomSheetState(confirmValueChange = { it != SheetValue.Hidden || !saving })
+            // Fully open, never half: half-open, the keyboard covered the
+            // "Save practice" button (and the line above it that says why).
+            val sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = true,
+                confirmValueChange = { it != SheetValue.Hidden || !saving },
+            )
             ModalBottomSheet(onDismissRequest = { if (!saving) practicing = null }, sheetState = sheetState) {
                 PracticeSheet(
                     v = v,
