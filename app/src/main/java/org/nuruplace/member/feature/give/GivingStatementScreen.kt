@@ -474,9 +474,11 @@ private fun StatementRecordRow(r: GivingRecord, onOpenReceipt: (String) -> Unit)
         Column(Modifier.weight(1f)) {
             Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
             // "8:11 PM · M-Pesa" — the rail by its name (M-Pesa when the row
-            // names none), as iOS.
+            // names none), as iOS. One time per gift (Cycle 3's closing walk,
+            // B8): the moment it settled, as its receipt says — the statement
+            // said 11:58 (sent) where the receipt said 11:59 (settled).
             Text(
-                "${timeLabel(r.createdAt)} · ${giveMethodLabel(r.method?.takeIf { it.isNotBlank() } ?: "mpesa")}",
+                "${timeLabel(statementTime(r))} · ${giveMethodLabel(r.method?.takeIf { it.isNotBlank() } ?: "mpesa")}",
                 style = giInter(11),
                 color = GIVE.tertiary,
             )

@@ -166,3 +166,8 @@ internal fun pledgeGroup(split: GivingSplit): PledgeGroup? {
 /** The gold tag a pledge row wears: the server's pledge title, else "Partner"
  *  (→ "Partner pledge") for an older row that carries only the id. */
 internal fun pledgeTagTitle(r: GivingRecord): String = r.pledgeTitle?.trim()?.takeIf { it.isNotEmpty() } ?: "Partner"
+
+/** The one time a gift shows, on its statement row as on its receipt: when it
+ *  settled; until then, when it was sent. (The day it is listed under, and
+ *  the year it counts in, stay the server's created day — totals untouched.) */
+internal fun statementTime(r: GivingRecord): String = r.settledAt?.takeIf { it.isNotBlank() } ?: r.createdAt

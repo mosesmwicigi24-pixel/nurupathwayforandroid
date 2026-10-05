@@ -230,3 +230,11 @@ class GivingStatementLogicTest {
         }
     }
 }
+
+class StatementTimeTest {
+    @org.junit.Test fun `a settled gift shows when it settled, as its receipt does (Cycle 3 closing walk B8)`() {
+        val sent = org.nuruplace.member.data.net.GivingRecord(transactionId = "t", amountMinor = 20_000, createdAt = "2026-10-05T08:58:10Z", settledAt = "2026-10-05T08:59:02Z")
+        org.junit.Assert.assertEquals("2026-10-05T08:59:02Z", statementTime(sent))
+        org.junit.Assert.assertEquals("2026-10-05T08:58:10Z", statementTime(sent.copy(settledAt = null)))
+    }
+}
