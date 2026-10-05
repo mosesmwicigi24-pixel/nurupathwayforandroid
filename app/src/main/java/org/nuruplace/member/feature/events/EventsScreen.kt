@@ -285,11 +285,12 @@ fun EventsScreen(
                         }
                     }
 
-                    // CHURCH ATTENDANCE dark card — scan into today's service, and the
-                    // streak that comes out of showing up. Same visual weight as
-                    // CALENDAR: on a Sunday morning this is the reason to open the app.
+                    // CHURCH ATTENDANCE — a white card: the tab has one dark
+                    // feature card (§8.1 rule 1), the calendar's. The icon sits
+                    // on a gold-tint tile, navy (rule 7).
                     Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
+                            .border(1.dp, EV.border, RoundedCornerShape(22.dp))
                             .clickable { onOpenAttendance() },
                     ) {
                         Row(
@@ -298,21 +299,18 @@ fun EventsScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Box(
-                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
+                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint),
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Filled.QrCodeScanner, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("CHURCH ATTENDANCE", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.goldLight)
-                                Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
+                                Text("CHURCH ATTENDANCE", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.overline)
+                                Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = EV.navy)
                                 Text(
                                     "Scan the QR at church · see your streak",
-                                    style = evInter(11), color = Color.White.copy(alpha = 0.55f),
+                                    style = evInter(11), color = EV.secondary,
                                 )
                             }
-                            Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            Icon(Icons.Filled.ChevronRight, null, tint = EV.secondary, modifier = Modifier.size(18.dp))
                         }
                     }
 
