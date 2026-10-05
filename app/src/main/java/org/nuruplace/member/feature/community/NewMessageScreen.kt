@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.ConnectionRequestRow
 import org.nuruplace.member.data.net.ConnectionRow
@@ -53,6 +54,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RequestConnectionBody
 import org.nuruplace.member.ui.components.AsyncContent
 import java.util.UUID
+import org.nuruplace.member.ui.components.QuickNotice
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -68,6 +70,7 @@ private data class NewMessageData(
 fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var busyUserId by remember { mutableStateOf<String?>(null) }
     var consentPromptFor by remember { mutableStateOf<ChatPerson?>(null) }
 
@@ -162,6 +165,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                         .onFailure { e ->
                             busyUserId = null
                             if (isConsentRequired(e)) consentPromptFor = person
+                            else QuickNotice.show(ApiException.failureLine("Couldn't open that chat.", e, context))
                         }
                 }
             }
@@ -170,6 +174,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                 busyUserId = person.userId
                 scope.launch {
                     runCatching { Net.client.api.requestConnection(RequestConnectionBody(person.userId, clientMutationId = UUID.randomUUID().toString())) }
+                        .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't send that request.", it, context)) }
                     busyUserId = null
                     reload()
                 }
@@ -180,6 +185,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                 busyUserId = person.userId
                 scope.launch {
                     runCatching { Net.client.api.cancelConnectionRequest(req.requestId) }
+                        .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't cancel that request.", it, context)) }
                     busyUserId = null
                     reload()
                 }
@@ -248,6 +254,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                             busyUserId = prompt.userId
                             scope.launch {
                                 runCatching { Net.client.api.requestConnection(RequestConnectionBody(prompt.userId, clientMutationId = UUID.randomUUID().toString())) }
+                                    .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't send that request.", it, context)) }
                                 busyUserId = null
                             }
                         }

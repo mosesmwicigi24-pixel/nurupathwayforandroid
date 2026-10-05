@@ -78,6 +78,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.BroadcastBody
 import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.ChatPerson
@@ -92,6 +93,7 @@ import org.nuruplace.member.data.net.RequestJoinSpaceBody
 import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.ListSkeleton
+import org.nuruplace.member.ui.components.QuickNotice
 import org.nuruplace.member.ui.theme.NuruType
 import java.util.UUID
 
@@ -194,6 +196,7 @@ fun ChatInboxScreen(
         HubData(inbox, people, name, verse, connections, incoming, outgoing, discipler, disciplerConversationId, pastoralConversationId)
     }) { (inbox, people, name, verse, connections, incoming, outgoing, discipler, disciplerConversationId, pastoralConversationId), reload ->
         val scope = rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
         var tab by rememberSaveable { mutableStateOf(ChatTab.MySpace) }
         var query by rememberSaveable { mutableStateOf("") }
         // Person a connection action is in flight for (Connect / cancel /
@@ -239,14 +242,23 @@ fun ChatInboxScreen(
                 // Immediate join first (public spaces, unchanged). Where the
                 // server refuses it (a space that requires leader review), fall
                 // back to filing a reviewed join request — pending, not failed.
+                // Only a refusal (403/404/409/422, as iOS) means "ask a leader";
+                // no answer, or our side failing, is said as such — it used to
+                // file a review request for a join that never reached us.
                 runCatching { Net.client.api.joinChatSpace(conversationId) }
                     .onSuccess { reload() }
-                    .onFailure {
+                    .onFailure { joinError ->
+                        val refused = (joinError as? retrofit2.HttpException)?.code() in setOf(403, 404, 409, 422)
+                        if (!refused) {
+                            QuickNotice.show(ApiException.failureLine("Couldn't join this space.", joinError, context))
+                            return@onFailure
+                        }
                         runCatching { Net.client.api.requestJoinSpace(conversationId, RequestJoinSpaceBody()) }
                             .onSuccess { res ->
                                 if (res.status == "already_member") reload()
                                 else pendingJoinIds = pendingJoinIds + conversationId
                             }
+                            .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't ask to join this space.", it, context)) }
                     }
             }
         }
@@ -254,7 +266,10 @@ fun ChatInboxScreen(
             scope.launch {
                 runCatching { Net.client.api.createDm(org.nuruplace.member.data.net.DmBody(person.userId)).conversationId }
                     .onSuccess { id -> if (id.isNotBlank()) onOpenThread(id) }
-                    .onFailure { e -> if (isConsentRequired(e)) consentPromptFor = person }
+                    .onFailure { e ->
+                        if (isConsentRequired(e)) consentPromptFor = person
+                        else QuickNotice.show(ApiException.failureLine("Couldn't open that chat.", e, context))
+                    }
             }
         }
         fun sendConnectionRequest(person: ChatPerson) {
@@ -262,6 +277,7 @@ fun ChatInboxScreen(
             connectingUserId = person.userId
             scope.launch {
                 runCatching { Net.client.api.requestConnection(RequestConnectionBody(person.userId, clientMutationId = UUID.randomUUID().toString())) }
+                    .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't send that request.", it, context)) }
                 connectingUserId = null
                 reload()
             }
@@ -271,6 +287,7 @@ fun ChatInboxScreen(
             connectingUserId = req.userId
             scope.launch {
                 runCatching { Net.client.api.cancelConnectionRequest(req.requestId) }
+                    .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't cancel that request.", it, context)) }
                 connectingUserId = null
                 reload()
             }
@@ -280,6 +297,7 @@ fun ChatInboxScreen(
             connectingUserId = req.userId
             scope.launch {
                 runCatching { Net.client.api.acceptConnectionRequest(req.requestId) }
+                    .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't accept that request.", it, context)) }
                 connectingUserId = null
                 reload()
             }
@@ -289,6 +307,7 @@ fun ChatInboxScreen(
             connectingUserId = req.userId
             scope.launch {
                 runCatching { Net.client.api.declineConnectionRequest(req.requestId) }
+                    .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't decline that request.", it, context)) }
                 connectingUserId = null
                 reload()
             }

@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -119,6 +120,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.OpenConversation
 import org.nuruplace.member.data.PastoralLock
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ChatInviteMeta
 import org.nuruplace.member.data.net.ChatMessage
 import org.nuruplace.member.data.net.ChatThreadDetail
@@ -127,12 +129,16 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.data.net.SendMessageBody
 import org.nuruplace.member.data.net.SendVoiceBody
+import org.nuruplace.member.data.offline.WriteOutcome
+import org.nuruplace.member.data.offline.queuedWrite
+import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.ui.components.AiDraftButton
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.LiveWave
 import org.nuruplace.member.ui.components.WaveformBars
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
@@ -251,7 +257,21 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 actionError = null
             }
         }
-        val messages = thread.messages
+        // Messages this phone queued while offline (§1.7 — as iOS does): shown
+        // as "Waiting to send" until the server's copy arrives with the same id.
+        var pending by remember(conversationId) { mutableStateOf(listOf<ChatMessage>()) }
+        LaunchedEffect(thread.messages) {
+            val landed = thread.messages.mapTo(HashSet()) { it.messageId }
+            pending = pending.filter { it.messageId !in landed }
+        }
+        // Why the last send didn't go — above the composer, while what the
+        // member typed stays in it (EXPERIENCE.md §7.4, §4).
+        var sendError by remember(conversationId) { mutableStateOf<String?>(null) }
+        // A voice note that didn't send is kept, with a way to send it again
+        // (iOS: "Couldn't send — tap to retry"); it was deleted on any outcome.
+        var unsentVoice by remember(conversationId) { mutableStateOf<UnsentVoice?>(null) }
+        val pendingIds = pending.mapTo(HashSet()) { it.messageId }
+        val messages = (thread.messages + pending.filter { p -> thread.messages.none { it.messageId == p.messageId } })
             .filter { it.messageId !in locallyDeleted }
             .map { m -> editOverrides[m.messageId]?.let { m.copy(body = it, isEdited = true) } ?: m }
         fun editMessage(m: ChatMessage, newBody: String) {
@@ -269,10 +289,12 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     editingMessage = null
                     Haptics.confirm(view)
                     reload()
-                } catch (_: Exception) {
+                } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                    throw c
+                } catch (e: Exception) {
                     editOverrides = if (previous != null) editOverrides + (m.messageId to previous) else editOverrides - m.messageId
                     Haptics.reject(view)
-                    editError = "Couldn't save — please try again."
+                    editError = ApiException.saveFailureLine(e, context)
                 } finally {
                     editSaving = false
                 }
@@ -284,10 +306,12 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 try {
                     Net.client.api.deleteChatMessage(m.messageId)
                     reload()
-                } catch (_: Exception) {
+                } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                    throw c
+                } catch (e: Exception) {
                     locallyDeleted = locallyDeleted - m.messageId
                     Haptics.reject(view)
-                    actionError = "Couldn't delete this message — try again."
+                    actionError = ApiException.failureLine("Couldn't delete that message.", e, context)
                 }
             }
         }
@@ -304,56 +328,132 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 askMic.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
-        fun sendVoice() {
+        // Upload, then send — the recording is deleted only once the server has
+        // the message; a failure keeps it (and an uploaded file's address, and
+        // the message's ids, so sending again can't send it twice).
+        fun deliverVoice(v: UnsentVoice) {
             if (busy) return
-            val f = recorder.stop() ?: return
-            Haptics.confirm(view) // a voice note committed — the weightier tick
-            val duration = recorder.elapsedSec.coerceAtLeast(1)
-            val wave = recorder.waveformFor()
             busy = true
+            unsentVoice = null
             scope.launch {
-                try {
-                    val url = withContext(Dispatchers.IO) {
-                        val part = MultipartBody.Part.createFormData("file", f.name, f.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
+                var held = v
+                val failure = try {
+                    val url = held.uploadedUrl ?: withContext(Dispatchers.IO) {
+                        val part = MultipartBody.Part.createFormData("file", held.file.name, held.file.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
                         Net.client.api.uploadVoiceNote(part).url
+                    }.ifBlank { throw IllegalStateException("no address for the upload") }
+                    held = held.copy(uploadedUrl = url)
+                    val meta = buildJsonObject {
+                        put("duration", held.durationSec)
+                        putJsonArray("waveform") { held.waveform.forEach { add(it) } }
                     }
-                    if (url.isNotBlank()) {
-                        val meta = buildJsonObject {
-                            put("duration", duration)
-                            putJsonArray("waveform") { wave.forEach { add(it) } }
-                        }
-                        Net.client.api.sendChatVoice(
-                            conversationId,
-                            SendVoiceBody(UUID.randomUUID().toString(), "Voice message", "voice", url, meta, UUID.randomUUID().toString()),
-                        )
-                        reload()
-                    }
-                } catch (_: Exception) {
-                } finally {
-                    busy = false
-                    withContext(Dispatchers.IO) { runCatching { f.delete() } }
+                    Net.client.api.sendChatVoice(
+                        conversationId,
+                        SendVoiceBody(held.messageId, "Voice message", "voice", url, meta, held.mutationId),
+                    )
+                    null
+                } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                    throw c
+                } catch (e: Exception) {
+                    e
+                }
+                busy = false
+                if (failure == null) {
+                    Haptics.confirm(view) // a voice note delivered — the weightier tick
+                    withContext(Dispatchers.IO) { runCatching { held.file.delete() } }
+                    reload()
+                } else {
+                    Haptics.reject(view)
+                    unsentVoice = held.copy(line = ApiException.failureLine(ApiException.SEND_FAILED, failure, context))
                 }
             }
         }
+        fun sendVoice() {
+            if (busy) return
+            val f = recorder.stop() ?: return
+            deliverVoice(
+                UnsentVoice(
+                    file = f,
+                    durationSec = recorder.elapsedSec.coerceAtLeast(1),
+                    waveform = recorder.waveformFor(),
+                    messageId = UUID.randomUUID().toString(),
+                    mutationId = UUID.randomUUID().toString(),
+                ),
+            )
+        }
+        fun discardVoice() {
+            val v = unsentVoice ?: return
+            unsentVoice = null
+            scope.launch { withContext(Dispatchers.IO) { runCatching { v.file.delete() } } }
+        }
 
-        fun send(text: String) {
+        // A text message goes through the app's durable offline queue, as on
+        // iOS (§1.7): sent now when it can be; with no answer it waits in the
+        // queue (same ids, so a send that did land is never doubled) and shows
+        // as "Waiting to send". A refusal keeps what was typed and says why.
+        fun send(text: String, fromDraft: Boolean = true) {
             val t = text.trim()
             if (t.isBlank() || busy) return
-            Haptics.tap(view) // light tap — the message left your hands
             busy = true
+            sendError = null
+            val messageId = UUID.randomUUID().toString()
+            val mutationId = UUID.randomUUID().toString()
             scope.launch {
-                try {
-                    Net.client.api.sendChatMessage(conversationId, SendMessageBody(UUID.randomUUID().toString(), t, "text", UUID.randomUUID().toString()))
-                    draft = ""
-                    reload()
-                } catch (_: Exception) {
-                } finally { busy = false }
+                val payload = buildJsonObject {
+                    put("conversation_id", conversationId)
+                    put("message_id", messageId)
+                    put("body", t)
+                    put("msg_type", "text")
+                    put("client_mutation_id", mutationId)
+                }
+                val outcome = queuedWrite(
+                    send = {
+                        Net.client.offline.runOrQueue("chat_messages", "create", payload) {
+                            Net.client.api.sendChatMessage(conversationId, SendMessageBody(messageId, t, "text", mutationId))
+                        }
+                    },
+                    failureLine = { ApiException.failureLine(ApiException.SEND_FAILED, it, context) },
+                )
+                busy = false
+                when (outcome) {
+                    WriteOutcome.Sent -> {
+                        Haptics.tap(view) // light tap — the message left your hands
+                        if (fromDraft && draft.trim() == t) draft = ""
+                        reload()
+                    }
+                    WriteOutcome.Queued -> {
+                        Haptics.tap(view)
+                        if (fromDraft && draft.trim() == t) draft = ""
+                        pending = pending + ChatMessage(
+                            messageId = messageId, body = t, msgType = "text",
+                            createdAt = java.time.Instant.now().toString(), mine = true,
+                        )
+                    }
+                    is WriteOutcome.Failed -> {
+                        Haptics.reject(view)
+                        sendError = outcome.line
+                    }
+                }
             }
         }
         fun react(m: ChatMessage, emoji: String) {
-            scope.launch { try { Net.client.api.toggleChatReaction(m.messageId, ReactBody(emoji)); reload() } catch (_: Exception) {} }
+            scope.launch {
+                noticeOnFailure(context, onFailure = { Haptics.reject(view) }) {
+                    Net.client.api.toggleChatReaction(m.messageId, ReactBody(emoji))
+                }?.let { reload() }
+            }
         }
-        fun join() { scope.launch { try { Net.client.api.joinChatSpace(conversationId); reload() } catch (_: Exception) {} } }
+        var joining by remember { mutableStateOf(false) }
+        fun join() {
+            if (joining) return
+            joining = true
+            scope.launch {
+                noticeOnFailure(context, lead = "Couldn't join this space.", onFailure = { Haptics.reject(view) }) {
+                    Net.client.api.joinChatSpace(conversationId)
+                }?.let { reload() }
+                joining = false
+            }
+        }
 
         // ── Connection controls (Chat Redesign C3a — thread ⋮ menu) ──
         var connectionBusy by remember { mutableStateOf(false) }
@@ -364,7 +464,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             scope.launch {
                 runCatching { Net.client.api.removeConnection(peer) }
                     .onSuccess { actionError = "Connection removed. This chat's history is kept." }
-                    .onFailure { actionError = "Couldn't remove this connection — try again." }
+                    .onFailure { actionError = ApiException.failureLine("Couldn't remove this connection.", it, context) }
                 connectionBusy = false
             }
         }
@@ -375,7 +475,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             scope.launch {
                 runCatching { Net.client.api.blockConnection(peer) }
                     .onSuccess { actionError = "Blocked. They can no longer message you." }
-                    .onFailure { actionError = "Couldn't block — try again." }
+                    .onFailure { actionError = ApiException.failureLine("Couldn't block them.", it, context) }
                 connectionBusy = false
             }
         }
@@ -389,7 +489,10 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     // The menu offers Unblock unconditionally (no per-pair status
                     // read exists client-side) — a 404 "wasn't blocked" is the
                     // expected, harmless outcome when it wasn't needed.
-                    .onFailure { actionError = "This person wasn't blocked." }
+                    .onFailure {
+                        actionError = if ((it as? retrofit2.HttpException)?.code() == 404) "This person wasn't blocked."
+                        else ApiException.failureLine("Couldn't unblock them.", it, context)
+                    }
                 connectionBusy = false
             }
         }
@@ -452,7 +555,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             muted = !target
                             AppPrefs.pastoralMuted = !target
                             Haptics.reject(view)
-                            actionError = if (target) "Couldn't mute — try again." else "Couldn't unmute — try again."
+                            actionError = if (target) "Couldn't mute this chat. Try again in a moment." else "Couldn't unmute this chat. Try again in a moment."
                         }
                     }
                 },
@@ -485,6 +588,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     val runHead = i == 0 || messages[i - 1].authorUserId != m.authorUserId || chatDayKey(messages[i - 1].createdAt) != thisDay
                     MessageRow(
                         m, thread.kind, runHead, player,
+                        pending = m.messageId in pendingIds,
                         onReact = { emoji -> react(m, emoji) },
                         onLongPress = { if (m.mine) { Haptics.tap(view); actionsForMessage = m } },
                         onOpenRoute = onNavigate,
@@ -519,17 +623,43 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 listOf("Amen 🙏", "Praying for you 💛", "On my way 🚶", "Thank you 🤍").forEach { q ->
                     Box(
                         Modifier.clip(Capsule).background(CHAT.white.copy(alpha = 0.9f)).border(1.dp, CHAT.border, Capsule)
-                            .clickable { send(q) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                            .clickable { send(q, fromDraft = false) }.padding(horizontal = 14.dp, vertical = 8.dp),
                     ) { Text(q, style = cInter(13, FontWeight.Medium), color = CHAT.navy) }
                 }
             }
 
             // A failed edit/delete already rolled its optimistic change back —
             // this just tells the member why, briefly, above the composer.
-            actionError?.let { msg ->
+            (sendError ?: actionError)?.let { msg ->
                 Row(
                     Modifier.fillMaxWidth().background(Color(0xFFFDECEA)).padding(horizontal = 16.dp, vertical = 7.dp),
-                ) { Text(msg, style = cInter(11, FontWeight.Medium), color = Color(0xFFB3261E)) }
+                ) { Text(msg, style = cInter(12, FontWeight.Medium), color = Color(0xFFB3261E)) }
+            }
+            // A voice note that didn't send — kept, with Send again and Discard.
+            unsentVoice?.let { v ->
+                if (!recorder.isRecording) {
+                    Row(
+                        Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(Modifier.size(10.dp).clip(Capsule).background(Color(0xFFD4183D)))
+                        Column(Modifier.weight(1f)) {
+                            Text("Voice note · ${voiceClock(v.durationSec)}", style = cInter(12, FontWeight.SemiBold), color = CHAT.navy)
+                            v.line?.let { Text(it, style = cInter(11), color = Color(0xFFB3261E)) }
+                        }
+                        Box(
+                            Modifier.size(38.dp).clip(Capsule).background(CHAT.white).border(1.dp, CHAT.border, Capsule)
+                                .clickable { discardVoice() },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.Delete, "Discard voice note", tint = CHAT.meta, modifier = Modifier.size(18.dp)) }
+                        Box(
+                            Modifier.clip(Capsule).background(CHAT.navy).clickable(enabled = !busy) { deliverVoice(v) }
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("Send again", style = cInter(12, FontWeight.SemiBold), color = Color.White) }
+                    }
+                }
             }
 
             // Composer — swaps to the live recording strip while a voice note is
@@ -1108,6 +1238,8 @@ private fun MessageRow(
     kind: String,
     runHead: Boolean,
     player: VoicePlayer,
+    /** Queued on this phone, not yet on the server (§1.7). */
+    pending: Boolean = false,
     onReact: (String) -> Unit,
     onLongPress: () -> Unit = {},
     onOpenRoute: (String) -> Unit = {},
@@ -1285,8 +1417,15 @@ private fun MessageRow(
                         Text("edited", style = cInter(11).copy(fontStyle = FontStyle.Italic), color = if (m.mine) Color.White.copy(alpha = 0.5f) else CHAT.meta)
                         Spacer(Modifier.width(4.dp))
                     }
-                    Text(chatMsgTime(m.createdAt), style = cInter(11), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
-                    if (m.mine) {
+                    if (pending) {
+                        // Honest: not delivered yet — no tick until the server has it.
+                        Icon(Icons.Filled.Schedule, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Waiting to send", style = cInter(11), color = Color.White.copy(alpha = 0.7f))
+                    } else {
+                        Text(chatMsgTime(m.createdAt), style = cInter(11), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
+                    }
+                    if (m.mine && !pending) {
                         Spacer(Modifier.width(4.dp))
                         // The broadcast rule, everywhere: ONE blue tick = delivered
                         // (the copy is in their thread), TWO blue ticks = seen
@@ -1299,3 +1438,17 @@ private fun MessageRow(
         }
     }
 }
+
+/** A recorded voice note on its way — or kept after a send that failed, with
+ *  what got done (the upload's address) and the message's own ids, so
+ *  "Send again" finishes it rather than sending it twice. */
+internal data class UnsentVoice(
+    val file: java.io.File,
+    val durationSec: Int,
+    val waveform: List<Int>,
+    val messageId: String,
+    val mutationId: String,
+    val uploadedUrl: String? = null,
+    /** Why it didn't send, in §4's words. */
+    val line: String? = null,
+)
