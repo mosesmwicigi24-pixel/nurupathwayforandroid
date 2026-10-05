@@ -134,7 +134,13 @@ internal fun promiseLine(
  *  total one — then everything given toward it. "KSh 0 of KSh 5,000 this
  *  month · KSh 0 given in all" · "KSh 5,000 of KSh 20,000 · KSh 5,000 given
  *  in all". */
-internal fun pledgeGivenLine(pl: Pledge): String {
+internal fun pledgeGivenLine(pl: Pledge, today: LocalDate = LocalDate.now(java.time.ZoneId.of("Africa/Nairobi"))): String {
+    // Before it starts (Cycle 3's closing walk, B7): "Starts Thu 5 Nov" — not
+    // "KSh 0 of KSh 5,000 this month", which read as a shortfall in a month
+    // nothing was due. Words only; the server's figures are untouched.
+    partnerDate(pl.startsOn)?.takeIf { it.isAfter(today) }?.let { starts ->
+        return "Starts ${org.nuruplace.member.util.NuruDates.day(starts, today)}"
+    }
     val total = pl.shape == "total"
     val toward = if (total) pl.progress.paidMinor else pl.progress.periodPaidMinor ?: 0
     val asks = if (total) pl.targetMinor ?: 0 else pl.amountMinor ?: 0

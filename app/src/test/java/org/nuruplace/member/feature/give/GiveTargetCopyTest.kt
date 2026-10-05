@@ -146,4 +146,15 @@ class GiveTargetCopyTest {
         val roof = Pledge(pledgeId = "p", shape = "total", targetMinor = 2_000_000, dueOn = "2026-12-31", progress = PledgeProgress(paidMinor = 500_000))
         assertEquals("KSh 5,000 of KSh 20,000 · KSh 5,000 given in all", pledgeGivenLine(roof))
     }
+
+    @Test
+    fun `before a pledge starts it says when — never a month's shortfall (Cycle 3 closing walk B7)`() {
+        val oct5 = java.time.LocalDate.of(2026, 10, 5)
+        val kenya = Pledge(pledgeId = "p", shape = "monthly", amountMinor = 500_000, dueDay = 5, startsOn = "2026-11-05")
+        assertEquals("Starts Thu 5 Nov", pledgeGivenLine(kenya, oct5))
+        // From its first day, the month's progress as before.
+        assertEquals("KSh 0 of KSh 5,000 this month · KSh 0 given in all", pledgeGivenLine(kenya, java.time.LocalDate.of(2026, 11, 5)))
+        // A start next year carries its year.
+        assertEquals("Starts Tue 5 Jan 2027", pledgeGivenLine(kenya.copy(startsOn = "2027-01-05"), oct5))
+    }
 }

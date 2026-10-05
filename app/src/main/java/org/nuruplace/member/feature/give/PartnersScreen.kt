@@ -1341,7 +1341,7 @@ private fun PledgePageHeader(title: String, onBack: () -> Unit) {
 private fun PledgePromiseCard(pl: Pledge, today: LocalDate) {
     Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).padding(18.dp)) {
         Text(pledgeAmountLine(pl, today), style = giSerif(22, FontWeight.Medium), color = GIVE.ink)
-        Text(pledgeGivenLine(pl), style = giInter(12), color = GIVE.ink600, modifier = Modifier.padding(top = 4.dp))
+        Text(pledgeGivenLine(pl, today), style = giInter(12), color = GIVE.ink600, modifier = Modifier.padding(top = 4.dp))
         // A total pledge's pace (Giving Cycle 9), as the server sets it.
         paceLine(pl, today)?.let { line ->
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
