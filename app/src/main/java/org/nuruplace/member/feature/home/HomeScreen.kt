@@ -273,6 +273,11 @@ fun HomeScreen(
     var refreshTick by remember { mutableIntStateOf(0) }
     var refreshing by remember { mutableStateOf(false) }
     var loadedOnce by rememberHeld("Home.loadedOnce") { mutableStateOf(false) }
+    // Nothing Home is about could be read — the journey, the day's rhythm, the
+    // verse, the plans: §4's state card says what happened, in place of a page
+    // of guesses ("No gatherings this week", "Find your cell" for a member in
+    // one) and a shimmer that never ends (EXPERIENCE.md §9.4).
+    var homeFailure by remember { mutableStateOf<org.nuruplace.member.data.net.StateMessage?>(null) }
     LaunchedEffect(refreshTick) {
         // YOUR WEEK's giving and RSVPs, side by side with everything below —
         // they add no wait to the page; the card is drawn once all answer.
@@ -294,7 +299,8 @@ fun HomeScreen(
         streak = runCatching { Net.client.api.achievements() }.getOrElse { streak }
         welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrElse { welcomeVideo }
         scores = runCatching { Net.client.api.scores() }.getOrElse { scores }
-        pathway = runCatching { Net.client.api.pathway() }.getOrElse { pathway }
+        val pathwayRead = runCatching { Net.client.api.pathway() }
+        pathway = pathwayRead.getOrElse { pathway }
         currentTrail = JourneyState.derive(pathway)?.levelNumber
             ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrElse { currentTrail } }
         letter = runCatching { Net.client.api.latestLetter().letter }.getOrElse { letter }
@@ -323,6 +329,9 @@ fun HomeScreen(
         partnership = partnershipRead.await() ?: partnership
         gifts = giftsRead.await() ?: gifts
         rsvps = rsvpsRead.await() ?: rsvps
+        homeFailure = pathwayRead.exceptionOrNull()
+            ?.takeIf { pathway == null && rhythm == null && verse == null && plans == null }
+            ?.let { org.nuruplace.member.data.net.ApiException.state(it, context) }
         refreshing = false
         loadedOnce = true
 
@@ -412,6 +421,7 @@ fun HomeScreen(
             HomeHeader(
                 firstName = me?.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() },
                 level = journey?.levelNumber ?: level,
+                levelUnknown = homeFailure != null,
                 journeyPill = journey?.pill,
                 // Unknown until the scores answer — never a "0" that isn't true.
                 growthScore = scores?.overall?.score,
@@ -457,6 +467,11 @@ fun HomeScreen(
                     HomeSkeleton()
                     // The Scaffold already insets the NavHost by the bottom bar,
                     // so only a breath of air is needed here, not tabBarSpace.
+                    Spacer(Modifier.height(Spacing.base))
+                    return@Column
+                }
+                homeFailure?.let { failed ->
+                    org.nuruplace.member.ui.components.FailedState(failed, onRetry = { refreshing = true; refreshTick++ })
                     Spacer(Modifier.height(Spacing.base))
                     return@Column
                 }
@@ -718,6 +733,9 @@ private fun HomeHeader(
     firstName: String?,
     /** Null until the member is known — a shimmer, never a guess. */
     level: Int?,
+    /** The member couldn't be read: no pill at all, rather than a shimmer
+     *  that never resolves (§9.4). */
+    levelUnknown: Boolean = false,
     /** The journey's pill (§3) — "12 of 20 modules", "Exam ready", … — null until it loads. */
     journeyPill: String?,
     /** The overall growth score, 0–100 — a score, never a percent; null
@@ -803,7 +821,7 @@ private fun HomeHeader(
         // streak is the rhythm card's (§9.2 #3). Until the level is known, a
         // shimmer in its place (B11).
         if (level == null) {
-            org.nuruplace.member.ui.components.SkeletonBlock(height = 26.dp, width = 140.dp, corner = 999.dp)
+            if (!levelUnknown) org.nuruplace.member.ui.components.SkeletonBlock(height = 26.dp, width = 140.dp, corner = 999.dp)
         } else Row(
             Modifier.clip(RoundedCornerShape(999.dp))
                 .background(Nuru.white)

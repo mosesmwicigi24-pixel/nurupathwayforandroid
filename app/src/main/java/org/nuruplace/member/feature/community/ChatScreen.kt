@@ -158,7 +158,9 @@ fun ChatInboxScreen(
     onOpenPrayerRoom: (() -> Unit)? = null,
 ) {
     // Held by the tab (§7.2 #8): Back from a thread finds the same list.
-    AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, heldAs = "Community", load = {
+    // A tab root: its failed state offers Try again, never a "Go back" to
+    // nowhere (as Events; EXPERIENCE.md §9.4).
+    AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, offerBack = false, heldAs = "Community", load = {
         val inbox = Net.client.api.chatInbox()
         val people = runCatching { Net.client.api.chatPeople(null).people }.getOrDefault(emptyList())
         val name = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("")

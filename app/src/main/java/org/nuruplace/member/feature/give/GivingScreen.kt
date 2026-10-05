@@ -99,6 +99,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
+import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.CreateScheduleBody
 import org.nuruplace.member.data.net.CreatedScheduleRes
 import org.nuruplace.member.data.net.GiftFailure
@@ -146,6 +147,10 @@ data class GiveSegmentData(
     /** The member's pledges — fetched only when a schedule collects one, so
      *  its sheet knows a MONTHLY pledge owns its amount and day (Cycle 5). */
     val pledges: List<Pledge> = emptyList(),
+    /** The history has answered at least once. Until it has, "given this
+     *  year" isn't said — never a "KSh 0" that is only a failed read
+     *  (EXPERIENCE.md §9.4). */
+    val historyKnown: Boolean = true,
 )
 
 /**
@@ -157,6 +162,9 @@ data class GiveSegmentData(
  */
 class GiveViewModel : ViewModel() {
     var data by mutableStateOf<GiveSegmentData?>(null); private set
+    /** The first load failed outright — nothing to show yet: §4's state
+     *  card, not a form of guesses ("KSh 0 given this year", no way to pay). */
+    var failure by mutableStateOf<StateMessage?>(null); private set
     private val freshness = GivingFreshness()
     private var seq = 0
 
@@ -198,12 +206,21 @@ class GiveViewModel : ViewModel() {
             }
             if (mine != seq) return@launch
             val shown = data
+            // Nothing shown yet and neither the history nor the rails
+            // answered: say what happened (§4) — it used to open a full form
+            // over "KSh 0 given this year" with no way to pay.
+            if (shown == null && hist.isFailure && methods.isFailure) {
+                failure = ApiException.state(hist.exceptionOrNull()!!)
+                return@launch
+            }
+            failure = null
             data = GiveSegmentData(
                 history = hist.getOrElse { shown?.history ?: emptyList() },
                 schedules = sched.getOrElse { shown?.schedules ?: emptyList() },
                 methods = methods.getOrElse { shown?.methods },
                 phoneOnFile = phoneOnFile.getOrElse { shown?.phoneOnFile },
                 pledges = pledges.getOrElse { shown?.pledges ?: emptyList() },
+                historyKnown = hist.isSuccess || shown?.historyKnown == true,
             )
         }
     }
@@ -253,8 +270,14 @@ fun GivingScreen(
         // First load only — every later refetch keeps the values on screen.
         Column(Modifier.fillMaxSize().background(GIVE.paper)) {
             GiveHeaderBand(segmentControl, yearTotals = null, onOpenStatement = onOpenStatement)
-            Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = GIVE.gold)
+            val failed = vm.failure
+            if (failed != null) {
+                // What really happened, in §4's one state card (§9.4).
+                org.nuruplace.member.ui.components.FailedState(failed, onRetry = { vm.load() }, modifier = Modifier.padding(20.dp))
+            } else {
+                Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = GIVE.gold)
+                }
             }
         }
         return
@@ -264,6 +287,7 @@ fun GivingScreen(
         segmentControl, onUnbind, onRebind, followTransactionId, onFollowed,
         pledges = d.pledges, onOpenPledge = onOpenPledge,
         startedSchedule = startedSchedule, onStartedShown = onStartedShown,
+        historyKnown = d.historyKnown,
     )
 }
 
@@ -552,6 +576,8 @@ private fun GiveTab(
     onOpenPledge: (String) -> Unit = {},
     startedSchedule: StartedSchedule? = null,
     onStartedShown: () -> Unit = {},
+    /** The history has answered — "given this year" only then (§9.4). */
+    historyKnown: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -895,7 +921,10 @@ private fun GiveTab(
     // This Nairobi year's settled giving, per currency — the statement's rule.
     val thisYear = LocalDate.now(java.time.ZoneId.of("Africa/Nairobi")).year
     // The one settled rule (succeeded / settled / completed), as iOS GiveMoney.
+    // Only once the history has answered: never "KSh 0 given this year" from
+    // a read that failed (§9.4).
     val yearTotals = currencySums(history.filter { giftSettled(it.status) && givingYear(it) == thisYear })
+        .takeIf { historyKnown }
 
     // Running, then paused (a paused schedule still stands until it is
     // cancelled) — iOS GiveSchedules.listed.
