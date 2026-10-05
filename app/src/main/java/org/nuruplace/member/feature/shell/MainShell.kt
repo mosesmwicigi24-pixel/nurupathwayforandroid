@@ -154,8 +154,21 @@ private fun tabRouteFor(route: String?): String? = when {
     else -> route
 }
 
-/** Tab-LEVEL routes — the ones the bottom bar shows on. */
-private val TAB_LEVEL_ROUTES = YOU_ALIAS_ROUTES + GIVE_ALIAS_ROUTES + EVENTS_ALIAS_ROUTES
+/** A tab's own top-level pages (its segments): re-tapping the tab there
+ *  leaves them be. */
+private val TAB_SEGMENT_ROUTES = YOU_ALIAS_ROUTES + setOf("partners")
+
+/** The pages inside a tab that are flows or ceremonies — they cover the tab
+ *  bar (the QR scanner, the check-in ceremony); the new pledge and the M-Pesa
+ *  stages cover it themselves (TabBarCover). */
+private val TAB_FLOW_ROUTES = setOf("checkin/{id}", "service-checkin")
+
+/** Tab-LEVEL routes — the ones the bottom bar shows on. One rule for the pages
+ *  inside a tab (Cycle 3 close walk E25): a detail page keeps the tab bar — the
+ *  pledge page had it while the receipt and the statements didn't — and a
+ *  flow or a ceremony covers it. */
+private val TAB_LEVEL_ROUTES = YOU_ALIAS_ROUTES + GIVE_ALIAS_ROUTES + EVENTS_ALIAS_ROUTES +
+    GIVE_SUB_ROUTES + (EVENTS_SUB_ROUTES - TAB_FLOW_ROUTES)
 
 private val BASE_TABS = listOf(
     Tab("home", "Home", Icons.Filled.Home),
@@ -332,7 +345,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                             NavigationBarItem(
                                 selected = isSelected,
                                 onClick = {
-                                    if (!isSelected) {
+                                    // Another tab — or this tab from one of its
+                                    // detail pages (they keep the bar now): back
+                                    // to the tab's own page.
+                                    if (!isSelected || route != tab.route && route !in TAB_SEGMENT_ROUTES) {
                                         org.nuruplace.member.ui.components.Haptics.tick(rootView)
                                         nav.navigate(tab.route) {
                                             popUpTo("home"); launchSingleTop = true
