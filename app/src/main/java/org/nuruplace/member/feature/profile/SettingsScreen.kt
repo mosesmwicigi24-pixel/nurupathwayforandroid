@@ -79,11 +79,11 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ChangePasswordBody
-import org.nuruplace.member.data.net.LocationBody
 import org.nuruplace.member.data.net.MfaCodeBody
 import org.nuruplace.member.data.net.MfaEnrollment
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationPreferences
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 
 /**
@@ -379,27 +379,30 @@ private fun LanguageCard() {
 }
 
 @Composable
-@Suppress("MissingPermission")
 private fun PrivacyCard() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Server first (EXPERIENCE.md §7.4, owner 2026-10-05): the switch shows
+    // what the server holds. It moves once the server has the change; on a
+    // failure it stays as it was and the line under it says why.
+    var saving by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<String?>(null) }
 
-    fun pushFix() {
+    fun change(want: Boolean) {
+        if (saving) return
+        saving = true
+        failure = null
         scope.launch {
-            val client = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
-            val loc = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    com.google.android.gms.tasks.Tasks.await(
-                        client.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_BALANCED_POWER_ACCURACY, null),
-                    )
-                }.getOrNull()
+            when (val r = org.nuruplace.member.feature.shell.LocationSharing.change(context, want)) {
+                is org.nuruplace.member.feature.shell.LocationShareResult.Saved -> AppPrefs.updateShareLocation(r.sharing)
+                is org.nuruplace.member.feature.shell.LocationShareResult.Failed -> failure = r.line
             }
-            if (loc != null) runCatching { Net.client.api.shareLocation(LocationBody(loc.latitude, loc.longitude)) }
+            saving = false
         }
     }
 
     val askPerm = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) { AppPrefs.updateShareLocation(true); pushFix() }
+        if (granted) change(true)
     }
 
     SectionCard {
@@ -409,16 +412,17 @@ private fun PrivacyCard() {
             title = "Share my approximate location",
             subtitle = "Helps you connect with believers near you. Approximate only; you can turn this off anytime.",
             checked = AppPrefs.shareLocation,
+            enabled = !saving,
+            failure = failure,
             onCheckedChange = { want ->
                 if (want) {
                     val granted = androidx.core.content.ContextCompat.checkSelfPermission(
                         context,
                         android.Manifest.permission.ACCESS_COARSE_LOCATION,
                     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    if (granted) { AppPrefs.updateShareLocation(true); pushFix() } else askPerm.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (granted) change(true) else askPerm.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 } else {
-                    AppPrefs.updateShareLocation(false)
-                    scope.launch { runCatching { Net.client.api.stopSharingLocation() } }
+                    change(false)
                 }
             },
         )
@@ -857,23 +861,31 @@ private fun ToggleRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    /** False while the change is on its way to the server. */
+    enabled: Boolean = true,
+    /** Why the last change didn't save (§4's words) — shown under the row. */
+    failure: String? = null,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        tile()
-        Column(Modifier.weight(1f)) {
-            // A control row's title (§8.1 rule 3): Inter 14 medium.
-            Text(title, style = NuruType.controlTitle, color = PROF.navy)
-            Text(subtitle, style = pInter(11), color = PROF.sub)
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            tile()
+            Column(Modifier.weight(1f)) {
+                // A control row's title (§8.1 rule 3): Inter 14 medium.
+                Text(title, style = NuruType.controlTitle, color = PROF.navy)
+                Text(subtitle, style = pInter(11), color = PROF.sub)
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled,
+                colors = SwitchDefaults.colors(checkedTrackColor = PROF.gold, checkedThumbColor = Color.White),
+            )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = PROF.gold, checkedThumbColor = Color.White),
-        )
+        failure?.let { Text(it, style = pInter(12), color = Nuru.danger, modifier = Modifier.padding(bottom = 8.dp)) }
     }
 }
 

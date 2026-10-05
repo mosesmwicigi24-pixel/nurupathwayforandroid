@@ -84,23 +84,27 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
+    // Server first (EXPERIENCE.md §7.4, owner 2026-10-05): the invite closes
+    // once the server has the area. A failure keeps it open, says why above
+    // the button, and the member can try again or choose "Not now".
+    var failure by remember { mutableStateOf<String?>(null) }
 
     fun captureAndShare() {
+        if (working) return
         working = true
+        failure = null
         scope.launch {
-            val client = LocationServices.getFusedLocationProviderClient(context)
-            val loc = withContext(Dispatchers.IO) {
-                runCatching {
-                    @Suppress("MissingPermission")
-                    Tasks.await(client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null))
-                }.getOrNull()
+            when (val r = LocationSharing.change(context, want = true)) {
+                is LocationShareResult.Saved -> {
+                    AppPrefs.updateShareLocation(true)
+                    working = false
+                    onDismiss()
+                }
+                is LocationShareResult.Failed -> {
+                    failure = r.line
+                    working = false
+                }
             }
-            if (loc != null) {
-                runCatching { Net.client.api.shareLocation(LocationBody(loc.latitude, loc.longitude)) }
-                AppPrefs.updateShareLocation(true)
-            }
-            working = false
-            onDismiss()
         }
     }
 
@@ -136,6 +140,10 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
                 style = NuruType.micro, color = Color.White.copy(alpha = 0.55f), textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(20.dp))
+            failure?.let {
+                Text(it, style = NuruType.caption, color = Color(0xFFFCA5A5), textAlign = TextAlign.Center)
+                Spacer(Modifier.height(10.dp))
+            }
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
                     .background(Brush.linearGradient(listOf(InviteGold, Color(0xFFB6862F))))

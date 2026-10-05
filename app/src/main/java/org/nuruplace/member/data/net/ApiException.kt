@@ -40,6 +40,23 @@ object ApiException {
         return state(e, context).sentence
     }
 
+    /**
+     * A write the server did not record (EXPERIENCE.md §7.4, "no success
+     * before the server says so"): "Couldn't save that." and why, in §4's
+     * words — the line that sits above the button that tried, while the
+     * member's entry stays where it was. iOS NuruStateCopy.saveFailureLine.
+     */
+    fun saveFailureLine(e: Throwable, context: Context? = null): String =
+        failureLine(SAVE_FAILED, e, context)
+
+    /** [lead] and §4's sentence for why: "Couldn't send that. You're
+     *  offline. Connect to the internet, then try again." */
+    fun failureLine(lead: String, e: Throwable, context: Context? = null): String =
+        "$lead ${state(e, context).sentence}"
+
+    const val SAVE_FAILED = "Couldn't save that."
+    const val SEND_FAILED = "Couldn't send that."
+
     /** The phone's own network state: from [context] when given, else from
      *  the app's HTTP stack; null when neither can say (a JVM test). */
     private fun deviceOnline(context: Context?): Boolean? =
