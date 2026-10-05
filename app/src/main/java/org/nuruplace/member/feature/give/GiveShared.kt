@@ -107,7 +107,9 @@ data class GiveMethod(
 )
 
 val GIVE_METHODS = listOf(
-    GiveMethod("mpesa", "Pay with M-Pesa", "STK push to your phone", Color(0xFF16A34A), Color.White, "M-PESA", null, "mpesa"),
+    // "STK push" is the provider's word, not the member's (§8.1 rule 8;
+    // Cycle 3 close walk E7) — the card below already says "prompt".
+    GiveMethod("mpesa", "Pay with M-Pesa", "A prompt on your phone", Color(0xFF16A34A), Color.White, "M-PESA", null, "mpesa"),
     GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", Color(0xFFDC2626), Color.White, "AIRTEL", null, "airtel"),
     GiveMethod("card", "Pay with Card", "Visa · Mastercard", Color(0xFFEEF2FF), Color(0xFF6366F1), null, Icons.Filled.CreditCard, "card"),
     GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", Color(0xFFE8F1FB), Color(0xFF0070BA), "PP", null, "paypal"),
