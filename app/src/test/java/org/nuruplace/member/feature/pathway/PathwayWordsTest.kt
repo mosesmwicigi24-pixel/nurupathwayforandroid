@@ -87,3 +87,40 @@ class FootprintsWordsTest {
         org.junit.Assert.assertEquals("Cara", joinNames(listOf("Cara")))
     }
 }
+
+/** Map view speaks the journey's words (Cycle 3 close walk E4/E5, as iOS):
+ *  never "CONTINUE YOUR JOURNEY" over a level whose modules are done, never
+ *  "Complete Level 1" for a level that is. */
+class LevelsMapWordsTest {
+    private val one = PathwayLevel(levelNumber = 1, title = "Foundations of Faith", status = LevelStatus.ACTIVE, totalModules = 10, completedModules = 10)
+    private fun journey(stage: JourneyStage, level: Int = 1) = Journey(
+        stage = stage, levelNumber = level, levelTitle = "Foundations of Faith", levelPosition = level, levelCount = 6,
+        completedModules = 10, totalModules = 10, pill = "", kicker = "Exam ready · Level $level",
+        next = JourneyStep("Take the Level $level exam", "Every module is done — the exam is next.", null), progress = 0.1,
+    )
+
+    @Test fun `a finished level's card is the journey's next step`() {
+        val card = LevelsMapWords.continueCard(one, journey(JourneyStage.EXAM_READY))
+        assertEquals("Take the Level 1 exam", card.title)
+        assertEquals("EXAM READY · LEVEL 1", card.kicker)
+        assertEquals("Every module is done — the exam is next.", card.line)
+        assertFalse(card.kicker.contains("CONTINUE"))
+    }
+
+    @Test fun `while modules remain, the card continues`() {
+        val card = LevelsMapWords.continueCard(one, journey(JourneyStage.LEARNING))
+        assertEquals(LevelsMapWords.Card("CONTINUE YOUR JOURNEY", "Level 1: Foundations of Faith", null), card)
+        // Another level than the journey's: the plain card.
+        assertEquals("CONTINUE YOUR JOURNEY", LevelsMapWords.continueCard(one, journey(JourneyStage.EXAM_READY, level = 2)).kicker)
+    }
+
+    @Test fun `a locked level names the step before it`() {
+        val ready = journey(JourneyStage.EXAM_READY)
+        assertEquals("Pass the Level 1 exam — then your leader opens Level 2", LevelsMapWords.lockLine(2, ready))
+        assertEquals("Complete Level 2 to unlock", LevelsMapWords.lockLine(3, ready))
+        assertEquals("Complete Level 1 to unlock", LevelsMapWords.lockLine(2, journey(JourneyStage.LEARNING)))
+        assertEquals("The Level 1 exam opens soon — then your leader opens Level 2", LevelsMapWords.lockLine(2, journey(JourneyStage.EXAM_SOON)))
+        assertEquals("Your leader will open Level 2 — you'll get a notice", LevelsMapWords.lockLine(2, journey(JourneyStage.AWAITING_USHER)))
+        assertEquals("Complete Level 1 to unlock", LevelsMapWords.lockLine(2, null))
+    }
+}

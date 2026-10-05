@@ -62,10 +62,10 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
         // The journey in levels (docs/EXPERIENCE.md §3), the same number the
         // hub's ring shows — never a share of published modules (20 of 20
         // read 100% at Level 1 of 6).
-        val pct = JourneyState.derive(summary)?.percent ?: 0
+        val journey = JourneyState.derive(summary)
+        val pct = journey?.percent ?: 0
         val levelsDone = levels.count { it.status == LevelStatus.COMPLETED }
         val active = levels.firstOrNull { it.status == LevelStatus.ACTIVE }
-        val firstName = me?.profile?.fullName?.substringBefore(' ')
 
         LazyColumn(
             Modifier.fillMaxWidth().background(Nuru.paper),
@@ -79,7 +79,9 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                 ) {
                     Text("‹  Pathway", style = NuruType.cardCta, color = Nuru.navy, modifier = Modifier.clickable { onBack() })
                     Spacer(Modifier.height(Spacing.md))
-                    Kicker(if (firstName != null) "Welcome back, $firstName" else "Welcome back")
+                    // A pushed page: back · kicker · title (§8.1 rule 2) — the
+                    // greeting ("WELCOME BACK, ADA") belongs to Home alone.
+                    Kicker("Pathway · Map")
                     Spacer(Modifier.height(Spacing.md))
                     Row(verticalAlignment = Alignment.Bottom) {
                         Column(Modifier.weight(1f)) {
@@ -97,7 +99,8 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         StatCard("Levels", "$levelsDone/${levels.size}", Modifier.weight(1f))
                         StatCard("Modules", "$doneModules/$totalModules", Modifier.weight(1f))
-                        StatCard("Offline", "Ready", Modifier.weight(1f))
+                        // "Offline · Ready" was jargon about the app, not the
+                        // member's journey (§8.1 rule 8) — gone.
                     }
                 }
             }
@@ -105,7 +108,7 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
             // Continue-your-journey card for the active level.
             active?.let { lvl ->
                 item {
-                    ContinueCard(lvl, Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.base)) { onOpenLevel(lvl.levelNumber) }
+                    ContinueCard(lvl, LevelsMapWords.continueCard(lvl, journey), Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.base)) { onOpenLevel(lvl.levelNumber) }
                 }
             }
 
@@ -122,6 +125,7 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                 LevelCard(
                     level = level,
                     currentLevel = summary.currentLevel,
+                    journey = journey,
                     onOpen = { onOpenLevel(level.levelNumber) },
                     modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.sm),
                 )
@@ -166,8 +170,9 @@ private fun ProgressRing(pct: Int) {
 }
 
 @Composable
-private fun ContinueCard(level: PathwayLevel, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val pct = if (level.lessonCount > 0) level.lessonsDone.toFloat() / level.lessonCount else 0f
+private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    // The journey's next step fills the bar: its modules are all done.
+    val pct = if (words.line != null) 1f else if (level.lessonCount > 0) level.lessonsDone.toFloat() / level.lessonCount else 0f
     Row(
         modifier.fillMaxWidth()
             .clip(RoundedCornerShape(Radii.hero))
@@ -182,9 +187,13 @@ private fun ContinueCard(level: PathwayLevel, modifier: Modifier = Modifier, onO
         }
         Spacer(Modifier.size(Spacing.base))
         Column(Modifier.weight(1f)) {
-            Kicker("Continue your journey")
+            Kicker(words.kicker)
             Spacer(Modifier.height(Spacing.xs))
-            Text("Level ${level.levelNumber}: ${level.title}", style = NuruType.cardTitle, color = Nuru.ink, maxLines = 2)
+            Text(words.title, style = NuruType.cardTitle, color = Nuru.ink, maxLines = 2)
+            words.line?.let {
+                Spacer(Modifier.height(Spacing.xs))
+                Text(it, style = NuruType.caption, color = Nuru.ink600)
+            }
             Spacer(Modifier.height(Spacing.sm))
             ProgressBar(pct)
         }
@@ -194,12 +203,10 @@ private fun ContinueCard(level: PathwayLevel, modifier: Modifier = Modifier, onO
 }
 
 @Composable
-private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val locked = LevelGating.isLevelLocked(level.levelNumber, currentLevel, level.status)
     val done = level.status == LevelStatus.COMPLETED
     val active = level.status == LevelStatus.ACTIVE
-    // Exam passed, waiting on the usher — the journey's own pill (§3).
-    val passed = level.isAwaitingReview
 
     Row(
         modifier.fillMaxWidth()
@@ -225,7 +232,15 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Kicker("Level ${level.levelNumber}", modifier = Modifier.weight(1f))
-                StatusPill(if (done) "Complete" else if (passed) "Exam passed" else if (active) "Active" else "Locked", done || passed, active)
+                // The level page's own words (levelBadge, B3) — "Active" here,
+                // "IN PROGRESS" there and "Exam ready" on Pathway were three
+                // words for one state.
+                val badge = levelBadge(level.levelNumber, level, journey)
+                StatusPill(
+                    if (locked) "Locked" else badge.text.lowercase().replaceFirstChar { it.uppercase() },
+                    done = !locked && badge.tone == LevelBadge.Tone.ACHIEVED,
+                    active = !locked && badge.tone != LevelBadge.Tone.ACHIEVED && (active || journey?.levelNumber == level.levelNumber),
+                )
             }
             Spacer(Modifier.height(Spacing.xs))
             Text(level.title, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Medium, maxLines = 2)
@@ -235,7 +250,7 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.size(Spacing.xs))
-                    Text(LevelGating.lockedLevelLabel(currentLevel), style = NuruType.caption, color = Nuru.ink400)
+                    Text(LevelsMapWords.lockLine(level.levelNumber, journey), style = NuruType.caption, color = Nuru.ink400)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {

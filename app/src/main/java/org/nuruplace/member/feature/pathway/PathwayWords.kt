@@ -80,3 +80,34 @@ fun levelBadge(levelNumber: Int, level: PathwayLevel?, journey: Journey?): Level
         else -> LevelBadge("UP NEXT", LevelBadge.Tone.QUIET)
     }
 }
+
+/**
+ * Map view speaks the journey's words (Cycle 3 close walk E4/E5; iOS
+ * LevelsMapWords): it said "CONTINUE YOUR JOURNEY · Level 1" and "Complete
+ * Level 1 to unlock" while Level 1's every module was done and its exam was
+ * next.
+ */
+object LevelsMapWords {
+    data class Card(val kicker: String, val title: String, val line: String?)
+
+    /** The continue card for the member's level: the journey's next step once
+     *  the modules are done; "continue" only while there are modules to walk. */
+    fun continueCard(level: PathwayLevel, journey: Journey?): Card {
+        if (journey == null || journey.levelNumber != level.levelNumber || journey.stage == JourneyStage.LEARNING) {
+            return Card("CONTINUE YOUR JOURNEY", "Level ${level.levelNumber}: ${level.title}", null)
+        }
+        return Card(journey.kicker.uppercase(), journey.next.title, journey.next.line.takeIf { it.isNotBlank() })
+    }
+
+    /** What opens a locked level: the step before it, in the journey's words. */
+    fun lockLine(levelNumber: Int, journey: Journey?): String {
+        val prev = levelNumber - 1
+        if (journey == null || journey.levelNumber != prev) return "Complete Level $prev to unlock"
+        return when (journey.stage) {
+            JourneyStage.LEARNING -> "Complete Level $prev to unlock"
+            JourneyStage.EXAM_READY -> "Pass the Level $prev exam — then your leader opens Level $levelNumber"
+            JourneyStage.EXAM_SOON -> "The Level $prev exam opens soon — then your leader opens Level $levelNumber"
+            JourneyStage.AWAITING_USHER, JourneyStage.FINISHED -> "Your leader will open Level $levelNumber — you'll get a notice"
+        }
+    }
+}
