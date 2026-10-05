@@ -169,11 +169,12 @@ fun EventsScreen(
                         )
                     }
                     // The counts only when there is something to count — a quiet
-                    // week's header line already says it.
-                    if (!quiet) {
+                    // week's header line already says it, and a chip never
+                    // reads "0 you're going" (EXPERIENCE.md §7.4 #9).
+                    if (!quiet && (thisWeek > 0 || going > 0)) {
                         Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            HeaderPill("$thisWeek this week", Icons.Filled.CalendarMonth)
-                            HeaderPill("$going you're going", Icons.Filled.Check)
+                            if (thisWeek > 0) HeaderPill("$thisWeek this week", Icons.Filled.CalendarMonth)
+                            if (going > 0) HeaderPill("$going you're going", Icons.Filled.Check)
                         }
                     }
                 }

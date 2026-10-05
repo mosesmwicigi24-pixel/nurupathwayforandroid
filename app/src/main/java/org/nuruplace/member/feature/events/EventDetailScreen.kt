@@ -1,5 +1,5 @@
 // Event detail — port of iOS EventDetailView. Hero + meta card + about + roster +
-// RSVP + "Who's coming" buzz feed + live check-in. Uses the shared `EV` palette /
+// RSVP + "The wall" buzz feed + live check-in. Uses the shared `EV` palette /
 // primitives from EventsShared.kt (same package, no import). Server-authoritative
 // data via MemberApi; RSVP is an offline-queued write, buzz posts/reactions go
 // straight through. The hero shows the full image un-cropped (height follows the
@@ -327,7 +327,8 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
 @Composable
 private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
     val accent = evCategory(e.category)
-    val peopleLabel = (e.rsvpCounts.going ?: 0).let { if (it == 1) "1 person" else "$it people" }
+    val going = e.rsvpCounts.going ?: 0
+    val peopleLabel = if (going == 1) "1 person" else "$going people"
     Column(
         Modifier
             .fillMaxWidth()
@@ -360,7 +361,9 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
                     ),
                     Icons.Filled.Place, "WHERE", e.location ?: "—", accent,
                 )
-                MetaTile(Modifier.weight(1f), Icons.Filled.Person, "GOING", peopleLabel, accent)
+                // No zero counts (EXPERIENCE.md §7.4 #9): nobody going yet
+                // leaves WHERE the row — the RSVP card below asks.
+                if (going > 0) MetaTile(Modifier.weight(1f), Icons.Filled.Person, "GOING", peopleLabel, accent)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -584,7 +587,7 @@ private fun RsvpOption(
     }
 }
 
-// ── Buzz card ("Who's coming") ────────────────────────────────────────────────
+// ── Buzz card ("The wall") ────────────────────────────────────────────────────
 
 @Composable
 private fun BuzzCard(eventId: String) {
@@ -663,7 +666,9 @@ private fun BuzzCard(eventId: String) {
                 }
             }
 
-            // Header
+            // Header — "The wall" (it was "Who's coming", beside the roster's
+            // "Who's going"), and "Buzzing" only when someone has posted
+            // (EXPERIENCE.md §7.4 #9): an empty wall isn't buzzing.
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -671,21 +676,23 @@ private fun BuzzCard(eventId: String) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Filled.Group, null, tint = EV.overline, modifier = Modifier.size(12.dp))
-                    EVOverline("Who's coming")
+                    EVOverline("The wall")
                 }
-                Box(
-                    Modifier
-                        .clip(Capsule)
-                        .background(EV.buzzing)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(Modifier.size(6.dp).clip(Capsule).background(Color.White))
-                        Text(
-                            if (posts.isEmpty()) "Buzzing" else "Buzzing · ${posts.size}",
-                            style = evInter(10, FontWeight.Bold),
-                            color = Color.White,
-                        )
+                if (posts.isNotEmpty()) {
+                    Box(
+                        Modifier
+                            .clip(Capsule)
+                            .background(EV.buzzing)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(Modifier.size(6.dp).clip(Capsule).background(Color.White))
+                            Text(
+                                "Buzzing · ${posts.size}",
+                                style = evInter(10, FontWeight.Bold),
+                                color = Color.White,
+                            )
+                        }
                     }
                 }
             }
@@ -881,7 +888,9 @@ private fun ReactChip(emoji: String, count: Int, on: Boolean, onClick: () -> Uni
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(emoji, fontSize = 12.sp)
-        Text(count.toString(), style = evInter(10, FontWeight.Bold), color = if (on) EV.goldDeep else EV.secondary)
+        // The chip is the way to react; its count only once there is one
+        // (no zero chips, EXPERIENCE.md §7.4 #9).
+        if (count > 0) Text(count.toString(), style = evInter(10, FontWeight.Bold), color = if (on) EV.goldDeep else EV.secondary)
     }
 }
 
