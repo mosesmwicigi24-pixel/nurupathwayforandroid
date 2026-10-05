@@ -60,7 +60,6 @@ import org.nuruplace.member.feature.grow.GrowHubScreen
 import org.nuruplace.member.feature.grow.MemoryVerseScreen
 import org.nuruplace.member.feature.grow.PlanDayScreen
 import org.nuruplace.member.feature.grow.PlanDetailScreen
-import org.nuruplace.member.feature.grow.PlanSegmentScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
 import org.nuruplace.member.feature.community.ChatThreadScreen
@@ -508,15 +507,6 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         nav.popBackStack("plans", inclusive = false)
                     }
                 }
-            }
-            composable(
-                "plan/{id}/day/{n}/seg/{i}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }, navArgument("i") { type = NavType.IntType }),
-            ) { entry ->
-                val id = entry.arguments?.getString("id") ?: ""
-                val n = entry.arguments?.getInt("n") ?: 1
-                val i = entry.arguments?.getInt("i") ?: 0
-                PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
             }
             composable("discipleship") {
                 org.nuruplace.member.feature.discipleship.DiscipleshipHubScreen(
