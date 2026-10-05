@@ -203,7 +203,7 @@ fun EventsScreen(
                         // forward — the strip filters that tab; on Upcoming
                         // a date tap would change nothing (§7.4 #6, as iOS).
                         Text(
-                            "TODAY", style = evInter(10, FontWeight.Bold, 1f), color = EV.navy,
+                            "TODAY", style = evInter(11, FontWeight.Bold, 1f), color = EV.navy,
                             modifier = Modifier.clickable { selectedDay = today; segment = EVENTS_TAB_TODAY },
                         )
                     }
@@ -231,7 +231,7 @@ fun EventsScreen(
                             ) {
                                 Text(
                                     date.format(DateTimeFormatter.ofPattern("EEEEE", Locale.ENGLISH)).uppercase(),
-                                    style = evInter(9, FontWeight.SemiBold, 0.8f),
+                                    style = evInter(11, FontWeight.SemiBold, 0.8f),
                                     color = if (selected) Color.White.copy(alpha = 0.65f) else EV.tertiary,
                                 )
                                 Text(
@@ -269,7 +269,7 @@ fun EventsScreen(
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("CALENDAR", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
+                                Text("CALENDAR", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.goldLight)
                                 Text("All events & calendar", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
                                 Text(
                                     org.nuruplace.member.util.ZeroCounts.join("See the whole month at a glance", org.nuruplace.member.util.ZeroCounts.count(upcoming, "upcoming", "upcoming")),
@@ -300,7 +300,7 @@ fun EventsScreen(
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Filled.QrCodeScanner, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("CHURCH ATTENDANCE", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
+                                Text("CHURCH ATTENDANCE", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.goldLight)
                                 Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
                                 Text(
                                     "Scan the QR at church · see your streak",
@@ -520,7 +520,7 @@ fun EventsScreen(
                                     )
                                 }
                                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(relTime(a.sentAt), style = evInter(9), color = EV.tertiary)
+                                    Text(relTime(a.sentAt), style = evInter(11), color = EV.tertiary)
                                     if (!a.opened) Box(Modifier.size(6.dp).clip(CircleShape).background(EV.gold))
                                 }
                             }
@@ -596,7 +596,7 @@ private fun HeaderPill(text: String, icon: androidx.compose.ui.graphics.vector.I
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Icon(icon, null, tint = EV.gold, modifier = Modifier.size(11.dp))
-        Text(text, style = evInter(10, FontWeight.Bold), color = EV.secondary)
+        Text(text, style = evInter(11, FontWeight.Bold), color = EV.secondary)
     }
 }
 
@@ -615,7 +615,7 @@ private fun SegmentPill(label: String, count: Int, on: Boolean, modifier: Modifi
             Box(
                 Modifier.clip(Capsule).background(if (on) EV.gold else EV.tile).padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
-                Text(count.toString(), style = evInter(9, FontWeight.Bold), color = EV.navy)
+                Text(count.toString(), style = evInter(11, FontWeight.Bold), color = EV.navy)
             }
         }
     }
@@ -696,7 +696,7 @@ private fun SeriesRail(
                                 Modifier.clip(Capsule).background(EV.gold.copy(alpha = 0.15f))
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                             ) {
-                                Text("${s.newCount} new", style = evInter(8, FontWeight.Bold), color = EV.chipText)
+                                Text("${s.newCount} new", style = evInter(11, FontWeight.Bold), color = EV.chipText)
                             }
                         }
                     }

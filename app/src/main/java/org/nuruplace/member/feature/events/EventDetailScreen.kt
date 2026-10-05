@@ -297,7 +297,7 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                                 .clip(Capsule)
                                 .background(evCategory(c).copy(alpha = 0.9f))
                                 .padding(horizontal = 8.dp, vertical = 2.dp),
-                        ) { Text(c.uppercase(), style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White) }
+                        ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1.4f), color = Color.White) }
                     }
                     if (isEventLive(e.occursAt)) {
                         Box(
@@ -311,12 +311,12 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Box(Modifier.size(4.dp).clip(Capsule).background(Color.White))
-                                Text("LIVE", style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White)
+                                Text("LIVE", style = evInter(11, FontWeight.Bold, 1.4f), color = Color.White)
                             }
                         }
                     }
                 }
-                Text(e.title, style = evSerif(24, FontWeight.SemiBold, -0.72f), color = Color.White)
+                Text(e.title, style = evSerif(26, FontWeight.SemiBold, -0.72f), color = Color.White)
             }
         }
     }
@@ -392,7 +392,7 @@ private fun MetaTile(modifier: Modifier, icon: ImageVector, label: String, value
             contentAlignment = Alignment.Center,
         ) { Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp)) }
         Column {
-            Text(label, style = evInter(9, FontWeight.Bold, 1.3f), color = EV.tertiary)
+            Text(label, style = evInter(11, FontWeight.Bold, 1.3f), color = EV.tertiary)
             Text(value, style = evInter(11, FontWeight.SemiBold), color = EV.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -521,7 +521,7 @@ private fun RosterCard(attendees: List<EventAttendee>) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         a.fullName.substringBefore(' '),
-                        style = evInter(10, FontWeight.SemiBold),
+                        style = evInter(11, FontWeight.SemiBold),
                         color = EV.body,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -689,7 +689,7 @@ private fun BuzzCard(eventId: String) {
                             Box(Modifier.size(6.dp).clip(Capsule).background(Color.White))
                             Text(
                                 "Buzzing · ${posts.size}",
-                                style = evInter(10, FontWeight.Bold),
+                                style = evInter(11, FontWeight.Bold),
                                 color = Color.White,
                             )
                         }
@@ -849,7 +849,7 @@ private fun PostRow(p: EventPost, onReact: (String) -> Unit) {
                             .clip(Capsule)
                             .background(EV.going.copy(alpha = 0.12f))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) { Text("GOING", style = evInter(8, FontWeight.Bold, 1f), color = EV.goingText) }
+                    ) { Text("GOING", style = evInter(11, FontWeight.Bold, 1f), color = EV.goingText) }
                 }
             }
             p.body?.let { Text(it, style = evInter(13), color = EV.body) }
@@ -890,7 +890,7 @@ private fun ReactChip(emoji: String, count: Int, on: Boolean, onClick: () -> Uni
         Text(emoji, fontSize = 12.sp)
         // The chip is the way to react; its count only once there is one
         // (no zero chips, EXPERIENCE.md §7.4 #9).
-        if (count > 0) Text(count.toString(), style = evInter(10, FontWeight.Bold), color = if (on) EV.goldDeep else EV.secondary)
+        if (count > 0) Text(count.toString(), style = evInter(11, FontWeight.Bold), color = if (on) EV.goldDeep else EV.secondary)
     }
 }
 

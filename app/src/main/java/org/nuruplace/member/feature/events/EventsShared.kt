@@ -193,9 +193,9 @@ fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> 
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(EV.white)
                         .border(1.dp, EV.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
-                ) { Text(eyebrow.uppercase(), style = evInter(9, FontWeight.Bold, 1.5f), color = EV.eyebrowGold) }
+                ) { Text(eyebrow.uppercase(), style = evInter(11, FontWeight.Bold, 1.4f), color = EV.eyebrowGold) }
             }
-            Text(title, style = evSerif(27, FontWeight.SemiBold), color = EV.navy, modifier = Modifier.padding(top = 16.dp))
+            Text(title, style = evSerif(26, FontWeight.SemiBold), color = EV.navy, modifier = Modifier.padding(top = 16.dp))
             if (subtitle.isNotBlank()) Text(subtitle, style = evInter(12), color = EV.secondary, modifier = Modifier.padding(top = 6.dp))
             Box(
                 Modifier.padding(top = 12.dp).width(48.dp).height(3.dp).clip(RoundedCornerShape(2.dp))
@@ -231,8 +231,8 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(evWeekdayShort(occ.startAt), style = evInter(8, FontWeight.Bold, 0.8f), color = accent)
-                Text(evDayNum(occ.startAt), style = evSerif(17, FontWeight.SemiBold), color = EV.navy)
+                Text(evWeekdayShort(occ.startAt), style = evInter(11, FontWeight.Bold, 0.8f), color = accent)
+                Text(evDayNum(occ.startAt), style = evSerif(18, FontWeight.SemiBold), color = EV.navy)
             }
             // Countdown chip (bottom-start)
             val cd = evCountdown(occ.startAt)
@@ -247,7 +247,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Icon(Icons.Filled.Schedule, null, tint = if (urgent) EV.navy else EV.white, modifier = Modifier.size(10.dp))
-                    Text(cd, style = evInter(8, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
+                    Text(cd, style = evInter(11, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
                 }
             }
             // Rescheduled pill (top-end) — wire truth: a moved occurrence arrives
@@ -259,7 +259,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Modifier.align(Alignment.TopEnd).padding(12.dp)
                         .clip(RoundedCornerShape(999.dp)).background(EV.goldTile)
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) { Text("RESCHEDULED", style = evInter(8, FontWeight.Bold, 1f), color = EV.navy) }
+                ) { Text("RESCHEDULED", style = evInter(11, FontWeight.Bold, 1f), color = EV.navy) }
             }
             // Category tag (bottom-end)
             occ.category?.takeIf { it.isNotBlank() }?.let { c ->
@@ -267,7 +267,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp)
                         .clip(RoundedCornerShape(999.dp)).background(accent.copy(alpha = 0.9f))
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) { Text(c.uppercase(), style = evInter(8, FontWeight.Bold, 1f), color = EV.white) }
+                ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1f), color = EV.white) }
             }
         }
         // Body

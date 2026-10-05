@@ -121,7 +121,7 @@ private fun AllEventsCalendarBody(
                             selectedDate = null
                         }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) { Text("TODAY", style = evInter(9, FontWeight.Bold, 1f), color = EV.overline) }
+                ) { Text("TODAY", style = evInter(11, FontWeight.Bold, 1f), color = EV.overline) }
                 Spacer(Modifier.size(8.dp))
                 NavButton(Icons.Filled.ChevronLeft) { visibleMonth = visibleMonth.minusMonths(1) }
                 Spacer(Modifier.size(8.dp))
@@ -132,7 +132,7 @@ private fun AllEventsCalendarBody(
             Row(Modifier.fillMaxWidth()) {
                 listOf("S", "M", "T", "W", "T", "F", "S").forEach { d ->
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(d, style = evInter(9, FontWeight.Bold, 0.8f), color = EV.ink300)
+                        Text(d, style = evInter(11, FontWeight.Bold, 0.8f), color = EV.ink300)
                     }
                 }
             }
@@ -179,7 +179,7 @@ private fun AllEventsCalendarBody(
                         Box(Modifier.size(6.dp).clip(CircleShape).background(evCategory(cat)))
                         Text(
                             cat.replaceFirstChar { c -> c.uppercase() },
-                            style = evInter(10, FontWeight.Medium),
+                            style = evInter(11, FontWeight.Medium),
                             color = EV.secondary,
                         )
                     }
@@ -200,11 +200,11 @@ private fun AllEventsCalendarBody(
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (selectedDate != null) selectedDate!!.format(monthDayFmt).uppercase() else "UPCOMING",
-                style = evInter(10, FontWeight.Bold, 1.5f),
+                style = evInter(11, FontWeight.Bold, 1.4f),
                 color = EV.overline,
             )
             Spacer(Modifier.weight(1f))
-            org.nuruplace.member.util.ZeroCounts.count(listCount, "event", "events")?.let { Text(it, style = evInter(10, FontWeight.SemiBold), color = EV.tertiary) }
+            org.nuruplace.member.util.ZeroCounts.count(listCount, "event", "events")?.let { Text(it, style = evInter(11, FontWeight.SemiBold), color = EV.tertiary) }
         }
 
         // ── List ────────────────────────────────────────────────────────────
