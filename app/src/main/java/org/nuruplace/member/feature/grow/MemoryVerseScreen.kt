@@ -33,10 +33,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,12 +50,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.MemoryVerseRow
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PracticeBody
@@ -101,6 +106,7 @@ private fun ScoreBreakdown.frac(key: String, fallback: Double): Double {
 @Composable
 fun MemoryVerseScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var practicing by remember { mutableStateOf<MemoryVerseRow?>(null) }
 
     AsyncContent(
@@ -150,20 +156,39 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
         }
 
         // ---- Practice sheet ----
+        // "Save practice" waits for the server (EXPERIENCE.md §7.4 #2: no
+        // success before the server): the sheet stays with progress on the
+        // button and closes on the ack (then the list reloads); a failure stays
+        // and says why above the button. It used to close first and drop any
+        // failure, so a practice that never saved looked saved.
         practicing?.let { v ->
-            ModalBottomSheet(onDismissRequest = { practicing = null }) {
+            var saving by remember(v.memoryVerseId) { mutableStateOf(false) }
+            var saveError by remember(v.memoryVerseId) { mutableStateOf<String?>(null) }
+            // Not dismissed mid-save: the outcome would have nowhere to show.
+            val sheetState = rememberModalBottomSheetState(confirmValueChange = { it != SheetValue.Hidden || !saving })
+            ModalBottomSheet(onDismissRequest = { if (!saving) practicing = null }, sheetState = sheetState) {
                 PracticeSheet(
                     v = v,
-                    onClose = { practicing = null },
+                    saving = saving,
+                    error = saveError,
+                    onClose = { if (!saving) practicing = null },
                     onSave = { pct ->
-                        scope.launch {
-                            try {
-                                Net.client.api.practiceVerse(PracticeBody(v.memoryVerseId, pct))
-                                reload()
-                            } catch (_: Exception) {
+                        if (!saving) {
+                            saving = true
+                            saveError = null
+                            scope.launch {
+                                val r = runCatching { Net.client.api.practiceVerse(PracticeBody(v.memoryVerseId, pct)) }
+                                val failure = r.exceptionOrNull()
+                                if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
+                                saving = false
+                                if (failure == null) {
+                                    practicing = null
+                                    reload()
+                                } else {
+                                    saveError = "Couldn't save that. ${ApiException.state(failure, context).sentence}"
+                                }
                             }
                         }
-                        practicing = null
                     },
                 )
             }
@@ -348,7 +373,7 @@ private fun Chip(text: String, bg: Color, fg: Color) {
 }
 
 @Composable
-private fun PracticeSheet(v: MemoryVerseRow, onClose: () -> Unit, onSave: (Int) -> Unit) {
+private fun PracticeSheet(v: MemoryVerseRow, saving: Boolean, error: String?, onClose: () -> Unit, onSave: (Int) -> Unit) {
     var attempt by remember { mutableStateOf("") }
     val pct = matchPct(v.verseText, attempt)
 
@@ -395,12 +420,15 @@ private fun PracticeSheet(v: MemoryVerseRow, onClose: () -> Unit, onSave: (Int) 
             color = if (pct >= 90) GrowPal.successText else GrowPal.ink600,
         )
 
+        // Why the last save did not land (§4) — above the button that retries.
+        error?.let { Text(it, style = gInter(12), color = Color(0xFFB91C1C)) }
         Box(
             Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(14.dp)).background(GrowPal.goldGrad)
-                .clickable { onSave(pct) },
+                .clickable(enabled = !saving) { onSave(pct) },
             contentAlignment = Alignment.Center,
         ) {
-            Text("Save practice", style = gInter(15, FontWeight.SemiBold), color = Color.White)
+            if (saving) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+            else Text("Save practice", style = gInter(15, FontWeight.SemiBold), color = Color.White)
         }
     }
 }
