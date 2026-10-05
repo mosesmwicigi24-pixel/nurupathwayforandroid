@@ -193,7 +193,8 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
 
     fun like(p: TalkPost) {
         scope.launch {
-            runCatching { Net.client.api.talkLike(p.postId) }.getOrNull()?.let { r ->
+            // An encouragement the server didn't take says so (§7.4).
+            org.nuruplace.member.ui.components.noticeOnFailure(context, lead = "Couldn't send that encouragement.") { Net.client.api.talkLike(p.postId) }?.let { r ->
                 val i = posts.indexOfFirst { it.postId == p.postId }
                 if (i >= 0) posts[i] = posts[i].copy(liked = r.liked, likeCount = r.likeCount)
             }

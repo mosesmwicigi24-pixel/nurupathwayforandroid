@@ -160,6 +160,7 @@ private fun BandRow(
 ) {
     val hasRecording = !row.audioUrl.isNullOrBlank()
     val scope = rememberCoroutineScope()
+    val rowContext = androidx.compose.ui.platform.LocalContext.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(Nuru.tintBlue.copy(alpha = if (expanded) 1f else 0.55f))
@@ -186,8 +187,10 @@ private fun BandRow(
                         .border(1.dp, Nuru.border, CircleShape)
                         .clickable {
                             scope.launch {
-                                runCatching { Net.client.api.deleteLiturgyRecording(row.band) }
-                                onDeleted()
+                                // Gone only once the server says so (§7.4).
+                                org.nuruplace.member.ui.components.noticeOnFailure(rowContext, lead = "Couldn't delete that recording.") {
+                                    Net.client.api.deleteLiturgyRecording(row.band)
+                                }?.let { onDeleted() }
                             }
                         },
                     contentAlignment = Alignment.Center,
@@ -225,6 +228,7 @@ private fun BandRow(
 private fun BandRecorder(band: String, onSaved: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val uploadContext = androidx.compose.ui.platform.LocalContext.current
     val recorder = remember { VoiceRecorder() }
     var attached by remember { mutableStateOf<File?>(null) }
     var attachedDur by remember { mutableStateOf(0) }
@@ -302,13 +306,15 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                                     if (f == null) return@clickable
                                     uploading = true
                                     scope.launch {
-                                        val ok = runCatching {
+                                        // The take stays until the server has it; a failure says so (§7.4).
+                                        val ok = org.nuruplace.member.ui.components.noticeOnFailure(uploadContext, lead = "Couldn't save that recording.") {
                                             val filePart = MultipartBody.Part.createFormData(
                                                 "file", f.name, f.asRequestBody("audio/mp4".toMediaTypeOrNull()),
                                             )
                                             val durationPart = attachedDur.toString().toRequestBody("text/plain".toMediaTypeOrNull())
                                             Net.client.api.uploadLiturgyRecording(band, filePart, durationPart)
-                                        }.isSuccess
+                                            true
+                                        } == true
                                         uploading = false
                                         if (ok) {
                                             f.delete()

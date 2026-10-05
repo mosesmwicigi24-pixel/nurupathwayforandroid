@@ -453,6 +453,7 @@ private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int
 @Composable
 fun CelebrationsRail() {
     val scope = rememberCoroutineScope()
+    val blessContext = androidx.compose.ui.platform.LocalContext.current
     // Held by the destination, like the liturgy card (§7.2 #8).
     var moments by rememberHeld("CelebrationsRail.moments") { mutableStateOf<List<CommunityMoment>>(emptyList()) }
     LaunchedEffect(Unit) {
@@ -469,7 +470,9 @@ fun CelebrationsRail() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             moments.forEach { m ->
                 MomentCard(m) { kind ->
-                    // Optimistic: move my blessing to the tapped kind.
+                    // Optimistic: move my blessing to the tapped kind — and back,
+                    // with a word, if the server didn't take it (§7.4).
+                    val before = moments
                     moments = moments.map { cur ->
                         if (cur.momentId != m.momentId) cur
                         else {
@@ -479,7 +482,11 @@ fun CelebrationsRail() {
                             cur.copy(amenCount = a, heartCount = h, fireCount = f, myBlessing = kind)
                         }
                     }
-                    scope.launch { runCatching { Net.client.api.blessMoment(m.momentId, BlessBody(kind)) } }
+                    scope.launch {
+                        org.nuruplace.member.ui.components.noticeOnFailure(blessContext, lead = "Couldn't send that blessing.", onFailure = { moments = before }) {
+                            Net.client.api.blessMoment(m.momentId, BlessBody(kind))
+                        }
+                    }
                 }
             }
         }

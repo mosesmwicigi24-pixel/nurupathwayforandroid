@@ -769,6 +769,8 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
     var comments by remember(now?.id) { mutableStateOf<List<RadioComment>>(emptyList()) }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var commentError by remember { mutableStateOf<String?>(null) }
+    val radioContext = androidx.compose.ui.platform.LocalContext.current
 
     // Reconcile the growing counter with the REAL server total whenever a
     // POST /react response updates the counts (only ever grows).
@@ -803,9 +805,9 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                             org.nuruplace.member.ui.components.Haptics.tap(view)
                             fx.tap(emoji)
                             scope.launch {
-                                runCatching {
-                                    counts = Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
-                                }
+                                org.nuruplace.member.ui.components.noticeOnFailure(radioContext, lead = "Couldn't send that.") {
+                                    Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
+                                }?.let { counts = it }
                             }
                         },
                     contentAlignment = Alignment.Center,
@@ -830,7 +832,8 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                 Spacer(Modifier.height(8.dp))
             }
 
-            // Composer.
+            // Composer — a comment that didn't send stays in it, with why.
+            commentError?.let { Text(it, style = gInter(12), color = Color(0xFFFCA5A5), modifier = Modifier.padding(top = 8.dp)) }
             Row(
                 Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -872,7 +875,12 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                                     Net.client.api.addRadioComment(id, RadioCommentBody(draft.trim(), java.util.UUID.randomUUID().toString()))
                                 }.onSuccess {
                                     draft = ""
+                                    commentError = null
                                     runCatching { comments = Net.client.api.radioComments(id) }
+                                }.onFailure {
+                                    // Kept in the field, with why (§7.4, §4).
+                                    if (it is kotlin.coroutines.cancellation.CancellationException) throw it
+                                    commentError = org.nuruplace.member.data.net.ApiException.failureLine(org.nuruplace.member.data.net.ApiException.SEND_FAILED, it, radioContext)
                                 }
                                 busy = false
                             }

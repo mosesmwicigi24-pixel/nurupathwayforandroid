@@ -225,6 +225,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     DisposableEffect(Unit) { onDispose { InboxUnread.refreshSoon() } }
     AsyncContent(load = { Net.client.api.notifications() }) { res: NotificationsRes, reload ->
         val scope = rememberCoroutineScope()
+        val inboxContext = androidx.compose.ui.platform.LocalContext.current
         // The notification opened in the read-and-continue popup (unroutable ones).
         var popup by remember { mutableStateOf<NotificationRow?>(null) }
         // Optimistic read overrides — the page answers the tap INSTANTLY (the old
@@ -245,7 +246,10 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
             if (isUnread(n)) {
                 locallyRead = locallyRead + n.notificationId
                 scope.launch {
+                    // Not marked on the server: it reads unread again, so the
+                    // bell's dot keeps telling the truth (§7.1 rule 8).
                     runCatching { Net.client.api.markNotificationsRead(MarkReadBody(listOf(n.notificationId))) }
+                        .onFailure { if (it !is kotlin.coroutines.cancellation.CancellationException) locallyRead = locallyRead - n.notificationId }
                     InboxUnread.refresh()
                 }
             }
@@ -274,7 +278,10 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                                 locallyRead = locallyRead + res.data.map { it.notificationId }
                                 markedAll = true
                                 scope.launch {
-                                    runCatching { Net.client.api.markNotificationsRead(MarkReadBody(null)) }
+                                    org.nuruplace.member.ui.components.noticeOnFailure(
+                                        inboxContext, lead = "Couldn't mark them read.",
+                                        onFailure = { markedAll = false; locallyRead = emptySet() },
+                                    ) { Net.client.api.markNotificationsRead(MarkReadBody(null)) }
                                     InboxUnread.refresh()
                                     reload()
                                 }
