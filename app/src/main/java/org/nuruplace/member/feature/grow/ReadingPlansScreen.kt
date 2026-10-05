@@ -414,6 +414,8 @@ private fun StreakStrip(view: StreakView) {
             Column(Modifier.weight(1f)) {
                 // Never cut (EXPERIENCE.md §8.2 #5, §8.1 rule 9): both lines wrap
                 // at any text size — iOS adopts these words ("0 days wi…" was cut).
+                // The words take the card's width: beside the seven week dots
+                // they had about a third of it and broke over three lines.
                 Text(
                     "$count-day streak",
                     style = plInter(14, FontWeight.Bold, -0.14f),
@@ -425,9 +427,13 @@ private fun StreakStrip(view: StreakView) {
                     color = PL.ink2,
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (i in 0 until 7) WeekDot(label = WEEK[i], done = isDone(i), today = i == todayIdx)
+        }
+        // The week has its own row, spread across the card (as iOS).
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            for (i in 0 until 7) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    WeekDot(label = WEEK[i], done = isDone(i), today = i == todayIdx)
+                }
             }
         }
         // Progress bar + gift chip
