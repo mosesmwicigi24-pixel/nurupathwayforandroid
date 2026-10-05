@@ -67,7 +67,8 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 
-private val AiOrb = Brush.radialGradient(listOf(Color(0xFFC4B5FD), Color(0xFF7C3AED), Color(0xFF2A1259)))
+// The AI's mark: gold with navy, like Quick help (§8.1 rule 1) — it was purple.
+private val AiOrb = Nuru.goldGradient
 
 @Composable
 fun PrayerPointsScreen() {
@@ -123,7 +124,7 @@ private fun ConsentGateCard(busy: Boolean, failed: String?, enable: () -> Unit) 
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(26.dp).clip(CircleShape).background(AiOrb), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(13.dp))
             }
             Spacer(Modifier.width(8.dp))
             Text("NURU INTELLIGENCE", style = NuruType.sectionLabel, color = Nuru.eyebrow)
@@ -205,10 +206,10 @@ private fun AssistComposerCard() {
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp))
-                    else Icon(Icons.Filled.AutoAwesome, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    if (busy) CircularProgressIndicator(color = Nuru.navy, modifier = Modifier.size(14.dp))
+                    else Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(13.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (busy) "Drafting…" else "Draft with Nuru", style = NuruType.cardCta.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                    Text(if (busy) "Drafting…" else "Draft with Nuru", style = NuruType.cardCta.copy(fontWeight = FontWeight.Bold), color = Nuru.navy)
                 }
             }
         }
