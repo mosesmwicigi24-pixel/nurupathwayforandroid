@@ -36,18 +36,39 @@ object RadioReminder {
 
     fun isSet(programId: String): Boolean = AppPrefs.isRadioReminderSet(programId)
 
-    /** Toggle the reminder for [program]; returns the new on/off state. A
-     *  program with no [RadioProgram.scheduledAt] can't be scheduled — the
-     *  caller (RemindMeCTA-equivalent) only shows the CTA when it's present. */
+    /** When a reminder for [program] would fire: its start, if readable and
+     *  still ahead of [now]; null when it can't be reminded (no time, an
+     *  unreadable one, or a start already past — that used to fire "Nuru
+     *  Radio is live" a second after the tap). */
+    fun remindAt(program: RadioProgram, now: Instant = Instant.now()): Instant? =
+        parseScheduledAt(program.scheduledAt)?.takeIf { it.isAfter(now) }
+
+    /** The next program a reminder can be set for — the soonest readable
+     *  future start. It sorted by the raw text, so a program with no time
+     *  sorted first and got the button. */
+    fun nextRemindable(programs: List<RadioProgram>, now: Instant = Instant.now()): RadioProgram? =
+        programs.filter { it.status == "scheduled" }
+            .mapNotNull { p -> remindAt(p, now)?.let { p to it } }
+            .minByOrNull { it.second }?.first
+
+    /** Toggle the reminder for [program]; returns the new on/off state. It is
+     *  marked on only once the phone has actually scheduled it (EXPERIENCE.md
+     *  §7.4: no success before it is true) — it used to be marked on even when
+     *  nothing was scheduled. */
     fun toggle(context: Context, program: RadioProgram): Boolean {
-        val on = !isSet(program.id)
-        if (on) schedule(context, program) else cancel(context, program.id)
-        AppPrefs.setRadioReminder(program.id, on)
-        return on
+        if (isSet(program.id)) {
+            cancel(context, program.id)
+            AppPrefs.setRadioReminder(program.id, false)
+            return false
+        }
+        val scheduled = schedule(context, program)
+        AppPrefs.setRadioReminder(program.id, scheduled)
+        return scheduled
     }
 
-    private fun schedule(context: Context, program: RadioProgram) {
-        val at = parseScheduledAt(program.scheduledAt) ?: return
+    /** Schedules the reminder; false when there is nothing to schedule. */
+    private fun schedule(context: Context, program: RadioProgram): Boolean {
+        val at = remindAt(program) ?: return false
         val delayMs = (at.toEpochMilli() - System.currentTimeMillis()).coerceAtLeast(1_000L)
         ensureChannel(context)
         val request = OneTimeWorkRequestBuilder<RadioReminderWorker>()
@@ -57,6 +78,7 @@ object RadioReminder {
             .addTag(WORK_PREFIX + program.id)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(WORK_PREFIX + program.id, ExistingWorkPolicy.REPLACE, request)
+        return true
     }
 
     private fun cancel(context: Context, programId: String) {

@@ -368,7 +368,8 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             val now = nowPlaying ?: programs.firstOrNull { it.live } ?: programs.firstOrNull()
             // The next scheduled program (soonest scheduledAt) — drives both the
             // off-air "Remind me" CTA and the header bell (iOS vm.nextScheduled).
-            val nextScheduled = programs.filter { it.status == "scheduled" }.minByOrNull { it.scheduledAt ?: "" }
+            // Only one a reminder can actually be set for: a readable future start.
+            val nextScheduled = RadioReminder.nextRemindable(programs)
             var reminderOn by remember(nextScheduled?.id) {
                 mutableStateOf(nextScheduled?.let { RadioReminder.isSet(it.id) } ?: false)
             }

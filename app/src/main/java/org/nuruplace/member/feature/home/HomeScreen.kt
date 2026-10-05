@@ -197,6 +197,9 @@ fun HomeScreen(
     var personalWord by rememberHeld("Home.personalWord") { mutableStateOf<String?>(null) }
     var verseReactions by rememberHeld("Home.verseReactions") { mutableStateOf<VerseReactions?>(null) }
     var verseSaved by rememberHeld("Home.verseSaved") { mutableStateOf(false) }
+    // A save in flight — one tap, one saved verse (each tap minted a new id).
+    var verseSaving by remember { mutableStateOf(false) }
+    val homeView = androidx.compose.ui.platform.LocalView.current
     var featuredEvent by rememberHeld("Home.featuredEvent") { mutableStateOf<FeaturedEvent?>(null) }
     // The member's journey (docs/EXPERIENCE.md §3): the pathway summary and
     // the current level's trail — one truth for the pill, the continue card
@@ -493,19 +496,34 @@ fun HomeScreen(
                                         .onFailure { verseReactions = previous }
                                 }
                             },
+                            // "Saved" and the success haptic on the server's
+                            // ack; a failure is felt and the button stays
+                            // "Save" (EXPERIENCE.md §7.4: no success before the
+                            // server; iOS the same). It dropped failures silently.
                             onSave = {
-                                if (!verseSaved) scope.launch {
-                                    runCatching {
-                                        Net.client.api.saveVerse(
-                                            VerseUpsertBody(
-                                                savedVerseId = java.util.UUID.randomUUID().toString(),
-                                                reference = v.reference,
-                                                version = v.version,
-                                                verseText = v.text,
-                                                clientMutationId = java.util.UUID.randomUUID().toString(),
-                                            ),
-                                        )
-                                    }.onSuccess { verseSaved = true }
+                                if (!verseSaved && !verseSaving) {
+                                    verseSaving = true
+                                    scope.launch {
+                                        val r = runCatching {
+                                            Net.client.api.saveVerse(
+                                                VerseUpsertBody(
+                                                    savedVerseId = java.util.UUID.randomUUID().toString(),
+                                                    reference = v.reference,
+                                                    version = v.version,
+                                                    verseText = v.text,
+                                                    clientMutationId = java.util.UUID.randomUUID().toString(),
+                                                ),
+                                            )
+                                        }
+                                        r.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+                                        verseSaving = false
+                                        if (r.isSuccess) {
+                                            verseSaved = true
+                                            org.nuruplace.member.ui.components.Haptics.confirm(homeView)
+                                        } else {
+                                            org.nuruplace.member.ui.components.Haptics.reject(homeView)
+                                        }
+                                    }
                                 }
                             },
                             onShare = {
