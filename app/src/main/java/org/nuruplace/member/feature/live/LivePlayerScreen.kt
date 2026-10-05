@@ -123,6 +123,7 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LiveGuestRespondBody
 import org.nuruplace.member.data.net.LiveHandBody
 import org.nuruplace.member.data.net.LiveMessageRow
@@ -130,6 +131,7 @@ import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.LiveReactionBody
 import org.nuruplace.member.data.net.LiveSendMessageBody
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.webrtc.SurfaceViewRenderer
@@ -364,7 +366,9 @@ fun LivePlayerScreen(
         }
         if (!reduceMotion) particles.spawn(reactionEmoji(emoji))
         if (streamId != null) {
-            scope.launch { runCatching { Net.client.api.postLiveReaction(streamId, LiveReactionBody(emoji)) } }
+            // The count and the hearts fly at once; a reaction the server didn't
+            // record says so (§7.4) and the next pulse sets the count right.
+            scope.launch { noticeOnFailure(context) { Net.client.api.postLiveReaction(streamId, LiveReactionBody(emoji)) } }
         }
     }
 
@@ -374,7 +378,9 @@ fun LivePlayerScreen(
         handOverride = next
         if (streamId != null) {
             scope.launch {
-                runCatching { Net.client.api.postLiveHand(streamId, LiveHandBody(next)) }
+                noticeOnFailure(context, lead = if (next) "Couldn't raise your hand." else "Couldn't lower your hand.") {
+                    Net.client.api.postLiveHand(streamId, LiveHandBody(next))
+                }
                 handOverride = null // let the next pulse reconcile the authoritative state
             }
         }
@@ -448,7 +454,7 @@ fun LivePlayerScreen(
         guestStageState = GuestStageState.Idle
         scope.launch { runCatching { whipPublisher.stop() } }
         if (leaveServerSide && streamId != null && myUserId != null) {
-            scope.launch { runCatching { Net.client.api.deleteLiveGuest(streamId, myUserId) } }
+            scope.launch { noticeOnFailure(context, lead = "Couldn't leave the stage.") { Net.client.api.deleteLiveGuest(streamId, myUserId) } }
         }
     }
 
@@ -591,11 +597,19 @@ fun LivePlayerScreen(
                     // phone at once (LiveInviteNotifications).
                     onAccept = {
                         LiveInviteNotifications.cancel(context, streamId)
-                        scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } }
+                        scope.launch {
+                            noticeOnFailure(context, lead = "Couldn't accept the invitation.") {
+                                Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true))
+                            }
+                        }
                     },
                     onDecline = {
                         LiveInviteNotifications.cancel(context, streamId)
-                        scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } }
+                        scope.launch {
+                            noticeOnFailure(context, lead = "Couldn't decline the invitation.") {
+                                Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false))
+                            }
+                        }
                     },
                 )
                 when (val s = guestStageState) {
@@ -667,10 +681,12 @@ fun LivePlayerScreen(
                         body = body,
                         sentAt = java.time.Instant.now().toString(),
                     )
-                    scope.launch {
-                        runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
-                            .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
-                        pendingMessages = pendingMessages.filterNot { it.messageId == localId }
+                    val sent = runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
+                        .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
+                    pendingMessages = pendingMessages.filterNot { it.messageId == localId }
+                    sent.exceptionOrNull()?.let { e ->
+                        if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+                        ApiException.failureLine(ApiException.SEND_FAILED, e, context)
                     }
                 },
             )

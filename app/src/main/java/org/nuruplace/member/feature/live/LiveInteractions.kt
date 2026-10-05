@@ -43,6 +43,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.LiveGuestRow
 import org.nuruplace.member.data.net.LiveHandRow
 import org.nuruplace.member.data.net.LiveMessageRow
@@ -313,12 +315,18 @@ fun clampDragOffset(offset: Offset, containerSize: Size, elementSize: Size): Off
 fun LiveFloatingChat(
     visible: Boolean,
     messages: List<LiveMessageRow>,
-    onSend: (String) -> Unit,
+    /** Sends one message; null once the server has it, else why it didn't
+     *  go (§4's words). */
+    onSend: suspend (String) -> String?,
     modifier: Modifier = Modifier,
     bottomMargin: Dp = 170.dp,
 ) {
     if (!visible) return
     val density = LocalDensity.current
+    val sendScope = rememberCoroutineScope()
+    // A message that didn't go comes back into the field, with why under it
+    // (EXPERIENCE.md §7.4) — it used to be cleared on the tap and lost.
+    var sendError by remember { mutableStateOf<String?>(null) }
     var collapsed by remember { mutableStateOf(false) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var panelOffset by remember { mutableStateOf<Offset?>(null) }
@@ -445,10 +453,26 @@ fun LiveFloatingChat(
                     Spacer(Modifier.width(6.dp))
                     Icon(
                         Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Nuru.gold,
-                        modifier = Modifier.size(16.dp).clickable {
+                        modifier = Modifier.size(18.dp).clickable {
                             val body = draft.trim()
-                            if (body.isNotEmpty()) { onSend(body); draft = "" }
+                            if (body.isNotEmpty()) {
+                                draft = ""
+                                sendError = null
+                                sendScope.launch {
+                                    val failure = onSend(body)
+                                    if (failure != null) {
+                                        if (draft.isBlank()) draft = body
+                                        sendError = failure
+                                    }
+                                }
+                            }
                         },
+                    )
+                }
+                sendError?.let {
+                    Text(
+                        it, style = NuruType.micro, color = Color(0xFFFCA5A5),
+                        modifier = Modifier.padding(horizontal = 10.dp).padding(bottom = 6.dp),
                     )
                 }
             }

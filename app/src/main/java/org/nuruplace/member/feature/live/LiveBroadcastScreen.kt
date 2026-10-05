@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LiveMessageRow
 import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.LiveSendMessageBody
@@ -548,10 +549,12 @@ fun LiveBroadcastScreen(
             visible = showChatSheet,
             messages = chatMessages,
             onSend = { body ->
-                scope.launch {
-                    runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
-                        .onSuccess { chatMessages = (chatMessages + it).takeLast(60); chatCursor = it.sentAt }
-                }
+                runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
+                    .onSuccess { chatMessages = (chatMessages + it).takeLast(60); chatCursor = it.sentAt }
+                    .exceptionOrNull()?.let { e ->
+                        if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+                        ApiException.failureLine(ApiException.SEND_FAILED, e, context)
+                    }
             },
         )
 
@@ -770,6 +773,8 @@ private fun SummaryView(
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    val deleteContext = androidx.compose.ui.platform.LocalContext.current
 
     Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(Spacing.lg)) {
@@ -820,19 +825,32 @@ private fun SummaryView(
 
     if (showDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false }, // dismissing keeps the recording, per spec
+            // Open until the server has deleted it (§7.4): a failure stays here
+            // and says why — it used to close first and report nothing.
+            onDismissRequest = { if (!deleting) { showDeleteConfirm = false; deleteError = null } },
             title = { Text("Delete “${title.ifBlank { "Nuru Live" }}”?", style = NuruType.cardTitle, color = Nuru.navy) },
-            text = { Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600)
+                    deleteError?.let { Text(it, style = NuruType.body, color = Nuru.danger) }
+                }
+            },
             confirmButton = {
                 Text(
-                    "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable {
-                        showDeleteConfirm = false
+                    if (deleting) "Deleting…" else "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable(enabled = !deleting) {
                         deleting = true
+                        deleteError = null
                         scope.launch {
-                            runCatching { Net.client.api.deleteLiveRecording(streamId) }
+                            val failure = runCatching { Net.client.api.deleteLiveRecording(streamId) }.exceptionOrNull()
+                            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
                             deleting = false
-                            onDone()
+                            if (failure == null) {
+                                showDeleteConfirm = false
+                                onDone()
+                            } else {
+                                deleteError = ApiException.failureLine("Couldn't delete it.", failure, deleteContext)
+                            }
                         }
                     }.padding(Spacing.sm),
                 )
@@ -840,7 +858,7 @@ private fun SummaryView(
             dismissButton = {
                 Text(
                     "Cancel", style = NuruType.cardCta, color = Nuru.ink600,
-                    modifier = Modifier.clickable { showDeleteConfirm = false }.padding(Spacing.sm),
+                    modifier = Modifier.clickable(enabled = !deleting) { showDeleteConfirm = false; deleteError = null }.padding(Spacing.sm),
                 )
             },
         )

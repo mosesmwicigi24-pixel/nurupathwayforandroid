@@ -52,6 +52,7 @@ import org.nuruplace.member.data.net.LiveHandRow
 import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.minutesSince
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
@@ -100,12 +101,13 @@ fun LiveHandsGuestsSheet(
     val hands = (pulse?.hands ?: emptyList()).filter { it.userId !in dismissedHandIds }
     val guests = (pulse?.guests ?: emptyList()).filter { it.isActive }
     val atGuestCap = guests.size >= MAX_GUESTS
+    val guestContext = androidx.compose.ui.platform.LocalContext.current
 
     fun invite(userId: String) {
         if (actioningUserId != null) return
         actioningUserId = userId
         scope.launch {
-            runCatching { Net.client.api.postLiveGuestInvite(streamId, userId) }
+            noticeOnFailure(guestContext, lead = "Couldn't invite them to the stage.") { Net.client.api.postLiveGuestInvite(streamId, userId) }
             onRefreshPulse()
             actioningUserId = null
         }
@@ -115,7 +117,7 @@ fun LiveHandsGuestsSheet(
         if (actioningUserId != null) return
         actioningUserId = userId
         scope.launch {
-            runCatching { Net.client.api.deleteLiveGuest(streamId, userId) }
+            noticeOnFailure(guestContext, lead = "Couldn't take them off the stage.") { Net.client.api.deleteLiveGuest(streamId, userId) }
             onRefreshPulse()
             actioningUserId = null
         }
