@@ -79,11 +79,24 @@ class EventsHeaderTest {
     }
 }
 
-class UpcomingSeriesTest {
-    @org.junit.Test fun `a series with no next gathering has ended and is not offered`() {
-        val live = org.nuruplace.member.data.net.EventSeries(seriesId = "a", title = "Sunday Service", nextAt = "2026-10-11T06:00:00Z")
-        val ended = org.nuruplace.member.data.net.EventSeries(seriesId = "b", title = "Pathway Discipleship Classes", nextAt = null)
-        org.junit.Assert.assertEquals(listOf("a"), upcomingSeries(listOf(live, ended)).map { it.seriesId })
+/** §9.2 #11 — which series are offered is the server's call (repeating only;
+ *  never an ended one unless the member follows it). The app adds no filter
+ *  of its own: it used to drop every series without `next_at`, which hid a
+ *  followed series that had ended (the server keeps it so it can be
+ *  unfollowed; iOS shows it) and a series meeting beyond `next_at`'s 45 days. */
+class SeriesRailsTest {
+    private fun s(id: String, following: Boolean, nextAt: String?) =
+        org.nuruplace.member.data.net.EventSeries(seriesId = id, title = id, following = following, nextAt = nextAt)
+
+    @org.junit.Test fun `the rails hold the server's list, split by following`() {
+        val sunday = s("Sunday Service", following = false, nextAt = "2026-10-11T06:00:00Z")
+        // Followed, and ended 6 Sep — the server sends it so it can be unfollowed.
+        val endedFollowed = s("Pathway Discipleship Classes", following = true, nextAt = null)
+        // Meets again, but beyond next_at's 45-day window — not ended.
+        val quarterly = s("Quarterly Prayer Day", following = false, nextAt = null)
+        val (followed, more) = seriesRails(listOf(endedFollowed, sunday, quarterly))
+        org.junit.Assert.assertEquals(listOf("Pathway Discipleship Classes"), followed.map { it.seriesId })
+        org.junit.Assert.assertEquals(listOf("Sunday Service", "Quarterly Prayer Day"), more.map { it.seriesId })
     }
 }
 

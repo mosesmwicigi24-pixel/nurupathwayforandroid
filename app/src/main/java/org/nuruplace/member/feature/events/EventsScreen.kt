@@ -437,10 +437,10 @@ fun EventsScreen(
                 // ── SERIES YOU FOLLOW · MORE SERIES ───────────────────────────
                 // "Series you follow" holds only what the member follows; the
                 // rest sit under "More series", each with + Follow (§7.4 #7).
-                // A series with no next gathering has ended: no row, no Follow
-                // (Cycle 3's closing walk — five finished series offered
-                // "Follow" beside "Every Sunday · 2:00 PM").
-                val (followed, more) = splitByFollowing(upcomingSeries(series)) { it.following }
+                // Which series are offered is the server's call: repeating
+                // series that meet again, plus any the member follows, to
+                // unfollow (§9.2 #11).
+                val (followed, more) = seriesRails(series)
                 // A follow the server didn't take says so (§7.4) — it was silent.
                 val toggleFollow: (EventSeries) -> Unit = { s ->
                     scope.launch {

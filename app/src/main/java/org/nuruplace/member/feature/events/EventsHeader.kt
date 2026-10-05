@@ -81,7 +81,13 @@ internal fun seriesLine(cadence: String, nextTime: String?): String {
 internal fun <T> splitByFollowing(series: List<T>, following: (T) -> Boolean): Pair<List<T>, List<T>> =
     series.partition(following)
 
-/** The series that will meet again — the server's `next_at` says when; one
- *  without it has ended and is not offered (Cycle 3's closing walk). */
-internal fun upcomingSeries(series: List<org.nuruplace.member.data.net.EventSeries>): List<org.nuruplace.member.data.net.EventSeries> =
-    series.filter { !it.nextAt.isNullOrBlank() }
+/** Events' two series rails, from the server's list as it comes: the server
+ *  offers only a repeating series that meets again, and keeps one the member
+ *  follows so it can be unfollowed (EXPERIENCE.md §9.2 #11). No second filter
+ *  here: `next_at` looks 45 days ahead, so a missing one is not "ended" — a
+ *  series meeting further out is still offered, and a followed one that has
+ *  ended stays under "Series you follow" to unfollow (as on iOS). */
+internal fun seriesRails(
+    series: List<org.nuruplace.member.data.net.EventSeries>,
+): Pair<List<org.nuruplace.member.data.net.EventSeries>, List<org.nuruplace.member.data.net.EventSeries>> =
+    splitByFollowing(series) { it.following }
