@@ -1616,7 +1616,7 @@ private fun PromptNumberSheet(
     val onFile = kenyanMobileE164(phoneOnFile)
     // Called wrong only once a whole number's worth is typed, not mid-way.
     val wrong = number == null && text.count { it.isDigit() } >= 9
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("$methodLabel number", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy)

@@ -36,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Call
@@ -503,7 +504,13 @@ private fun EditFieldSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = PROF.white) {
+    // Open to its content, never half-way (the keyboard used to drop it to
+    // the half state), with a visible way out (Cycle 3's closing walk: "Save"
+    // was the only control; the other sheets have ✕).
+    ModalBottomSheet(
+        onDismissRequest = onDismiss, containerColor = PROF.white,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -512,7 +519,15 @@ private fun EditFieldSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(field.title, style = pSerif(18, FontWeight.SemiBold), color = PROF.navy)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(field.title, style = pSerif(18, FontWeight.SemiBold), color = PROF.navy, modifier = Modifier.weight(1f))
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape).background(PROF.surface).clickable { onDismiss() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = PROF.navy, modifier = Modifier.size(18.dp))
+                }
+            }
             field.helper?.let { helper ->
                 Text(helper, style = pInter(11), color = PROF.sub)
             }

@@ -1016,7 +1016,7 @@ private fun EditPledgeSheet(
     val patch = pledgeEditPatch(pl, amountMinor.takeIf { it > 0 }, if (monthly) dueDay else null, pledgeEditTitlePatch(pl, name))
     val canSave = patch != null && amountMinor > 0 && nameValid && !busy
     val label = giInter(11, FontWeight.SemiBold, 1.6f)
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1309,7 +1309,7 @@ private fun PledgePage(
     // "I paid another way" — its form in a sheet over the page; the claim
     // joins PAID ANOTHER WAY the moment the office has it.
     if (claiming) {
-        ModalBottomSheet(onDismissRequest = { claiming = false }, containerColor = Nuru.paper) {
+        ModalBottomSheet(onDismissRequest = { claiming = false }, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
                 ClaimForm(
                     pl = pl,

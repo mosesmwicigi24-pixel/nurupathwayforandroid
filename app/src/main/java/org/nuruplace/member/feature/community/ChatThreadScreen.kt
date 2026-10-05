@@ -790,7 +790,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Edit sheet — prefilled with the current body; PATCH on save ----
         editingMessage?.let { m ->
-            ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }) {
+            ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
                     Text("Edit message", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
                     Spacer(Modifier.height(12.dp))

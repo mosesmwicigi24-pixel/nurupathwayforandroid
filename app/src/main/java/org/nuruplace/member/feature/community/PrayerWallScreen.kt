@@ -356,7 +356,7 @@ private fun AnsweredChip() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         val context = LocalContext.current
         var title by remember { mutableStateOf("") }
         var body by remember { mutableStateOf("") }

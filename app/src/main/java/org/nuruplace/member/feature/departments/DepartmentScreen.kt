@@ -425,7 +425,7 @@ private fun PostComposerSheet(busy: Boolean, onDismiss: () -> Unit, onPost: (bod
     val url = imageUrl.trim()
     val urlOk = url.isBlank() || url.startsWith("http://") || url.startsWith("https://")
     val valid = trimmedBody.isNotEmpty() && trimmedBody.length <= 2000 && urlOk
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Write a post", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
             Text("Members of this department are notified.", style = NuruType.caption, color = Nuru.ink600)
@@ -524,7 +524,7 @@ private fun NeedSheet(busy: Boolean, onDismiss: () -> Unit, onSubmit: (Departmen
     val amountMajor = amountText.filter { it.isDigit() }.take(8).toIntOrNull() ?: 0
     val deadlineOk = deadline.isBlank() || runCatching { LocalDate.parse(deadline.trim()) }.isSuccess
     val valid = title.trim().length in 3..120 && why.trim().length in 10..1500 && amountMajor in 1..50_000_000 && deadlineOk
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
