@@ -1679,7 +1679,7 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(Icons.Filled.CalendarMonth, null, tint = GIVE.gold, modifier = Modifier.size(18.dp))
-                Text(paidOn.format(CLAIM_PICKED_DAY), style = giInter(14), color = Nuru.ink)
+                Text(org.nuruplace.member.util.NuruDates.day(paidOn), style = giInter(14), color = Nuru.ink)
             }
             Text("Today, or any day in the last year.", style = giInter(12), color = Nuru.ink400)
         }
@@ -1755,7 +1755,6 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
 }
 
 /** The day picked on the claim form: "Monday, 28 September 2026". */
-private val CLAIM_PICKED_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.ENGLISH)
 
 /** "Charge me automatically" could not be set up when the pledge was made
  *  (Giving Cycle 5): the pledge stands, and the server's words say why —
@@ -1968,14 +1967,20 @@ private fun PartnerNotice(title: String, message: String, action: Pair<String, (
 internal object PartnerFormat {
     val MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
     private val MONTH_YEAR = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
-    private val DAY_MONTH = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
-    private val DAY_MONTH_YEAR = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
     fun monthYear(iso: String): String? = partnerDate(iso)?.format(MONTH_YEAR)
 
-    fun dayMonth(d: LocalDate): String = d.format(DAY_MONTH)
+    /** "Thu 5 Nov" — the one date form (§8.1 rule 8); it read "5 Nov" here
+     *  and "Mon 12 Oct" a card away. The caller adds the year when it isn't
+     *  this year, via [dayMonthYear]. */
+    fun dayMonth(d: LocalDate): String = org.nuruplace.member.util.NuruDates.day(d, withYear = false)
 
-    fun dayMonthYear(iso: String): String = partnerDate(iso)?.format(DAY_MONTH_YEAR) ?: iso.take(10)
+    /** "Thu 5 Nov 2026". */
+    fun dayMonthYear(d: LocalDate): String = org.nuruplace.member.util.NuruDates.day(d, withYear = true)
+
+    /** "Thu 5 Nov 2026" from a value the server sent; null when it can't be
+     *  read — never the raw text (it fell back to "2026-11-05"). */
+    fun dayMonthYear(iso: String): String? = partnerDate(iso)?.let(::dayMonthYear)
 
     fun grouped(n: Int): String = NumberFormat.getIntegerInstance(Locale.US).format(n)
 }

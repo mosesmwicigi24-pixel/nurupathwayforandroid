@@ -392,7 +392,7 @@ internal fun ScheduleSheet(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text("Resume on", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.weight(1f))
-                            Text(resumeDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)), style = giInter(14, FontWeight.SemiBold), color = GIVE.gold)
+                            Text(org.nuruplace.member.util.NuruDates.day(resumeDate), style = giInter(14, FontWeight.SemiBold), color = GIVE.gold)
                         }
                         Text(pauseComesBackLine(resumeDate), style = giInter(11), color = GIVE.tertiary)
                     }

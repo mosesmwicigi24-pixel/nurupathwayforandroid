@@ -303,7 +303,6 @@ internal const val PLEDGE_CUSTOM_NAME_ERROR = "A custom name is 2–60 character
  *  them as it makes the pledge. */
 internal const val PLEDGE_JOINS_NOTE = "Creating this also joins you to the Partners programme."
 
-private val REVIEW_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH)
 
 /** The review, row by row: Shape · Each month / Total · For · Due day / By ·
  *  Collected, and — collected automatically — First collection. `autoRail`
@@ -321,7 +320,7 @@ internal fun pledgeReviewRows(
     add("Shape" to if (monthly) "Monthly" else "A total, by a date")
     add((if (monthly) "Each month" else "Total") to kshMajor(amountMajor))
     add("For" to forName)
-    add(if (monthly) "Due day" to "The ${ordinal(dueDay)} of each month" else "By" to (dueOn?.format(REVIEW_DATE) ?: "—"))
+    add(if (monthly) "Due day" to "The ${ordinal(dueDay)} of each month" else "By" to (dueOn?.let { org.nuruplace.member.util.NuruDates.day(it, withYear = true) } ?: "—"))
     add("Collected" to if (auto) "Automatically · $autoRail" else "By you, with Pay now")
     if (auto) add("First collection" to firstCollection)
 }

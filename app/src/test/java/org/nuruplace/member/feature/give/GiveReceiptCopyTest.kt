@@ -92,9 +92,10 @@ class GiveReceiptCopyTest {
 
     @Test
     fun `receipt is dated by settled_at, else created_at, in Nairobi`() {
-        assertEquals("Fri 25 Sep 2026 · 8:11 PM", receiptWhen(base))
-        assertEquals("Fri 25 Sep 2026 · 7:40 PM", receiptWhen(base.copy(settledAt = null)))
-        assertEquals("Fri 25 Sep 2026 · 7:40 PM", receiptWhen(base.copy(settledAt = "")))
+        assertEquals("Fri 25 Sep · 8:11 PM", receiptWhen(base, java.time.LocalDate.of(2026, 10, 5)))
+        assertEquals("Fri 25 Sep 2026 · 8:11 PM", receiptWhen(base, java.time.LocalDate.of(2027, 1, 5)))
+        assertEquals("Fri 25 Sep · 7:40 PM", receiptWhen(base.copy(settledAt = null), java.time.LocalDate.of(2026, 10, 5)))
+        assertEquals("Fri 25 Sep · 7:40 PM", receiptWhen(base.copy(settledAt = ""), java.time.LocalDate.of(2026, 10, 5)))
         assertEquals("—", receiptWhen(base.copy(settledAt = null, createdAt = "")))
         assertEquals("25 Sep 2026", receiptDay(base))
         assertEquals("", receiptDay(base.copy(settledAt = null, createdAt = "not a date")))

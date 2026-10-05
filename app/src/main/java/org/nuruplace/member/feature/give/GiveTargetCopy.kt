@@ -121,7 +121,7 @@ internal fun promiseLine(
 ): String =
     if (total) {
         val by = partnerDate(dueOn)?.let { d ->
-            if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
+            if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d)
         }
         listOfNotNull(money(targetMinor ?: 0, currency), by?.let { "by $it" }).joinToString(" · ")
     } else {

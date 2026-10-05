@@ -329,22 +329,22 @@ class PartnerStatementMathTest {
         assertEquals(WhenLabel("today", false), dueWhen(pledgeDue("2026-09-25"), sep25))
         assertEquals(WhenLabel("tomorrow", false), dueWhen(pledgeDue("2026-09-26"), sep25))
         assertEquals(WhenLabel("in 3 days", false), dueWhen(pledgeDue("2026-09-28"), sep25))
-        assertEquals(WhenLabel("20 Oct", false), dueWhen(pledgeDue("2026-10-20"), sep25))
+        assertEquals(WhenLabel("Tue 20 Oct", false), dueWhen(pledgeDue("2026-10-20"), sep25))
         // Past: amber "overdue since", one instalment behind or an older server.
-        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-08-10"), sep25))
-        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 1), sep25))
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-08-10"), sep25))
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 1), sep25))
         // Two or more behind: the count leads (the amount is the catch-up total).
-        assertEquals(WhenLabel("2 overdue since 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 2), sep25))
+        assertEquals(WhenLabel("2 overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 2), sep25))
         // overdue_since is preferred for the date when sent.
-        assertEquals(WhenLabel("3 overdue since 10 Jul", true), dueWhen(pledgeDue("2026-08-10", count = 3, since = "2026-07-10"), sep25))
+        assertEquals(WhenLabel("3 overdue since Fri 10 Jul", true), dueWhen(pledgeDue("2026-08-10", count = 3, since = "2026-07-10"), sep25))
         // Another year carries its year.
-        assertEquals(WhenLabel("overdue since 10 Dec 2025", true), dueWhen(pledgeDue("2025-12-10"), sep25))
+        assertEquals(WhenLabel("overdue since Wed 10 Dec 2025", true), dueWhen(pledgeDue("2025-12-10"), sep25))
     }
 
     @Test
     fun `a recurring-gift row is never overdue, and an unreadable date is said as sent`() {
-        assertEquals(WhenLabel("10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule"), sep25))
-        assertEquals(WhenLabel("10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule", overdue = false), sep25))
+        assertEquals(WhenLabel("Thu 10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule"), sep25))
+        assertEquals(WhenLabel("Thu 10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule", overdue = false), sep25))
         // iOS relativeDay: the text as it came.
         assertEquals(WhenLabel("soon-ish", false), dueWhen(pledgeDue("soon-ish"), sep25))
     }
@@ -353,12 +353,12 @@ class PartnerStatementMathTest {
     fun `the server decides overdue — as sent, not by the phone's calendar`() {
         // A catch-up row: due_on is today (the earliest uncovered), the server
         // says one instalment is overdue since 10 Aug.
-        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-09-25", count = 1, since = "2026-08-10", overdue = true), sep25))
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-09-25", count = 1, since = "2026-08-10", overdue = true), sep25))
         // overdue_since alone, or overdue_count alone, is the server's word too.
-        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-09-25", since = "2026-08-10"), sep25))
-        assertEquals(WhenLabel("2 overdue since 25 Sep", true), dueWhen(pledgeDue("2026-09-25", count = 2), sep25))
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-09-25", since = "2026-08-10"), sep25))
+        assertEquals(WhenLabel("2 overdue since Fri 25 Sep", true), dueWhen(pledgeDue("2026-09-25", count = 2), sep25))
         // The server says on time: on time, even when the phone's day has moved on.
-        assertEquals(WhenLabel("24 Sep", false), dueWhen(pledgeDue("2026-09-24", overdue = false), sep25))
+        assertEquals(WhenLabel("Thu 24 Sep", false), dueWhen(pledgeDue("2026-09-24", overdue = false), sep25))
         assertFalse(dueOverdue(pledgeDue("2026-09-24", overdue = false), sep25))
         // An older server sends none of them: the due date itself decides.
         assertTrue(dueOverdue(pledgeDue("2026-09-24"), sep25))
@@ -398,9 +398,9 @@ class PartnerStatementMathTest {
     @Test
     fun `the pledge card says Next, or Overdue since once its next instalment has passed`() {
         fun card(nextDue: String?) = Pledge(pledgeId = "p", status = "active", progress = PledgeProgress(nextDue = nextDue))
-        assertEquals(WhenLabel("Next 5 Oct", false), pledgeNextLabel(card("2026-10-05"), sep25))
-        assertEquals(WhenLabel("Next 25 Sep", false), pledgeNextLabel(card("2026-09-25"), sep25)) // due today is not overdue
-        assertEquals(WhenLabel("Overdue since 10 Aug", true), pledgeNextLabel(card("2026-08-10"), sep25))
+        assertEquals(WhenLabel("Next Mon 5 Oct", false), pledgeNextLabel(card("2026-10-05"), sep25))
+        assertEquals(WhenLabel("Next Fri 25 Sep", false), pledgeNextLabel(card("2026-09-25"), sep25)) // due today is not overdue
+        assertEquals(WhenLabel("Overdue since Mon 10 Aug", true), pledgeNextLabel(card("2026-08-10"), sep25))
         assertEquals(null, pledgeNextLabel(card(null), sep25))
     }
 
@@ -413,6 +413,6 @@ class PartnerStatementMathTest {
         assertNull(pledgeNextLabel(card("fulfilled"), sep25))
         assertNull(pledgeNextLabel(card("active", label = "fulfilled"), sep25))
         // Behind is still asked for: it keeps its Next.
-        assertEquals(WhenLabel("Next 5 Oct", false), pledgeNextLabel(card("active", label = "behind"), sep25))
+        assertEquals(WhenLabel("Next Mon 5 Oct", false), pledgeNextLabel(card("active", label = "behind"), sep25))
     }
 }

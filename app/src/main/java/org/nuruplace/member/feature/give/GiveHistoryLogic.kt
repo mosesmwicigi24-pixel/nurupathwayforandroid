@@ -33,7 +33,8 @@ fun repeatGiftLine(g: GivingRecord): String = "${money(g.amountMinor, g.currency
 
 /** A RECENT GIVING row's line under the fund: "5 Oct · M-Pesa" (its Nairobi day). */
 fun recentGiftMeta(g: GivingRecord): String {
-    val day = parseNairobi(g.createdAt)?.toLocalDate()?.let { PartnerFormat.dayMonth(it) } ?: g.createdAt.take(10)
+    // Never the raw value when the stamp can't be read (§8.1 rule 8).
+    val day = parseNairobi(g.createdAt)?.toLocalDate()?.let { PartnerFormat.dayMonth(it) }.orEmpty()
     return "$day · ${methodName(g.method)}"
 }
 

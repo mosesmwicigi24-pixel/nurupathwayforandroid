@@ -136,8 +136,6 @@ private val PillShape = RoundedCornerShape(999.dp)
  *  no theme token carries this value). */
 private val PLEDGE_FOR_SELECTED_BG = Color(0xFFFFF9EC)
 
-/** The total pledge's date as the step shows it: "Monday, 28 December 2026". */
-private val DUE_ON_SHOWN: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.ENGLISH)
 
 /** A card's icon tile and one-line cue, by the option's kind. */
 private class PledgeForLook(val icon: ImageVector, val tileBg: Color, val iconTint: Color, val subtitle: String)
@@ -475,7 +473,7 @@ fun NewPledgeFlow(
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Icon(Icons.Filled.CalendarMonth, null, tint = GIVE.gold, modifier = Modifier.size(20.dp))
-                        Text(dueOn.format(DUE_ON_SHOWN), style = giInter(15, FontWeight.SemiBold), color = GIVE.ink)
+                        Text(org.nuruplace.member.util.NuruDates.day(dueOn), style = giInter(15, FontWeight.SemiBold), color = GIVE.ink)
                     }
                     if (showDatePicker) {
                         // Only days after today — a total is reached by a date to come.

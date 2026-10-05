@@ -11,8 +11,6 @@ import org.nuruplace.member.data.net.GivingDetail
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val WHEN_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy · h:mm a", Locale.ENGLISH)
-private val WHEN_FULL_FMT = DateTimeFormatter.ofPattern("d MMMM yyyy · h:mm a", Locale.ENGLISH)
 private val DAY_ONLY_FMT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 private fun String?.clean(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
@@ -159,11 +157,13 @@ fun receiptWhereItWent(d: GivingDetail): String {
 private fun receiptInstant(d: GivingDetail) = parseNairobi(d.settledAt.clean() ?: d.createdAt)
 
 /** "Fri 25 Sep 2026 · 8:11 PM" (Nairobi), "—" when unknown — the hero's line. */
-fun receiptWhen(d: GivingDetail): String = receiptInstant(d)?.format(WHEN_FMT) ?: "—"
+fun receiptWhen(d: GivingDetail, today: java.time.LocalDate = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Nairobi"))): String =
+    receiptInstant(d)?.let { org.nuruplace.member.util.NuruDates.dayTime(it.toInstant(), it.zone, today) } ?: "—"
 
 /** "25 September 2026 · 8:11 PM" (Nairobi), "—" when unknown — the details'
  *  Date row (iOS whenFull). */
-fun receiptWhenFull(d: GivingDetail): String = receiptInstant(d)?.format(WHEN_FULL_FMT) ?: "—"
+fun receiptWhenFull(d: GivingDetail, today: java.time.LocalDate = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Nairobi"))): String =
+    receiptWhen(d, today)
 
 
 /** The receipt's verse, on the Give page's verse card (iOS verseFooter). */

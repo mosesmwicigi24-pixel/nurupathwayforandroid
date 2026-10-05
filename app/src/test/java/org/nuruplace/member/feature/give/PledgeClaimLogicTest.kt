@@ -135,15 +135,15 @@ class PledgeClaimLogicTest {
         // iOS ClaimCopy.line: the day in words, the year only when it isn't this one.
         val today = LocalDate.of(2026, 10, 2)
         assertEquals(
-            "KSh 3,000 · paid 12 September",
+            "KSh 3,000 · paid Sat 12 Sep",
             claimRowLine(PledgeClaim(claimId = "c1", amountMinor = 300_000, currency = "KES", paidOn = "2026-09-12"), today),
         )
         assertEquals(
-            "US$ 25.50 · paid 1 October",
+            "US$ 25.50 · paid Thu 1 Oct",
             claimRowLine(PledgeClaim(claimId = "c2", amountMinor = 2_550, currency = "USD", paidOn = "2026-10-01"), today),
         )
         assertEquals(
-            "KSh 3,000 · paid 28 December 2025",
+            "KSh 3,000 · paid Sun 28 Dec 2025",
             claimRowLine(PledgeClaim(claimId = "c5", amountMinor = 300_000, currency = "KES", paidOn = "2025-12-28"), today),
         )
         assertEquals("KSh 500", claimRowLine(PledgeClaim(claimId = "c3", amountMinor = 50_000, paidOn = null), today))
@@ -174,15 +174,15 @@ class PledgeClaimLogicTest {
 
     @Test
     fun `the first collection is said as a day, the year only when it is not this one`() {
-        assertEquals("First collection: 5 October", firstCollectionLine(LocalDate.of(2026, 9, 28), 5))
-        assertEquals("5 October", firstCollectionDay(LocalDate.of(2026, 9, 28), 5))
+        assertEquals("First collection: Mon 5 Oct", firstCollectionLine(LocalDate.of(2026, 9, 28), 5))
+        assertEquals("Mon 5 Oct", firstCollectionDay(LocalDate.of(2026, 9, 28), 5))
         // Its due day is today: next month, never today.
-        assertEquals("First collection: 28 October", firstCollectionLine(LocalDate.of(2026, 9, 28), 28))
+        assertEquals("First collection: Wed 28 Oct", firstCollectionLine(LocalDate.of(2026, 9, 28), 28))
         // Day 28 at the month's end.
-        assertEquals("First collection: 28 October", firstCollectionLine(LocalDate.of(2026, 9, 30), 28))
+        assertEquals("First collection: Wed 28 Oct", firstCollectionLine(LocalDate.of(2026, 9, 30), 28))
         // December rolls into January — and says the year.
-        assertEquals("First collection: 5 January 2027", firstCollectionLine(LocalDate.of(2026, 12, 5), 5))
-        assertEquals("First collection: 20 December", firstCollectionLine(LocalDate.of(2026, 12, 5), 20))
+        assertEquals("First collection: Tue 5 Jan 2027", firstCollectionLine(LocalDate.of(2026, 12, 5), 5))
+        assertEquals("First collection: Sun 20 Dec", firstCollectionLine(LocalDate.of(2026, 12, 5), 20))
         assertEquals(LocalDate.of(2027, 1, 5), firstCollectionDate(LocalDate.of(2026, 12, 5), 5))
     }
 }

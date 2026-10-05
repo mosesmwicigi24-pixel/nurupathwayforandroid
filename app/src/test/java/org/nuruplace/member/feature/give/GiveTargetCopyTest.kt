@@ -100,12 +100,12 @@ class GiveTargetCopyTest {
         assertEquals("KSh 2,000 monthly", pledgeTermsLine(Pledge(pledgeId = "p", shape = "monthly", amountMinor = 200_000), today))
         // The promise as the pledge card says it (iOS pledgeAmountLine).
         assertEquals(
-            "KSh 50,000 · by 15 Dec",
+            "KSh 50,000 · by Tue 15 Dec",
             pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000, dueOn = "2026-12-15"), today),
         )
         // Not this year → the year is said.
         assertEquals(
-            "KSh 50,000 · by 15 Mar 2027",
+            "KSh 50,000 · by Mon 15 Mar 2027",
             pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-15"), today),
         )
         assertEquals("KSh 50,000", pledgeTermsLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000), today))
@@ -120,11 +120,11 @@ class GiveTargetCopyTest {
     fun `the promise is said once — by its date, never the date twice`() {
         // Seen on screen: Android said "KSh 20,000 by Dec · due 31 Dec".
         assertEquals(
-            "KSh 20,000 · by 31 Dec",
+            "KSh 20,000 · by Thu 31 Dec",
             pledgeAmountLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 2_000_000, dueOn = "2026-12-31"), today),
         )
         assertEquals(
-            "KSh 50,000 · by 15 Mar 2027",
+            "KSh 50,000 · by Mon 15 Mar 2027",
             pledgeAmountLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-15"), today),
         )
         assertEquals("KSh 50,000", pledgeAmountLine(Pledge(pledgeId = "p", shape = "total", targetMinor = 5_000_000), today))

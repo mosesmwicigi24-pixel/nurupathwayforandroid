@@ -140,10 +140,7 @@ private fun freqLabel(f: Int): String = when (f) { 0 -> "one-time"; 1 -> "weekly
 /** "12 Mar 2026" — an ISO timestamp's Nairobi day (the day the member lives
  *  it, as the statement and receipt date theirs), best-effort — falls back to
  *  the raw string's date part. */
-private fun prettyDate(iso: String?): String {
-    if (iso.isNullOrBlank()) return "—"
-    return nairobiDayOf(iso) ?: iso.take(10)
-}
+private fun prettyDate(iso: String?): String? = nairobiDayOf(iso)
 
 /** The first prompt of a schedule created now — the server's own rule
  *  (ScheduleCopy.firstPromptAt), as a Nairobi day. */

@@ -340,7 +340,7 @@ internal data class WhenLabel(val text: String, val overdue: Boolean)
 
 /** "10 Aug", or "10 Aug 2025" outside the year being lived. */
 private fun dayMonthIn(d: LocalDate, today: LocalDate): String =
-    if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())
+    if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d)
 
 /**
  * Whether a DUE row is overdue — the SERVER decides, as sent: its `overdue`

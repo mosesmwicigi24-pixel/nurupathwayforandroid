@@ -95,7 +95,7 @@ class PledgeCycle5Test {
         assertEquals("pending", made.status)
         assertNull(made.decidedAt)
         assertNull(made.transactionId)
-        assertEquals("KSh 3,000 · paid 28 September", claimRowLine(made, LocalDate.of(2026, 9, 28)))
+        assertEquals("KSh 3,000 · paid Mon 28 Sep", claimRowLine(made, LocalDate.of(2026, 9, 28)))
     }
 
     @Test

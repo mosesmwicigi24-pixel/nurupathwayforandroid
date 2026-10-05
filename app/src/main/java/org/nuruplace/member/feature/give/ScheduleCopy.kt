@@ -36,8 +36,6 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private val NAIROBI_ZONE: ZoneId = ZoneId.of("Africa/Nairobi")
-private val SCHEDULE_DAY_FMT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
-private val CARD_DAY_FMT = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 private val RHYTHM_DAY_FMT = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
 
 /** Prompts go out 07:00–21:00 Nairobi — the platform's quiet hours. */
@@ -80,11 +78,13 @@ fun firstPromptAt(now: Instant, freq: Int): Instant {
     return if (freq == FREQ_WEEKLY) start.plusDays(7).toInstant() else start.plusMonths(1).toInstant()
 }
 
-/** "28 Oct 2026" — the Nairobi day of an instant. */
-fun nairobiDay(instant: Instant): String = instant.atZone(NAIROBI_ZONE).toLocalDate().format(SCHEDULE_DAY_FMT)
+/** "Wed 28 Oct" — the Nairobi day of an instant, in the one date form (§8.1
+ *  rule 8): the year only when it isn't [today]'s. */
+fun nairobiDay(instant: Instant, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): String = org.nuruplace.member.util.NuruDates.day(instant, NAIROBI_ZONE, today)
 
-/** "28 Oct 2026" — an ISO timestamp's Nairobi day; null when unreadable. */
-fun nairobiDayOf(iso: String?): String? = parseNairobi(iso)?.toLocalDate()?.format(SCHEDULE_DAY_FMT)
+/** "Wed 28 Oct" — an ISO timestamp's Nairobi day; null when unreadable. */
+fun nairobiDayOf(iso: String?, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): String? =
+    parseNairobi(iso)?.toLocalDate()?.let { org.nuruplace.member.util.NuruDates.day(it, today) }
 
 /** Today in Nairobi. */
 fun nairobiToday(now: Instant): LocalDate = now.atZone(NAIROBI_ZONE).toLocalDate()
@@ -98,20 +98,21 @@ fun listedSchedules(all: List<GivingSchedule>): List<GivingSchedule> =
 /** A paused gift's card line (iOS PauseCopy.cardLine): when it comes back
  *  on its own — "Resumes 12 Oct", a member's pause with a date — else
  *  "Nothing is owed". */
-fun pauseCardLine(s: GivingSchedule): String {
+fun pauseCardLine(s: GivingSchedule, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): String {
     if (s.pauseReason?.trim()?.lowercase() == "member") {
         s.resumeOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
-            ?.let { return "Resumes ${it.format(CARD_DAY_FMT)}" }
+            ?.let { return "Resumes ${org.nuruplace.member.util.NuruDates.day(it, today)}" }
     }
     return "Nothing is owed"
 }
 
-/** A Give card's next prompt (iOS): "Next 5 Oct" — the year only when it
- *  isn't this one ("Next 5 Jan 2027") — on the Nairobi calendar; "Next —"
- *  when there is no date to read. */
+/** A Give card's next prompt: "Next Mon 5 Oct" — the year only when it
+ *  isn't this one ("Next Tue 5 Jan 2027") — on the Nairobi calendar, in the
+ *  one date form the rhythm line above it uses ("next Mon 5 Oct"); it read
+ *  "Next 5 Oct" under it. "Next —" when there is no date to read. */
 fun scheduleCardNextLine(nextRunAt: String?, today: LocalDate): String {
     val d = parseNairobi(nextRunAt)?.toLocalDate() ?: return "Next —"
-    return "Next " + d.format(if (d.year == today.year) CARD_DAY_FMT else SCHEDULE_DAY_FMT)
+    return "Next " + org.nuruplace.member.util.NuruDates.day(d, today)
 }
 
 // ── Setting one up ──
@@ -197,7 +198,7 @@ fun scheduleRunning(status: String): Boolean = status.trim().lowercase() == "act
 data class PauseView(val line: String, val canResume: Boolean)
 
 /** Null while the schedule is not paused. */
-fun schedulePauseView(s: GivingSchedule): PauseView? {
+fun schedulePauseView(s: GivingSchedule, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): PauseView? {
     if (s.status.trim().lowercase() != "paused") return null
     return when (s.pauseReason?.trim()?.lowercase()) {
         "failures" -> PauseView(
@@ -206,7 +207,7 @@ fun schedulePauseView(s: GivingSchedule): PauseView? {
         )
         "member" -> PauseView(
             s.resumeOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
-                ?.let { "Paused until ${it.format(SCHEDULE_DAY_FMT)}" } ?: "Paused",
+                ?.let { "Paused until ${org.nuruplace.member.util.NuruDates.day(it, today)}" } ?: "Paused",
             canResume = true,
         )
         "pledge" -> PauseView("Paused with its pledge — resume the pledge in Partners", canResume = false)
@@ -255,7 +256,6 @@ fun monthlyPledgeCollected(s: GivingSchedule, pledges: List<Pledge>): Pledge? {
 
 // ── The sheet's words (iOS ScheduleDetailSheet) ──
 
-private val NEXT_PROMPT_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.ENGLISH)
 
 /** "Every Sunday" · "Every month on the 31st" — "Every week" / "Every month"
  *  when its day cannot be read (iOS dayLine). */
@@ -265,15 +265,15 @@ fun scheduleDayLine(s: GivingSchedule): String {
     return if (weekly) "Every ${weekdayName(day)}" else "Every month on the ${ordinal(day)}"
 }
 
-/** The sheet's "Next prompt": "Mon 5 Oct 2026" — "None while paused", as a
- *  paused gift's old date is no promise. */
-fun scheduleNextPromptLine(s: GivingSchedule): String =
+/** The sheet's "Next prompt": "Mon 5 Oct" (the year when it isn't this
+ *  year) — "None while paused", as a paused gift's old date is no promise. */
+fun scheduleNextPromptLine(s: GivingSchedule, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): String =
     if (s.status.trim().lowercase() == "paused") "None while paused"
-    else parseNairobi(s.nextRunAt)?.format(NEXT_PROMPT_FMT) ?: "—"
+    else parseNairobi(s.nextRunAt)?.toLocalDate()?.let { org.nuruplace.member.util.NuruDates.day(it, today) } ?: "—"
 
 /** Under "Until a date": when the gift comes back on its own. */
-fun pauseComesBackLine(date: LocalDate): String =
-    "It comes back on its own at its next day on or after ${date.format(SCHEDULE_DAY_FMT)}."
+fun pauseComesBackLine(date: LocalDate, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): String =
+    "It comes back on its own at its next day on or after ${org.nuruplace.member.util.NuruDates.day(date, today)}."
 
 /** The sheet's Change form, as typed (iOS ScheduleDraft). */
 data class ScheduleDraft(val amountText: String, val day: Int, val numberText: String, val useProfile: Boolean)

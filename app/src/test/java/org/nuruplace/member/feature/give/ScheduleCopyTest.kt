@@ -49,10 +49,11 @@ class ScheduleCopyTest {
 
     @Test
     fun `days are Nairobi days`() {
-        assertEquals("28 Oct 2026", nairobiDay(Instant.parse("2026-10-28T09:30:00Z")))
+        assertEquals("Wed 28 Oct", nairobiDay(Instant.parse("2026-10-28T09:30:00Z"), LocalDate.of(2026, 10, 1)))
+        assertEquals("Wed 28 Oct 2026", nairobiDay(Instant.parse("2026-10-28T09:30:00Z"), LocalDate.of(2027, 1, 1)))
         // 22:30 UTC is already the next morning in Nairobi.
-        assertEquals("29 Oct 2026", nairobiDay(Instant.parse("2026-10-28T22:30:00Z")))
-        assertEquals("29 Oct 2026", nairobiDayOf("2026-10-28T22:30:00.000Z"))
+        assertEquals("Thu 29 Oct", nairobiDay(Instant.parse("2026-10-28T22:30:00Z"), LocalDate.of(2026, 10, 1)))
+        assertEquals("Thu 29 Oct", nairobiDayOf("2026-10-28T22:30:00.000Z", LocalDate.of(2026, 10, 1)))
         assertNull(nairobiDayOf(""))
         assertNull(nairobiDayOf("not a date"))
         assertEquals(LocalDate.of(2026, 10, 29), nairobiToday(Instant.parse("2026-10-28T22:30:00Z")))
@@ -146,7 +147,7 @@ class ScheduleCopyTest {
         val paused = sched.copy(status = "paused")
         assertEquals(PauseView("Paused after 3 prompts didn't go through", canResume = true), schedulePauseView(paused.copy(pauseReason = "failures", consecutiveFailures = 3)))
         assertEquals(PauseView("Paused after 3 prompts didn't go through", canResume = true), schedulePauseView(paused.copy(pauseReason = "failures")))
-        assertEquals(PauseView("Paused until 5 Oct 2026", canResume = true), schedulePauseView(paused.copy(pauseReason = "member", resumeOn = "2026-10-05")))
+        assertEquals(PauseView("Paused until Mon 5 Oct", canResume = true), schedulePauseView(paused.copy(pauseReason = "member", resumeOn = "2026-10-05"), LocalDate.of(2026, 10, 1)))
         assertEquals(PauseView("Paused", canResume = true), schedulePauseView(paused.copy(pauseReason = "member")))
         assertEquals(
             PauseView("Paused with its pledge — resume the pledge in Partners", canResume = false),
@@ -185,11 +186,11 @@ class ScheduleCopyTest {
         // No readable day: the rhythm alone.
         assertEquals("Every month", scheduleDayLine(sched.copy(anchorDay = null, nextRunAt = "")))
         assertEquals("Every week", scheduleDayLine(weekly.copy(nextRunAt = "")))
-        assertEquals("Wed 28 Oct 2026", scheduleNextPromptLine(sched))
+        assertEquals("Wed 28 Oct", scheduleNextPromptLine(sched, LocalDate.of(2026, 10, 1)))
         // A paused gift's old date is no promise.
         assertEquals("None while paused", scheduleNextPromptLine(sched.copy(status = "paused")))
         assertEquals("—", scheduleNextPromptLine(sched.copy(nextRunAt = "")))
-        assertEquals("It comes back on its own at its next day on or after 5 Oct 2026.", pauseComesBackLine(LocalDate.of(2026, 10, 5)))
+        assertEquals("It comes back on its own at its next day on or after Mon 5 Oct.", pauseComesBackLine(LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 1)))
     }
 
     // ── Pausing ──
@@ -320,7 +321,7 @@ class ScheduleCopyTest {
     @Test
     fun `a paused card says when it comes back, else that nothing is owed`() {
         val paused = sched.copy(status = "paused")
-        assertEquals("Resumes 12 Oct", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "2026-10-12")))
+        assertEquals("Resumes Mon 12 Oct", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "2026-10-12"), LocalDate.of(2026, 10, 1)))
         // Paused by the member until resumed, after failures, or with its pledge: nothing is owed.
         assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = null)))
         assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "failures", consecutiveFailures = 3)))
@@ -333,10 +334,10 @@ class ScheduleCopyTest {
     fun `a Give card says its next prompt short — the year only when it isn't this one`() {
         // Seen on screen: "Next 5 Oct 2026" where iOS says "Next 5 Oct".
         val today = LocalDate.of(2026, 9, 28)
-        assertEquals("Next 5 Oct", scheduleCardNextLine("2026-10-05T06:00:00Z", today))
-        assertEquals("Next 5 Jan 2027", scheduleCardNextLine("2027-01-05T06:00:00Z", today))
+        assertEquals("Next Mon 5 Oct", scheduleCardNextLine("2026-10-05T06:00:00Z", today))
+        assertEquals("Next Tue 5 Jan 2027", scheduleCardNextLine("2027-01-05T06:00:00Z", today))
         // The Nairobi day: 22:30 UTC on the 4th is 01:30 on the 5th there.
-        assertEquals("Next 5 Oct", scheduleCardNextLine("2026-10-04T22:30:00Z", today))
+        assertEquals("Next Mon 5 Oct", scheduleCardNextLine("2026-10-04T22:30:00Z", today))
         assertEquals("Next —", scheduleCardNextLine(null, today))
         assertEquals("Next —", scheduleCardNextLine("soon", today))
     }

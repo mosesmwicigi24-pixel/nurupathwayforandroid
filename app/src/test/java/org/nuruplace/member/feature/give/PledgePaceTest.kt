@@ -49,20 +49,20 @@ class PledgePaceTest {
 
     @Test
     fun `a pace is said as what reaches the pledge, a month at a time`() {
-        assertEquals("To reach KSh 20,000 by 31 Dec: KSh 5,000 a month — 4 collections", paceLine(roof, today))
+        assertEquals("To reach KSh 20,000 by Thu 31 Dec: KSh 5,000 a month — 4 collections", paceLine(roof, today))
         // One collection left: singular.
         assertEquals(
-            "To reach KSh 20,000 by 31 Dec: KSh 20,000 a month — 1 collection",
+            "To reach KSh 20,000 by Thu 31 Dec: KSh 20,000 a month — 1 collection",
             paceLine(roof.copy(pace = PledgePace(2_000_000, 1, "2026-12-31")), today),
         )
         // Rounded up to whole shillings by the server — said as it came.
         assertEquals(
-            "To reach KSh 20,000 by 31 Dec: KSh 4,251 a month — 4 collections",
+            "To reach KSh 20,000 by Thu 31 Dec: KSh 4,251 a month — 4 collections",
             paceLine(roof.copy(pace = PledgePace(425_100, 4, "2026-12-31")), today),
         )
         // Dollars keep their cents; another year says its year.
         val trip = roof.copy(currency = "USD", targetMinor = 10_001, dueOn = "2027-01-15", pace = PledgePace(2_501, 4, "2027-01-15"))
-        assertEquals("To reach US$ 100.01 by 15 Jan 2027: US$ 25.01 a month — 4 collections", paceLine(trip, today))
+        assertEquals("To reach US$ 100.01 by Fri 15 Jan 2027: US$ 25.01 a month — 4 collections", paceLine(trip, today))
         // No pace (a monthly pledge, paid, past, not active, an older server): no line.
         assertNull(paceLine(roof.copy(pace = null), today))
         assertNull(paceLine(roof.copy(pace = PledgePace(0, 4, "2026-12-31")), today))
@@ -188,15 +188,15 @@ class PledgePaceTest {
 
     @Test
     fun `a gift already collecting the pledge is shown instead, with what it asks next`() {
-        assertEquals("Collected automatically — next KSh 5,000 on 28 Oct", collectedLine(collector(), today))
-        assertEquals("Collected automatically — next KSh 3,000 on 28 Oct", collectedLine(collector(next = 300_000), today))
+        assertEquals("Collected automatically — next KSh 5,000 on Wed 28 Oct", collectedLine(collector(), today))
+        assertEquals("Collected automatically — next KSh 3,000 on Wed 28 Oct", collectedLine(collector(next = 300_000), today))
         assertEquals("Collected automatically — nothing to pay next time", collectedLine(collector(next = 0), today))
         assertEquals("Collected automatically — paused", collectedLine(collector(status = "paused", next = null), today))
         // Nothing coming (stopping with its pledge), or an older server's row.
         assertEquals("Collected automatically", collectedLine(collector(next = null), today))
         // The year only when the next prompt is not this year (parity list B14).
         assertEquals(
-            "Collected automatically — next KSh 5,000 on 5 Jan 2027",
+            "Collected automatically — next KSh 5,000 on Tue 5 Jan 2027",
             collectedLine(collector().copy(nextRunAt = "2027-01-05T06:00:00Z"), today),
         )
         // The running one is the one shown when both exist.
@@ -212,7 +212,7 @@ class PledgePaceTest {
             pledgeId = "p-kenya", shape = "monthly", amountMinor = 500_000, dueDay = 5, currency = "KES",
             status = "active", title = "Kenya trip",
         )
-        // A running gift collects it ("Collected automatically — next KSh 5,000 on 28 Oct").
+        // A running gift collects it ("Collected automatically — next KSh 5,000 on Wed 28 Oct").
         val running = pledgeCollection(kenya, methods(), listOf(collector(pledgeId = "p-kenya")))
         assertEquals(PledgePayButton("Pay early", primary = false), pledgePayButton(running))
         // Paid ahead ("nothing to pay next time") — still collected automatically.

@@ -29,8 +29,6 @@ const val CLAIM_OFFLINE_LINE = "You're offline. Telling the office needs a conne
 /** Said when the request got no answer at all (iOS sendClaim). */
 const val CLAIM_NO_ANSWER_LINE = "We couldn't reach the church just now. Try again in a moment."
 
-private val COLLECTION_DAY_FMT = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH)
-private val COLLECTION_DAY_YEAR_FMT = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH)
 
 /** The days a payment can be told about: a year back to today (Nairobi).
  *  The server allows 366 days back, so a year always passes. */
@@ -116,11 +114,11 @@ fun claimStatusLine(status: String?): String = when (claimTone(status)) {
     ClaimTone.Unmatched -> "The office couldn't match it"
 }
 
-/** "KSh 3,000 · paid 12 September" — the year only when it isn't this one
- *  (iOS ClaimCopy.line). */
+/** "KSh 3,000 · paid Sat 12 Sep" — the year only when it isn't this one
+ *  (the one date form, §8.1 rule 8). */
 fun claimRowLine(c: PledgeClaim, today: LocalDate): String {
     val day = c.paidOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
-        ?.let { d -> d.format(if (d.year == today.year) COLLECTION_DAY_FMT else COLLECTION_DAY_YEAR_FMT) }
+        ?.let { d -> org.nuruplace.member.util.NuruDates.day(d, today) }
     return listOfNotNull(money(c.amountMinor, c.currency), day?.let { "paid $it" }).joinToString(" · ")
 }
 
@@ -128,10 +126,10 @@ fun claimRowLine(c: PledgeClaim, today: LocalDate): String {
  *  due day (held to 1–28) strictly after today — never today. */
 fun firstCollectionDate(today: LocalDate, dueDay: Int): LocalDate = firstDueAfter(today, dueDay)
 
-/** "5 October" — "5 January 2027" when it is not this year. */
+/** "Mon 5 Oct" — "Tue 5 Jan 2027" when it is not this year. */
 fun firstCollectionDay(today: LocalDate, dueDay: Int): String {
     val d = firstCollectionDate(today, dueDay)
-    return d.format(if (d.year == today.year) COLLECTION_DAY_FMT else COLLECTION_DAY_YEAR_FMT)
+    return org.nuruplace.member.util.NuruDates.day(d, today)
 }
 
 /** "First collection: 5 October" — under the toggle. */

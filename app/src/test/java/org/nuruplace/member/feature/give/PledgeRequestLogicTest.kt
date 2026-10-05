@@ -222,7 +222,7 @@ class PledgeRequestLogicTest {
                 "Shape" to "A total, by a date",
                 "Total" to "KSh 50,000",
                 "For" to "School fees for Grace",
-                "By" to "28 December 2026",
+                "By" to "Mon 28 Dec 2026",
                 "Collected" to "By you, with Pay now",
             ),
             pledgeReviewRows(false, 50_000, "School fees for Grace", 5, LocalDate.of(2026, 12, 28), null, "5 October"),

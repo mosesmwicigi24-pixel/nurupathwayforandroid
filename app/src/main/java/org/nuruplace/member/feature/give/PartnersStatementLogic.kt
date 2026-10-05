@@ -440,7 +440,7 @@ internal fun faithfulnessLine(f: StatementFaithfulness?, marks: List<MonthMark>,
         if (late > 0) add("$late late")
         if (missed > 0) add("$missed missed")
         nextDue?.let { d ->
-            add("next due ${if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString())}")
+            add("next due ${if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d)}")
         }
     }
     if (parts.isEmpty()) return null

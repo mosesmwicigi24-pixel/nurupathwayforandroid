@@ -100,12 +100,13 @@ internal fun parseNairobi(iso: String?): ZonedDateTime? {
         .getOrNull()
 }
 
-private val DAY_FMT = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
 private val TIME_FMT = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 
-/** "FRI, 25 SEP 2026" for a Nairobi calendar day; "—" for an unreadable one. */
+/** "FRI 25 SEP" for a Nairobi calendar day — the one date form, the year
+ *  when it isn't this year (it read "FRI, 25 SEP 2026"); "—" for an
+ *  unreadable one. */
 private fun dayHeader(date: LocalDate?): String =
-    date?.format(DAY_FMT)?.uppercase(Locale.ENGLISH) ?: "—"
+    date?.let { org.nuruplace.member.util.NuruDates.day(it, LocalDate.now(NAIROBI)).uppercase(Locale.ENGLISH) } ?: "—"
 
 private fun timeLabel(iso: String?): String =
     parseNairobi(iso)?.format(TIME_FMT) ?: ""

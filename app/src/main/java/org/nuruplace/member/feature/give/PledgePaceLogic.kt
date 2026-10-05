@@ -33,7 +33,7 @@ const val PACE_OFFER_NOTE = "Each month asks only what's left, and stops when yo
 fun paceLine(pl: Pledge, today: LocalDate): String? {
     val pace = pl.pace?.takeIf { it.perMonthMinor > 0 && it.collectionsLeft >= 1 } ?: return null
     val by = partnerDate(pace.by) ?: partnerDate(pl.dueOn)
-    val byText = by?.let { d -> if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString()) }
+    val byText = by?.let { d -> if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d) }
     val n = pace.collectionsLeft
     val target = money(pl.targetMinor ?: 0, pl.currency) + (byText?.let { " by $it" } ?: "")
     return "To reach $target: ${money(pace.perMonthMinor, pl.currency)} a month — $n collection${if (n == 1) "" else "s"}"
@@ -134,6 +134,6 @@ fun collectedLine(s: GivingSchedule, today: LocalDate): String {
     val next = s.nextAmountMinor ?: return base
     if (next <= 0L) return "$base — nothing to pay next time"
     val day = parseNairobi(s.nextRunAt)?.toLocalDate()
-        ?.let { d -> if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d.toString()) }
+        ?.let { d -> if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d) }
     return "$base — next ${money(next, s.currency)}" + (day?.let { " on $it" } ?: "")
 }

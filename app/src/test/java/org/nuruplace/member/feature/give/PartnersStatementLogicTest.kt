@@ -137,11 +137,11 @@ class PartnersStatementLogicTest {
     fun `amount line is the pledge card's own words, the year only when it isn't this one`() {
         assertEquals("KSh 2,000 monthly · due on the 5th", pledgeAmountLine(StatementPledge(shape = "monthly", amountMinor = 200_000, dueDay = 5), today))
         assertEquals("KSh 2,000 monthly", pledgeAmountLine(StatementPledge(shape = "monthly", amountMinor = 200_000), today))
-        assertEquals("KSh 50,000 · by 15 Dec", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2026-12-15"), today))
-        assertEquals("KSh 50,000 · by 1 Mar 2027", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-01"), today))
+        assertEquals("KSh 50,000 · by Tue 15 Dec", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2026-12-15"), today))
+        assertEquals("KSh 50,000 · by Mon 1 Mar 2027", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-01"), today))
         // No date to state: the amount alone, never "by a date".
         assertEquals("KSh 50,000", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000), today))
-        assertEquals("US$ 500.00 · by 15 Dec", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 50_000, currency = "USD", dueOn = "2026-12-15"), today))
+        assertEquals("US$ 500.00 · by Tue 15 Dec", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 50_000, currency = "USD", dueOn = "2026-12-15"), today))
     }
 
     @Test
@@ -374,7 +374,7 @@ class PartnersStatementLogicTest {
         // The statement's counts — the ledger the hero's Kept tile reads —
         // even where the strip's months would count differently.
         assertEquals(
-            "6 kept on time · 1 late · next due 5 Oct",
+            "6 kept on time · 1 late · next due Mon 5 Oct",
             faithfulnessLine(StatementFaithfulness(keptOnTime = 6, late = 1, missed = 0, dueCount = 7), marks, LocalDate.of(2026, 10, 5), today),
         )
         assertEquals("2 missed", faithfulnessLine(StatementFaithfulness(missed = 2, dueCount = 2), marks, null, today))
@@ -383,10 +383,10 @@ class PartnersStatementLogicTest {
         assertEquals("1 kept on time · 2 late · 1 missed", faithfulnessLine(null, twoLate, null, today))
         // A new partner with nothing behind them: just the next due.
         val fresh = List(9) { MonthMark.None } + List(3) { MonthMark.Upcoming }
-        assertEquals("Next due 5 Oct", faithfulnessLine(StatementFaithfulness(), fresh, LocalDate.of(2026, 10, 5), today))
-        assertEquals("Next due 5 Oct", faithfulnessLine(null, fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due Mon 5 Oct", faithfulnessLine(StatementFaithfulness(), fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due Mon 5 Oct", faithfulnessLine(null, fresh, LocalDate.of(2026, 10, 5), today))
         // Next year's date carries its year.
-        assertEquals("Next due 5 Jan 2027", faithfulnessLine(null, fresh, LocalDate.of(2027, 1, 5), today))
+        assertEquals("Next due Tue 5 Jan 2027", faithfulnessLine(null, fresh, LocalDate.of(2027, 1, 5), today))
         assertNull(faithfulnessLine(StatementFaithfulness(), fresh, null, today))
         assertNull(faithfulnessLine(null, fresh, null, today))
     }
@@ -422,7 +422,7 @@ class PartnersStatementLogicTest {
         )
         assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(paidToday, today))
         assertEquals(
-            "1 kept on time · next due 25 Oct",
+            "1 kept on time · next due Sun 25 Oct",
             faithfulnessLine(
                 StatementFaithfulness(keptOnTime = 1, dueCount = 1),
                 List(8) { MonthMark.None } + MonthMark.Kept + List(3) { MonthMark.None }, nextPledgeDue(paidToday, today), today,
@@ -446,7 +446,7 @@ class PartnersStatementLogicTest {
         assertEquals(LocalDate.of(2026, 9, 27), nextPledgeDue(p, today))
         val marks = List(7) { MonthMark.Kept } + List(2) { MonthMark.Missed } + List(3) { MonthMark.Upcoming }
         assertEquals(
-            "3 kept on time · 2 missed · next due 27 Sep",
+            "3 kept on time · 2 missed · next due Sun 27 Sep",
             faithfulnessLine(StatementFaithfulness(keptOnTime = 3, missed = 2, dueCount = 5), marks, nextPledgeDue(p, today), today),
         )
     }

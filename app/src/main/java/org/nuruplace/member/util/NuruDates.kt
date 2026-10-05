@@ -29,6 +29,9 @@ object NuruDates {
     fun day(date: LocalDate, today: LocalDate = LocalDate.now()): String =
         date.format(if (date.year == today.year) DAY else DAY_YEAR)
 
+    /** "Mon 5 Oct", or with its year — for a caller that decides the year itself. */
+    fun day(date: LocalDate, withYear: Boolean): String = date.format(if (withYear) DAY_YEAR else DAY)
+
     /** [instant]'s day in [zone]. */
     fun day(instant: Instant, zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): String =
         day(instant.atZone(zone).toLocalDate(), today)

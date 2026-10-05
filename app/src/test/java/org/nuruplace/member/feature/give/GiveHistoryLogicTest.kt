@@ -101,8 +101,8 @@ class GiveHistoryLogicTest {
         assertEquals(listOf("t5", "t4", "t3"), recentGifts(history).map { it.transactionId })
         assertEquals(emptyList<GivingRecord>(), recentGifts(listOf(gift("f1", status = "failed"))))
         // Its line: the Nairobi day and the rail — 20 Sep 23:30 UTC is 21 Sep in Nairobi.
-        assertEquals("20 Sep · M-Pesa", recentGiftMeta(gift("t1", at = "2026-09-20T07:00:00Z")))
-        assertEquals("21 Sep · PayPal", recentGiftMeta(gift("t2", at = "2026-09-20T23:30:00Z", method = "paypal")))
+        assertEquals("Sun 20 Sep · M-Pesa", recentGiftMeta(gift("t1", at = "2026-09-20T07:00:00Z")))
+        assertEquals("Mon 21 Sep · PayPal", recentGiftMeta(gift("t2", at = "2026-09-20T23:30:00Z", method = "paypal")))
     }
 
     // ── what "Give again" puts on the form ──
