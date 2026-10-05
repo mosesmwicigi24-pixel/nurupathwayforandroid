@@ -141,6 +141,39 @@ internal object PlanProgressBus {
  * end a day (a part's finish, Talk it Over's post or its gold button) ends
  * here; iOS's PlanDayUnlockAck.announce is the same.
  */
+/** What finishing a part came to: the server's last ack, or what stopped it. */
+internal data class PartFinish(
+    val lastAck: org.nuruplace.member.data.net.SegmentCompleteResult?,
+    val failure: Throwable?,
+)
+
+/**
+ * Complete a part's segments in order (POST /growth/segments/{id}/complete),
+ * stopping at the first the server does not record. Each one recorded goes to
+ * [onSaved] (the hub's tick); the rest stay open for the button to try again —
+ * a part never reads as done when it isn't (§4). Every part's finish goes
+ * through here: the part readers (Watch/Listen, The Word, Respond) and Talk it
+ * Over. Cancellation propagates.
+ */
+internal suspend fun completeSegments(
+    segmentIds: List<String>,
+    complete: suspend (String) -> org.nuruplace.member.data.net.SegmentCompleteResult,
+    onSaved: (String) -> Unit,
+): PartFinish {
+    var last: org.nuruplace.member.data.net.SegmentCompleteResult? = null
+    for (id in segmentIds) {
+        val r = runCatching { complete(id) }
+        val failure = r.exceptionOrNull()
+        if (failure != null) {
+            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
+            return PartFinish(last, failure)
+        }
+        last = r.getOrNull()
+        onSaved(id)
+    }
+    return PartFinish(last, null)
+}
+
 internal fun announceDaySealed(ack: org.nuruplace.member.data.net.SegmentCompleteResult, planId: String?) {
     if (!ack.dayComplete) return
     PlanDayLog.noteSealed()

@@ -2,7 +2,9 @@
 // THIS). One PART of the day at a time (Watch/Listen · The Word · Respond) on a
 // warm day/night canvas, with the reading progress hairline + right-rail pace
 // dot. "Finished" ticks every segment in the part (server-backed), tells the hub
-// (PlanProgressBus), and pops back. The Respond part carries the day's reflection.
+// (PlanProgressBus), and pops back — or, when the server did not record it,
+// stays and says why above the button (§4). The Respond part carries the day's
+// reflection.
 // Ported from the iOS PlanSegmentView grouped-part reader.
 package org.nuruplace.member.feature.grow
 
@@ -39,6 +41,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,6 +88,10 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
+    // Why finishing did not land — said above the button (§4), and the parts
+    // of this group the server already recorded on an earlier try.
+    var finishError by remember { mutableStateOf<String?>(null) }
+    val savedIds = remember { mutableStateListOf<String>() }
     // A part that did not load says so (§4) — it read "Nothing to read here."
     var loadError by remember { mutableStateOf<StateMessage?>(null) }
     var attempt by remember { mutableStateOf(0) }
@@ -122,11 +129,20 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
         if (saving) return
         if (done) { onBack(); return }
         saving = true
+        finishError = null
         scope.launch {
-            var lastAck: org.nuruplace.member.data.net.SegmentCompleteResult? = null
-            group.filterNot { it.completed }.forEach { seg ->
-                runCatching { Net.client.api.completeSegment(seg.segmentId) }.onSuccess { lastAck = it }
-                PlanProgressBus.finished.tryEmit(seg.segmentId)
+            val result = completeSegments(
+                segmentIds = group.filterNot { it.completed || it.segmentId in savedIds }.map { it.segmentId },
+                complete = { Net.client.api.completeSegment(it) },
+            ) { id -> savedIds.add(id); PlanProgressBus.finished.tryEmit(id) }
+            result.failure?.let { failure ->
+                // Not recorded: stay and say why, as Talk it Over does
+                // (EXPERIENCE.md §7.4 #1, §4) — it used to tick the hub's row
+                // and go back as if it had. The parts that did land keep
+                // their tick; the button tries the rest again.
+                finishError = "Couldn't save that. ${ApiException.state(failure, loadContext).sentence}"
+                saving = false
+                return@launch
             }
             // The LAST segment's ack is the server's authoritative word on
             // whether this day just sealed and the next one opened — computed
@@ -134,7 +150,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
             // day hub skip waiting on an extra "Seal the day" tap, and the
             // plan overview tell a genuine lock apart from a completion still
             // landing through the sync path.
-            lastAck?.let { ack -> announceDaySealed(ack, planId) }
+            result.lastAck?.let { ack -> announceDaySealed(ack, planId) }
             done = true; saving = false
             onBack()
         }
@@ -200,9 +216,18 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
             // Finished CTA.
             val fade = Brush.verticalGradient(listOf(pal.bg.copy(alpha = 0f), pal.bg))
             Column(Modifier.fillMaxWidth().background(fade).padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 12.dp)) {
+                // Why the part was not saved (§4), right above the button that
+                // tries again — the state colour, readable in night mode too.
+                finishError?.let { err ->
+                    Text(
+                        err, style = rInter(12),
+                        color = if (pal.night) Color(0xFFF87171) else Color(0xFFB91C1C),
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
-                        .background(Brush.linearGradient(listOf(pal.gold, Color(0xFFB6862F)))).clickable { finish() },
+                        .background(Brush.linearGradient(listOf(pal.gold, Color(0xFFB6862F)))).clickable(enabled = !saving) { finish() },
                     horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (saving) CircularProgressIndicator(color = pal.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))

@@ -66,7 +66,6 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
-import org.nuruplace.member.data.net.SegmentCompleteResult
 import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.TalkAssistBody
 import org.nuruplace.member.data.net.TalkPost
@@ -121,16 +120,15 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
      */
     suspend fun completeTalk(): StateMessage? {
         if (talkSegs == null) loadDay()?.let { return ApiException.state(it, context) }
-        val pending = talkSegs.orEmpty().filterNot { it.completed }
-        var lastAck: SegmentCompleteResult? = null
-        for (seg in pending) {
-            val r = runCatching { Net.client.api.completeSegment(seg.segmentId) }
-            r.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it; return ApiException.state(it, context) }
-            lastAck = r.getOrNull()
-            talkSegs = talkSegs?.map { s -> if (s.segmentId == seg.segmentId) s.copy(completed = true) else s }
-            PlanProgressBus.finished.tryEmit(seg.segmentId)
+        val result = completeSegments(
+            segmentIds = talkSegs.orEmpty().filterNot { it.completed }.map { it.segmentId },
+            complete = { Net.client.api.completeSegment(it) },
+        ) { id ->
+            talkSegs = talkSegs?.map { s -> if (s.segmentId == id) s.copy(completed = true) else s }
+            PlanProgressBus.finished.tryEmit(id)
         }
-        lastAck?.let { ack -> announceDaySealed(ack, planId) }
+        result.failure?.let { return ApiException.state(it, context) }
+        result.lastAck?.let { ack -> announceDaySealed(ack, planId) }
         return null
     }
 
@@ -164,10 +162,12 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                 .onSuccess {
                     posts.add(it); draft = ""; postError = null
                     // Speaking in the conversation finishes the part too
-                    // (§7.4 #1). The server records the post, not the part, so
-                    // the app completes it here. If that call fails, the post
-                    // still stands and the part stays open — the gold button
-                    // below finishes it, and says so if it can't.
+                    // (§7.4 #1). The server now completes it with the post
+                    // (pathway 8e5341e); this call is idempotent and still
+                    // wanted — its ack says whether the day just sealed (the
+                    // hub, the plan page and the streak card act on it), and
+                    // it covers an older server. If it fails, the post stands
+                    // and the gold button below finishes the part.
                     completeTalk()
                 }
                 // The kept draft alone is too quiet a signal that the post
