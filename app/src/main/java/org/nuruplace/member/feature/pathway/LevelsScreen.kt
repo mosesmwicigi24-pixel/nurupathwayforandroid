@@ -56,8 +56,9 @@ import org.nuruplace.member.ui.theme.Spacing
 fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> Unit = {}) {
     AsyncContent(load = { Net.client.api.pathway() }) { summary: PathwaySummary, _ ->
         val levels = summary.levels
-        val totalModules = levels.sumOf { it.totalModules }
-        val doneModules = levels.sumOf { it.completedModules }
+        // Lessons, never the exams (§8.2 #4).
+        val totalModules = levels.sumOf { it.lessonCount }
+        val doneModules = levels.sumOf { it.lessonsDone }
         // The journey in levels (docs/EXPERIENCE.md §3), the same number the
         // hub's ring shows — never a share of published modules (20 of 20
         // read 100% at Level 1 of 6).
@@ -164,7 +165,7 @@ private fun ProgressRing(pct: Int) {
 
 @Composable
 private fun ContinueCard(level: PathwayLevel, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val pct = if (level.totalModules > 0) level.completedModules.toFloat() / level.totalModules else 0f
+    val pct = if (level.lessonCount > 0) level.lessonsDone.toFloat() / level.lessonCount else 0f
     Row(
         modifier.fillMaxWidth()
             .clip(RoundedCornerShape(Radii.hero))
@@ -236,12 +237,12 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${level.completedModules}/${level.totalModules} modules", style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
-                    val p = if (level.totalModules > 0) level.completedModules * 100 / level.totalModules else 0
+                    Text("${level.lessonsDone}/${level.lessonCount} modules", style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
+                    val p = if (level.lessonCount > 0) level.lessonsDone * 100 / level.lessonCount else 0
                     Text("$p%", style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(Spacing.xs))
-                ProgressBar(if (level.totalModules > 0) level.completedModules.toFloat() / level.totalModules else 0f)
+                ProgressBar(if (level.lessonCount > 0) level.lessonsDone.toFloat() / level.lessonCount else 0f)
             }
         }
     }

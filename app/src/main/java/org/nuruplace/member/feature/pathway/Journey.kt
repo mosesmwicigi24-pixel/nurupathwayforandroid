@@ -76,6 +76,8 @@ data class Journey(
     /** The current level's place on the road (1-based) and the road's length. */
     val levelPosition: Int,
     val levelCount: Int,
+    /** The current level's lessons done and in all — the exam is its own
+     *  step, never one of them (§8.2 #4). */
     val completedModules: Int,
     val totalModules: Int,
     /** "X of Y modules" · "Exam ready" · "Exam opens soon" · "Exam passed" · "Commissioned". */
@@ -94,6 +96,16 @@ data class Journey(
 
     /** The summit card and the commissioned celebration — only at the end. */
     val summitReached: Boolean get() = stage == JourneyStage.FINISHED
+
+    /** "20 of 20 modules" — the current level's lessons; "Modules open soon"
+     *  for a level with none published yet (never "0 of 0 modules"). */
+    val modulesLine: String
+        get() = if (totalModules > 0) "$completedModules of $totalModules modules" else "Modules open soon"
+
+    /** The Pathway header's one line (EXPERIENCE.md §8.2 #1): where the
+     *  member is on the road and how far through the level — "Level 1 of 6 ·
+     *  20 of 20 modules". The greeting belongs to Home alone. */
+    val headerLine: String get() = "Level $levelPosition of $levelCount · $modulesLine"
 
     /** Home's progress line: the modules while they are being walked, else
      *  the step itself — never "0 modules left before Level 2". */
@@ -152,8 +164,10 @@ object JourneyState {
             else -> JourneyStage.LEARNING
         }
 
-        val done = current.completedModules
-        val total = current.totalModules
+        // Lessons, never the exam (§8.2 #4): production counts the exam
+        // container in total_modules, so a finisher read "20 of 21".
+        val done = current.lessonsDone
+        val total = current.lessonCount
         // A level the member was ushered into before any module was published
         // (Levels 2–6 today): no "0 of 0 modules", no step to take yet.
         val preparing = stage == JourneyStage.LEARNING && total <= 0

@@ -176,8 +176,10 @@ fun LevelDetailScreen(
     ) { bundle: LevelBundle, _ ->
         val modules = bundle.modules
         val level = bundle.level
-        val total = level?.totalModules ?: modules.size
-        val done = level?.completedModules ?: modules.count { it.completed }
+        // Lessons, never the exam (§8.2 #4) — the trail's own exam row is a
+        // step of its own, and production counts it in total_modules.
+        val total = level?.lessonCount ?: modules.count { !it.isExam }
+        val done = level?.lessonsDone ?: modules.count { it.completed && !it.isExam }
         val pct = if (total > 0) done * 100 / total else 0
         // The exam container is its own visible row in the trail — exclude it from
         // "finished every module", and keep the standalone exam button only as a

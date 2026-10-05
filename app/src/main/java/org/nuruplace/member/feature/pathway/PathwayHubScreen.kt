@@ -220,14 +220,15 @@ fun PathwayHubScreen(
     // the journey's next step. Writes only; the widget itself never
     // touches the network (docs/PARITY_AUDIT.md, widgets entry).
     val widgetContext = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(active?.levelNumber, active?.completedModules, journey?.next?.title, streak) {
+    LaunchedEffect(active?.levelNumber, active?.lessonsDone, journey?.next?.title, streak) {
         val lvl = active ?: return@LaunchedEffect
         org.nuruplace.member.widget.WidgetSnapshotStore.writePathway(
             context = widgetContext,
             currentLevel = summary?.currentLevel ?: lvl.levelNumber,
             levelTitle = lvl.title,
-            completedModules = lvl.completedModules,
-            totalModules = lvl.totalModules,
+            // The widget's "X of Y modules" counts lessons too (§8.2 #4).
+            completedModules = lvl.lessonsDone,
+            totalModules = lvl.lessonCount,
             // The journey's next step — never a module already finished.
             nextModuleTitle = journey?.next?.title,
             streak = streak,
@@ -288,12 +289,14 @@ private fun HubHeader(
     onBell: () -> Unit,
 ) {
     val idx = levels.indexOfFirst { it.levelNumber == active?.levelNumber }.coerceAtLeast(0)
-    val pct = active?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
-    // Modules still to read — only while learning. A level whose exam
-    // container counts among its modules reads 20 of 21 at the exam, and
-    // "1 module left" there would contradict "Exam ready".
+    // Lessons, never the exam (§8.2 #4): production counts the exam
+    // container in total_modules, and the bar read "20/21" beside "20 of 20
+    // modules done".
+    val pct = active?.let { if (it.lessonCount > 0) it.lessonsDone * 100 / it.lessonCount else 0 } ?: 0
+    // Modules still to read — only while learning ("1 module left" beside
+    // "Exam ready" would contradict it).
     val remaining = active?.takeIf { journey?.stage == JourneyStage.LEARNING }
-        ?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
+        ?.let { (it.lessonCount - it.lessonsDone).coerceAtLeast(0) } ?: 0
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
@@ -333,7 +336,7 @@ private fun HubHeader(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
             Box(Modifier.weight(1f)) { PWBar(pct, PW.goldGrad, PW.navy.copy(alpha = 0.10f)) }
             Spacer(Modifier.width(Spacing.sm))
-            Text("${active?.completedModules ?: 0}/${active?.totalModules ?: 0}", style = PW.t(10, FontWeight.SemiBold), color = PW.ink2)
+            Text("${active?.lessonsDone ?: 0}/${active?.lessonCount ?: 0}", style = PW.t(10, FontWeight.SemiBold), color = PW.ink2)
         }
         if (remaining > 0) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -547,7 +550,8 @@ private fun SelectedModules(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(level.title.uppercase(), style = PW.over(9, 1.62f), color = PW.goldDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${level.completedModules} of ${level.totalModules} done", style = PW.t(11), color = PW.ink2)
+                // Lessons, as the folded row and the header count them (§8.2 #4).
+                Text("${level.lessonsDone} of ${level.lessonCount} done", style = PW.t(11), color = PW.ink2)
             }
             resume?.let { r -> Text("Continue →", style = PW.over(10, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
@@ -751,8 +755,9 @@ private fun Milestones(levels: List<PathwayLevel>) {
     val earned = levels.count { it.walked }
     val rewardIdx = levels.indexOfFirst { !it.walked }
     val reward = rewardIdx.takeIf { it >= 0 }?.let { levels[it] }
-    val remaining = reward?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
-    val rewardPct = reward?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
+    // Lessons to go — the exam is a step of its own, never "1 to go" (§8.2 #4).
+    val remaining = reward?.let { (it.lessonCount - it.lessonsDone).coerceAtLeast(0) } ?: 0
+    val rewardPct = reward?.let { if (it.lessonCount > 0) it.lessonsDone * 100 / it.lessonCount else 0 } ?: 0
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Text("MILESTONES", style = PW.over(9, 1.62f), color = PW.goldDeep)

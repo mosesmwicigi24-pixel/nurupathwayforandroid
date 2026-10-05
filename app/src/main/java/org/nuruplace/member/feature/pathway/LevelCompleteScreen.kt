@@ -115,7 +115,7 @@ fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
                 ) {
                     Text("NEXT LEVEL", style = NuruType.micro, color = Nuru.onNavyDim)
                     Text(next.title, style = NuruType.cardTitle, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
-                    Text("${next.totalModules} modules" + (next.minutes.takeIf { it > 0 }?.let { " · ≈ ${it} min" } ?: ""), style = NuruType.caption, color = Nuru.onNavyFaint)
+                    Text("${next.lessonCount} modules" + (next.minutes.takeIf { it > 0 }?.let { " · ≈ ${it} min" } ?: ""), style = NuruType.caption, color = Nuru.onNavyFaint)
                 }
                 Spacer(Modifier.height(Spacing.md))
                 Box(Modifier.fillMaxWidth().alpha(t)) {

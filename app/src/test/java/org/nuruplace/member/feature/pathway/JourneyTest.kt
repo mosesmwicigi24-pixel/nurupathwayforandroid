@@ -35,6 +35,9 @@ class JourneyTest {
         examPublished: Boolean = true,
         examAvailable: Boolean? = null,
         awaitingFlag: Boolean = false,
+        /** The server's lesson counts (§8.2 #4) — null: an older server. */
+        lessonsTotal: Int? = null,
+        lessonsCompleted: Int? = null,
     ) = PathwaySummary(
         currentLevel = current,
         levels = (1..6).map { n ->
@@ -43,6 +46,7 @@ class JourneyTest {
                 n == current -> PathwayLevel(
                     n, titles[n - 1], totalModules = total, completedModules = done, status = status,
                     examPublished = examPublished, examAvailable = examAvailable, awaitingReview = awaitingFlag,
+                    lessonsTotal = lessonsTotal, lessonsCompleted = lessonsCompleted,
                 )
                 else -> PathwayLevel(n, titles[n - 1], totalModules = 0, completedModules = 0, status = LevelStatus.LOCKED)
             }
@@ -342,6 +346,62 @@ class JourneyTest {
         assertNull(JourneyState.derive(PathwaySummary(currentLevel = 1, levels = emptyList())))
     }
 
+    // ── lessons, never the exam (EXPERIENCE.md §8.2 #4) ──
+    // Production counts a published exam container in total_modules: Ada at
+    // the Level 1 exam is total 21 / completed 20 — and lessons 20 / 20. She
+    // reads "20 of 20" everywhere, never "20 of 21".
+
+    @Test fun `production's shape — the exam row counted in total_modules reads 20 of 20, never 20 of 21`() {
+        val withExam = trail(done = 20) + examRow(status = ModuleStatus.NEXT, available = true)
+        val j = JourneyState.derive(
+            summary(status = LevelStatus.ACTIVE, done = 20, total = 21, examAvailable = true, lessonsTotal = 20, lessonsCompleted = 20),
+            withExam,
+        )!!
+        assertEquals(JourneyStage.EXAM_READY, j.stage)
+        assertEquals(20, j.completedModules)
+        assertEquals(20, j.totalModules)
+        assertEquals("20 of 20 modules", j.modulesLine)
+        // The Pathway header's one line (§8.2 #1).
+        assertEquals("Level 1 of 6 · 20 of 20 modules", j.headerLine)
+        assertEquals(17, j.percent)
+    }
+
+    @Test fun `production's shape while learning — the step and the pill count lessons`() {
+        val withExam = trail(done = 12) + examRow(status = ModuleStatus.LOCKED)
+        val j = JourneyState.derive(
+            summary(done = 12, total = 21, lessonsTotal = 20, lessonsCompleted = 12),
+            withExam,
+        )!!
+        assertEquals(JourneyStage.LEARNING, j.stage)
+        assertEquals("12 of 20 modules", j.pill)
+        assertEquals("12 of 20 modules in Level 1", j.next.line)
+        assertEquals(JourneyLine("12 of 20 modules", " in Level 1"), j.progressLine)
+        assertEquals("Level 1 of 6 · 12 of 20 modules", j.headerLine)
+        // (0 + 12/20) / 6 = 10%.
+        assertEquals(10, j.percent)
+    }
+
+    @Test fun `an older server without lesson counts — the module totals stand`() {
+        val j = JourneyState.derive(summary(done = 5, total = 20), trail(done = 5))!!
+        assertEquals("5 of 20 modules", j.pill)
+        assertEquals("Level 1 of 6 · 5 of 20 modules", j.headerLine)
+        val level = PathwayLevel(1, "Foundations", totalModules = 21, completedModules = 20)
+        assertEquals(21, level.lessonCount)
+        assertEquals(20, level.lessonsDone)
+    }
+
+    @Test fun `lessons done never exceed the lessons there are`() {
+        val level = PathwayLevel(1, "Foundations", totalModules = 21, completedModules = 21, lessonsTotal = 20, lessonsCompleted = 21)
+        assertEquals(20, level.lessonCount)
+        assertEquals(20, level.lessonsDone)
+    }
+
+    @Test fun `a level with no lessons yet says so in the header line`() {
+        val j = JourneyState.derive(summary(current = 2, done = 0, total = 0, lessonsTotal = 0, lessonsCompleted = 0), emptyList())!!
+        assertEquals("Modules open soon", j.modulesLine)
+        assertEquals("Level 2 of 6 · Modules open soon", j.headerLine)
+    }
+
     // ── the wire ──
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -363,6 +423,26 @@ class JourneyTest {
         // A vocabulary this client predates still reads as locked.
         assertEquals(LevelStatus.LOCKED, s.levels[2].status)
         assertEquals(JourneyStage.AWAITING_USHER, JourneyState.derive(s)!!.stage)
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    @Test fun `lessons_total and lessons_completed decode — absent is null, and the totals stand`() {
+        val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; namingStrategy = JsonNamingStrategy.SnakeCase }
+        val s = json.decodeFromString(
+            PathwaySummary.serializer(),
+            """{"current_level":1,"levels":[
+                {"level_number":1,"title":"Foundations of Faith","total_modules":21,"completed_modules":20,"lessons_total":20,"lessons_completed":20,"status":"active","awaiting_review":false,"exam_published":true,"exam_available":true},
+                {"level_number":2,"title":"Older server","total_modules":21,"completed_modules":20,"status":"locked"}
+            ]}""",
+        )
+        assertEquals(20, s.levels[0].lessonsTotal)
+        assertEquals(20, s.levels[0].lessonsCompleted)
+        assertEquals(20, s.levels[0].lessonCount)
+        assertEquals(20, s.levels[0].lessonsDone)
+        assertNull(s.levels[1].lessonsTotal)
+        assertNull(s.levels[1].lessonsCompleted)
+        assertEquals(21, s.levels[1].lessonCount)
+        assertEquals(20, s.levels[1].lessonsDone)
     }
 
     @OptIn(ExperimentalSerializationApi::class)

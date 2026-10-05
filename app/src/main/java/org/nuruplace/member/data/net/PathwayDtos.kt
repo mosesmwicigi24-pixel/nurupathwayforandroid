@@ -54,6 +54,12 @@ data class PathwayLevel(
     val description: String? = null,
     val totalModules: Int = 0,
     val completedModules: Int = 0,
+    // Lessons only — the exam is a step of its own, never "a module"
+    // (EXPERIENCE.md §8.2 #4). total_modules counts a published exam
+    // container, so a finisher read "20 of 21 done" beside "20 of 20 modules
+    // done". Null from a server that predates them: the totals above stand.
+    val lessonsTotal: Int? = null,
+    val lessonsCompleted: Int? = null,
     val minutes: Int = 0,
     val status: LevelStatus = LevelStatus.LOCKED,
     // The level's final exam is live only once an admin publishes it. Defaults
@@ -79,6 +85,13 @@ data class PathwayLevel(
      *  passed and waiting to be ushered on. Drives the rail's seals, the
      *  milestone badges and the summit's road — never the journey's stage. */
     val walked: Boolean get() = status == LevelStatus.COMPLETED || isAwaitingReview
+
+    /** The level's modules as a member counts them — its lessons, never the
+     *  exam (§8.2 #4). Every "X of Y modules" reads these two. */
+    val lessonCount: Int get() = lessonsTotal ?: totalModules
+
+    /** Lessons done — never more than there are. */
+    val lessonsDone: Int get() = (lessonsCompleted ?: completedModules).coerceAtMost(lessonCount.coerceAtLeast(0))
 }
 
 @Serializable
