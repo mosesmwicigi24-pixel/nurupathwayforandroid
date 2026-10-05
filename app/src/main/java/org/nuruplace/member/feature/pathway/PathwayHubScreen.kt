@@ -545,7 +545,7 @@ private fun SelectedModules(
                 // Lessons, as the folded row and the header count them (§8.2 #4).
                 Text("${level.lessonsDone} of ${level.lessonCount} done", style = PW.t(11), color = PW.ink2)
             }
-            resume?.let { r -> Text("Continue →", style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
+            resume?.let { r -> Text(ModuleWords.trailLink(level.lessonsDone), style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(22.dp)),
@@ -581,15 +581,9 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
     val active = m.status == ModuleStatus.NEXT && !soon
     val locked = m.status == ModuleStatus.LOCKED
     val exam = m.isExam
-    val caption = when {
-        exam && done -> "Level exam · passed"
-        soon -> "Level exam · opens soon"
-        exam && active -> "Level exam · ready — tap to begin"
-        exam -> "Finish every module to unlock the exam"
-        done -> "Completed"
-        active -> "In progress · tap to continue"
-        else -> "Locked"
-    }
+    // "Up next" and "Start", never "In progress"/"Resume" — `next` is the next
+    // one to do, not progress (Cycle 3's closing walk, B2).
+    val caption = ModuleWords.trailCaption(m)
     Column {
         Row(
             Modifier.fillMaxWidth().then(if (soon) Modifier else Modifier.pressScale(0.98f))
@@ -640,7 +634,7 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                 Text(caption, style = PW.t(11, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
-                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(if (exam) "Start exam" else "Resume", style = PW.over(11, 0f), color = PW.gold) }
+                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(ModuleWords.trailAction(m), style = PW.over(11, 0f), color = PW.gold) }
                 soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(11, 0f), color = PW.goldDeep) }
                 done -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
             }

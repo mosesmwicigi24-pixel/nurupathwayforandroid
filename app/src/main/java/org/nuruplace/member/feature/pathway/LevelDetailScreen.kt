@@ -225,10 +225,19 @@ fun LevelDetailScreen(
                         Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
                             Text("LEVEL $levelNumber", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.Bold)
                         }
-                        val complete = level?.status == LevelStatus.COMPLETED
-                        val passed = level?.isAwaitingReview == true
-                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (complete || passed) Nuru.success else Nuru.white.copy(alpha = 0.22f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text(if (complete) "COMPLETE" else if (passed) "EXAM PASSED" else "IN PROGRESS", style = NuruType.micro, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
+                        // The one journey state (Cycle 3's closing walk, B3): "EXAM
+                        // READY" when Pathway says so, never "IN PROGRESS" beside it.
+                        val badge = levelBadge(levelNumber, level, bundle.journey)
+                        val badgeBg = when (badge.tone) {
+                            LevelBadge.Tone.ACHIEVED -> Nuru.success
+                            LevelBadge.Tone.NEXT_STEP -> Nuru.gold
+                            LevelBadge.Tone.QUIET -> Nuru.white.copy(alpha = 0.22f)
+                        }
+                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(badgeBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text(
+                                badge.text, style = NuruType.micro, fontWeight = FontWeight.Bold,
+                                color = if (badge.tone == LevelBadge.Tone.NEXT_STEP) Nuru.navy else Nuru.onNavy,
+                            )
                         }
                     }
                     Spacer(Modifier.height(Spacing.sm))
@@ -419,7 +428,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                     Kicker(if (module.isExam) "Level exam" else "Module ${module.moduleSequenceNumber}")
                     Text(module.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 }
-                ModuleStatusPill(done, isNext, soon)
+                ModuleStatusPill(done, isNext, soon, module.isExam)
             }
             module.summary?.let {
                 Spacer(Modifier.height(Spacing.xs))
@@ -439,7 +448,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                         Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy).padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (module.isExam) "Start exam" else "Resume", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
+                        Text(ModuleWords.trailAction(module), style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                     }
                 }
@@ -452,7 +461,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                     module.isExam && isNext -> "Level exam · ready — tap to begin."
                     module.isExam -> "Unlocks when you finish every module."
                     done -> "Completed — nicely done."
-                    isNext -> "Pick up where you left off."
+                    isNext -> "Up next — tap to start."
                     else -> "Unlocks when you finish the one before."
                 },
                 style = NuruType.micro, color = if (done) Nuru.goldChipText else if (isNext) Nuru.goldLo else Nuru.ink400,
@@ -737,12 +746,14 @@ private fun encouragementKicker(kind: String?): String = when (kind?.lowercase()
 }
 
 @Composable
-private fun ModuleStatusPill(done: Boolean, isNext: Boolean, soon: Boolean = false) {
-    val (label, bg, fg) = when {
-        done -> Triple("Done", Nuru.successBg, Nuru.successText)
-        soon -> Triple("Opens soon", Nuru.goldTint, Nuru.goldChipText)
-        isNext -> Triple("In progress", Nuru.goldTint, Nuru.goldChipText)
-        else -> Triple("Locked", Nuru.inputBg, Nuru.ink400)
+private fun ModuleStatusPill(done: Boolean, isNext: Boolean, soon: Boolean = false, isExam: Boolean = false) {
+    // "Up next" (an exam: "Ready"), never "In progress" — `next` is the next
+    // one to do, not progress (B2).
+    val label = ModuleWords.levelPagePill(done, isNext, soon, isExam)
+    val (bg, fg) = when {
+        done -> Nuru.successBg to Nuru.successText
+        soon || isNext -> Nuru.goldTint to Nuru.goldChipText
+        else -> Nuru.inputBg to Nuru.ink400
     }
     Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(bg).padding(horizontal = 8.dp, vertical = 2.dp)) {
         Text(label, style = NuruType.micro, color = fg, fontWeight = FontWeight.Bold)
