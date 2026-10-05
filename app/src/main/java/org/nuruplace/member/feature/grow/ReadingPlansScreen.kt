@@ -490,11 +490,13 @@ private fun ContinueRow(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
         PLCover(url = plan.imageUrl, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
+            // A plan is a content row (§8.1 rule 3): Fraunces 15 semibold,
+            // wrapping to two lines rather than cut (rule 9).
             Text(
                 plan.title,
-                style = plInter(14, FontWeight.Bold, -0.14f),
+                style = NuruType.rowTitle,
                 color = PL.navy,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(

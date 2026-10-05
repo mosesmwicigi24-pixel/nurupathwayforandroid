@@ -272,7 +272,8 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
         }
         // Body
         Column(Modifier.padding(16.dp)) {
-            Text(occ.title, style = evSerif(15, FontWeight.SemiBold), color = EV.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // An event's title wraps to two lines, never cut (§8.1 rule 9).
+            Text(occ.title, style = evSerif(15, FontWeight.SemiBold), color = EV.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             occ.description?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = evInter(11), color = EV.secondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
