@@ -93,7 +93,7 @@ fun AnnouncementsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                                     Text(a.title, style = evSerif(16, FontWeight.SemiBold), color = EV.ink, maxLines = 2)
                                 }
                                 Text(
-                                    a.body,
+                                    org.nuruplace.member.ui.components.LightMarkdown.plain(a.body),
                                     style = evInter(13),
                                     color = EV.secondary,
                                     maxLines = 2,
@@ -156,7 +156,11 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
                     )
                 }
                 // Body (plain text)
-                Text(a.body, style = evInter(16).copy(lineHeight = 24.sp), color = EV.ink)
+                // Read as written — "**9:00 AM**" is 9:00 AM in bold, not its
+                // asterisks (§8.1 rule 8) — at the one 16 sp reading body.
+                org.nuruplace.member.ui.components.MarkdownBody(
+                    a.body, style = evInter(16).copy(lineHeight = 24.sp), color = EV.ink, linkColor = EV.goldDeep,
+                )
                 // Video
                 a.videoUrl?.let {
                     Box(

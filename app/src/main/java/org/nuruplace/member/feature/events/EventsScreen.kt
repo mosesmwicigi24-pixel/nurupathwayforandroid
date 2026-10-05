@@ -519,7 +519,7 @@ fun EventsScreen(
                                         Icon(Icons.Filled.Verified, null, tint = EV.gold, modifier = Modifier.size(12.dp))
                                     }
                                     Text(
-                                        a.body, style = evInter(11), color = EV.secondary,
+                                        org.nuruplace.member.ui.components.LightMarkdown.plain(a.body), style = evInter(11), color = EV.secondary,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     )
                                 }

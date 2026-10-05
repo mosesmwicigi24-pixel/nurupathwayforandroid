@@ -1526,13 +1526,16 @@ private fun FeaturedCarousel(
             when (val page = pages[i]) {
                 is FeaturedPage.Ann -> FeaturedPageCard(
                     kicker = "ANNOUNCEMENT", imageUrl = page.a.primaryImageUrl,
-                    title = page.a.title, body = page.a.body,
+                    title = page.a.title, body = org.nuruplace.member.ui.components.LightMarkdown.plain(page.a.body),
                     meta = page.a.sentAt?.let { fmtDate(it) }, cta = "Read more ›",
                 ) { onOpenAnnouncement(page.a.announcementId) }
                 is FeaturedPage.Fev -> FeaturedPageCard(
                     kicker = "FEATURED GATHERING", imageUrl = page.e.primaryImageUrl,
                     title = page.e.title, body = page.e.description ?: page.e.location.orEmpty(),
-                    meta = page.e.dtstartLocal.takeIf { it.isNotBlank() }, cta = "See details ›",
+                    // One date form (§8.1 rule 8) — it showed the raw start.
+                    meta = runCatching { java.time.LocalDateTime.parse(page.e.dtstartLocal.trim().take(19)) }.getOrNull()
+                        ?.let { org.nuruplace.member.util.NuruDates.dayTime(it) },
+                    cta = "See details ›",
                 ) { onAll() }
                 is FeaturedPage.Occ -> FeaturedPageCard(
                     kicker = "UPCOMING EVENT", imageUrl = page.o.primaryImageUrl,
