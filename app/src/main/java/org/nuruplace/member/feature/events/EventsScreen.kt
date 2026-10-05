@@ -71,6 +71,7 @@ import org.nuruplace.member.ui.components.ListSkeleton
 import org.nuruplace.member.util.isoPlusDays
 import org.nuruplace.member.util.relTime
 import org.nuruplace.member.util.todayIso
+import org.nuruplace.member.ui.theme.NuruType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -143,9 +144,11 @@ fun EventsScreen(
                 Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
                         Column(Modifier.weight(1f)) {
-                            Text("EVENTS", style = evInter(11, FontWeight.Bold, 2f), color = EV.eyebrowGold)
+                            // §8.1 rules 2–3: the kicker (Inter 11 bold, tracking
+                            // 1.4), the title, one Inter line at body size.
+                            Text("EVENTS", style = NuruType.kicker, color = EV.eyebrowGold)
                             Text("Gathered together", style = evSerif(28, FontWeight.SemiBold), color = EV.navy)
-                            Text(eventsHeaderLine(events, today), style = evInter(11), color = EV.secondary)
+                            Text(eventsHeaderLine(events, today), style = evInter(13), color = EV.secondary)
                         }
                         // The one bell (§7.2 #4): a dot only while something is unread.
                         InboxBell(
@@ -611,7 +614,8 @@ private fun QuietEntryRow(icon: androidx.compose.ui.graphics.vector.ImageVector,
             Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(EV.goldTile),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(16.dp)) }
-        Text(title, style = evInter(13, FontWeight.SemiBold), color = EV.navy, modifier = Modifier.weight(1f))
+        // A menu entry is a control row (§8.1 rule 3): Inter 14 medium.
+        Text(title, style = NuruType.controlTitle, color = EV.navy, modifier = Modifier.weight(1f))
         Icon(Icons.Filled.ChevronRight, null, tint = EV.tertiary, modifier = Modifier.size(16.dp))
     }
 }

@@ -555,8 +555,11 @@ private fun PartnersHeaderBand(segmentControl: @Composable () -> Unit) {
     GiveCreamHeaderBox {
         Column(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp)) {
             segmentControl()
-            Text("Walk with the church", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 14.dp))
-            Text("Decide in advance. The church can plan.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
+            // One header (§8.1 rule 2): the switch above the kicker that names
+            // the tab, the Fraunces title (26–28), one Inter line.
+            Text("PARTNERS", style = NuruType.kicker, color = GIVE.eyebrow, modifier = Modifier.padding(top = 14.dp))
+            Text("Walk with the church", style = giSerif(26, FontWeight.SemiBold, -0.52f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
+            Text("Decide in advance. The church can plan.", style = giInter(13), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }

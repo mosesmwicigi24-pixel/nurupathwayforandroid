@@ -128,6 +128,7 @@ import org.nuruplace.member.data.net.PayPalCaptureBody
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.RetryGiftBody
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.theme.NuruType
 import java.time.Instant
 import java.time.LocalDate
 
@@ -299,8 +300,11 @@ private fun GiveHeaderBand(
     GiveCreamHeaderBox {
         Column(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp)) {
             segmentControl()
-            Text("Sow into the Kingdom", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 14.dp))
-            Text("Generosity is worship — a quiet, joyful act.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
+            // One header (§8.1 rule 2): the switch above the kicker that names
+            // the tab, the Fraunces title (26–28), one Inter line.
+            Text("GIVE", style = NuruType.kicker, color = GIVE.eyebrow, modifier = Modifier.padding(top = 14.dp))
+            Text("Sow into the Kingdom", style = giSerif(26, FontWeight.SemiBold, -0.52f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
+            Text("Generosity is worship — a quiet, joyful act.", style = giInter(13), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
             if (yearTotals != null) {
                 Row(
                     Modifier.padding(top = 14.dp),

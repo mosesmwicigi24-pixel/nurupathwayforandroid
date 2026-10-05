@@ -205,7 +205,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                 // One settings gear on the You tab (EXPERIENCE.md §6.2): the
                 // segment bar's. Profile's own gear, a second door to the
                 // same Settings, is gone.
-                Text("ACCOUNT", style = pInter(11, FontWeight.Bold, 1.98f), color = PROF.eyebrow)
+                Text("ACCOUNT", style = NuruType.kicker, color = PROF.eyebrow)
                 Row(
                     Modifier.padding(top = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,

@@ -86,6 +86,7 @@ import org.nuruplace.member.ui.components.InboxBell
 import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import org.nuruplace.member.ui.theme.NuruType
 import java.util.Calendar
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -271,7 +272,8 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
     ) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                PLOverline("PLANS", color = PL.catText, kerning = 1.8f)
+                // The kicker (§8.1 rule 3): Inter 11 bold, tracking 1.4, gold.
+                Text("PLANS", style = NuruType.kicker, color = PL.catText)
                 Text(
                     "Grow in the Word",
                     style = plSerif(26, FontWeight.SemiBold, -0.52f),
@@ -280,7 +282,7 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
                 )
                 Text(
                     line,
-                    style = plInter(12),
+                    style = plInter(13),
                     color = PL.ink2,
                     modifier = Modifier.padding(top = 4.dp),
                 )
