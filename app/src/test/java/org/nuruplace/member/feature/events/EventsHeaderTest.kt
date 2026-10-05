@@ -78,3 +78,11 @@ class EventsHeaderTest {
         assertEquals(listOf("Sunday Service", "Pathway classes"), more.map { it.title })
     }
 }
+
+class UpcomingSeriesTest {
+    @org.junit.Test fun `a series with no next gathering has ended and is not offered`() {
+        val live = org.nuruplace.member.data.net.EventSeries(seriesId = "a", title = "Sunday Service", nextAt = "2026-10-11T06:00:00Z")
+        val ended = org.nuruplace.member.data.net.EventSeries(seriesId = "b", title = "Pathway Discipleship Classes", nextAt = null)
+        org.junit.Assert.assertEquals(listOf("a"), upcomingSeries(listOf(live, ended)).map { it.seriesId })
+    }
+}

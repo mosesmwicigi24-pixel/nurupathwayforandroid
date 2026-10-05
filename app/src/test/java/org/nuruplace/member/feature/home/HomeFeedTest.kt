@@ -77,3 +77,13 @@ class HomeFeedTest {
         assertEquals(listOf(FeaturedPage.Ann(ann)) + four.take(3).map { FeaturedPage.Occ(it) }, featuredPages(ann, null, four, ownCardSeries = null))
     }
 }
+
+class FeaturedUpcomingTest {
+    private val ev = org.nuruplace.member.data.net.FeaturedEvent(seriesId = "s", title = "Pathway Discipleship Classes", dtstartLocal = "2026-08-30T14:00:00")
+    @org.junit.Test fun `a featured gathering shows only while it is ahead (Cycle 3 closing walk B1)`() {
+        val oct5 = java.time.LocalDateTime.of(2026, 10, 5, 12, 0)
+        org.junit.Assert.assertFalse(featuredIsUpcoming(ev, oct5))
+        org.junit.Assert.assertTrue(featuredIsUpcoming(ev.copy(dtstartLocal = "2026-10-11T14:00:00"), oct5))
+        org.junit.Assert.assertFalse(featuredIsUpcoming(ev.copy(dtstartLocal = ""), oct5))
+    }
+}

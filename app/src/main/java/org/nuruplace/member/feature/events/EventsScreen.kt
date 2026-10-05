@@ -69,6 +69,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.InboxBell
 import org.nuruplace.member.ui.components.ListSkeleton
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.util.isoPlusDays
 import org.nuruplace.member.util.relTime
 import org.nuruplace.member.util.todayIso
@@ -114,6 +115,7 @@ fun EventsScreen(
         EventsData(cal, series, anns, rsvps)
     }) { (events, series, anns, rsvps), reload ->
         val scope = rememberCoroutineScope()
+        val eventsContext = androidx.compose.ui.platform.LocalContext.current
         val today = remember { LocalDate.now(EV_ZONE) }
         // What the member picked stays picked across Back (§7 rule 5).
         var selectedDay by rememberSaveable { mutableStateOf(today) }
@@ -377,7 +379,7 @@ fun EventsScreen(
                         selectedDay == today && segment == 0 -> "Today's gatherings"
                         segment == 1 -> "Coming up"
                         segment == 2 -> "Your RSVPs"
-                        else -> "Events on " + selectedDay.format(DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH))
+                        else -> "Events on " + org.nuruplace.member.util.NuruDates.day(selectedDay, today)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(sectionTitle, style = evSerif(18, FontWeight.SemiBold), color = EV.ink)
@@ -445,14 +447,16 @@ fun EventsScreen(
                 // ── SERIES YOU FOLLOW · MORE SERIES ───────────────────────────
                 // "Series you follow" holds only what the member follows; the
                 // rest sit under "More series", each with + Follow (§7.4 #7).
-                val (followed, more) = splitByFollowing(series) { it.following }
+                // A series with no next gathering has ended: no row, no Follow
+                // (Cycle 3's closing walk — five finished series offered
+                // "Follow" beside "Every Sunday · 2:00 PM").
+                val (followed, more) = splitByFollowing(upcomingSeries(series)) { it.following }
+                // A follow the server didn't take says so (§7.4) — it was silent.
                 val toggleFollow: (EventSeries) -> Unit = { s ->
                     scope.launch {
-                        try {
+                        noticeOnFailure(eventsContext, lead = if (s.following) "Couldn't unfollow that series." else "Couldn't follow that series.") {
                             Net.client.api.toggleSeriesFollow(s.seriesId)
-                            reload()
-                        } catch (_: Exception) {
-                        }
+                        }?.let { reload() }
                     }
                 }
                 if (followed.isNotEmpty()) {

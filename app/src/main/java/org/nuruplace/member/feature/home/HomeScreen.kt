@@ -293,7 +293,9 @@ fun HomeScreen(
         // grounded in their streak/level/prayers, cached per day). iOS parity.
         personalWord = runCatching { Net.client.api.homeGreeting().greeting.takeIf { it.isNotBlank() } }.getOrElse { personalWord }
         verseReactions = runCatching { Net.client.api.verseReactions() }.getOrElse { verseReactions }
-        featuredEvent = runCatching { Net.client.api.featuredEvent().data }.getOrElse { featuredEvent }
+        // Only a gathering still ahead (Cycle 3's closing walk, B1): a series
+        // that ended on 6 Sep was featured as "Sun, Aug 30 · 2:00 PM".
+        featuredEvent = runCatching { Net.client.api.featuredEvent().data?.takeIf { featuredIsUpcoming(it) } }.getOrElse { featuredEvent }
         verse = runCatching { Net.client.api.homeVerse() }.getOrElse { verse }
         streak = runCatching { Net.client.api.achievements() }.getOrElse { streak }
         welcomeVideo = runCatching { Net.client.api.welcomeVideo() }.getOrElse { welcomeVideo }
@@ -1468,6 +1470,11 @@ internal sealed interface FeaturedPage {
  *  series of the gathering shown in its own card (Home's featured-gathering
  *  card) — neither it nor another occurrence of it slides here too; the
  *  featured gathering's other occurrences never repeat it either. */
+/** The featured gathering is still ahead — its start, the church's wall time
+ *  (Nairobi), is not past. An unreadable start is not shown. */
+internal fun featuredIsUpcoming(ev: FeaturedEvent, now: java.time.LocalDateTime = java.time.LocalDateTime.now(EV_ZONE)): Boolean =
+    runCatching { java.time.LocalDateTime.parse(ev.dtstartLocal.trim().take(19)) }.getOrNull()?.let { !it.isBefore(now) } == true
+
 internal fun featuredPages(
     announcement: FeaturedAnnouncement?,
     featuredEvent: FeaturedEvent?,
@@ -1801,10 +1808,10 @@ private fun FeaturedGatheringCard(ev: FeaturedEvent, onOpen: () -> Unit) {
                 Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
             Spacer(Modifier.height(Spacing.sm))
-            val whenText = runCatching {
-                java.time.LocalDateTime.parse(ev.dtstartLocal.take(19))
-                    .format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a"))
-            }.getOrDefault(ev.dtstartLocal)
+            // One date form (§8.1 rule 8): "Sun 11 Oct · 2:00 PM" — never the
+            // raw value when it can't be read.
+            val whenText = runCatching { java.time.LocalDateTime.parse(ev.dtstartLocal.take(19)) }.getOrNull()
+                ?.let { org.nuruplace.member.util.NuruDates.dayTime(it) }
             Text(
                 listOfNotNull(whenText, ev.location?.takeIf { it.isNotBlank() }).joinToString("  ·  "),
                 style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold,
@@ -1917,4 +1924,4 @@ private fun parseZdt(s: String?): ZonedDateTime? {
 }
 
 private fun fmtDate(s: String?): String =
-    parseZdt(s)?.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())) ?: ""
+    parseZdt(s)?.let { org.nuruplace.member.util.NuruDates.day(it.toInstant(), it.zone) } ?: ""

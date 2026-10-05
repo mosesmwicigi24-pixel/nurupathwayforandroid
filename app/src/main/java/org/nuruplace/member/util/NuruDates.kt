@@ -12,6 +12,8 @@ package org.nuruplace.member.util
 
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -37,6 +39,13 @@ object NuruDates {
     /** "Mon 5 Oct · 11:58 AM". */
     fun dayTime(instant: Instant, zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): String =
         "${day(instant, zone, today)} · ${time(instant, zone)}"
+
+    /** "Sun 11 Oct · 2:00 PM" for a wall-clock moment (a gathering's local start). */
+    fun dayTime(local: LocalDateTime, today: LocalDate = LocalDate.now()): String =
+        "${day(local.toLocalDate(), today)} · ${TIME.format(local)}"
+
+    /** "2:00 PM" for a wall-clock time. */
+    fun time(local: LocalTime): String = TIME.format(local)
 
     /** An instant the server sent ("…Z" or with an offset); null when unreadable. */
     fun instant(iso: String?): Instant? {

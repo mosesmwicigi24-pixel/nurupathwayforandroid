@@ -70,3 +70,8 @@ internal fun seriesLine(cadence: String, nextTime: String?): String {
  *  sit under "More series", each with + Follow (§7.4 #7). */
 internal fun <T> splitByFollowing(series: List<T>, following: (T) -> Boolean): Pair<List<T>, List<T>> =
     series.partition(following)
+
+/** The series that will meet again — the server's `next_at` says when; one
+ *  without it has ended and is not offered (Cycle 3's closing walk). */
+internal fun upcomingSeries(series: List<org.nuruplace.member.data.net.EventSeries>): List<org.nuruplace.member.data.net.EventSeries> =
+    series.filter { !it.nextAt.isNullOrBlank() }
