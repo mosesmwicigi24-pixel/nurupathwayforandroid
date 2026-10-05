@@ -68,7 +68,7 @@ object ApiException {
     /** A refusal's own words — only from OUR envelope (`{ error: { code,
      *  message } }`): a bare `{ message }`, a proxy's page or an empty body is
      *  not something our API said to the member (iOS NuruStateCopy, the same
-     *  rule) — and neither is VALIDATION_FAILED ([ServerError.refusalWords]). */
+     *  rule) — and neither is the body-parse failure ([ServerError.refusalWords]). */
     private fun refusalWords(e: HttpException): String? =
         parseServerError(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull()).refusalWords
 
@@ -113,10 +113,16 @@ object ApiException {
 
 }
 
-/** The envelope code of a request the server could not parse: the APP built
- *  it wrong, so it is our side's fault, not a refusal in a member's words
- *  (EXPERIENCE.md §7.3) — "Request body failed validation" is never shown. */
+/** The envelope code the server uses both for a body it could not parse and
+ *  for many refusals written for members ("That code is not valid", "Photo
+ *  exceeds 5 MB"). Only the parse failure is ours (EXPERIENCE.md §7.3). */
 const val VALIDATION_FAILED = "VALIDATION_FAILED"
+
+/** The words of a request the server could not parse: the APP built it
+ *  wrong, so it is our side's fault, never a refusal in a member's words —
+ *  "Request body failed validation" is never shown (§7.3; iOS's
+ *  bodyParseRefusal, the same rule). */
+const val BODY_PARSE_REFUSAL = "Request body failed validation"
 
 /** A server refusal, as [ApiException.serverError] read it. */
 data class ServerError(
@@ -129,10 +135,15 @@ data class ServerError(
     val details: JsonObject?,
 ) {
     /** The server's own words for the member: a refusal in our envelope (a
-     *  4xx with its code) — never [VALIDATION_FAILED]'s parse message, a
-     *  5xx's "Internal server error", or a proxy's page. Null otherwise. */
+     *  4xx with its code) — never the body-parse failure ([BODY_PARSE_REFUSAL],
+     *  ours), a 5xx's "Internal server error", or a proxy's page. Null
+     *  otherwise. A VALIDATION_FAILED in words written for the member ("That
+     *  code is not valid") is theirs to read, as on iOS. */
     val refusalWords: String?
-        get() = message?.takeIf { code != null && code != VALIDATION_FAILED && status in 400..499 && status != 401 }
+        get() = message?.takeIf {
+            code != null && status in 400..499 && status != 401 &&
+                !(code == VALIDATION_FAILED && it.trim() == BODY_PARSE_REFUSAL)
+        }
 
     /** What the member reads (EXPERIENCE.md §4): [refusalWords] when there
      *  are any, else the state language's sentence for the status — "Something

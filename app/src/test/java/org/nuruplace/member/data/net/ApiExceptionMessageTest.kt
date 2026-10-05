@@ -80,6 +80,13 @@ class ApiExceptionMessageTest {
         val refusal = ApiException.parseServerError(422, """{"error":{"code":"AMOUNT_OUT_OF_RANGE","message":"M-Pesa gifts are from KSh 1 to KSh 250,000."}}""")
         assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", refusal.refusalWords)
         assertEquals("M-Pesa gifts are from KSh 1 to KSh 250,000.", refusal.displayMessage)
+        // A VALIDATION_FAILED in words written for the member is theirs (iOS:
+        // ExperienceCycle3Tests keeps "That code is not valid"); only the
+        // body-parse failure is ours.
+        val code = ApiException.parseServerError(400, """{"error":{"code":"VALIDATION_FAILED","message":"That code is not valid"}}""")
+        assertEquals("That code is not valid", code.refusalWords)
+        val photo = ApiException.parseServerError(400, """{"error":{"code":"VALIDATION_FAILED","message":"Photo exceeds 5 MB"}}""")
+        assertEquals("Photo exceeds 5 MB", photo.displayMessage)
         // The one-line form says the same (Partners' actions, the claim form, PayPal's capture).
         val http = HttpException(
             Response.error<Any>(
