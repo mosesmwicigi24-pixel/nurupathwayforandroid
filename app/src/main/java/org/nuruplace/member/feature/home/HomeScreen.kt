@@ -888,7 +888,7 @@ private fun LiveHeaderChip(onClick: () -> Unit) {
             .border(2.dp, Nuru.liveRed.copy(alpha = ringAlpha), RoundedCornerShape(999.dp))
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Text("📺", style = NuruType.body) }
+    ) { Icon(Lucide.Video, "Live now", tint = Nuru.white, modifier = Modifier.size(18.dp)) }
 }
 
 // ─────────────────────────── Primitives ───────────────────────────
@@ -995,7 +995,7 @@ private fun TrendBadge(t: org.nuruplace.member.data.net.ScoreTrend, modifier: Mo
 private fun Avatar(url: String?, size: androidx.compose.ui.unit.Dp = 44.dp) {
     Box(Modifier.size(size).clip(RoundedCornerShape(999.dp)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
         if (url != null) AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(size).clip(RoundedCornerShape(999.dp)))
-        else Text("🙂", style = NuruType.body)
+        else Icon(Lucide.User, null, tint = Nuru.ink400, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1012,7 +1012,7 @@ private fun OnAirCard(r: RadioProgram, onOpen: () -> Unit) {
     ) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.homeNavyDark), contentAlignment = Alignment.Center) {
             if (r.artworkUrl != null) AsyncImage(model = r.artworkUrl, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)))
-            else Text("📻", style = NuruType.body)
+            else Icon(Lucide.Radio, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("● ON AIR · NURU RADIO", style = NuruType.micro, color = Nuru.liveRed, fontWeight = FontWeight.Bold)
@@ -1061,7 +1061,7 @@ private fun LiveNowCard(info: LiveNowInfo, onOpen: () -> Unit) {
             if (info.occ.primaryImageUrl != null) {
                 AsyncImage(model = info.occ.primaryImageUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
             } else {
-                Text("⛪", style = NuruType.title)
+                Icon(Lucide.Users, null, tint = Nuru.gold, modifier = Modifier.size(22.dp))
             }
         }
         Column(Modifier.weight(1f)) {
@@ -1512,11 +1512,14 @@ private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
         // No zero counts (§7.4 #9): no pill until someone prays or replies.
         org.nuruplace.member.util.ZeroCounts.prayerLine(praying = post.prayCount, replies = post.commentCount ?: 0)?.let { counts ->
             Spacer(Modifier.height(Spacing.sm))
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
-                Text(
-                    "🤲 $counts",
-                    style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold,
-                )
+            // iOS's pill: the hand-heart and the counts — not a "🤲" typed in (§8.1 rule 7).
+            Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.HandHeart, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(5.dp))
+                Text(counts, style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -1939,7 +1942,7 @@ private fun EncouragementCard(prayerCount: Int) {
     ) {
         Box(Modifier.width(3.dp).height(40.dp).background(Nuru.gold))
         Spacer(Modifier.width(Spacing.md))
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.white), contentAlignment = Alignment.Center) { Text("✦", color = Nuru.gold, style = NuruType.heading) }
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.white), contentAlignment = Alignment.Center) { Icon(Lucide.HandHeart, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
         Spacer(Modifier.width(Spacing.md))
         Text("Your community lifted $prayerCount prayers — stand with one of them today.", style = NuruType.body, color = Nuru.navy)
     }
@@ -1952,7 +1955,7 @@ private fun GiveCard(railsLine: String, onGive: () -> Unit) {
     NavyCard(pad = Spacing.screen) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(56.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) { Text("🤲", style = NuruType.title) }
+                Box(Modifier.size(56.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) { Icon(Lucide.HandHeart, null, tint = Nuru.homeNavy, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.height(Spacing.md))
                 CardKicker("Support God's work", Nuru.goldSoft)
                 Spacer(Modifier.height(Spacing.xs))
@@ -1966,7 +1969,13 @@ private fun GiveCard(railsLine: String, onGive: () -> Unit) {
                 Box(
                     Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onGive() }.padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,
-                ) { Text("🤲  Give now  ›", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold) }
+                ) {
+                    // iOS's words: "Give now" and the chevron — no "🤲" or typed "›" (§8.1 rule 7).
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Give now", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold)
+                        Icon(Lucide.ChevronRight, null, tint = Nuru.homeNavy, modifier = Modifier.size(18.dp))
+                    }
+                }
                 Spacer(Modifier.height(Spacing.sm))
                 Text(railsLine, style = NuruType.micro, color = Nuru.onNavyFaint)
             }
