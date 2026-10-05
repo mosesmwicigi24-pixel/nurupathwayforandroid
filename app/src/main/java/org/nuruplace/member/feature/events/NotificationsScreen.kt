@@ -1,6 +1,6 @@
 // Notification center — ported to the Figma NotificationsScreen. A white app bar
-// with an unread count + "Mark all read" navy pill, then rows carrying a
-// category-toned icon chip (info · success · warning · security — §B2) and
+// with an unread count + "Mark all read" navy pill, then rows carrying one
+// icon per notice family on the gold-tint tile (EXPERIENCE.md §8.2 #14) and
 // reward rows (badge/certificate/level) in a gold gift treatment. Read-state
 // contrast is the owner's amber/green design (2026-08-26, iOS parity): unread
 // rows carry a GLOWING AMBER dot on a warm wash + amber accent bar; read rows a
@@ -39,7 +39,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.MailOutline
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.RateReview
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -57,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -118,35 +134,83 @@ private fun bodyOf(n: NotificationRow): String? =
     n.payload?.body?.takeIf { it.isNotEmpty() }
         ?: org.nuruplace.member.feature.give.givingNotificationBody(n.template, n.payload)
 
-/** The four backend notification categories → (glyph, foreground, tint). §B2.
- *  Internal so NotificationToneTest pins the rules' order. */
-internal data class Tone(val glyph: String, val fg: Color, val bg: Color, val reward: Boolean = false)
+/** What a notice is about — one family per kind of notice, one icon each
+ *  (EXPERIENCE.md §8.1 rule 7, §8.2 #14), the same families as iOS's inbox.
+ *  Every icon sits on the gold-tint tile; the rewards keep their gold one.
+ *  It used to be an emoji per category, and a Live notice — matching none —
+ *  fell to the default bell (iOS: its gear). Internal so NotificationToneTest
+ *  pins the families and their order. */
+internal enum class NoticeFamily(val icon: ImageVector, val reward: Boolean = false) {
+    /** live_stream_started · live_guest_invite — the broadcast. */
+    LIVE(Icons.Filled.Sensors),
+    BADGE(Icons.Filled.Verified, reward = true),
+    CERTIFICATE(Icons.Filled.WorkspacePremium, reward = true),
+    /** level_completed · level_ushered — the road moving on. */
+    LEVEL(Icons.AutoMirrored.Filled.TrendingUp, reward = true),
+    /** reflection_approved · _returned · _deferred — the discipler's word. */
+    REFLECTION(Icons.Filled.RateReview),
+    /** department_* · serve_request_* — a team to serve on. */
+    DEPARTMENT(Icons.Filled.Handshake),
+    /** giving_* · pledge_* · payment_* — the Give tab's hand and heart. */
+    GIVING(Icons.Filled.VolunteerActivism),
+    /** event_* — a gathering. */
+    EVENT(Icons.Filled.CalendarMonth),
+    /** announcement — the church's megaphone. */
+    ANNOUNCEMENT(Icons.Filled.Campaign),
+    /** plan_group_* — reading with a friend. */
+    PLAN(Icons.Filled.Bookmark),
+    /** sunday_letter — the letter. */
+    LETTER(Icons.Filled.MailOutline),
+    /** space_* · connection_* · community_* · prayer_* — the family. */
+    COMMUNITY(Icons.Filled.Groups),
+    /** check_in_* — a service's check-in. */
+    CHECK_IN(Icons.Filled.QrCodeScanner),
+    /** security · login · password · mfa — the account. */
+    SECURITY(Icons.Filled.Shield),
+    /** Anything else — a notice. */
+    OTHER(Icons.Filled.Notifications),
+}
 
-/** A giving or Partners notice — giving_* · pledge_* · payment_*. They wear
- *  the Give tab's one tone (iOS: its hand-and-heart on gold), checked BEFORE
- *  the event/reminder rule — pledge_reminder_manual read as a calendar
- *  reminder — and the "give" rule, which "giving_…" never matched, so every
- *  other giving notice fell to the default bell. */
+/** A giving or Partners notice — giving_* · pledge_* · payment_*. Checked
+ *  before the event rule: pledge_reminder_manual is a giving notice, not a
+ *  calendar reminder (Giving Cycle 10). */
 internal fun isGivingNotice(template: String): Boolean {
     val t = template.lowercase()
     return t.startsWith("giving") || t.startsWith("pledge") || t.startsWith("payment")
 }
 
-internal fun toneFor(template: String): Tone {
-    val t = template.lowercase()
+/** The family a template belongs to — by its prefix, in this order. */
+internal fun noticeFamily(template: String): NoticeFamily {
+    val t = template.trim().lowercase()
     return when {
-        "badge" in t -> Tone("🏅", Nuru.navy, Nuru.gold, reward = true)
-        "certificate" in t || "cert" in t -> Tone("📜", Nuru.navy, Nuru.gold, reward = true)
-        "level" in t || "advanced" in t -> Tone("📈", Nuru.navy, Nuru.gold, reward = true)
-        "reflection" in t && ("return" in t || "revis" in t) -> Tone("✍️", Nuru.warning, Nuru.warningBg)     // warning
-        "department" in t || "serve_request" in t -> Tone("🤝", Nuru.info, Nuru.infoBg)                        // departments
-        // The giving hands Home's Give card wears, on the Give tab's gold.
-        isGivingNotice(t) -> Tone("🤲", org.nuruplace.member.feature.give.GIVE.overline, Nuru.goldChipBg)    // giving
-        "event" in t || "reminder" in t -> Tone("📅", Nuru.info, Nuru.infoBg)                                 // info
-        "announcement" in t || "announce" in t -> Tone("📣", Nuru.info, Nuru.infoBg)                          // info
-        "system" in t || "security" in t || "login" in t || "password" in t -> Tone("⚙️", Nuru.ink600, Nuru.inputBg) // security
-        "prayer" in t || "verse" in t || "devotional" in t || "give" in t -> Tone("🌿", Nuru.info, Nuru.infoBg)
-        else -> Tone("🔔", Nuru.success, Nuru.successBg)                                                       // success default
+        t.startsWith("live_") -> NoticeFamily.LIVE
+        t.startsWith("badge") -> NoticeFamily.BADGE
+        t.startsWith("certificate") -> NoticeFamily.CERTIFICATE
+        t.startsWith("level") -> NoticeFamily.LEVEL
+        t.startsWith("reflection") -> NoticeFamily.REFLECTION
+        t.startsWith("department") || t.startsWith("serve_request") -> NoticeFamily.DEPARTMENT
+        isGivingNotice(t) -> NoticeFamily.GIVING
+        t.startsWith("event") -> NoticeFamily.EVENT
+        t.startsWith("announcement") -> NoticeFamily.ANNOUNCEMENT
+        t.startsWith("plan_group") -> NoticeFamily.PLAN
+        t.startsWith("sunday_letter") || t.startsWith("letter") -> NoticeFamily.LETTER
+        t.startsWith("space_") || t.startsWith("connection_") || t.startsWith("community") || t.startsWith("prayer") -> NoticeFamily.COMMUNITY
+        t.startsWith("check_in") -> NoticeFamily.CHECK_IN
+        "security" in t || "login" in t || "password" in t || "mfa" in t -> NoticeFamily.SECURITY
+        else -> NoticeFamily.OTHER
+    }
+}
+
+/** A notice's icon on its tile: gold tint, gold-chip ink (§8.1 rules 1 and 7);
+ *  a reward (badge, certificate, level) on solid gold, its icon navy. */
+@Composable
+private fun NoticeIconTile(family: NoticeFamily) {
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(Radii.control))
+            .background(if (family.reward) Nuru.gold else Nuru.goldChipBg),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(family.icon, contentDescription = null, tint = if (family.reward) Nuru.navy else Nuru.goldChipText, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -248,7 +312,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
  *  from a notice that had nothing to do with it. */
 @Composable
 private fun NotifDetailPopup(n: NotificationRow, onDismiss: () -> Unit) {
-    val tone = toneFor(n.template)
+    val family = noticeFamily(n.template)
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.paper).padding(Spacing.lg),
@@ -259,13 +323,11 @@ private fun NotifDetailPopup(n: NotificationRow, onDismiss: () -> Unit) {
                     .border(1.dp, Nuru.border, RoundedCornerShape(Radii.control)).padding(Spacing.base),
                 verticalAlignment = Alignment.Top,
             ) {
-                Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.control)).background(tone.bg), contentAlignment = Alignment.Center) {
-                    Text(tone.glyph, style = NuruType.body)
-                }
+                NoticeIconTile(family)
                 Spacer(Modifier.size(Spacing.md))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                     Row(verticalAlignment = Alignment.Top) {
-                        Text(titleOf(n), style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text(titleOf(n), style = NuruType.rowTitle, color = Nuru.ink, modifier = Modifier.weight(1f))
                         Spacer(Modifier.size(Spacing.sm))
                         Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = Nuru.ink400)
                     }
@@ -311,7 +373,7 @@ private fun StatusCluster(unread: Boolean) {
 
 @Composable
 private fun NotifRow(n: NotificationRow, unread: Boolean, onClick: () -> Unit) {
-    val tone = toneFor(n.template)
+    val family = noticeFamily(n.template)
     // All read-state visuals animate, so the optimistic flip is a visible settle.
     val rowBg by animateColorAsState(if (unread) Amber.copy(alpha = 0.07f) else Color.Transparent, label = "notifRowBg")
     val titleColor by animateColorAsState(if (unread) Nuru.ink else Nuru.ink600, label = "notifTitle")
@@ -328,21 +390,17 @@ private fun NotifRow(n: NotificationRow, unread: Boolean, onClick: () -> Unit) {
                 .align(Alignment.CenterStart),
         )
         Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.base), verticalAlignment = Alignment.Top) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.control)).background(tone.bg), contentAlignment = Alignment.Center) {
-                Text(tone.glyph, style = NuruType.body)
-            }
+            NoticeIconTile(family)
             Spacer(Modifier.size(Spacing.md))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
-                    Text(
-                        titleOf(n),
-                        style = NuruType.rowTitle, color = titleColor, modifier = Modifier.weight(1f),
-                        fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
-                    )
+                    // A notice is a content row (§8.1 rule 3): Fraunces 15
+                    // semibold; read rows quieten by colour.
+                    Text(titleOf(n), style = NuruType.rowTitle, color = titleColor, modifier = Modifier.weight(1f))
                     Text(relTime(n.sentAt ?: n.scheduledFor), style = NuruType.micro, color = timeColor)
                 }
                 bodyOf(n)?.let { Text(it, style = NuruType.caption, color = bodyColor, maxLines = 2) }
-                if (tone.reward && unread) {
+                if (family.reward && unread) {
                     Spacer(Modifier.height(Spacing.xs))
                     Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldTint).padding(horizontal = 8.dp, vertical = 2.dp)) {
                         Text("🎁 Tap to open your gift", style = NuruType.micro, color = Nuru.goldChipText)
