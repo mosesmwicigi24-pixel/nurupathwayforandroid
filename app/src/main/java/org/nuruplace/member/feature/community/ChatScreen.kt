@@ -1,6 +1,7 @@
 // Chat hub — "Nuru Connect" inbox. Cream header + AI card + verse + segmented
 // tabs (My Space / DM / My Groups) over grouped conversation cards, a DM story
-// rail, discover-spaces and people directories, and a compose FAB. Port of the
+// rail, discover-spaces and people directories, and a compose button beside the
+// bell (it floated, over the cards — §8.1 rule 9). Port of the
 // iOS ChatView inbox. Thread + compose live in sibling files (ChatThreadScreen /
 // NewMessageScreen). Shared palette + primitives come from ChatShared.kt.
 package org.nuruplace.member.feature.community
@@ -344,6 +345,25 @@ fun ChatInboxScreen(
                                     modifier = Modifier.padding(top = 6.dp),
                                 )
                             }
+                            // New message lives in the header, beside the bell (the
+                            // bell stays rightmost, §8.1 rule 2) — as iOS. As a
+                            // floating button it sat on the cards (the cell card's
+                            // right half, a row's time and unread count), and a
+                            // floating button never hides content (rule 9).
+                            if (tab != ChatTab.Broadcast) {
+                                Box(
+                                    Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(CHAT.white)
+                                        .border(1.dp, CHAT.border, RoundedCornerShape(16.dp))
+                                        .clickable { onNewMessage() },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(Icons.Filled.Edit, contentDescription = "New message", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(8.dp))
+                            }
                             // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
                             org.nuruplace.member.ui.components.InboxBell(
                                 onClick = onOpenNotifications, size = 44.dp, shape = RoundedCornerShape(16.dp),
@@ -393,7 +413,7 @@ fun ChatInboxScreen(
                 Column(
                     Modifier
                         .padding(horizontal = 20.dp)
-                        .padding(top = 16.dp, bottom = 110.dp),
+                        .padding(top = 16.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     AiCard(totalUnread = totalUnread, spaceCount = spaces.size, onOpenAssistant = onOpenAssistant)
@@ -482,19 +502,6 @@ fun ChatInboxScreen(
                 }
             }
 
-            // ── FAB ──
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 24.dp)
-                    .size(56.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(CHAT.storyRing)
-                    .clickable { onNewMessage() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Edit, contentDescription = "New message", tint = Color.White, modifier = Modifier.size(22.dp))
-            }
         }
 
         // Stale-cache recovery: offer the connection request instead of a dead-end error.
