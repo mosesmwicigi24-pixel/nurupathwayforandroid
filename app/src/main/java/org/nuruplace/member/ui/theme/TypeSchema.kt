@@ -51,6 +51,13 @@ fun nuruSerif(size: Int, weight: FontWeight = FontWeight.Normal, tracking: Float
         letterSpacing = tracking?.sp ?: (-0.02).em,
     )
 
+/** An ornament drawn with a font — a large quotation mark, the keepsake's
+ *  star, Live's floating heart: an icon, not words, so it stands outside the
+ *  type scale (EXPERIENCE.md §8.3 lists icons as allowed). Never use it for
+ *  words; TypeScaleSourceTest counts every use by file. */
+fun nuruOrnament(size: Int, weight: FontWeight = FontWeight.SemiBold): TextStyle =
+    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, lineHeight = size.sp)
+
 /** For the handful of reading-surface call sites that hardcode an explicit
  *  `.copy(lineHeight = N.sp)` instead of taking a factory's schema default —
  *  routes that literal through the same AppPrefs.lineSpacing multiplier so

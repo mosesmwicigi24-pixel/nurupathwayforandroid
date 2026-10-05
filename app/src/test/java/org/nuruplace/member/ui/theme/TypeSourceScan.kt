@@ -456,9 +456,10 @@ internal object TypeSourceScan {
         }
         for (src in scanned) {
             val fns = fnsBySrc.getValue(src)
-            // 1. fontSize = …
+            // 1. fontSize = … (an excluded route's own body is the route, not a use of it)
             for (m in Regex("""\bfontSize\s*=(?!=)\s*""").findAll(src.code)) {
                 val start = m.range.last + 1
+                if (enclosing(fns, start)?.name in excludedHelpers) continue
                 val items = argumentExtent(src.code, start)
                 val expr = src.code.substring(start, items).trim()
                 sites += SizeSite(src, m.range.first, "fontSize = $expr", evaluate(expr, start, src, fns, forwardedAt(src, start)))

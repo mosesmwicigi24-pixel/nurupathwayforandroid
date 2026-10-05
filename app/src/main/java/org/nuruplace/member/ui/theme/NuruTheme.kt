@@ -222,6 +222,32 @@ private val NuruColorScheme = lightColorScheme(
     error = Nuru.danger,
 )
 
+/**
+ * Material's fifteen type slots, every one in an app face AND on the type
+ * scale (EXPERIENCE.md §8.1 rule 3): a Material component that reads a slot
+ * we never style ourselves — an AlertDialog's title (headlineSmall), the
+ * date picker's headline (headlineLarge) — draws in Fraunces or Inter at a
+ * size of the scale, never Material's 57/45/36/32/24. TypeFacesTest checks
+ * all fifteen.
+ */
+fun nuruTypography(): Typography = Typography(
+    displayLarge = NuruType.display,
+    displayMedium = NuruType.display,
+    displaySmall = NuruType.display,
+    headlineLarge = NuruType.display,
+    headlineMedium = NuruType.display,
+    headlineSmall = NuruType.title,
+    titleLarge = NuruType.title,
+    titleMedium = NuruType.cardTitle,
+    titleSmall = NuruType.rowTitle,
+    bodyLarge = NuruType.bodyLg,
+    bodyMedium = NuruType.body,
+    bodySmall = NuruType.caption,
+    labelLarge = NuruType.cardCta,
+    labelMedium = NuruType.label,
+    labelSmall = NuruType.micro,
+)
+
 @Composable
 fun NuruTheme(content: @Composable () -> Unit) {
     @Suppress("UNUSED_EXPRESSION") isSystemInDarkTheme() // brand is light-only for now
@@ -243,28 +269,9 @@ fun NuruTheme(content: @Composable () -> Unit) {
     // the M3 default, i.e. FontFamily.Default = the device's system face. Those
     // are the "foreign" letters. Every one of the 15 slots is now pinned to an
     // app family — display/headline/title serif (Fraunces), body/label sans
-    // (Inter) — keeping M3's own metrics for the slots we don't otherwise style,
-    // so nothing shifts except the typeface.
-    val typography = remember(org.nuruplace.member.data.AppPrefs.lineSpacing) {
-        val m3 = Typography()
-        Typography(
-            displayLarge = m3.displayLarge.copy(fontFamily = Fraunces),
-            displayMedium = m3.displayMedium.copy(fontFamily = Fraunces),
-            displaySmall = m3.displaySmall.copy(fontFamily = Fraunces),
-            headlineLarge = m3.headlineLarge.copy(fontFamily = Fraunces),
-            headlineMedium = m3.headlineMedium.copy(fontFamily = Fraunces),
-            headlineSmall = m3.headlineSmall.copy(fontFamily = Fraunces),
-            titleLarge = NuruType.title,
-            titleMedium = NuruType.cardTitle,
-            titleSmall = NuruType.rowTitle,
-            bodyLarge = NuruType.bodyLg,
-            bodyMedium = NuruType.body,
-            bodySmall = NuruType.caption,
-            labelLarge = NuruType.cardCta,
-            labelMedium = NuruType.label,
-            labelSmall = NuruType.micro,
-        )
-    }
+    // (Inter) — and, since Cycle 4 (§8.2 #21), to a size of the type scale too:
+    // see nuruTypography() above.
+    val typography = remember(org.nuruplace.member.data.AppPrefs.lineSpacing) { nuruTypography() }
     CompositionLocalProvider(LocalDensity provides scaled) {
         MaterialTheme(
             colorScheme = NuruColorScheme,
