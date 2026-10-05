@@ -1007,6 +1007,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(it) }) }
             composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
+            // "Ask to be connected" (EXPERIENCE.md §9.2 #12) — YOUR WEEK's
+            // Cell row for a member with no cell. Already in one: the cell page.
+            composable("cell-connect") {
+                org.nuruplace.member.feature.home.CellConnectScreen(
+                    onBack = { nav.popBackStack() },
+                    onInCell = { nav.navigate("cell-info") { popUpTo("cell-connect") { inclusive = true } } },
+                    onOpenThread = { nav.navigate("chat/$it?ctx=pastoral") },
+                )
+            }
             composable("cell-info") {
                 org.nuruplace.member.feature.home.CellInfoScreen(
                     me = me,

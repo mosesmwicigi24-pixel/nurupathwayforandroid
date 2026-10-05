@@ -718,6 +718,14 @@ interface MemberApi {
     @GET("me/cell-summary")
     suspend fun cellSummary(): CellSummary
 
+    // "Ask to be connected" (EXPERIENCE.md §9.2 #12): 409 already in a cell;
+    // 422 in words for a minor, or when no pastor can receive it.
+    @GET("me/cell-connection")
+    suspend fun cellConnection(): CellConnectionStatus
+
+    @POST("me/cell-connection")
+    suspend fun askCellConnection(@Body body: CellConnectionBody): CellConnectionSent
+
     // The cell's people. Server-authoritative privacy: the shepherd fields
     // (score/band/attendance/last_seen_days) are only serialized for a caller
     // the server itself judges `can_shepherd` — the client never decides who

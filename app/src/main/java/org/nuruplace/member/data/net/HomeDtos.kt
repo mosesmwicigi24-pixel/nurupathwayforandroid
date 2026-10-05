@@ -248,3 +248,36 @@ data class HomeEventRow(
     val myRsvp: String? = null,
 )
 
+
+// "Ask to be connected" to a cell (pathway ed1525d; EXPERIENCE.md §9.2 #12):
+// the member says where they live and when they're free, and the request goes
+// to their own pastor in their pastoral thread. No list of cells is shown.
+
+/** GET /me/cell-connection — in a cell already, else the member's latest ask. */
+@Serializable
+data class CellConnectionStatus(
+    val inCell: Boolean = false,
+    val request: CellConnectionRequest? = null,
+)
+
+@Serializable
+data class CellConnectionRequest(
+    val requestedAt: String = "",
+    val conversationId: String = "",
+)
+
+/** POST /me/cell-connection — idempotent on [clientMutationId]. */
+@Serializable
+data class CellConnectionBody(
+    val area: String,
+    val availability: String,
+    val note: String? = null,
+    val clientMutationId: String,
+)
+
+/** 201 — where the request was posted, and when. */
+@Serializable
+data class CellConnectionSent(
+    val conversationId: String = "",
+    val requestedAt: String = "",
+)

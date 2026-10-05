@@ -19,6 +19,7 @@ import org.nuruplace.member.data.net.HomeEventRow
 import org.nuruplace.member.data.net.MyRsvp
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.ReadingPlanRow
+import org.nuruplace.member.feature.events.EV_ZONE
 import org.nuruplace.member.feature.events.evZdt
 import org.nuruplace.member.feature.give.collectedOnLine
 import org.nuruplace.member.feature.give.dueOverdue
@@ -297,10 +298,15 @@ object YourWeek {
 
     /** Cell — the member's own cell (GET /me/cell-summary): its name, "Next
      *  gathering EEE d MMM" or "Next gathering not set · N members", the cell
-     *  page; no cell (or the read failed): "Find your cell" → Community. */
-    fun cell(summary: CellSummary?): WeekRow {
+     *  page; no cell (or the read failed): "Find your cell" → "Ask to be
+     *  connected" (EXPERIENCE.md §9.2 #12) — it opened Community, which has
+     *  no way to find one. Once asked ([askedAt], GET /me/cell-connection,
+     *  on any phone), the line says when it went to the pastor. */
+    fun cell(summary: CellSummary?, askedAt: String? = null, today: LocalDate = LocalDate.now(EV_ZONE)): WeekRow {
         val c = summary?.cell ?: return WeekRow(
-            WeekForm.CELL_FIND, "Find your cell", "Gather with believers near you.", WeekDest.Tab("you"),
+            WeekForm.CELL_FIND, "Find your cell",
+            askedAt?.let { CellConnectWords.sent(it, EV_ZONE, today) } ?: "Ask to be connected — tell the church where you live.",
+            WeekDest.Screen("cell-connect"),
         )
         val line = evZdt(c.next?.startAt)?.let { "Next gathering ${it.format(DAY)}" }
             ?: "Next gathering not set · ${c.members} ${if (c.members == 1) "member" else "members"}"

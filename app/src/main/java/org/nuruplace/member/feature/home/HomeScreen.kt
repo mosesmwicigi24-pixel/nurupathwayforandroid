@@ -172,6 +172,8 @@ fun HomeScreen(
     var upcoming by rememberHeld("Home.upcoming") { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
     var homeEvents by rememberHeld("Home.homeEvents") { mutableStateOf<List<HomeEventRow>>(emptyList()) }
     var cohort by rememberHeld("Home.cohort") { mutableStateOf<CellSummary?>(null) }
+    // A member with no cell who asked to be connected — when (§9.2 #12).
+    var cellAskedAt by rememberHeld("Home.cellAskedAt") { mutableStateOf<String?>(null) }
     // YOUR WEEK's own reads (EXPERIENCE.md §6.1): the plans, the member's
     // RSVPs, the partnership (its DUE rows and pledges) and the recurring
     // gifts. Null = never answered — that row says its "none" form; a failed
@@ -298,6 +300,9 @@ fun HomeScreen(
         letter = runCatching { Net.client.api.latestLetter().letter }.getOrElse { letter }
         announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrElse { announcement }
         cohort = runCatching { Net.client.api.cellSummary() }.getOrElse { cohort }
+        if (cohort?.cell == null) {
+            cellAskedAt = runCatching { Net.client.api.cellConnection().request?.requestedAt }.getOrElse { cellAskedAt }
+        }
         plans = runCatching { Net.client.api.plans().data }.getOrNull() ?: plans
         // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
         // parity) — distinct from the community/prayer-wall feed's sort query.
@@ -380,13 +385,13 @@ fun HomeScreen(
     val level = me?.enrollment?.currentLevel
     val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
     // YOUR WEEK (§6.1): the five rows, in the journey's order.
-    val week = remember(journey, plans, upcoming, homeEvents, rsvps, partnership, gifts, giveRails, cohort, me) {
+    val week = remember(journey, plans, upcoming, homeEvents, rsvps, partnership, gifts, giveRails, cohort, cellAskedAt, me) {
         listOf(
             YourWeek.pathway(journey, me?.enrollment?.currentLevel),
             YourWeek.plans(plans, sealedHere = org.nuruplace.member.feature.grow.PlanDayLog.sealedToday()),
             YourWeek.events(upcoming, homeEvents, rsvps, ZonedDateTime.now(EV_ZONE)),
             YourWeek.giving(partnership, gifts, giveRailsLine(giveRails), LocalDate.now(EV_ZONE)),
-            YourWeek.cell(cohort),
+            YourWeek.cell(cohort, cellAskedAt),
         )
     }
     // A member already giving isn't asked twice: the banner only with "Give".

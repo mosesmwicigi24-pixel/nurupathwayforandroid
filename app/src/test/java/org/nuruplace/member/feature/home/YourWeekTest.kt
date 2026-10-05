@@ -313,7 +313,9 @@ class YourWeekTest {
 
     @Test
     fun `Cell — no cell, or the read failed — Find your cell, Community`() {
-        val find = WeekRow(WeekForm.CELL_FIND, "Find your cell", "Gather with believers near you.", WeekDest.Tab("you"))
+        // "Ask to be connected" (EXPERIENCE.md §9.2 #12): it opened Community,
+        // which has no way to find a cell.
+        val find = WeekRow(WeekForm.CELL_FIND, "Find your cell", "Ask to be connected — tell the church where you live.", WeekDest.Screen("cell-connect"))
         assertEquals(find, YourWeek.cell(CellSummary(null)))
         assertEquals(find, YourWeek.cell(null))
     }
@@ -374,5 +376,13 @@ class YourWeekTest {
         for (k in listOf("reflection_due", "letter_unread", "reading_invite", "chat_unread")) assertTrue(k, !YourWeek.repeats(nudge(k), week))
         // No cell: "Find your cell" is not the cell's gathering.
         assertTrue(!YourWeek.repeats(nudge("cell_gathering"), listOf(YourWeek.cell(null))))
+    }
+
+    @Test
+    fun `Cell — once asked, the row says when it went to the pastor`() {
+        val asked = YourWeek.cell(null, askedAt = "2026-10-05T09:30:00Z", today = today)
+        assertEquals(WeekForm.CELL_FIND, asked.form)
+        assertEquals("Sent to your pastor on Mon 5 Oct — they'll connect you", asked.line)
+        assertEquals(WeekDest.Screen("cell-connect"), asked.dest)
     }
 }
