@@ -952,11 +952,10 @@ private fun FilteredResults(category: String, plans: List<ReadingPlanRow>, onOpe
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             PLOverline(if (category == "all") "RESULTS" else category, modifier = Modifier.weight(1f))
-            Text(
-                "${plans.size} plan${if (plans.size == 1) "" else "s"}",
-                style = plInter(10, FontWeight.SemiBold),
-                color = PL.ink3,
-            )
+            // No zero counts (§7.4 #9): the empty state below says it.
+            org.nuruplace.member.util.ZeroCounts.count(plans.size, "plan", "plans")?.let {
+                Text(it, style = plInter(10, FontWeight.SemiBold), color = PL.ink3)
+            }
         }
         if (plans.isEmpty()) {
             val shape = RoundedCornerShape(22.dp)

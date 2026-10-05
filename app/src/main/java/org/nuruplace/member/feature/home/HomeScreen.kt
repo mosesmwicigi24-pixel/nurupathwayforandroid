@@ -1413,12 +1413,15 @@ private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(6.dp))
         Text(post.body, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(Spacing.sm))
-        Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
-            Text(
-                "🤲 ${post.prayCount} praying" + (post.commentCount?.let { " · $it replies" } ?: ""),
-                style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold,
-            )
+        // No zero counts (§7.4 #9): no pill until someone prays or replies.
+        org.nuruplace.member.util.ZeroCounts.prayerLine(praying = post.prayCount, replies = post.commentCount ?: 0)?.let { counts ->
+            Spacer(Modifier.height(Spacing.sm))
+            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                Text(
+                    "🤲 $counts",
+                    style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }

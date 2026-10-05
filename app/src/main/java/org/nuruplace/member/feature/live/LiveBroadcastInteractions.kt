@@ -133,7 +133,7 @@ fun LiveHandsGuestsSheet(
             }
             Spacer(Modifier.height(Spacing.md))
 
-            Text("RAISED HANDS · ${hands.size}".uppercase(), style = NuruType.sectionLabel, color = Nuru.goldLo)
+            Text(org.nuruplace.member.util.ZeroCounts.labelled("RAISED HANDS", hands.size), style = NuruType.sectionLabel, color = Nuru.goldLo)
             Spacer(Modifier.height(Spacing.sm))
             if (hands.isEmpty()) {
                 Text(

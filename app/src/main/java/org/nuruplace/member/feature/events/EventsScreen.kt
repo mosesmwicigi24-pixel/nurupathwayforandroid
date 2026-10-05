@@ -272,7 +272,7 @@ fun EventsScreen(
                                 Text("CALENDAR", style = evInter(9, FontWeight.Bold, 1.5f), color = EV.goldLight)
                                 Text("All events & calendar", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
                                 Text(
-                                    "See the whole month at a glance · $upcoming upcoming",
+                                    org.nuruplace.member.util.ZeroCounts.join("See the whole month at a glance", org.nuruplace.member.util.ZeroCounts.count(upcoming, "upcoming", "upcoming")),
                                     style = evInter(11), color = Color.White.copy(alpha = 0.55f),
                                 )
                             }
@@ -609,11 +609,14 @@ private fun SegmentPill(label: String, count: Int, on: Boolean, modifier: Modifi
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = evInter(11, FontWeight.SemiBold), color = if (on) Color.White else EV.secondary)
-        Spacer(Modifier.width(6.dp))
-        Box(
-            Modifier.clip(Capsule).background(if (on) EV.gold else EV.tile).padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            Text(count.toString(), style = evInter(9, FontWeight.Bold), color = EV.navy)
+        // No zero counts (§7.4 #9): a tab with nothing in it shows no badge.
+        if (count > 0) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier.clip(Capsule).background(if (on) EV.gold else EV.tile).padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(count.toString(), style = evInter(9, FontWeight.Bold), color = EV.navy)
+            }
         }
     }
 }

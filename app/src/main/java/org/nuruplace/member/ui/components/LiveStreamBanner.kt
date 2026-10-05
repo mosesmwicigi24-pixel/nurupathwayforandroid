@@ -121,7 +121,7 @@ fun LiveStreamBanner(row: LiveNowRow, onOpen: () -> Unit, onReplays: () -> Unit,
             Column(Modifier.weight(1f)) {
                 Text(row.title.ifBlank { "Nuru Live" }, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${startedAgoLabel(row.startedAt)} · ${row.viewerCount} watching",
+                    org.nuruplace.member.util.ZeroCounts.join(startedAgoLabel(row.startedAt), org.nuruplace.member.util.ZeroCounts.count(row.viewerCount, "watching", "watching")),
                     style = NuruType.micro, color = Nuru.onNavyDim,
                 )
             }

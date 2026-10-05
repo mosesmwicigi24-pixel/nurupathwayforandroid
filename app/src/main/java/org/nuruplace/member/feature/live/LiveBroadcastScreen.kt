@@ -788,7 +788,7 @@ private fun SummaryView(
                 Spacer(Modifier.height(8.dp))
             }
             Text(
-                "${mmss(elapsedSec)} · peak $peakViewers watching",
+                org.nuruplace.member.util.ZeroCounts.join(mmss(elapsedSec), if (peakViewers > 0) "peak $peakViewers watching" else null),
                 style = NuruType.body, color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center,
             )
             title.takeIf { it.isNotBlank() }?.let {

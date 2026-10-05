@@ -126,8 +126,9 @@ fun PrayerJournalScreen(
                     // surface in a single place (iOS build 80 parity).
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         if (forcedTab == null) {
-                            PrayerChip("Active (${active.size})", tab == PrayerTab.Active) { tab = PrayerTab.Active }
-                            PrayerChip("Answered (${answered.size})", tab == PrayerTab.Answered) { tab = PrayerTab.Answered }
+                            // No zero counts (§7.4 #9): "Answered", not "Answered (0)".
+                            PrayerChip(org.nuruplace.member.util.ZeroCounts.labelled("Active", active.size) { l, n -> "$l ($n)" }, tab == PrayerTab.Active) { tab = PrayerTab.Active }
+                            PrayerChip(org.nuruplace.member.util.ZeroCounts.labelled("Answered", answered.size) { l, n -> "$l ($n)" }, tab == PrayerTab.Answered) { tab = PrayerTab.Answered }
                         }
                         Spacer(Modifier.weight(1f))
                         AddPrayerPill { editing = null; showComposer = true }

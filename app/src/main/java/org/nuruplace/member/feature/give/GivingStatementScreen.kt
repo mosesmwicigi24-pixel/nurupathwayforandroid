@@ -264,12 +264,16 @@ fun GivingStatementScreen(
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    Text(
-                        "$giftCount gift${if (giftCount == 1) "" else "s"} · $periodLabel · most recent first",
-                        style = giInter(11),
-                        color = Color.White.copy(alpha = 0.55f),
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+                    // No zero counts (§7.4 #9): no "0 gifts · …" line — the
+                    // page below already says there are none.
+                    if (giftCount > 0) {
+                        Text(
+                            "$giftCount gift${if (giftCount == 1) "" else "s"} · $periodLabel · most recent first",
+                            style = giInter(11),
+                            color = Color.White.copy(alpha = 0.55f),
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
             }
 

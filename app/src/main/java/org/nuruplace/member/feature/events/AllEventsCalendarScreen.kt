@@ -84,7 +84,8 @@ private fun AllEventsCalendarBody(
     EvSubHeader(
         eyebrow = "EVENTS",
         title = "All events & calendar",
-        subtitle = "$upcomingCount upcoming · ${visibleMonth.format(monthYearFmt)}",
+        // No zero counts (§7.4 #9): the month alone when nothing is coming.
+        subtitle = org.nuruplace.member.util.ZeroCounts.calendarHeader(upcomingCount, visibleMonth.format(monthYearFmt)),
         onBack = onBack,
     )
 
@@ -203,7 +204,7 @@ private fun AllEventsCalendarBody(
                 color = EV.overline,
             )
             Spacer(Modifier.weight(1f))
-            Text("$listCount events", style = evInter(10, FontWeight.SemiBold), color = EV.tertiary)
+            org.nuruplace.member.util.ZeroCounts.count(listCount, "event", "events")?.let { Text(it, style = evInter(10, FontWeight.SemiBold), color = EV.tertiary) }
         }
 
         // ── List ────────────────────────────────────────────────────────────

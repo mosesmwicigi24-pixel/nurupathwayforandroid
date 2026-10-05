@@ -393,7 +393,7 @@ private fun GroupHeroCard(g: ReadingGroupRow) {
             Text("READING TOGETHER", style = plInter(9, FontWeight.Bold, 1.5f), color = PL.goldDeep)
             Text(g.plan.title, style = plSerif(20, FontWeight.SemiBold, -0.4f), color = PL.navy)
             Text(
-                "${g.plan.dayCount}-day plan · ${g.members.count(ReadingGroupMember::isActive)} reading together",
+                org.nuruplace.member.util.ZeroCounts.join("${g.plan.dayCount}-day plan", org.nuruplace.member.util.ZeroCounts.count(g.members.count(ReadingGroupMember::isActive), "reading together", "reading together")),
                 style = plInter(12), color = PL.ink3,
             )
         }
