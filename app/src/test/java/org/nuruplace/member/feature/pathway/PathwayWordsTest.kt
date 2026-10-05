@@ -148,4 +148,15 @@ class LevelsMapWordsTest {
         assertEquals("Your leader will open Level 2 — you'll get a notice", LevelsMapWords.lockLine(2, journey(JourneyStage.AWAITING_USHER)))
         assertEquals("Complete Level 1 to unlock", LevelsMapWords.lockLine(2, null))
     }
+
+    // EXPERIENCE.md §9.2 #9: each level's own short name on the rail.
+    @Test fun `the rail names each level by its theme — never two Foundations`() {
+        val one = PathwayLevel(1, "Foundations of Faith", theme = "Foundations")
+        val three = PathwayLevel(3, "Foundations of Grace & Kingdom Perspective", theme = "Grace")
+        assertEquals("Foundations", levelShortName(one))
+        assertEquals("Grace", levelShortName(three))
+        // No theme (production's "Level 6"): the title, never a stray first word.
+        assertEquals("Level 6", levelShortName(PathwayLevel(6, "Level 6", theme = null)))
+        assertEquals("Level 7", levelShortName(PathwayLevel(7, "", theme = " ")))
+    }
 }

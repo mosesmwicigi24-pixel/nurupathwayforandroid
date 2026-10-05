@@ -105,7 +105,11 @@ private object PW {
     fun serif(size: Int, w: FontWeight = FontWeight.Medium, ker: Float = 0f) = nuruSerif(size, w, ker.takeIf { it != 0f })
 }
 
-private fun pwShort(t: String): String = t.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: ""
+/** A level's own short name — the server's `theme` ("Foundations", "Grace",
+ *  "Spirit"…); its first word read "Foundations" for Levels 1 and 3 alike
+ *  (EXPERIENCE.md §9.2 #9). Without a theme, the title itself. */
+internal fun levelShortName(level: PathwayLevel): String =
+    level.theme?.trim()?.takeIf { it.isNotEmpty() } ?: level.title.ifBlank { "Level ${level.levelNumber}" }
 
 @Composable
 fun PathwayHubScreen(
@@ -232,7 +236,9 @@ fun PathwayHubScreen(
                 }
                 // Studying together, apart (Wave 2) — renders nothing when quiet.
                 CellPresenceLine()
-                JourneyRail(levels, selNum ?: -1, current = currentNum, onSelect = { selected = it }, onMap = onOpenMap)
+                // A circle opens its level's page (§9.2 #9) — it only changed
+                // the selection, so tapping the member's own "1" did nothing.
+                JourneyRail(levels, selNum ?: -1, current = currentNum, onSelect = onOpenLevel, onMap = onOpenMap)
                 selLevel?.let { lv ->
                     SelectedModules(
                         level = lv,
@@ -438,7 +444,12 @@ private fun JourneyNode(
     val done = level.walked
     val active = isCurrent
     val locked = !done && !active
-    Column(Modifier.width(76.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
+    // A walked or current level opens; a locked one is not a button and
+    // doesn't look like one (§9.2 #9) — its lock seal says why.
+    Column(
+        Modifier.width(76.dp).then(if (locked) Modifier else Modifier.clickable(onClickLabel = "Open Level $number") { onTap() }),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
             when { active -> "▾ You"; upNext -> "▾ Next"; else -> " " },
             style = PW.over(11, 0.7f),
@@ -485,7 +496,7 @@ private fun JourneyNode(
             }
         }
         Text(
-            pwShort(level.title),
+            levelShortName(level),
             style = PW.t(11, if (active) FontWeight.Bold else FontWeight.Medium),
             color = when { active -> PW.navy; upNext -> PW.goldDeep; else -> PW.ink2 },
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
@@ -750,7 +761,7 @@ private fun Milestones(levels: List<PathwayLevel>) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("NEXT REWARD", style = PW.over(11), color = PW.goldLight)
-                    Text("The “${pwShort(reward.title)}” badge", style = PW.t(13, FontWeight.Bold), color = Color.White, maxLines = 1)
+                    Text("The “${levelShortName(reward)}” badge", style = PW.t(13, FontWeight.Bold), color = Color.White, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                         Box(Modifier.weight(1f)) { PWBar(rewardPct, PW.goldGrad, Color.White.copy(alpha = 0.16f)) }
                         Spacer(Modifier.width(8.dp))
@@ -760,7 +771,7 @@ private fun Milestones(levels: List<PathwayLevel>) {
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            levels.forEachIndexed { i, lvl -> RewardBadge(pwShort(lvl.title), PW.badge[i % PW.badge.size], lvl.walked) }
+            levels.forEachIndexed { i, lvl -> RewardBadge(levelShortName(lvl), PW.badge[i % PW.badge.size], lvl.walked) }
         }
     }
 }
