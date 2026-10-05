@@ -37,6 +37,13 @@ fun planReadToday(p: ReadingPlanRow, sealedHere: Boolean = false, now: Instant =
  * for today and the next day waits — Home said "Day 4 of 7 · today's reading"
  * beside Plans' "Today's reading is done 🔥".
  */
-fun planTodayLine(p: ReadingPlanRow, readToday: Boolean): String =
-    if (readToday) "Done for today · Day ${planDay(p)} is next"
-    else "Day ${planDay(p)} of ${p.dayCount} · today's reading"
+fun planTodayLine(p: ReadingPlanRow, readToday: Boolean): String {
+    val day = planDay(p)
+    return when {
+        // "Day 3 done today · Day 4 next" (EXPERIENCE.md §9.2 #3) — the day
+        // read today and the one that waits, in one breath.
+        readToday && day > 1 -> "Day ${day - 1} done today · Day $day next"
+        readToday -> "Done today · Day $day next"
+        else -> "Day $day of ${p.dayCount} · today's reading"
+    }
+}

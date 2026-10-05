@@ -104,12 +104,12 @@ class YourWeekTest {
             ReadingPlanRow(planId = "first", title = "First Steps", dayCount = 7, currentDay = 4, enrolled = true, lastDayFinishedAt = "2026-10-05T08:45:00Z"),
         )
         assertEquals(
-            WeekRow(WeekForm.PLAN_DAY, "First Steps", "Done for today · Day 4 is next", WeekDest.Screen("plan/first")),
+            WeekRow(WeekForm.PLAN_DAY, "First Steps", "Day 3 done today · Day 4 next", WeekDest.Screen("plan/first")),
             YourWeek.plans(readToday, now = now),
         )
         val readYesterday = listOf(readToday[0].copy(lastDayFinishedAt = "2026-10-04T08:45:00Z"))
         assertEquals("Day 4 of 7 · today's reading", YourWeek.plans(readYesterday, now = now).line)
-        assertEquals("Done for today · Day 4 is next", YourWeek.plans(readYesterday, sealedHere = true, now = now).line)
+        assertEquals("Day 3 done today · Day 4 next", YourWeek.plans(readYesterday, sealedHere = true, now = now).line)
         assertEquals(start, YourWeek.plans(emptyList()))
         assertEquals(start, YourWeek.plans(null))
     }

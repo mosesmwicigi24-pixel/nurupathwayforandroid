@@ -215,7 +215,7 @@ fun PathwayHubScreen(
                 FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
                 return@Column
             }
-            HubHeader(streak, active, levels, journey, ::go, onOpenNotifications)
+            HubHeader(active, levels, journey, ::go, onOpenNotifications)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -257,7 +257,6 @@ fun PathwayHubScreen(
  *  (it used to open this header too, above the title). */
 @Composable
 private fun HubHeader(
-    streak: Int,
     active: PathwayLevel?,
     levels: List<PathwayLevel>,
     journey: Journey?,
@@ -282,17 +281,9 @@ private fun HubHeader(
         // top bar
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("PATHWAY", style = NuruType.kicker, color = Nuru.eyebrow)
-            if (streak > 0) {
-                Spacer(Modifier.width(Spacing.sm))
-                Row(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Lucide.Flame, null, tint = PW.eyebrow, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("$streak-day streak", style = PW.over(11, 0f), color = PW.eyebrow)
-                }
-            }
+            // The streak is the rhythm's, said on Home's rhythm card and the
+            // Plans card by one rule (EXPERIENCE.md §9.2 #3) — not a third time
+            // here, by another.
             Spacer(Modifier.weight(1f))
             // The one bell (EXPERIENCE.md §7.2 #4) — it used to open nothing,
             // under a dot that was always there.

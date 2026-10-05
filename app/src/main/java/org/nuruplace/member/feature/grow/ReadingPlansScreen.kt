@@ -99,6 +99,9 @@ fun ReadingPlansScreen(
     // (the plan rows' last_day_finished_at). It was the rhythm's `word`, so
     // reading one part ticked today beside "0-day streak".
     var todaySealed by rememberHeld("Plans.todaySealed") { mutableStateOf(false) }
+    // Any of the rhythm done today — the one streak counts today then, here
+    // as on Home (EXPERIENCE.md §9.2 #3).
+    var activeToday by rememberHeld("Plans.activeToday") { mutableStateOf(false) }
     // The day the member is on in the plan in progress, as parts — the streak
     // card says "Today: 2 of 3 parts" while it's under way.
     var todayPlanParts by rememberHeld("Plans.todayPlanParts") { mutableStateOf<DayParts?>(null) }
@@ -126,6 +129,7 @@ fun ReadingPlansScreen(
         // A part that fails keeps what is on screen.
         promos = runCatching { Net.client.api.planPromos().data }.getOrElse { promos }
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
+        activeToday = runCatching { Net.client.api.rhythmToday().doneCount > 0 }.getOrElse { activeToday }
         todaySealed = PlanDayLog.sealedToday() || planDayFinishedToday(plans)
         // The plan in progress (the one CONTINUE READING and the header name):
         // how far the day the member is on stands. No plan, no parts.
@@ -233,7 +237,7 @@ fun ReadingPlansScreen(
                 // Nothing published yet — the shared empty card, iOS's words.
                 EmptyState("Plans are being prepared — check back soon.")
             } else {
-                if (!searching) StreakStrip(streakView(count = streak, todayDone = todaySealed, today = todayPlanParts))
+                if (!searching) StreakStrip(streakView(count = streak, todayDone = todaySealed, today = todayPlanParts, activeToday = activeToday))
                 if (!searching && continueReading.isNotEmpty()) {
                     ContinueSection(plans = continueReading, onOpenPlan = onOpenPlan)
                 }
@@ -407,7 +411,7 @@ private fun StreakStrip(view: StreakView) {
                 // The words take the card's width: beside the seven week dots
                 // they had about a third of it and broke over three lines.
                 Text(
-                    "$count-day streak",
+                    StreakWords.label(count),
                     style = plInter(14, FontWeight.Bold, -0.14f),
                     color = PL.navy,
                 )

@@ -110,6 +110,21 @@ internal fun parseInstant(iso: String): Instant? =
     runCatching { Instant.parse(iso) }.getOrNull()
         ?: runCatching { OffsetDateTime.parse(iso).toInstant() }.getOrNull()
 
+/**
+ * The one streak (EXPERIENCE.md §9.2 #3): the server's count of days with the
+ * rhythm (GET /me/achievements — any prayer, Word or reflection; recomputed
+ * overnight, so it doesn't hold today yet). Home's rhythm card and the Plans
+ * card showed it under two looks and two counts — "1-day streak" on Plans
+ * beside nothing on Home. Both now say it in these words, by this rule.
+ */
+internal object StreakWords {
+    /** Today counts once the member was active today: at least 1. */
+    fun days(serverCount: Int, activeToday: Boolean): Int =
+        if (activeToday) maxOf(serverCount, 1) else maxOf(serverCount, 0)
+
+    fun label(days: Int): String = "$days-day streak"
+}
+
 /** What the Plans streak card shows (EXPERIENCE.md §7.4 #4). */
 internal data class StreakView(val count: Int, val todayMarked: Boolean, val line: String)
 
@@ -127,13 +142,16 @@ internal data class StreakView(val count: Int, val todayMarked: Boolean, val lin
  * else today's progress while the day is under way ("Today: 2 of 3 parts");
  * else the invitation.
  */
-internal fun streakView(count: Int, todayDone: Boolean, today: DayParts?): StreakView {
-    val shown = if (todayDone) maxOf(count, 1) else maxOf(count, 0)
+internal fun streakView(count: Int, todayDone: Boolean, today: DayParts?, activeToday: Boolean = todayDone): StreakView {
+    // The one streak's count (StreakWords): a day read — or any of the
+    // rhythm done today ([activeToday]) — counts today, as Home counts it.
+    val shown = StreakWords.days(count, todayDone || activeToday)
+    // No emoji (§8.1 rule 7): the card's flame is the Lucide tile beside it.
     val line = when {
-        todayDone -> "Today's reading is done 🔥"
+        todayDone -> "Today's reading is done"
         today != null && today.partway -> "Today: ${today.done} of ${today.total} parts"
-        shown > 0 -> "Read today to keep it alive 🔥"
-        else -> "Read today to start your streak 🔥"
+        shown > 0 -> "Read today to keep it alive"
+        else -> "Read today to start your streak"
     }
     return StreakView(count = shown, todayMarked = todayDone, line = line)
 }

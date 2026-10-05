@@ -108,18 +108,18 @@ class PlanDayPartsTest {
         assertEquals(0, partway.count)
 
         // "I've talked it over" seals Day 1: ticked, and never "0-day streak".
-        assertEquals(StreakView(1, true, "Today's reading is done 🔥"), streakView(count = 0, todayDone = true, today = DayParts(0, 3)))
+        assertEquals(StreakView(1, true, "Today's reading is done"), streakView(count = 0, todayDone = true, today = DayParts(0, 3)))
         // She goes on into Day 2 the same day — today stays ticked.
-        assertEquals(StreakView(1, true, "Today's reading is done 🔥"), streakView(count = 0, todayDone = true, today = DayParts(1, 3)))
+        assertEquals(StreakView(1, true, "Today's reading is done"), streakView(count = 0, todayDone = true, today = DayParts(1, 3)))
 
         // A longer walk keeps its count while today is under way.
         assertEquals(StreakView(4, false, "Today: 1 of 3 parts"), streakView(count = 4, todayDone = false, today = DayParts(1, 3)))
-        assertEquals(StreakView(4, true, "Today's reading is done 🔥"), streakView(count = 4, todayDone = true, today = null))
+        assertEquals(StreakView(4, true, "Today's reading is done"), streakView(count = 4, todayDone = true, today = null))
     }
 
     @Test fun `before a part is read the card keeps its invitation`() {
-        assertEquals(StreakView(0, false, "Read today to start your streak 🔥"), streakView(count = 0, todayDone = false, today = null))
-        assertEquals(StreakView(3, false, "Read today to keep it alive 🔥"), streakView(count = 3, todayDone = false, today = DayParts(0, 3)))
+        assertEquals(StreakView(0, false, "Read today to start your streak"), streakView(count = 0, todayDone = false, today = null))
+        assertEquals(StreakView(3, false, "Read today to keep it alive"), streakView(count = 3, todayDone = false, today = DayParts(0, 3)))
     }
 
     @Test fun `the sealed-day note counts on the church's calendar`() {
@@ -154,5 +154,16 @@ class PlanDayPartsTest {
         assertFalse(planDayFinishedToday(listOf(row("yesterday")), noonOct5))
         assertFalse(planDayFinishedToday(listOf(row("2026-10-05T06:00:00Z", enrolled = false)), noonOct5))
         assertFalse(planDayFinishedToday(emptyList(), noonOct5))
+    }
+
+    // EXPERIENCE.md §9.2 #3: one streak, one rule, on Home and Plans.
+    @Test fun `the one streak counts today once the member was active today — on any screen`() {
+        assertEquals(0, StreakWords.days(0, activeToday = false))
+        assertEquals(1, StreakWords.days(0, activeToday = true))
+        assertEquals(4, StreakWords.days(4, activeToday = true))
+        assertEquals("3-day streak", StreakWords.label(3))
+        // Prayed today, nothing read: Plans counts today as Home does, and
+        // still invites the reading.
+        assertEquals(StreakView(1, false, "Read today to keep it alive"), streakView(count = 0, todayDone = false, today = null, activeToday = true))
     }
 }

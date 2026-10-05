@@ -402,7 +402,6 @@ fun HomeScreen(
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             HomeHeader(
                 firstName = me?.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() },
-                streak = streak?.streak?.current ?: 0,
                 level = journey?.levelNumber ?: level,
                 journeyPill = journey?.pill,
                 // Unknown until the scores answer — never a "0" that isn't true.
@@ -704,7 +703,6 @@ fun HomeScreen(
 private fun HomeHeader(
     /** Null until the member is known — the greeting then stands alone. */
     firstName: String?,
-    streak: Int,
     /** Null until the member is known — a shimmer, never a guess. */
     level: Int?,
     /** The journey's pill (§3) — "12 of 20 modules", "Exam ready", … — null until it loads. */
@@ -787,9 +785,9 @@ private fun HomeHeader(
             }
         }
         Spacer(Modifier.height(Spacing.sm))
-        // Level jewel capsule — the level, the journey's pill (§3), the streak
-        // when there is one ("🔥 0-day" was no streak at all). Until the level
-        // is known, a shimmer in its place (B11).
+        // Level jewel capsule — the level and the journey's pill (§3); the
+        // streak is the rhythm card's (§9.2 #3). Until the level is known, a
+        // shimmer in its place (B11).
         if (level == null) {
             org.nuruplace.member.ui.components.SkeletonBlock(height = 26.dp, width = 140.dp, corner = 999.dp)
         } else Row(
@@ -801,7 +799,7 @@ private fun HomeHeader(
         ) {
             Text("Level $level", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
             journeyPill?.let { Text("  ·  $it", style = NuruType.micro, color = Nuru.eyebrow, fontWeight = FontWeight.SemiBold) }
-            if (streak > 0) Text("  ·  🔥 $streak-day", style = NuruType.micro, color = Nuru.eyebrow)
+            // The streak is said once on Home, by the rhythm it counts (§9.2 #3).
         }
     }
 }
@@ -1110,11 +1108,20 @@ private fun WeekRowView(row: WeekRow, onClick: () -> Unit) {
 
 @Composable
 private fun RhythmCard(r: RhythmToday, streak: Int) {
+    // The one streak, named and counted as Plans names and counts it
+    // (EXPERIENCE.md §9.2 #3): it was "🔥 3" here, "🔥 3-day" in the header
+    // and "1-day streak" on Plans.
+    val days = org.nuruplace.member.feature.grow.StreakWords.days(streak, r.doneCount > 0)
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (r.doneCount >= 3) "Today's rhythm complete 🎉" else "Today's rhythm", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
-            if (streak > 0) Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text("🔥 $streak", style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+            if (days > 0) Row(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Flame, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(org.nuruplace.member.feature.grow.StreakWords.label(days), style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
             }
         }
         Spacer(Modifier.height(Spacing.md))
