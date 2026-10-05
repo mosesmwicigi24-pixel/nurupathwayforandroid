@@ -145,8 +145,5 @@ private fun RecordingRow(row: LiveRecordingRow, onClick: () -> Unit) {
 internal fun replayDate(iso: String?): String {
     if (iso.isNullOrBlank()) return ""
     val zone = ZoneId.of("Africa/Nairobi")
-    val fmt = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
-    return runCatching { Instant.parse(iso).atZone(zone).format(fmt) }
-        .recoverCatching { OffsetDateTime.parse(iso).atZoneSameInstant(zone).format(fmt) }
-        .getOrDefault("")
+    return org.nuruplace.member.util.NuruDates.instant(iso)?.let { org.nuruplace.member.util.NuruDates.day(it, zone) }.orEmpty()
 }

@@ -1241,17 +1241,9 @@ private fun countryName(code: String?): String = when (code?.trim()?.uppercase()
     else -> code.trim().uppercase()
 }
 
-private val CERT_DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
-
-private fun certDate(iso: String?): String {
-    if (iso.isNullOrBlank()) return ""
-    return runCatching {
-        Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate().format(CERT_DATE_FMT)
-    }.recoverCatching {
-        // Fall back to date-only ISO (yyyy-MM-dd)
-        java.time.LocalDate.parse(iso.take(10)).format(CERT_DATE_FMT)
-    }.getOrDefault(iso)
-}
+// One date form (§8.1 rule 8): "Mon 5 Oct" (the year when it isn't this
+// year) — it read "Oct 5, 2026", and the raw value when it couldn't be read.
+private fun certDate(iso: String?): String = org.nuruplace.member.util.NuruDates.day(iso).orEmpty()
 
 
 // --- Nuru Intelligence: the personalization covenant (one switch) ---

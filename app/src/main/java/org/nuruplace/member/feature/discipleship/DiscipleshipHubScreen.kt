@@ -550,4 +550,4 @@ private fun monthYear(iso: String?): String? =
     parseDate(iso)?.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH))
 
 private fun shortDate(iso: String?): String? =
-    parseDate(iso)?.format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH))
+    parseDate(iso)?.let { org.nuruplace.member.util.NuruDates.day(it) }

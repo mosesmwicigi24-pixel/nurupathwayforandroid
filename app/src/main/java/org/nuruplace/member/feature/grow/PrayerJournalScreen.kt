@@ -416,6 +416,6 @@ private fun relativeLabel(iso: String?): String {
         days < 7 -> "$days days ago"
         days < 14 -> "1 week ago"
         days < 31 -> "${days / 7} weeks ago"
-        else -> instant.atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("MMM d"))
+        else -> org.nuruplace.member.util.NuruDates.day(instant)
     }
 }

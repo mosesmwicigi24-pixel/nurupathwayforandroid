@@ -240,7 +240,8 @@ fun LetterDialog(
                         .padding(top = 44.dp, bottom = 22.dp),
                 ) {
                     Text("THE SUNDAY LETTER", style = NuruType.micro, color = Color(0xFFA8861C), fontWeight = FontWeight.Bold)
-                    Text("Week of ${letter.weekOf}", style = NuruType.caption, color = Color(0xFF74808F))
+                    // "Week of Sun 4 Oct" — it read the server's raw "2026-10-04" (§8.1 rule 8).
+                    org.nuruplace.member.util.NuruDates.day(letter.weekOf)?.let { Text("Week of $it", style = NuruType.caption, color = Color(0xFF74808F)) }
                     letter.scriptureRef?.let { ref ->
                         Spacer(Modifier.height(12.dp))
                         Row(

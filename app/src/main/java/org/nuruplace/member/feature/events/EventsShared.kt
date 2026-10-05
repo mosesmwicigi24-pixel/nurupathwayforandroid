@@ -339,9 +339,9 @@ fun evTimeRange(start: String?, end: String?): String {
     return if (e == s) s else "$s – $e"
 }
 
-/** "Sunday, July 5" */
+/** "Sun 5 Jul" — the one date form (§8.1 rule 8); it read "Sunday, July 5". */
 fun evDateFull(iso: String?): String =
-    evZdt(iso)?.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.ENGLISH)).orEmpty()
+    evZdt(iso)?.let { org.nuruplace.member.util.NuruDates.day(it.toLocalDate()) }.orEmpty()
 
 /** "SUN" */
 fun evWeekdayShort(iso: String?): String =

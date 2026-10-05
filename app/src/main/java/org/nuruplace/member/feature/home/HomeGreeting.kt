@@ -23,11 +23,12 @@ object HomeGreeting {
         else -> "Rest well"
     }
 
-    /** The header's kicker — Home's is the date (§8.1 rule 2): "MONDAY · OCT 5
-     *  · EAT"; on a Sunday "SUNDAY · THE LORD'S DAY · OCT 4". */
+    /** The header's kicker — Home's is the date (§8.1 rule 2), in the one
+     *  date form (rule 8): "MON 5 OCT"; on a Sunday "THE LORD'S DAY · SUN 4
+     *  OCT". It read "MONDAY · OCT 5 · EAT" — month first, and a time-zone
+     *  code, which is data, not a word. */
     fun kicker(today: LocalDate): String {
-        val monthDay = today.format(DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)).uppercase(Locale.ENGLISH)
-        return if (today.dayOfWeek == DayOfWeek.SUNDAY) "SUNDAY · THE LORD'S DAY · $monthDay"
-        else today.format(DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)).uppercase(Locale.ENGLISH) + " · $monthDay · EAT"
+        val date = org.nuruplace.member.util.NuruDates.day(today, today).uppercase(Locale.ENGLISH)
+        return if (today.dayOfWeek == DayOfWeek.SUNDAY) "THE LORD'S DAY · $date" else date
     }
 }

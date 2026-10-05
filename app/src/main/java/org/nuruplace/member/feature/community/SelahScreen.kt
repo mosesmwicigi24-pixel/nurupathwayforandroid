@@ -259,6 +259,6 @@ private fun relativeThoughtLabel(iso: String?): String {
         days < 1 -> "today"
         days == 1L -> "1 day ago"
         days < 7 -> "$days days ago"
-        else -> instant.atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("MMM d"))
+        else -> org.nuruplace.member.util.NuruDates.day(instant)
     }
 }

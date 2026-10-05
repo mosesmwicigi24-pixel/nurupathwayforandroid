@@ -218,25 +218,23 @@ fun chatZdt(iso: String?): ZonedDateTime? {
 
 private val T_TIME = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 private val T_WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-private val T_DAYMON = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 private val T_FULLDAY = DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)
-private val T_MONDAY = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
-/** Inbox-row timestamp: today→time, this week→weekday, older→"d MMM". */
+/** Inbox-row timestamp: today→time, this week→weekday, older→"Mon 5 Oct" (the one date form). */
 fun chatRowTime(iso: String?): String {
     val z = chatZdt(iso) ?: return ""
     val days = ChronoUnit.DAYS.between(z.toLocalDate(), LocalDate.now(CHAT_ZONE))
     return when {
         days <= 0L -> z.format(T_TIME)
         days in 1..6 -> z.format(T_WEEKDAY)
-        else -> z.format(T_DAYMON)
+        else -> org.nuruplace.member.util.NuruDates.day(z.toLocalDate(), LocalDate.now(CHAT_ZONE))
     }
 }
 
 /** Message bubble timestamp "5:07 PM". */
 fun chatMsgTime(iso: String?): String = chatZdt(iso)?.format(T_TIME).orEmpty()
 
-/** Thread day divider: TODAY / YESTERDAY / weekday (this week) / "MMM d" (older), uppercased. */
+/** Thread day divider: TODAY / YESTERDAY / weekday (this week) / "MON 5 OCT" (older). */
 fun chatDayDivider(iso: String?): String {
     val z = chatZdt(iso) ?: return ""
     val days = ChronoUnit.DAYS.between(z.toLocalDate(), LocalDate.now(CHAT_ZONE))
@@ -244,7 +242,7 @@ fun chatDayDivider(iso: String?): String {
         0L -> "TODAY"
         1L -> "YESTERDAY"
         in 2..6 -> z.format(T_FULLDAY).uppercase()
-        else -> z.format(T_MONDAY).uppercase()
+        else -> org.nuruplace.member.util.NuruDates.day(z.toLocalDate(), LocalDate.now(CHAT_ZONE)).uppercase()
     }
 }
 

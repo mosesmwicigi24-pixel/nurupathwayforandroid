@@ -132,9 +132,7 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
             runCatching { Net.client.api.openAnnouncement(a.announcementId) }
                 .onSuccess { InboxUnread.refresh() }
         }
-        val whenString = evZdt(a.sentAt)
-            ?.format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH))
-            ?: ""
+        val whenString = evZdt(a.sentAt)?.let { org.nuruplace.member.util.NuruDates.day(it.toLocalDate()) } ?: ""
         Column(
             Modifier.fillMaxSize().background(EV.paper).verticalScroll(rememberScrollState()),
         ) {

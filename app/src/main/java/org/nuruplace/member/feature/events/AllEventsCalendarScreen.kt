@@ -77,7 +77,6 @@ private fun AllEventsCalendarBody(
 
     val monthYearFmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
     val monthFmt = DateTimeFormatter.ofPattern("MMMM", Locale.ENGLISH)
-    val monthDayFmt = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
     val upcomingCount = events.count { (evZdt(it.startAt)?.toLocalDate() ?: today) >= today }
 
@@ -199,7 +198,7 @@ private fun AllEventsCalendarBody(
 
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (selectedDate != null) selectedDate!!.format(monthDayFmt).uppercase() else "UPCOMING",
+                if (selectedDate != null) org.nuruplace.member.util.NuruDates.day(selectedDate!!).uppercase() else "UPCOMING",
                 style = evInter(11, FontWeight.Bold, 1.4f),
                 color = EV.overline,
             )

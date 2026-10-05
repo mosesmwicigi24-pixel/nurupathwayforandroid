@@ -128,11 +128,8 @@ fun parseServiceQr(raw: String): ScannedServiceCode? {
 
 /** "Sunday, 9:00 AM" from the API's ISO stamp — null if it doesn't parse,
  *  and the caller falls back to wording with no time in it. */
-fun friendlyServiceTime(iso: String): String? = runCatching {
-    java.time.Instant.parse(iso)
-        .atZone(java.time.ZoneId.systemDefault())
-        .format(java.time.format.DateTimeFormatter.ofPattern("EEEE, h:mm a"))
-}.getOrNull()
+fun friendlyServiceTime(iso: String): String? =
+    org.nuruplace.member.util.NuruDates.instant(iso)?.let { "${org.nuruplace.member.util.NuruDates.day(it)} at ${org.nuruplace.member.util.NuruDates.time(it)}" }
 
 private enum class Phase { SCANNING, REGISTERING, SUBMITTING, DONE }
 
@@ -440,11 +437,10 @@ fun streakNote(s: AttendanceStreak): String = when (s.status) {
     else -> ""
 }
 
-/** "09:14" out of an ISO-8601 instant, without pulling in a date library. */
-fun shortTime(iso: String): String {
-    val t = iso.substringAfter('T', "")
-    return if (t.length >= 5) t.substring(0, 5) else iso
-}
+/** "9:14 AM" — the instant in the phone's own zone, 12-hour (§8.1 rule 8). It
+ *  cut "09:14" out of the raw UTC text: three hours behind Nairobi, 24-hour,
+ *  and the raw value when it couldn't. */
+fun shortTime(iso: String): String = org.nuruplace.member.util.NuruDates.time(iso).orEmpty()
 
 // ---------------- Camera ----------------
 

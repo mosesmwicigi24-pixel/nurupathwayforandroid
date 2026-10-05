@@ -133,7 +133,9 @@ private fun HistoryRow(entry: AttendanceHistoryEntry) {
         Spacer(Modifier.size(Spacing.md))
         Column(Modifier.weight(1f)) {
             Text(entry.title, style = NuruType.rowTitle, color = Nuru.onNavy)
-            Text(entry.serviceDate, style = NuruType.caption, color = Nuru.onNavyDim)
+            // "Sun 4 Oct" — the service's calendar date, never the raw
+            // "2026-10-05" (§8.1 rule 8).
+            Text(org.nuruplace.member.util.NuruDates.day(entry.serviceDate).orEmpty(), style = NuruType.caption, color = Nuru.onNavyDim)
         }
         Text(
             if (entry.attended) entry.attendedAt?.let { shortTime(it) } ?: "Present" else "Missed",

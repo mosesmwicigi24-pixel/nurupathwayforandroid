@@ -509,9 +509,9 @@ private fun needChip(n: DepartmentNeed): Triple<String, Color, Color> = when {
     else -> Triple("Closed", Nuru.inputBg, Nuru.ink600)
 }
 
-private val deadlineFmt = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
-private fun deadlineLabel(iso: String): String =
-    runCatching { LocalDate.parse(iso.take(10)).format(deadlineFmt) }.getOrDefault(iso.take(10))
+// One date form (§8.1 rule 8); a deadline that can't be read says nothing —
+// it fell back to the raw "2026-10-30".
+private fun deadlineLabel(iso: String): String = org.nuruplace.member.util.NuruDates.day(iso.take(10)).orEmpty()
 
 /** Leader submit: title, why, amount (KSh), optional deadline (yyyy-MM-dd). */
 @OptIn(ExperimentalMaterial3Api::class)

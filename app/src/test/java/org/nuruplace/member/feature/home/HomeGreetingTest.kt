@@ -31,9 +31,9 @@ class HomeGreetingTest {
     }
 
     @Test fun `the kicker is the date — the Lord's Day on a Sunday`() {
-        assertEquals("MONDAY · OCT 5 · EAT", HomeGreeting.kicker(LocalDate.parse("2026-10-05")))
-        assertEquals("SATURDAY · OCT 10 · EAT", HomeGreeting.kicker(LocalDate.parse("2026-10-10")))
-        assertEquals("SUNDAY · THE LORD'S DAY · OCT 4", HomeGreeting.kicker(LocalDate.parse("2026-10-04")))
-        assertEquals("SUNDAY · THE LORD'S DAY · SEP 27", HomeGreeting.kicker(LocalDate.parse("2026-09-27")))
+        assertEquals("MON 5 OCT", HomeGreeting.kicker(LocalDate.parse("2026-10-05")))
+        assertEquals("SAT 10 OCT", HomeGreeting.kicker(LocalDate.parse("2026-10-10")))
+        assertEquals("THE LORD'S DAY · SUN 4 OCT", HomeGreeting.kicker(LocalDate.parse("2026-10-04")))
+        assertEquals("THE LORD'S DAY · SUN 27 SEP", HomeGreeting.kicker(LocalDate.parse("2026-09-27")))
     }
 }
