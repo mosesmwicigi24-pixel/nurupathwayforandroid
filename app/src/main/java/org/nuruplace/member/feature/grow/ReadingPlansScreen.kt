@@ -166,22 +166,6 @@ fun ReadingPlansScreen(
             if (!c.isNullOrEmpty() && seen.add(c)) add(c)
         }
     }
-    // Every plan, grouped by the commitment it asks for — and every one VISIBLE
-    // (owner, 2026-08-26: "make sure all plans are not hidden"). The old browse
-    // put 17 plans in a sideways rail where ~14 lived off-screen behind a gesture
-    // most members never make, and each plan appeared twice (once under
-    // "Featured for you", once in its length bucket). "Featured" is gone: one
-    // vertical grid per section, each plan exactly once.
-    val collections = buildList {
-        val short = plans.filter { it.dayCount <= 7 }
-        if (short.isNotEmpty()) add(Triple("short", "Short reads · 7 days or less", short))
-        // Mid-length (8–13 days) — most study plans are 10-day, so without this
-        // bucket they'd fall between "short" and "long" and never appear in browse.
-        val mid = plans.filter { it.dayCount in 8..13 }
-        if (mid.isNotEmpty()) add(Triple("mid", "Mid-length journeys · about 10 days", mid))
-        val long = plans.filter { it.dayCount >= 14 }
-        if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
-    }
     // The server's promos, joined to the plans we actually hold — never a plan
     // being read. When it returns nothing (or failed), `resolved` is empty and
     // the page keeps its exact local behaviour: plan-of-the-day at the top, one
@@ -196,6 +180,34 @@ fun ReadingPlansScreen(
     // had no promo to give (iOS the same): never the one already at the top,
     // never one already being read, turning every second Nairobi day.
     val midPromo = if (resolved.isEmpty()) midPromoPlan(plans, planOfDay?.planId, nairobiEpochDay()) else null
+    // Every plan, grouped by the commitment it asks for — and every one VISIBLE
+    // (owner, 2026-08-26: "make sure all plans are not hidden"). The old browse
+    // put 17 plans in a sideways rail where ~14 lived off-screen behind a gesture
+    // most members never make, and each plan appeared twice (once under
+    // "Featured for you", once in its length bucket). "Featured" is gone: one
+    // vertical grid per section, each plan exactly once.
+    // Each plan once on the page (Cycle 3's closing walk): a plan featured or
+    // promoted above or between the sections, or being read in CONTINUE
+    // READING, isn't repeated in the grid — "Where Did I Come From?" sat in a
+    // promo and as a grid card on one screen.
+    val shownElsewhere = buildSet {
+        featured?.plan?.planId?.let(::add)
+        restPromos.forEach { add(it.plan.planId) }
+        midPromo?.planId?.let(::add)
+        continueReading.forEach { add(it.planId) }
+    }
+    val browse = plans.filter { it.planId !in shownElsewhere }
+    val collections = buildList {
+        val plans = browse
+        val short = plans.filter { it.dayCount <= 7 }
+        if (short.isNotEmpty()) add(Triple("short", "Short reads · 7 days or less", short))
+        // Mid-length (8–13 days) — most study plans are 10-day, so without this
+        // bucket they'd fall between "short" and "long" and never appear in browse.
+        val mid = plans.filter { it.dayCount in 8..13 }
+        if (mid.isNotEmpty()) add(Triple("mid", "Mid-length journeys · about 10 days", mid))
+        val long = plans.filter { it.dayCount >= 14 }
+        if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
+    }
 
     Column(
         Modifier
@@ -717,6 +729,9 @@ private fun PlanPromo(
     onOpenPlan: (String) -> Unit,
     reason: String? = null,
     shimmer: Boolean = false,
+    /** The page's one primary (§8.1 rule 4): the featured plan at the top. A
+     *  promo woven into the browse invites in the secondary style. */
+    primary: Boolean = true,
 ) {
     // When the server has a reason THIS member is being shown THIS plan, it
     // speaks instead of the plan's own opening line — it knows more than we do.
@@ -760,12 +775,18 @@ private fun PlanPromo(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            // Gold CTA capsule — the whole card is tappable; this says where to.
+            // The CTA capsule — the whole card is tappable; this says where to.
+            // Gold only on the page's one primary (the featured plan); a woven
+            // promo's is white with a hairline (rule 4) — the tab carried four
+            // gold "Begin the journey".
             Row(
                 Modifier
                     .padding(top = 6.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(PL.gold)
+                    .then(
+                        if (primary) Modifier.background(PL.gold)
+                        else Modifier.background(Color.White).border(1.dp, PL.border, RoundedCornerShape(999.dp)),
+                    )
                     .padding(horizontal = 14.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -912,18 +933,18 @@ private fun CollectionsSections(
             }
             if (promos.isEmpty()) {
                 if (i == 0 && midPromo != null) {
-                    PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan)
+                    PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan, primary = false)
                 }
             } else if (i < gaps) {
                 promos.getOrNull(i)?.let { p ->
-                    PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan)
+                    PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan, primary = false)
                 }
             }
         }
         // More promos than gaps (or no sections at all) — the remainder closes
         // the page rather than being silently dropped.
         for (p in promos.drop(gaps)) {
-            PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan)
+            PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan, primary = false)
         }
     }
 }
