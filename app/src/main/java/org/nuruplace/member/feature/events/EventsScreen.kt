@@ -124,7 +124,7 @@ fun EventsScreen(
 
         // date helpers over events
         fun occDate(occ: CalendarOccurrence): LocalDate? = evZdt(occ.startAt)?.toLocalDate()
-        val thisWeek = events.count { val d = occDate(it); d != null && !d.isBefore(today) && d.isBefore(today.plusDays(7)) }
+        val thisWeek = events.count { val d = occDate(it); d != null && inThisWeek(d, today) }
         val rsvpMap = rsvps.associate { it.eventId to it.status }
         val going = rsvpMap.values.count { it == "going" }
         val upcoming = events.count { val d = occDate(it); d != null && !d.isBefore(today) }
@@ -209,17 +209,19 @@ fun EventsScreen(
                             modifier = Modifier.clickable { selectedDay = today; segment = EVENTS_TAB_TODAY },
                         )
                     }
+                    // This week, whole and in view: today through the seventh
+                        // day after (§6) — the same days "N this week" counts.
                     Row(
-                        Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        Modifier.padding(top = 8.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        val strip = (-2..11).map { today.plusDays(it.toLong()) }
+                        val strip = thisWeekDays(today)
                         strip.forEach { date ->
                             val selected = date == selectedDay
                             val isToday = date == today
                             val hasEvents = events.any { occDate(it) == date }
                             Column(
-                                Modifier.width(44.dp).clip(RoundedCornerShape(16.dp))
+                                Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
                                     .background(
                                         when {
                                             selected -> EV.navy

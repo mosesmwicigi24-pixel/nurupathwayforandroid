@@ -37,6 +37,16 @@ internal fun eventsHeaderLine(events: List<CalendarOccurrence>, today: LocalDate
         ?.let { (o, start) -> "Next: ${o.title} · ${start.format(NEXT_DAY)}" }
         ?: "Nothing planned this week"
 
+/** "This week" (§6, both apps): today through the seventh day after — the
+ *  week strip's days and the header's "N this week" count the same days. The
+ *  strip ran two days back to eleven ahead and showed Sat–Fri, so "1 this
+ *  week" (a Sunday) wasn't on it (Cycle 3 close walk E21). */
+internal fun thisWeekDays(today: LocalDate): List<LocalDate> = (0L..7L).map { today.plusDays(it) }
+
+/** [day] falls in [thisWeekDays]. */
+internal fun inThisWeek(day: LocalDate, today: LocalDate): Boolean =
+    !day.isBefore(today) && !day.isAfter(today.plusDays(7))
+
 /** The tabs under the calendar: Today · Upcoming · My RSVPs. */
 internal const val EVENTS_TAB_TODAY = 0
 internal const val EVENTS_TAB_UPCOMING = 1

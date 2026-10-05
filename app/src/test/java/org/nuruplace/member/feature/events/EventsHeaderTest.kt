@@ -86,3 +86,26 @@ class UpcomingSeriesTest {
         org.junit.Assert.assertEquals(listOf("a"), upcomingSeries(listOf(live, ended)).map { it.seriesId })
     }
 }
+
+/** The strip and "N this week" count the same days: today through the
+ *  seventh day after (§6; Cycle 3 close walk E21 — Sat–Fri on the strip,
+ *  a Sunday in the count). */
+class ThisWeekTest {
+    private val mon5 = LocalDate.of(2026, 10, 5)
+
+    @org.junit.Test fun `the strip is today through the seventh day after`() {
+        val days = thisWeekDays(mon5)
+        org.junit.Assert.assertEquals(8, days.size)
+        org.junit.Assert.assertEquals(mon5, days.first())
+        org.junit.Assert.assertEquals(LocalDate.of(2026, 10, 12), days.last())
+        org.junit.Assert.assertTrue(LocalDate.of(2026, 10, 11) in days) // the Sunday the walk counted
+    }
+
+    @org.junit.Test fun `the count's days are the strip's days`() {
+        val days = thisWeekDays(mon5).toSet()
+        for (offset in -3L..10L) {
+            val d = mon5.plusDays(offset)
+            org.junit.Assert.assertEquals(d.toString(), d in days, inThisWeek(d, mon5))
+        }
+    }
+}
