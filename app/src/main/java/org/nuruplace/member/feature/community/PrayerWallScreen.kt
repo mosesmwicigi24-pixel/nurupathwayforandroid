@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -174,7 +175,11 @@ fun PrayerWallScreen(
                     DisposableEffect(Unit) { onDispose { player.release() } }
                     Column(
                         Modifier.padding(horizontal = 20.dp)
-                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 96.dp),
+                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 96.dp)
+                            // The floating "+" rides above the gesture bar on the pushed
+                            // page; the list's end clears it too — a floating button
+                            // never hides content (§8.1 rule 9).
+                            .then(if (clearNavigationBar) Modifier.navigationBarsPadding() else Modifier),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         // Sort pills
@@ -183,9 +188,16 @@ fun PrayerWallScreen(
                             SortPill("Most prayed", "prayed", sort) { sort = it }
                         }
                         if (posts.isEmpty()) {
-                            Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                                Text("No prayer requests yet.", style = gInter(13), color = GrowPal.ink600)
-                            }
+                            // §4's one state card with a labelled way forward (Cycle 3's
+                            // closing walk): it was one bare line beside an unlabelled "+".
+                            org.nuruplace.member.ui.components.StateCard(
+                                title = "No prayer requests yet",
+                                line = "Be the first to share one — your cell will stand with you.",
+                                glyph = Icons.Filled.VolunteerActivism,
+                                actionLabel = "Share a prayer",
+                                onAction = { composing = true },
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
                         } else {
                             posts.forEach { p ->
                                 PrayerCard(
@@ -226,13 +238,14 @@ fun PrayerWallScreen(
 private fun SortPill(label: String, key: String, sort: String, onSelect: (String) -> Unit) {
     val on = sort == key
     Box(
+        // Pills select in navy (§8.1 rule 6) — they selected into a gold tint.
         Modifier.clip(Capsule)
-            .background(if (on) GrowPal.goldChipBg else GrowPal.white)
-            .border(1.dp, if (on) GrowPal.gold else GrowPal.border, Capsule)
+            .background(if (on) GrowPal.navy else GrowPal.white)
+            .then(if (on) Modifier else Modifier.border(1.dp, GrowPal.border, Capsule))
             .clickable { onSelect(key) }
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
-        Text(label, style = gInter(12, FontWeight.Bold), color = if (on) GrowPal.navyDeep else GrowPal.ink600)
+        Text(label, style = gInter(12, FontWeight.Bold), color = if (on) Color.White else GrowPal.ink600)
     }
 }
 
