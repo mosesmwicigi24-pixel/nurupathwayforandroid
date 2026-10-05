@@ -1158,12 +1158,16 @@ fun PersonRow(
         }
         Column(Modifier.weight(1f)) {
             Text(p.fullName, style = cInter(12, FontWeight.Medium, -0.12f), color = CHAT.navy, maxLines = 1)
-            Text(
-                listOfNotNull(p.role, p.congregation).joinToString(" · "),
-                style = cInter(11),
-                color = CHAT.ink500,
-                maxLines = 1,
-            )
+            // The member's real context — their congregation — never the
+            // account's role ("Student · …", an internal word; §8.1 rule 8).
+            p.congregation?.takeIf { it.isNotBlank() }?.let { where ->
+                Text(
+                    where,
+                    style = cInter(11),
+                    color = CHAT.ink500,
+                    maxLines = 1,
+                )
+            }
         }
         if (busy) {
             androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), color = CHAT.gold, strokeWidth = 2.dp)
