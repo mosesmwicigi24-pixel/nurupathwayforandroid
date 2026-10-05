@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -53,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -76,7 +79,6 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.Kicker
-import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
@@ -287,35 +289,28 @@ fun LevelDetailScreen(
                 }
 
                 if (allDone && !hasExamModule) {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.goldTint).padding(Spacing.base),
-                    ) {
-                        // The gate is the journey's (§3), for the member's own
-                        // level only — the same title, line and action the hub
-                        // and Home say. It used to offer the exam on any level
-                        // whose modules were all done: a level already passed,
-                        // or one whose exam was passed and awaits the usher
-                        // (where "See Level N" lands).
-                        val j = bundle.journey?.takeIf { it.levelNumber == levelNumber && it.stage != JourneyStage.LEARNING }
-                        if (j != null) {
-                            Text(j.next.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(Spacing.xs))
-                            Text(j.next.line, style = NuruType.caption, color = Nuru.ink600)
-                            // Only the exam is opened from here; the other
-                            // steps' actions lead back to this very page.
-                            j.next.action?.takeIf { j.stage == JourneyStage.EXAM_READY }?.let { action ->
-                                Spacer(Modifier.height(Spacing.md))
-                                PrimaryButton(action.label, onClick = { onTakeExam(levelNumber) })
-                            }
-                        } else {
-                            Text("You've finished every module in this level.", style = NuruType.body, color = Nuru.ink)
-                            // No journey to ask (the pathway read failed):
-                            // the old gate — the server still decides.
-                            if (bundle.journey == null) {
-                                Spacer(Modifier.height(Spacing.md))
-                                PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
-                            }
-                        }
+                    // The gate is the journey's (§3), for the member's own
+                    // level only — the same title, line and action the hub
+                    // and Home say. It used to offer the exam on any level
+                    // whose modules were all done: a level already passed,
+                    // or one whose exam was passed and awaits the usher
+                    // (where "See Level N" lands). Only the exam is opened
+                    // from here; the other steps' actions lead back to this
+                    // very page. No journey to ask (the pathway read failed):
+                    // the old gate — the server still decides.
+                    val j = bundle.journey?.takeIf { it.levelNumber == levelNumber && it.stage != JourneyStage.LEARNING }
+                    when {
+                        j != null -> LevelGateCard(
+                            title = j.next.title, line = j.next.line,
+                            actionLabel = j.next.action?.takeIf { j.stage == JourneyStage.EXAM_READY }?.label,
+                            onAction = { onTakeExam(levelNumber) },
+                        )
+                        bundle.journey == null -> LevelGateCard(
+                            title = "You've finished every module in this level.", line = null,
+                            actionLabel = "Take the Level $levelNumber exam",
+                            onAction = { onTakeExam(levelNumber) },
+                        )
+                        else -> LevelGateCard(title = "You've finished every module in this level.", line = null, actionLabel = null, onAction = {})
                     }
                 }
                 Spacer(Modifier.height(Spacing.xxl))
@@ -527,6 +522,44 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
                     Spacer(Modifier.height(Spacing.xs))
                     Text(it, style = NuruType.micro, color = Nuru.goldLo, fontWeight = FontWeight.SemiBold)
                 }
+            }
+        }
+    }
+}
+
+/** The level's gate (EXPERIENCE.md §8.2 #15) — navy, the level page's one
+ *  feature card, as iOS draws it (ExamGateCard): "THE LEVEL GATE", the
+ *  journey's title and line, and — only while the exam can be taken — its
+ *  gold action. It was a gold card on Android. */
+@Composable
+private fun LevelGateCard(title: String, line: String?, actionLabel: String?, onAction: () -> Unit) {
+    val shape = RoundedCornerShape(Radii.card)
+    Column(
+        Modifier.fillMaxWidth()
+            .shadow(12.dp, shape, ambientColor = Nuru.navyCeremony.copy(alpha = 0.35f), spotColor = Nuru.navyCeremony.copy(alpha = 0.35f))
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(Nuru.navy700, Nuru.navyCeremony)))
+            .border(1.dp, Nuru.gold.copy(alpha = 0.5f), shape)
+            .then(if (actionLabel != null) Modifier.clickable { onAction() } else Modifier)
+            .padding(Spacing.base),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.WorkspacePremium, null, tint = Nuru.goldGlow, modifier = Modifier.size(12.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("THE LEVEL GATE", style = NuruType.kicker, color = Nuru.goldGlow)
+        }
+        Text(title, style = NuruType.cardTitle, color = Nuru.onNavy)
+        line?.let { Text(it, style = NuruType.body, color = Nuru.onNavy.copy(alpha = 0.65f)) }
+        if (actionLabel != null) {
+            Row(
+                Modifier.padding(top = 4.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldGradient)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(actionLabel, style = NuruType.actionLabel, color = Nuru.navyDeep)
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Nuru.navyDeep, modifier = Modifier.size(13.dp))
             }
         }
     }
