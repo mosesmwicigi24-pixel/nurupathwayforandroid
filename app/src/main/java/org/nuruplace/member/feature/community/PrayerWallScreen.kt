@@ -87,6 +87,7 @@ import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.ui.components.voiceClock
+import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
 import org.nuruplace.member.util.relTime
@@ -148,7 +149,7 @@ fun PrayerWallScreen(
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text("PRAY FOR ONE ANOTHER", style = gInter(11, FontWeight.Medium, 1.8f), color = GrowPal.gold)
-                            Text("Carry one another", style = gSerif(24, FontWeight.SemiBold), color = Color.White)
+                            Text("Carry one another", style = gSerif(26, FontWeight.SemiBold), color = Color.White)
                             Text(
                                 "“Carry each other's burdens, and in this way you will fulfill the law of Christ.” — Galatians 6:2",
                                 style = gInter(12), color = Color.White.copy(alpha = 0.55f), maxLines = 2,
@@ -286,7 +287,7 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
                     maxBarHeight = 18.dp,
                 )
                 if (playing && player.durationSec > 0) {
-                    Text(voiceClock(player.durationSec), style = gInter(10, FontWeight.SemiBold), color = GrowPal.ink400)
+                    Text(voiceClock(player.durationSec), style = gInter(11, FontWeight.SemiBold), color = GrowPal.ink400)
                 }
             }
         }
@@ -330,7 +331,7 @@ internal fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.D
         } else {
             Text(
                 initials(name),
-                style = gInter((size.value * 0.4f).toInt().coerceAtLeast(9), FontWeight.SemiBold),
+                style = gInter(TypeScale.initials(size.value), FontWeight.SemiBold),
                 color = GrowPal.navyMid,
             )
         }

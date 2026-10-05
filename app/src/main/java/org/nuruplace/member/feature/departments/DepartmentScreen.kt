@@ -472,7 +472,7 @@ private fun NeedCard(n: DepartmentNeed, showStatus: Boolean, onGive: () -> Unit)
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(n.title, style = nuruSerif(17, FontWeight.SemiBold), color = Nuru.ink, modifier = Modifier.weight(1f))
+            Text(n.title, style = nuruSerif(18, FontWeight.SemiBold), color = Nuru.ink, modifier = Modifier.weight(1f))
             if (showStatus || n.reached) DeptChip(chipText, chipBg, chipFg)
         }
         if (n.why.isNotBlank()) Text(n.why, style = NuruType.body, color = Nuru.ink600)

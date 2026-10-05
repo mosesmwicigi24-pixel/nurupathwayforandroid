@@ -101,7 +101,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                         Text("NEW MESSAGE", style = cInter(11, FontWeight.Bold, 1.98f), color = CHAT.eyebrow)
                         Text(
                             "Start a conversation",
-                            style = cSerif(24, FontWeight.SemiBold, -0.48f),
+                            style = cSerif(26, FontWeight.SemiBold, -0.48f),
                             color = CHAT.navy,
                         )
                     }

@@ -81,7 +81,7 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                Text("Prayer", style = gSerif(20, FontWeight.SemiBold), color = Color.White)
+                Text("Prayer", style = gSerif(22, FontWeight.SemiBold), color = Color.White)
             }
 
             // Content
@@ -269,7 +269,7 @@ private fun VoicePrayerRow(id: String, url: String, wave: List<Int>, player: Voi
             maxBarHeight = 20.dp,
         )
         if (playing && player.durationSec > 0) {
-            Text(voiceClock(player.durationSec), style = gInter(10, FontWeight.Bold), color = GrowPal.ink400)
+            Text(voiceClock(player.durationSec), style = gInter(11, FontWeight.Bold), color = GrowPal.ink400)
         }
     }
 }

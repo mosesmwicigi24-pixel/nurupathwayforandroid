@@ -567,7 +567,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.bubbleInk), contentAlignment = Alignment.Center) {
-                        Text(if (myName.isBlank()) "You" else chatInitials(myName), style = cInter(10, FontWeight.Bold), color = Color.White)
+                        Text(if (myName.isBlank()) "You" else chatInitials(myName), style = cInter(11, FontWeight.Bold), color = Color.White)
                     }
                     Row(
                         Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(CHAT.paper).border(1.dp, CHAT.border, RoundedCornerShape(24.dp))
@@ -662,7 +662,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
         editingMessage?.let { m ->
             ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-                    Text("Edit message", style = cSerif(19, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
+                    Text("Edit message", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
                     Spacer(Modifier.height(12.dp))
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(CHAT.paper)
@@ -859,10 +859,10 @@ private fun ThreadHeader(
                 }
 
                 Column(Modifier.weight(1f)) {
-                    Text(thread.title ?: "Conversation", style = cSerif(19, FontWeight.SemiBold, -0.3f), color = CHAT.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(thread.title ?: "Conversation", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (thread.kind == "dm") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("🕊️", fontSize = 10.sp)
+                            Text("🕊️", fontSize = 11.sp)
                             Text(
                                 when {
                                     threadContext == "discipler" -> "My Discipler"
@@ -1074,7 +1074,7 @@ private fun InviteCardBubble(invite: ChatInviteMeta, from: String, mine: Boolean
             }
         }
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("READ WITH A FRIEND", style = cInter(9, FontWeight.Bold, 1.6f), color = if (mine) CHAT.goldLight else CHAT.eyebrow)
+            Text("READ WITH A FRIEND", style = cInter(11, FontWeight.Bold, 1.6f), color = if (mine) CHAT.goldLight else CHAT.eyebrow)
             Text(
                 invite.planTitle.ifBlank { "A reading plan" },
                 style = cSerif(15, FontWeight.SemiBold), color = if (mine) Color.White else CHAT.navy,
@@ -1096,7 +1096,7 @@ private fun InviteCardBubble(invite: ChatInviteMeta, from: String, mine: Boolean
 private fun DaySeparator(iso: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(CHAT.hairline))
-        Text(chatDayDivider(iso), style = cInter(10, FontWeight.Bold, 2.2f), color = CHAT.dayGold, modifier = Modifier.padding(horizontal = 10.dp))
+        Text(chatDayDivider(iso), style = cInter(11, FontWeight.Bold, 2.2f), color = CHAT.dayGold, modifier = Modifier.padding(horizontal = 10.dp))
         Box(Modifier.weight(1f).height(1.dp).background(CHAT.hairline))
     }
 }
@@ -1126,7 +1126,7 @@ private fun MessageRow(
                     if (!m.authorAvatar.isNullOrBlank()) {
                         AsyncImage(model = m.authorAvatar, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     } else {
-                        Text(chatInitials(m.authorName), style = cInter(9, FontWeight.Bold), color = Color.White)
+                        Text(chatInitials(m.authorName), style = cInter(11, FontWeight.Bold), color = Color.White)
                     }
                 }
             } else {
@@ -1228,7 +1228,7 @@ private fun MessageRow(
                             )
                             val shownDur = metaDur ?: player.durationSec.takeIf { playing && it > 0 }
                             if (shownDur != null) {
-                                Text(voiceClock(shownDur), style = cInter(10, FontWeight.SemiBold), color = if (m.mine) Color.White.copy(alpha = 0.7f) else CHAT.meta)
+                                Text(voiceClock(shownDur), style = cInter(11, FontWeight.SemiBold), color = if (m.mine) Color.White.copy(alpha = 0.7f) else CHAT.meta)
                             }
                         }
                     }
@@ -1275,24 +1275,24 @@ private fun MessageRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(r.emoji, fontSize = 11.sp)
-                                Text(r.count.toString(), style = cInter(9, FontWeight.Bold), color = if (r.mine) CHAT.navy else CHAT.ink600)
+                                Text(r.count.toString(), style = cInter(11, FontWeight.Bold), color = if (r.mine) CHAT.navy else CHAT.ink600)
                             }
                         }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     if (m.isEdited) {
-                        Text("edited", style = cInter(9).copy(fontStyle = FontStyle.Italic), color = if (m.mine) Color.White.copy(alpha = 0.5f) else CHAT.meta)
+                        Text("edited", style = cInter(11).copy(fontStyle = FontStyle.Italic), color = if (m.mine) Color.White.copy(alpha = 0.5f) else CHAT.meta)
                         Spacer(Modifier.width(4.dp))
                     }
-                    Text(chatMsgTime(m.createdAt), style = cInter(10), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
+                    Text(chatMsgTime(m.createdAt), style = cInter(11), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
                     if (m.mine) {
                         Spacer(Modifier.width(4.dp))
                         // The broadcast rule, everywhere: ONE blue tick = delivered
                         // (the copy is in their thread), TWO blue ticks = seen
                         // (their last_read_at covers it). Always WhatsApp-blue.
                         val seen = (m.readCount ?: 0) > 0
-                        Text(if (seen) "✓✓" else "✓", style = cInter(9, FontWeight.SemiBold, -1f), color = CHAT.tickBlue)
+                        Text(if (seen) "✓✓" else "✓", style = cInter(11, FontWeight.SemiBold, -1f), color = CHAT.tickBlue)
                     }
                 }
             }

@@ -100,7 +100,7 @@ fun BroadcastDetailScreen(broadcastId: String, onBack: () -> Unit, onOpenThread:
                     .clickable { onBack() },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
-            Text("Broadcast", style = cSerif(20, FontWeight.SemiBold), color = Color.White)
+            Text("Broadcast", style = cSerif(22, FontWeight.SemiBold), color = Color.White)
         }
 
         Column(
@@ -156,7 +156,7 @@ private fun PinnedBroadcastCard(body: String, createdAt: String?) {
         }
         Text(
             body.ifBlank { "…" },
-            style = cSerif(17),
+            style = cSerif(16),
             color = Color.White,
             lineHeight = 24.sp,
         )
@@ -291,7 +291,7 @@ private fun ResponseRow(r: BroadcastResponseRow, onOpenThread: () -> Unit) {
             if (r.fromThem > 1) {
                 Text(
                     "${r.fromThem} messages in your conversation",
-                    style = cInter(10, FontWeight.SemiBold),
+                    style = cInter(11, FontWeight.SemiBold),
                     color = CHAT.goldDeep,
                     modifier = Modifier.padding(top = 4.dp),
                 )

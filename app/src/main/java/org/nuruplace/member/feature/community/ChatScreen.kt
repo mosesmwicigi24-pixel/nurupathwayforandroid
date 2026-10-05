@@ -555,7 +555,7 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                             .background(CHAT.goldLight)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
-                        Text("AI", style = cInter(8, FontWeight.Bold, 1.1f), color = CHAT.navy)
+                        Text("AI", style = cInter(11, FontWeight.Bold, 1.1f), color = CHAT.navy)
                     }
                 }
                 // No zero counts (§7.4 #9): "0 updates across 0 spaces" said nothing.
@@ -612,7 +612,7 @@ private fun VerseCard(verse: TailoredVerse?) {
             )
             Text(
                 verse?.reference?.takeIf { it.isNotBlank() } ?: "Proverbs 27:9",
-                style = cInter(10, FontWeight.Bold), color = CHAT.eyebrow, modifier = Modifier.padding(top = 4.dp),
+                style = cInter(11, FontWeight.Bold), color = CHAT.eyebrow, modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
@@ -654,7 +654,7 @@ internal fun Segment(
                         .padding(horizontal = 6.dp, vertical = 1.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(count.toString(), style = cInter(10, FontWeight.Bold), color = if (on) CHAT.navy else CHAT.ink500)
+                    Text(count.toString(), style = cInter(11, FontWeight.Bold), color = if (on) CHAT.navy else CHAT.ink500)
                 }
             }
         }
@@ -744,7 +744,7 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                 )
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(previewText(c), style = cInter(10), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(previewText(c), style = cInter(11), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
                 if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
             }
             // Bottom meta: overlapping member stack + count pill · space topic on the right
@@ -758,7 +758,7 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                 if (!topic.isNullOrBlank()) {
                     Text(
                         topic,
-                        style = cInter(10),
+                        style = cInter(11),
                         color = CHAT.faint,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -798,7 +798,7 @@ private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, pending: Boolean, onJoi
                             .background(CHAT.goldTint)
                             .padding(horizontal = 6.dp, vertical = 1.dp),
                     ) {
-                        Text(category.uppercase(), style = cInter(8, FontWeight.Bold, 0.8f), color = CHAT.goldDeep)
+                        Text(category.uppercase(), style = cInter(11, FontWeight.Bold, 0.8f), color = CHAT.goldDeep)
                     }
                 }
             }
@@ -806,7 +806,7 @@ private fun DiscoverSpaceRow(d: DiscoverSpace, idx: Int, pending: Boolean, onJoi
             if (!topic.isNullOrBlank()) {
                 Text(
                     topic,
-                    style = cInter(10),
+                    style = cInter(11),
                     color = CHAT.ink600,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -926,7 +926,7 @@ private fun DmTab(
                         Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
                     }
                 }
-                Text("Your note", style = cInter(10, FontWeight.Medium), color = CHAT.navy, modifier = Modifier.padding(top = 6.dp))
+                Text("Your note", style = cInter(11, FontWeight.Medium), color = CHAT.navy, modifier = Modifier.padding(top = 6.dp))
             }
             dms.forEach { dm ->
                 Column(Modifier.width(60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -951,7 +951,7 @@ private fun DmTab(
                     }
                     Text(
                         (dm.title ?: "").substringBefore(' '),
-                        style = cInter(10, FontWeight.Medium),
+                        style = cInter(11, FontWeight.Medium),
                         color = CHAT.navy,
                         maxLines = 1,
                         modifier = Modifier.padding(top = 6.dp),
@@ -1076,7 +1076,7 @@ private fun DmRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Unit)
                 )
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(previewText(c), style = cInter(10), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(previewText(c), style = cInter(11), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
                 if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
             }
         }
@@ -1126,7 +1126,7 @@ fun PersonRow(
                         .border(1.5.dp, Color.White, Capsule)
                         .padding(horizontal = 5.dp, vertical = 1.dp),
                 ) {
-                    Text("L${p.level}", style = cInter(8, FontWeight.Bold), color = CHAT.navy)
+                    Text("L${p.level}", style = cInter(11, FontWeight.Bold), color = CHAT.navy)
                 }
             }
         }
@@ -1169,12 +1169,12 @@ private fun PersonRowAffordance(state: ConnectionState) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("Request sent", style = cInter(10, FontWeight.SemiBold), color = CHAT.ink500)
+            Text("Request sent", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink500)
             Icon(Icons.Filled.Close, contentDescription = "Cancel request", tint = CHAT.faint, modifier = Modifier.size(12.dp))
         }
         is ConnectionState.RequestReceived -> Box(
             Modifier.clip(Capsule).background(CHAT.gold.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 6.dp),
-        ) { Text("Wants to connect", style = cInter(10, FontWeight.Bold), color = CHAT.navy) }
+        ) { Text("Wants to connect", style = cInter(11, FontWeight.Bold), color = CHAT.navy) }
         is ConnectionState.Blocked -> Icon(
             Icons.Filled.Close, contentDescription = null, tint = CHAT.faint,
             modifier = Modifier.size(20.dp),
@@ -1221,7 +1221,7 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                 )
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(previewText(c), style = cInter(10), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(previewText(c), style = cInter(11), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
                 if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
             }
         }
@@ -1452,7 +1452,7 @@ private fun PastoralInboxRowView(row: PastoralInboxRow, idx: Int, onOpenThread: 
                 Text(chatRowTime(row.lastAt), style = cInter(11), color = CHAT.faint)
             }
             row.lastBody?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = cInter(10), color = CHAT.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                Text(it, style = cInter(11), color = CHAT.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
@@ -1776,7 +1776,7 @@ private fun UnreadBadge(n: Int) {
             .padding(horizontal = 6.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(n.toString(), style = cInter(10, FontWeight.Bold), color = CHAT.navy)
+        Text(n.toString(), style = cInter(11, FontWeight.Bold), color = CHAT.navy)
     }
 }
 
@@ -1807,7 +1807,7 @@ private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCoun
                 if (i == 0 && !avatarUrl.isNullOrBlank()) {
                     AsyncImage(model = avatarUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
                 } else if (i == 0) {
-                    Text((title ?: "#").trim().take(1).uppercase(), style = cInter(8, FontWeight.Bold), color = Color.White)
+                    Text((title ?: "#").trim().take(1).uppercase(), style = cInter(11, FontWeight.Bold), color = Color.White)
                 }
             }
         }
@@ -1822,7 +1822,7 @@ private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCoun
                 .padding(horizontal = 7.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(memberCount.toString(), style = cInter(9, FontWeight.Bold), color = CHAT.navy)
+            Text(memberCount.toString(), style = cInter(11, FontWeight.Bold), color = CHAT.navy)
         }
     }
 }

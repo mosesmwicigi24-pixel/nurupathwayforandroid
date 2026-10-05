@@ -110,7 +110,7 @@ fun DiscipleshipHubScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
-                Text("Discipleship", style = gSerif(20, FontWeight.SemiBold), color = GrowPal.navy)
+                Text("Discipleship", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
 
@@ -176,8 +176,8 @@ private fun DisciplerCard(d: HubDiscipler) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             DisciplerAvatar(d.fullName, d.avatarUrl)
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(d.fullName, style = gInter(17, FontWeight.Bold), color = GrowPal.ink)
-                Text(d.roleLabel.uppercase(), style = gInter(10, FontWeight.SemiBold).copy(letterSpacing = 1.2.sp), color = GrowPal.gold)
+                Text(d.fullName, style = gInter(18, FontWeight.Bold), color = GrowPal.ink)
+                Text(d.roleLabel.uppercase(), style = gInter(11, FontWeight.SemiBold).copy(letterSpacing = 1.2.sp), color = GrowPal.gold)
                 d.cellName?.let { Text(it, style = gInter(12), color = GrowPal.ink600) }
                 monthYear(d.establishedAt)?.let {
                     Text("Walking with you since $it", style = gInter(11), color = GrowPal.gold)
@@ -198,7 +198,7 @@ private fun DisciplerAvatar(name: String, url: String?) {
         ) {
             val initials = name.split(" ").filter { it.isNotBlank() }.take(2)
                 .joinToString("") { it.first().uppercase() }
-            Text(initials.ifEmpty { "?" }, style = gSerif(20, FontWeight.SemiBold), color = GrowPal.gold)
+            Text(initials.ifEmpty { "?" }, style = gSerif(22, FontWeight.SemiBold), color = GrowPal.gold)
         }
     }
 }
@@ -246,7 +246,7 @@ private fun WhereYouAreCard(p: HubProgression) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Kicker("WHERE YOU ARE")
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Level ${p.currentLevel}", style = gSerif(20, FontWeight.SemiBold), color = GrowPal.ink)
+                Text("Level ${p.currentLevel}", style = gSerif(18, FontWeight.SemiBold), color = GrowPal.ink)
                 Text(p.levelTitle, style = gInter(13), color = GrowPal.ink600, maxLines = 1, modifier = Modifier.weight(1f))
                 if (p.streakDays > 0) {
                     Box(
@@ -301,7 +301,7 @@ private fun GrowthCard(s: HubScores) {
                             .border(2.dp, scoreColor(overall), CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("$overall", style = gSerif(20, FontWeight.SemiBold), color = scoreColor(overall))
+                        Text("$overall", style = gSerif(22, FontWeight.SemiBold), color = scoreColor(overall))
                     }
                     Text("overall", style = gInter(13), color = GrowPal.ink600)
                 }
@@ -368,11 +368,11 @@ private fun ReflectionRow(r: HubReflection) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(r.moduleTitle, style = gInter(13, FontWeight.SemiBold), color = GrowPal.ink, maxLines = 2)
-                Text("Level ${r.levelNumber}", style = gInter(10), color = GrowPal.ink400)
+                Text("Level ${r.levelNumber}", style = gInter(11), color = GrowPal.ink400)
             }
             StatePill(r.state)
         }
-        Text(relTime(r.submittedAt), style = gInter(10), color = GrowPal.ink400)
+        Text(relTime(r.submittedAt), style = gInter(11), color = GrowPal.ink400)
         // The discipler's feedback to the student, when present.
         val notes = r.feedbackNotes
         if (!notes.isNullOrEmpty()) {
@@ -401,7 +401,7 @@ private fun StatePill(state: String) {
             .border(1.dp, color.copy(alpha = 0.25f), Capsule)
             .padding(horizontal = 9.dp, vertical = 4.dp),
     ) {
-        Text(label, style = gInter(10, FontWeight.Bold), color = color)
+        Text(label, style = gInter(11, FontWeight.Bold), color = color)
     }
 }
 
@@ -451,11 +451,11 @@ private fun NoteRow(n: HubNote) {
                 style = gInter(12, FontWeight.Bold), color = GrowPal.ink,
                 modifier = Modifier.weight(1f),
             )
-            shortDate(n.metAt)?.let { Text(it, style = gInter(10), color = GrowPal.ink400) }
+            shortDate(n.metAt)?.let { Text(it, style = gInter(11), color = GrowPal.ink400) }
         }
         Text(n.body, style = gInter(12).copy(lineHeight = 17.sp), color = GrowPal.ink600)
         n.nextMeetingAt?.let { next ->
-            shortDate(next)?.let { Text("Next: $it", style = gInter(10), color = GrowPal.ink400) }
+            shortDate(next)?.let { Text("Next: $it", style = gInter(11), color = GrowPal.ink400) }
         }
     }
 }
@@ -495,7 +495,7 @@ private fun EmptyCard() {
             ) { Text("🤝", fontSize = 22.sp) }
             Text(
                 "You'll be paired with a discipler soon",
-                style = gInter(17, FontWeight.Bold), color = GrowPal.ink,
+                style = gInter(18, FontWeight.Bold), color = GrowPal.ink,
             )
             Text(
                 "When your leader walks you into a discipleship relationship, your meetings, notes, and feedback will live here.",
@@ -518,7 +518,7 @@ private fun HubCard(content: @Composable () -> Unit) {
 
 @Composable
 private fun Kicker(text: String) {
-    Text(text, style = gInter(10, FontWeight.Bold).copy(letterSpacing = 1.8.sp), color = GrowPal.gold)
+    Text(text, style = gInter(11, FontWeight.Bold).copy(letterSpacing = 1.8.sp), color = GrowPal.gold)
 }
 
 private fun firstName(full: String) = full.split(" ").firstOrNull { it.isNotBlank() } ?: full

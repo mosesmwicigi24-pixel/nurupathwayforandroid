@@ -95,7 +95,7 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Your disciples", style = gSerif(20, FontWeight.SemiBold), color = GrowPal.navy)
+                    Text("Your disciples", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
                     roster?.summary?.let { s ->
                         Text(
                             "${s.totalStudents} walking with you · ${s.awaitingAction} awaiting action",
@@ -209,7 +209,7 @@ private fun StudentAvatar(name: String, url: String?) {
         ) {
             val initials = name.split(" ").filter { it.isNotBlank() }.take(2)
                 .joinToString("") { it.first().uppercase() }
-            Text(initials.ifEmpty { "?" }, style = gSerif(17, FontWeight.SemiBold), color = GrowPal.gold)
+            Text(initials.ifEmpty { "?" }, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.gold)
         }
     }
 }
@@ -229,7 +229,7 @@ private fun BandPill(band: String) {
             .border(1.dp, color.copy(alpha = 0.25f), Capsule)
             .padding(horizontal = 9.dp, vertical = 4.dp),
     ) {
-        Text(label, style = gInter(10, FontWeight.Bold), color = color)
+        Text(label, style = gInter(11, FontWeight.Bold), color = color)
     }
 }
 
@@ -263,7 +263,7 @@ private fun EmptyCard() {
             ) { Text("🌱", fontSize = 22.sp) }
             Text(
                 "No disciples assigned yet",
-                style = gInter(17, FontWeight.Bold), color = GrowPal.ink,
+                style = gInter(18, FontWeight.Bold), color = GrowPal.ink,
             )
             Text(
                 "When members are placed in your care, they'll appear here.",

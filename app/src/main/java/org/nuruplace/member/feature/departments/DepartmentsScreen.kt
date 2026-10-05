@@ -54,6 +54,7 @@ import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import org.nuruplace.member.util.relTime
@@ -208,7 +209,7 @@ internal fun PersonAvatar(url: String?, name: String?, size: Dp) {
         Box(Modifier.size(size).clip(CircleShape).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
             Text(
                 name?.trim()?.firstOrNull()?.uppercase() ?: "?",
-                style = nuruSans((size.value * 0.42f).toInt().coerceAtLeast(9), FontWeight.SemiBold),
+                style = nuruSans(TypeScale.initials(size.value), FontWeight.SemiBold),
                 color = Nuru.goldLo,
             )
         }

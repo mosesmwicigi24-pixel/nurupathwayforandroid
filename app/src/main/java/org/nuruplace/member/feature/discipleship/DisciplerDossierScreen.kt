@@ -117,7 +117,7 @@ fun DisciplerDossierScreen(studentId: String, onBack: () -> Unit, onOpenChat: (S
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
                 val title = dossier?.member?.fullName?.let { firstName(it) }?.takeIf { it.isNotBlank() } ?: "Disciple"
-                Text(title, style = gSerif(20, FontWeight.SemiBold), color = GrowPal.navy)
+                Text(title, style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
 
@@ -168,7 +168,7 @@ private fun MemberCard(m: DossierMember, busy: Boolean, onMessage: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 MemberAvatar(m.fullName, m.avatarUrl)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(m.fullName.ifBlank { "Disciple" }, style = gInter(17, FontWeight.Bold), color = GrowPal.ink)
+                    Text(m.fullName.ifBlank { "Disciple" }, style = gInter(18, FontWeight.Bold), color = GrowPal.ink)
                     m.cellName?.let { Text(it, style = gInter(12), color = GrowPal.ink600) }
                     val since = monthYear(m.establishedAt)?.let { "In your care since $it" }
                         ?: monthYear(m.joinedAt)?.let { "Joined $it" }
@@ -202,7 +202,7 @@ private fun MemberAvatar(name: String, url: String?) {
         ) {
             val initials = name.split(" ").filter { it.isNotBlank() }.take(2)
                 .joinToString("") { it.first().uppercase() }
-            Text(initials.ifEmpty { "?" }, style = gSerif(20, FontWeight.SemiBold), color = GrowPal.gold)
+            Text(initials.ifEmpty { "?" }, style = gSerif(22, FontWeight.SemiBold), color = GrowPal.gold)
         }
     }
 }
@@ -222,7 +222,7 @@ private fun EngagementCard(e: DossierEngagement) {
                 ) {
                     Text(
                         e.eScore?.toString() ?: "—",
-                        style = gSerif(20, FontWeight.SemiBold),
+                        style = gSerif(22, FontWeight.SemiBold),
                         color = e.eScore?.let { scoreColor(it) } ?: GrowPal.ink400,
                     )
                 }
@@ -258,7 +258,7 @@ private fun BandPill(band: String) {
             .border(1.dp, color.copy(alpha = 0.25f), Capsule)
             .padding(horizontal = 9.dp, vertical = 4.dp),
     ) {
-        Text(label, style = gInter(10, FontWeight.Bold), color = color)
+        Text(label, style = gInter(11, FontWeight.Bold), color = color)
     }
 }
 
@@ -270,7 +270,7 @@ private fun WhereTheyAreCard(p: HubProgression) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Kicker("WHERE THEY ARE")
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Level ${p.currentLevel}", style = gSerif(20, FontWeight.SemiBold), color = GrowPal.ink)
+                Text("Level ${p.currentLevel}", style = gSerif(18, FontWeight.SemiBold), color = GrowPal.ink)
                 Text(p.levelTitle, style = gInter(13), color = GrowPal.ink600, maxLines = 1, modifier = Modifier.weight(1f))
                 if (p.streakDays > 0) {
                     Box(
@@ -325,7 +325,7 @@ private fun GrowthCard(s: HubScores) {
                             .border(2.dp, scoreColor(overall), CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("$overall", style = gSerif(20, FontWeight.SemiBold), color = scoreColor(overall))
+                        Text("$overall", style = gSerif(22, FontWeight.SemiBold), color = scoreColor(overall))
                     }
                     Text("overall", style = gInter(13), color = GrowPal.ink600)
                 }
@@ -392,11 +392,11 @@ private fun ReflectionRow(r: DossierReflection) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(r.moduleTitle, style = gInter(13, FontWeight.SemiBold), color = GrowPal.ink, maxLines = 2)
-                Text("Level ${r.levelNumber}", style = gInter(10), color = GrowPal.ink400)
+                Text("Level ${r.levelNumber}", style = gInter(11), color = GrowPal.ink400)
             }
             StatePill(r.state)
         }
-        Text(relTime(r.submittedAt), style = gInter(10), color = GrowPal.ink400)
+        Text(relTime(r.submittedAt), style = gInter(11), color = GrowPal.ink400)
         // The reflection itself — the discipler reads the student's own words.
         val body = r.body
         if (!body.isNullOrEmpty()) {
@@ -414,7 +414,7 @@ private fun ReflectionRow(r: DossierReflection) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     "YOUR FEEDBACK",
-                    style = gInter(9, FontWeight.Bold).copy(letterSpacing = 1.2.sp),
+                    style = gInter(11, FontWeight.Bold).copy(letterSpacing = 1.2.sp),
                     color = GrowPal.gold,
                 )
                 Text(notes, style = gInter(12).copy(lineHeight = 17.sp), color = GrowPal.ink600)
@@ -437,7 +437,7 @@ private fun StatePill(state: String) {
             .border(1.dp, color.copy(alpha = 0.25f), Capsule)
             .padding(horizontal = 9.dp, vertical = 4.dp),
     ) {
-        Text(label, style = gInter(10, FontWeight.Bold), color = color)
+        Text(label, style = gInter(11, FontWeight.Bold), color = color)
     }
 }
 
@@ -455,7 +455,7 @@ private fun ActivityCard(events: List<ActivityEvent>) {
                         style = gInter(12, FontWeight.SemiBold), color = GrowPal.ink,
                         modifier = Modifier.weight(1f),
                     )
-                    Text(relTime(e.occurredAt), style = gInter(10), color = GrowPal.ink400)
+                    Text(relTime(e.occurredAt), style = gInter(11), color = GrowPal.ink400)
                 }
             }
             if (events.size > 10) {
@@ -511,7 +511,7 @@ private fun DossierCard(content: @Composable () -> Unit) {
 
 @Composable
 private fun Kicker(text: String) {
-    Text(text, style = gInter(10, FontWeight.Bold).copy(letterSpacing = 1.8.sp), color = GrowPal.gold)
+    Text(text, style = gInter(11, FontWeight.Bold).copy(letterSpacing = 1.8.sp), color = GrowPal.gold)
 }
 
 private fun firstName(full: String) = full.split(" ").firstOrNull { it.isNotBlank() } ?: full

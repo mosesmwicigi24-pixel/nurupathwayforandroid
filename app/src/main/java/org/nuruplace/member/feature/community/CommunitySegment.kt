@@ -102,7 +102,7 @@ private fun DoorRow(selected: CommunityDoor, chatUnread: Int, onSelect: (Communi
                 if (count > 0) {
                     Text(
                         if (count > 9) "9+" else "$count",
-                        style = nuruSans(10, FontWeight.Bold),
+                        style = nuruSans(11, FontWeight.Bold),
                         color = if (on) Nuru.navy else Color(0xFF6A7686),
                         modifier = Modifier
                             .clip(CircleShape)
