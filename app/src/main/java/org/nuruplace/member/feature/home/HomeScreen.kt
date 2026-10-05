@@ -732,7 +732,8 @@ private fun HomeHeader(
 ) {
     // iOS's words (HomeGreeting, §8.2 #13): Sunday is the Lord's Day —
     // "Happy Lord's Day, Ada." — and late evening is "Rest well".
-    val now = java.time.LocalDateTime.now()
+    // The church's clock, as the liturgy card's (§9.3 rule 3).
+    val now = java.time.LocalDateTime.now(HomeGreeting.CHURCH_ZONE)
     val kicker = HomeGreeting.kicker(now.toLocalDate())
     val greeting = HomeGreeting.greeting(now)
     Column(

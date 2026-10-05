@@ -18,12 +18,17 @@ class HomeGreetingTest {
         }
     }
 
-    @Test fun `on other days the hour decides — iOS's boundaries`() {
-        // Monday 5 October 2026.
-        assertEquals("Good morning", HomeGreeting.greeting(at("2026-10-05", 0)))
+    @Test fun `on other days the hour decides — the liturgy card's clock`() {
+        // Monday 5 October 2026. The card is MORNING 4–11, MIDDAY 11–16,
+        // EVENING 16–21, NIGHT 21–4 (server partOf, EAT); the greeting never
+        // says another part of the day over it (EXPERIENCE.md §9.3 rule 3).
+        assertEquals("Rest well", HomeGreeting.greeting(at("2026-10-05", 0)))   // NIGHT — it said "Good morning"
+        assertEquals("Rest well", HomeGreeting.greeting(at("2026-10-05", 3)))
+        assertEquals("Good morning", HomeGreeting.greeting(at("2026-10-05", 4)))
         assertEquals("Good morning", HomeGreeting.greeting(at("2026-10-05", 11)))
         assertEquals("Good afternoon", HomeGreeting.greeting(at("2026-10-05", 12)))
-        assertEquals("Good afternoon", HomeGreeting.greeting(at("2026-10-05", 16)))
+        assertEquals("Good afternoon", HomeGreeting.greeting(at("2026-10-05", 15)))
+        assertEquals("Good evening", HomeGreeting.greeting(at("2026-10-05", 16)))   // EVENING — Ben read "Good afternoon" at 16:32
         assertEquals("Good evening", HomeGreeting.greeting(at("2026-10-05", 17)))
         assertEquals("Good evening", HomeGreeting.greeting(at("2026-10-05", 20)))
         assertEquals("Rest well", HomeGreeting.greeting(at("2026-10-05", 21)))

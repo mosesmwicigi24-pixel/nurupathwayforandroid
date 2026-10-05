@@ -13,15 +13,23 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 object HomeGreeting {
-    /** "Happy Lord's Day" on a Sunday; otherwise by the hour — morning before
-     *  noon, afternoon before five, evening before nine, then "Rest well". */
+    /** "Happy Lord's Day" on a Sunday; otherwise by the hour on the church's
+     *  clock — the one the liturgy card keeps (the server's partOf: evening
+     *  from 16, night from 21 until 4) — so the greeting and the card say the
+     *  same part of the day (EXPERIENCE.md §9.3 rule 3). Ben read "Good
+     *  afternoon" over an "EVENING" card at 16:32, and "Good morning" sat
+     *  over "NIGHT" after midnight. [now] is the church's (Nairobi) time. */
     fun greeting(now: LocalDateTime): String = when {
         now.dayOfWeek == DayOfWeek.SUNDAY -> "Happy Lord's Day"
+        now.hour < 4 -> "Rest well"
         now.hour < 12 -> "Good morning"
-        now.hour < 17 -> "Good afternoon"
+        now.hour < 16 -> "Good afternoon"
         now.hour < 21 -> "Good evening"
         else -> "Rest well"
     }
+
+    /** The church's clock, which the liturgy is chosen by. */
+    val CHURCH_ZONE: java.time.ZoneId = java.time.ZoneId.of("Africa/Nairobi")
 
     /** The header's kicker — Home's is the date (§8.1 rule 2), in the one
      *  date form (rule 8): "MON 5 OCT"; on a Sunday "THE LORD'S DAY · SUN 4
