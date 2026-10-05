@@ -188,8 +188,10 @@ fun LevelDetailScreen(
         // cap) + AppPrefs (24h quiet period after an explicit X dismissal).
         var showReminder by remember { mutableStateOf(false) }
         val reduceMotion = rememberDisciplerReduceMotion()
-        LaunchedEffect(done, allDone, levelNumber) {
-            if (done >= 3 && !allDone && DisciplerReminderSession.shouldShow(levelNumber)) {
+        // Only for a member who has a discipler (§9.2 #8): "A discipler is
+        // walking this with you" floated over members who had none.
+        LaunchedEffect(done, allDone, levelNumber, bundle.mentor) {
+            if (bundle.mentor != null && done >= 3 && !allDone && DisciplerReminderSession.shouldShow(levelNumber)) {
                 showReminder = true
             }
         }
@@ -613,21 +615,24 @@ private fun StatsStation(
                     if (streak > 0) StatLine("$streak-day", "streak")
                 }
             }
-            Spacer(Modifier.height(Spacing.base))
-            Text(
-                "Walk the rest with your discipler" + (mentorName?.let { " — $it is right there with you" } ?: "") + ".",
-                style = NuruType.caption, color = Color.White.copy(alpha = 0.7f),
-            )
-            Spacer(Modifier.height(Spacing.sm))
-            Row(
-                Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold)
-                    .clickable { onMessage() }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(Lucide.MessageCircle, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
-                Text("Message your discipler", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold)
+            // The discipler, only for a member who has one (§9.2 #8).
+            if (mentorName != null) {
+                Spacer(Modifier.height(Spacing.base))
+                Text(
+                    "Walk the rest with your discipler — $mentorName is right there with you.",
+                    style = NuruType.caption, color = Color.White.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(Spacing.sm))
+                Row(
+                    Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold)
+                        .clickable { onMessage() }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Lucide.MessageCircle, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
+                    Text("Message your discipler", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

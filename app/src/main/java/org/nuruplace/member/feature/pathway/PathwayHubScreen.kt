@@ -125,6 +125,9 @@ fun PathwayHubScreen(
     // "0%" (EXPERIENCE.md §7.2 #8). The level picked on the rail is saved too.
     var summary by rememberHeld("PathwayHub.summary") { mutableStateOf<PathwaySummary?>(null) }
     var streak by rememberHeld("PathwayHub.streak") { mutableIntStateOf(0) }
+    // Whether the member has a discipler (GET /growth/mentor) — the hub's
+    // row offers one only to a member who has one (EXPERIENCE.md §9.2 #8).
+    var hasDiscipler by rememberHeld("PathwayHub.hasDiscipler") { mutableStateOf<Boolean?>(null) }
     var selected by rememberSaveable { mutableStateOf<Int?>(null) }
     var modulesByLevel by rememberHeld("PathwayHub.modulesByLevel") { mutableStateOf<Map<Int, List<LevelModule>>>(emptyMap()) }
     // One tick per full load — pull-to-refresh bumps it, and every return to
@@ -150,6 +153,7 @@ fun PathwayHubScreen(
             if (summary == null) loadError = ApiException.state(e, context)
         }
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
+        hasDiscipler = runCatching { Net.client.api.mentor().mentor != null }.getOrElse { hasDiscipler }
         // The trails already on screen refresh in place — a module just
         // finished reads done on Back — and one that fails keeps its rows.
         // (They were dropped and re-fetched behind skeleton rows.)
@@ -239,7 +243,10 @@ fun PathwayHubScreen(
                         onOpenExam = onOpenExam,
                     )
                 }
-                DisciplershipRow(onOpenMentor)
+                // "Walk with your discipler" only for a member who has one —
+                // none is offered in five places to members without (§9.2 #8;
+                // Home says "No discipler yet — your leader will pair you" once).
+                if (hasDiscipler == true) DisciplershipRow(onOpenMentor)
                 WalkRow(onOpenWalk)
                 Milestones(levels)
                 SummitCard(journey, levels, firstName)

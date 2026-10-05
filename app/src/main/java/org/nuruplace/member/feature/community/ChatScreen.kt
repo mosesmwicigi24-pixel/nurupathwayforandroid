@@ -404,9 +404,13 @@ fun ChatInboxScreen(
                     // (docs/CHAT_REDESIGN.md). Staff append Pastoral Inbox
                     // and/or Broadcast; the list (not fixed integer indices)
                     // is what actually varies per role.
-                    val tabs = remember(isStaff, pastoralEligible) {
+                    val tabs = remember(isStaff, pastoralEligible, discipler != null) {
                         buildList {
-                            add(ChatTab.MySpace); add(ChatTab.Chat); add(ChatTab.MyDiscipler); add(ChatTab.TalkWithPastor)
+                            add(ChatTab.MySpace); add(ChatTab.Chat)
+                            // Only for a member who has a discipler (§9.2 #8):
+                            // the tab was offered to members with none.
+                            if (discipler != null) add(ChatTab.MyDiscipler)
+                            add(ChatTab.TalkWithPastor)
                             if (pastoralEligible) add(ChatTab.PastoralInbox)
                             if (isStaff) add(ChatTab.Broadcast)
                         }

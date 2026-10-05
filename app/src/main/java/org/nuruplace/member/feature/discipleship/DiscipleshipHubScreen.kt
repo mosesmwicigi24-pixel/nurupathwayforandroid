@@ -496,12 +496,13 @@ private fun EmptyCard() {
                 Modifier.size(48.dp).clip(ControlShape).background(GrowPal.goldChipBg),
                 contentAlignment = Alignment.Center,
             ) { Text("🤝", fontSize = 22.sp) }
+            // The one sentence for it (EXPERIENCE.md §9.2 #8).
             Text(
-                "You'll be paired with a discipler soon",
+                "No discipler yet — your leader will pair you",
                 style = gInter(18, FontWeight.Bold), color = GrowPal.ink,
             )
             Text(
-                "When your leader walks you into a discipleship relationship, your meetings, notes, and feedback will live here.",
+                "Your meetings, notes and feedback will live here.",
                 style = gInter(13).copy(lineHeight = 19.sp), color = GrowPal.ink600,
             )
         }

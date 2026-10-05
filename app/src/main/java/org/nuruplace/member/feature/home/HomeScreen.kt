@@ -181,6 +181,9 @@ fun HomeScreen(
     var partnership by rememberHeld("Home.partnership") { mutableStateOf<Partnership?>(null) }
     var gifts by rememberHeld("Home.gifts") { mutableStateOf<List<GivingSchedule>?>(null) }
     var prayers by rememberHeld("Home.prayers") { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
+    // Whether the member has a discipler (GET /growth/mentor) — Home says
+    // "No discipler yet — your leader will pair you" once when not (§9.2 #8).
+    var hasDiscipler by rememberHeld("Home.hasDiscipler") { mutableStateOf<Boolean?>(null) }
     var radio by rememberHeld("Home.radio") { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
     var personalWord by rememberHeld("Home.personalWord") { mutableStateOf<String?>(null) }
@@ -299,6 +302,7 @@ fun HomeScreen(
         // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
         // parity) — distinct from the community/prayer-wall feed's sort query.
         prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrElse { prayers }
+        hasDiscipler = runCatching { Net.client.api.mentor().mentor != null }.getOrElse { hasDiscipler }
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrElse { radio }
         runCatching { Net.client.api.getLiveNow().data }.onSuccess { rows ->
             liveNow = rows
@@ -645,7 +649,7 @@ fun HomeScreen(
                 // grow your faith, and the encouragement.
                 scores?.let { ProgressCard(it, journey?.progressLine) { onNavigate("pathway") } }
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
-                GrowSection(onNavigate)
+                GrowSection(onNavigate, hasDiscipler)
                 EncouragementCard(prayers.size)
                 // 7 · Support God's work — only while the Giving row says "Give".
                 if (askToGive) GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
@@ -1740,7 +1744,7 @@ private fun ScoreBar(line: ScoreLine, deltaWidth: Dp, valueWidth: Dp) {
  *  The reading plan lives in YOUR WEEK (and the Plans tab); the discipler
  *  opens Mentor, as the old disciplers card did. */
 @Composable
-private fun GrowSection(onNavigate: (String) -> Unit) {
+private fun GrowSection(onNavigate: (String) -> Unit, hasDiscipler: Boolean?) {
     Column {
         SectionLabel("Grow your faith")
         HomeCard(pad = Spacing.md) {
@@ -1756,30 +1760,47 @@ private fun GrowSection(onNavigate: (String) -> Unit) {
                 GrowTile("My Prayer Room", "Pray with the family", Lucide.HandHeart, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
                 GrowTile("Your Calling", "Discover your gifts", Lucide.Sparkles, Modifier.weight(1f)) { onNavigate("gifts") }
             }
-            Spacer(Modifier.height(Spacing.sm))
-            DisciplerRow { onNavigate("mentor") }
+            // Unknown until GET /growth/mentor answers — never a guess.
+            hasDiscipler?.let { has ->
+                Spacer(Modifier.height(Spacing.sm))
+                DisciplerRow(has) { onNavigate("mentor") }
+            }
         }
     }
 }
 
-/** "YOUR DISCIPLER · Meet your discipler" (iOS growCard's row) → Mentor. */
+/** "YOUR DISCIPLER · Meet your discipler" (iOS growCard's row) → Mentor —
+ *  or, for a member who has none, the one place that says so: "No discipler
+ *  yet — your leader will pair you" (EXPERIENCE.md §9.2 #8), with nothing to
+ *  tap. The icon sits on a gold-tint tile (§8.1 rule 7) — it was a blank
+ *  gold disc. */
 @Composable
-private fun DisciplerRow(onClick: () -> Unit) {
+private fun DisciplerRow(hasDiscipler: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     Row(
         Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg)
-            .border(1.dp, Nuru.gold.copy(alpha = 0.2f), shape).clickable { onClick() }.padding(Spacing.md),
+            .border(1.dp, Nuru.gold.copy(alpha = 0.2f), shape)
+            .then(if (hasDiscipler) Modifier.clickable { onClick() } else Modifier)
+            .padding(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.goldGradient))
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Users, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
+        }
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
             CardKicker("Your discipler")
-            Text("Meet your discipler", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (hasDiscipler) "Meet your discipler" else DISCIPLER_NONE,
+                style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold,
+            )
         }
-        Text("›", style = NuruType.title, color = Nuru.ink300)
+        if (hasDiscipler) Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
     }
 }
+
+/** Said once, on Home, to a member with no discipler (EXPERIENCE.md §9.2 #8). */
+internal const val DISCIPLER_NONE = "No discipler yet — your leader will pair you"
 
 @Composable
 private fun GrowTile(title: String, sub: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, onClick: () -> Unit) {

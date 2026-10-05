@@ -43,10 +43,11 @@ fun MentorScreen(onBack: () -> Unit) {
             Column(Modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
                 val m = info.mentor
                 if (m == null) {
+                    // The one sentence for it (EXPERIENCE.md §9.2 #8).
                     NuruCard {
-                        Text("No discipler yet", style = NuruType.cardTitle, color = Nuru.ink)
+                        Text("No discipler yet — your leader will pair you", style = NuruType.cardTitle, color = Nuru.ink)
                         Spacer(Modifier.height(Spacing.xs))
-                        Text("When your leader pairs you with a discipler, you'll see them here along with your meeting notes.", style = NuruType.caption, color = Nuru.ink600)
+                        Text("You'll see them here, with your meeting notes.", style = NuruType.caption, color = Nuru.ink600)
                     }
                 } else {
                     NuruCard {
