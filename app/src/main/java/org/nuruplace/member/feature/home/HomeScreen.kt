@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.Achievements
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.CellSummary
@@ -121,6 +122,7 @@ import org.nuruplace.member.feature.pathway.JourneyState
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideoPlayer
 import org.nuruplace.member.ui.components.VideoPosterFrame
+import org.nuruplace.member.ui.components.VideoShape
 import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.LiveStreamBanner
 import org.nuruplace.member.ui.components.Moment
@@ -1210,8 +1212,8 @@ private fun RhythmTile(words: RhythmTileWords, done: Boolean, modifier: Modifier
     }
 }
 
-// Featured welcome video — it plays IN PLACE, inside this card's inset 16:9
-// box, for every source. See ui/components/VideoPlayer.kt for the browser/
+// Featured welcome video — it plays IN PLACE, inside this card's inset box in
+// the video's own shape (VideoShape.kt), for every source. See ui/components/VideoPlayer.kt for the browser/
 // download bug this replaced, and ui/components/VideoPoster.kt for the poster
 // frame we cut ourselves when the server sends no thumbnail_url.
 @Composable
@@ -1231,6 +1233,20 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
         }
         Spacer(Modifier.height(Spacing.md))
         val playable = v.playUrl
+        // The video takes its own shape (owner, 2026-10-06): a portrait video
+        // was pillarboxed in a fixed 16:9 frame. The frame is the video's
+        // width ÷ height at the card's full content width — the player's own
+        // report, else the one remembered from an earlier load, else the
+        // poster's size, else 16:9 (VideoShape.frame) — and the card grows
+        // with it. The header and caption stay as they were.
+        val assetId = v.mediaAssetId
+        var rememberedShape by remember(assetId) { mutableStateOf(AppPrefs.videoRatio(assetId)) }
+        var posterShape by remember(assetId) { mutableStateOf<Float?>(null) }
+        var playerShape by remember(assetId) { mutableStateOf<Float?>(null) }
+        val frameShape = VideoShape.frame(playerShape, rememberedShape, posterShape)
+        val onPoster: (Int, Int) -> Unit = { w, h ->
+            VideoShape.displayAspect(w, h)?.let { if (VideoShape.differs(posterShape, it)) posterShape = it }
+        }
         if (playing && playable != null) {
             // Direct/cloudinary/HLS → ExoPlayer; youtube/vimeo → provider embed.
             // Either way it renders inside this box, with its own gold buffering
@@ -1240,10 +1256,19 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
                 source = v.videoSource,
                 externalVideoId = v.externalVideoId,
                 modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                aspectRatio = frameShape,
+                fillFrame = true,
+                onVideoAspect = { shape ->
+                    if (VideoShape.differs(playerShape, shape)) playerShape = shape
+                    if (VideoShape.differs(rememberedShape, shape)) {
+                        rememberedShape = shape
+                        AppPrefs.rememberVideoRatio(assetId, shape)
+                    }
+                },
             )
         } else {
             Box(
-                Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp))
+                Modifier.fillMaxWidth().aspectRatio(frameShape).clip(RoundedCornerShape(16.dp))
                     // iOS videoThumb's neutral bed (#D6DADE) — a shade darker than
                     // the card so the gold disc still reads while the poster loads.
                     .background(Color(0xFFD6DADE))
@@ -1255,7 +1280,7 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
                     // on the API host): cut a poster frame from the video itself,
                     // once, and keep it for the session.
                     if (!v.needsWebEmbed) {
-                        VideoPosterFrame(playable, Modifier.fillMaxSize(), contentDescription = v.caption)
+                        VideoPosterFrame(playable, Modifier.fillMaxSize(), contentDescription = v.caption, onSize = onPoster)
                     }
                 } else {
                     AsyncImage(
@@ -1263,6 +1288,7 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
                         contentDescription = v.caption,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        onSuccess = { s -> s.result.drawable.let { d -> onPoster(d.intrinsicWidth, d.intrinsicHeight) } },
                     )
                 }
                 // Gold play disc + duration pill ride on top of whichever poster won.

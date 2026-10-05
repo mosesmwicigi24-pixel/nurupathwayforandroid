@@ -61,6 +61,10 @@ object AppPrefs {
     // §7.4 #4; feature/grow/PlanDayParts.kt PlanDayLog; iOS's
     // "nuru.plans.daySealedOn"). Per account: forgotten at sign-out.
     private const val KEY_PLAN_DAY_SEALED_ON = "nuru.plans.daySealedOn"
+    // A video's own shape (width ÷ height as the player reported it), per
+    // media_asset_id — Home's featured card paints its frame right the first
+    // time (owner, 2026-10-06). Not personal: kept across sign-outs.
+    private const val KEY_VIDEO_RATIO_PREFIX = "nuru.video.ratio."
 
     private lateinit var prefs: SharedPreferences
 
@@ -244,6 +248,18 @@ object AppPrefs {
             if (!::prefs.isInitialized) return
             prefs.edit().apply { if (v == null) remove(KEY_PLAN_DAY_SEALED_ON) else putLong(KEY_PLAN_DAY_SEALED_ON, v) }.apply()
         }
+
+    /** The shape the player last reported for this video, or null when it has
+     *  never played here (ui/components/VideoShape.kt). */
+    fun videoRatio(mediaAssetId: String): Float? {
+        if (!::prefs.isInitialized || mediaAssetId.isBlank()) return null
+        return prefs.getFloat(KEY_VIDEO_RATIO_PREFIX + mediaAssetId, 0f).takeIf { it > 0f && it.isFinite() }
+    }
+
+    fun rememberVideoRatio(mediaAssetId: String, ratio: Float) {
+        if (!::prefs.isInitialized || mediaAssetId.isBlank() || !ratio.isFinite() || ratio <= 0f) return
+        prefs.edit().putFloat(KEY_VIDEO_RATIO_PREFIX + mediaAssetId, ratio).apply()
+    }
 
     /** Account sign-out — these are per-device but keyed to whoever is signed
      *  in right now; never let a pastoral cache/flag from account A leak into

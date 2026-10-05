@@ -35,6 +35,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +46,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.nuruplace.member.ui.theme.Nuru
 
@@ -54,7 +56,12 @@ import org.nuruplace.member.ui.theme.Nuru
  * | vimeo | direct | private); when it is null the provider is sniffed from the
  * URL host, so a call site that only has a URL still gets it right.
  *
- * The player fills its parent's width at 16:9. Put rounding on [modifier].
+ * The player fills its parent's width at [aspectRatio] (16:9 unless the host
+ * knows the video's own shape — Home's featured card, VideoShape.kt). Put
+ * rounding on [modifier]. [fillFrame]: the picture fills the frame (Media3's
+ * zoom) instead of fitting inside it with bars — for a frame that already has
+ * the video's shape. [onVideoAspect]: the shape the player reports, once it
+ * knows (direct/HLS only; a provider embed reports nothing).
  */
 @Composable
 fun InlineVideoPlayer(
@@ -62,18 +69,30 @@ fun InlineVideoPlayer(
     source: String? = null,
     externalVideoId: String? = null,
     modifier: Modifier = Modifier,
+    aspectRatio: Float = VideoShape.DEFAULT,
+    fillFrame: Boolean = false,
+    onVideoAspect: ((Float) -> Unit)? = null,
 ) {
     val embed = remember(url, source, externalVideoId) { videoEmbedUrl(url, source, externalVideoId) }
-    if (embed != null) InlineWebVideo(embed, modifier) else InlineVideo(url, modifier)
+    if (embed != null) InlineWebVideo(embed, modifier, aspectRatio)
+    else InlineVideo(url, modifier, aspectRatio, fillFrame, onVideoAspect)
 }
 
 /** Play a direct/cloudinary/HLS URL inline, auto-playing, released on dispose.
  *  A gold spinner sits INSIDE the black box while it buffers, so the card never
  *  shows a silent black rectangle. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class) // PlayerView.resizeMode
 @Composable
-fun InlineVideo(url: String, modifier: Modifier = Modifier) {
+fun InlineVideo(
+    url: String,
+    modifier: Modifier = Modifier,
+    aspectRatio: Float = VideoShape.DEFAULT,
+    fillFrame: Boolean = false,
+    onVideoAspect: ((Float) -> Unit)? = null,
+) {
     val context = LocalContext.current
     var buffering by remember(url) { mutableStateOf(true) }
+    val reportAspect by rememberUpdatedState(onVideoAspect)
     val player = remember(url) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(url))
@@ -91,6 +110,14 @@ fun InlineVideo(url: String, modifier: Modifier = Modifier) {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 buffering = false
             }
+            // The picture's own shape — width × pixel ratio ÷ height, turned
+            // when the rotation is left to us (VideoShape.displayAspect).
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                VideoShape.displayAspect(
+                    videoSize.width, videoSize.height,
+                    videoSize.pixelWidthHeightRatio, videoSize.unappliedRotationDegrees,
+                )?.let { reportAspect?.invoke(it) }
+            }
         }
         player.addListener(listener)
         onDispose {
@@ -98,7 +125,7 @@ fun InlineVideo(url: String, modifier: Modifier = Modifier) {
             player.release()
         }
     }
-    Box(modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)) {
+    Box(modifier.fillMaxWidth().aspectRatio(VideoShape.clamp(aspectRatio)).background(Color.Black)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -106,6 +133,12 @@ fun InlineVideo(url: String, modifier: Modifier = Modifier) {
                     this.player = player
                     useController = true
                 }
+            },
+            // A frame in the video's own shape is filled, never barred: zoom
+            // crops nothing when the shapes match (and only the excess past
+            // 9:20 / 21:9 when they can't).
+            update = { view ->
+                view.resizeMode = if (fillFrame) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
             },
         )
         if (buffering) {
@@ -123,9 +156,9 @@ fun InlineVideo(url: String, modifier: Modifier = Modifier) {
  *  hands every navigation to an ACTION_VIEW Intent, which is the very
  *  "it opened a browser" behaviour this file exists to prevent. */
 @Composable
-private fun InlineWebVideo(embedUrl: String, modifier: Modifier = Modifier) {
+private fun InlineWebVideo(embedUrl: String, modifier: Modifier = Modifier, aspectRatio: Float = VideoShape.DEFAULT) {
     var loading by remember(embedUrl) { mutableStateOf(true) }
-    Box(modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)) {
+    Box(modifier.fillMaxWidth().aspectRatio(VideoShape.clamp(aspectRatio)).background(Color.Black)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
