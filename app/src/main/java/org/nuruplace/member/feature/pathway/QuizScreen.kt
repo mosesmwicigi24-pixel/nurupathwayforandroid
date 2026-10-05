@@ -75,31 +75,45 @@ data class QuizVerdict(
     val requiresManualReview: Boolean,
 )
 
+/** What a test loads: its questions, how many the server says it holds, and
+ *  — for a level exam — the mark a pass needs (GET /levels/{n}/exam). */
+data class QuizSet(
+    val questions: List<QuizQuestion>,
+    val questionCount: Int = questions.size,
+    val passMark: Int? = null,
+)
+
 @Composable
 fun QuizScreen(
     title: String,
-    loadQuestions: suspend () -> List<QuizQuestion>,
+    load: suspend () -> QuizSet,
     submit: suspend (answers: List<QuizAnswer>, clientMutationId: String) -> QuizVerdict,
     onDone: () -> Unit,
     onPassed: (() -> Unit)? = null,   // level exam: route to the level-complete ceremony
     moduleId: String? = null,         // module quizzes only: unlocks "Review with Nuru" on a fail
     draftKey: String,                 // "module:<id>" | "level:<n>" — where saved answers live
     onBack: () -> Unit = onDone,      // the back at the top — every answer is already saved
+    /** A level exam's number: its front door and its verdict speak its one
+     *  name (EXPERIENCE.md §9.1 rules 1–2). Null for a module quiz. */
+    examLevel: Int? = null,
 ) {
     AsyncContent(
         key = title,
-        load = { loadQuestions() },
+        load = { load() },
         // A refusal in the server's words — "Your Level 1 exam isn't ready
         // yet…", "Finish every module…" — offers Go back alone: trying again
         // would only be refused again (EXPERIENCE.md §7.2 #1).
         refusalAction = StateAction.BACK,
         // The way out, from the first frame (§7 rule 3).
         header = { QuizHeader(title, onBack) },
-    ) { questions, _ ->
-        if (questions.isEmpty()) {
+    ) { set, _ ->
+        if (set.questions.isEmpty()) {
             EmptyQuiz(title, onBack, onDone)
         } else {
-            QuizFlow(title, questions, submit, onDone, onPassed, moduleId, draftKey, onBack)
+            val frontDoor = examLevel?.let { n ->
+                ExamWords.frontDoor(n, set.questionCount.takeIf { it > 0 } ?: set.questions.size, set.passMark)
+            }
+            QuizFlow(title, set.questions, submit, onDone, onPassed, moduleId, draftKey, onBack, frontDoor, examLevel)
         }
     }
 }
@@ -144,6 +158,8 @@ private fun QuizFlow(
     moduleId: String? = null,
     draftKey: String,
     onBack: () -> Unit,
+    frontDoor: QuizFrontDoor? = null,
+    examLevel: Int? = null,
 ) {
     val scope = rememberCoroutineScope()
     // A draft left mid-test wins over the fresh fetch: the server randomises
@@ -159,6 +175,9 @@ private fun QuizFlow(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var verdict by remember { mutableStateOf<QuizVerdict?>(null) }
+    // The front door (§9.1 rule 2) opens a fresh test; a member coming back
+    // to answers already given goes straight to the question they were on.
+    var begun by remember { mutableStateOf(frontDoor == null || (draft != null && (draft.answeredCount > 0 || draft.index > 0))) }
     // Every answer and every step is written the moment it happens. Snapshots,
     // so the effect keys on content rather than on the maps' identity.
     val valuesSnap = values.toMap()
@@ -216,25 +235,42 @@ private fun QuizFlow(
         // A passed level exam continues into the level-complete ceremony; a passed
         // module quiz (or manual review) just returns to the pathway.
         val onContinue = if (v.isPassed && onPassed != null) onPassed else onDone
-        ResultScreen(v, moduleId = moduleId, onDone = onContinue, onRetry = {
+        ResultScreen(v, moduleId = moduleId, examLevel = examLevel, onDone = onContinue, onRetry = {
             verdict = null; error = null; values.clear(); checks.clear(); idx = 0; mutationId = newId()
             QuizDraftStore.clear(draftKey)
         })
         return
     }
 
+    if (!begun && frontDoor != null) {
+        QuizFrontDoorPage(title, frontDoor, onBack) { begun = true }
+        return
+    }
+
     val q = questions[idx]
     Column(
-        Modifier.fillMaxSize().background(Nuru.coolPaper).imePadding(),
+        // Paper, the page (§8.1 rule 1) — it was a cool blue-white.
+        Modifier.fillMaxSize().background(Nuru.paper).imePadding(),
     ) {
         QuizHeader(title, onBack) {
-            // Gold progress dots — active dot widened, completed gold (Figma).
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                questions.indices.forEach { i ->
+            if (questions.size <= MAX_DOTS) {
+                // Gold progress dots — active dot widened, completed gold (Figma).
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                    questions.indices.forEach { i ->
+                        Box(
+                            Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
+                                .clip(RoundedCornerShape(Radii.pill))
+                                .background(if (i <= idx) Nuru.gold else Nuru.navy.copy(alpha = 0.18f)),
+                        )
+                    }
+                }
+            } else {
+                // A long test (the Level 1 exam is 91 questions) ran its dots
+                // off the screen (§8.1 rule 9): one gold bar instead.
+                Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy.copy(alpha = 0.10f))) {
                     Box(
-                        Modifier.height(7.dp).width(if (i == idx) 24.dp else 8.dp)
-                            .clip(RoundedCornerShape(Radii.pill))
-                            .background(if (i <= idx) Nuru.gold else Nuru.navy.copy(alpha = 0.18f)),
+                        Modifier.fillMaxWidth((idx + 1).toFloat() / questions.size).height(7.dp)
+                            .clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold),
                     )
                 }
             }
@@ -349,17 +385,54 @@ private fun OptionRow(text: String, selected: Boolean, multi: Boolean, onClick: 
 }
 
 @Composable
-private fun ResultScreen(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, onRetry: () -> Unit) {
+private fun ResultScreen(v: QuizVerdict, moduleId: String?, examLevel: Int?, onDone: () -> Unit, onRetry: () -> Unit) {
     when {
-        v.isPassed || v.requiresManualReview -> PassResult(v, onDone)
-        else -> FailResult(v, moduleId, onDone, onRetry)
+        v.isPassed || v.requiresManualReview -> PassResult(v, examLevel, onDone)
+        else -> FailResult(v, moduleId, examLevel, onDone, onRetry)
+    }
+}
+
+/** More questions than this and the dots become one bar. */
+private const val MAX_DOTS = 20
+
+/** A long test's front door (EXPERIENCE.md §9.1 rule 2): what it is, what it
+ *  asks, what to know before starting, and Begin. */
+@Composable
+private fun QuizFrontDoorPage(title: String, door: QuizFrontDoor, onBack: () -> Unit, onBegin: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Nuru.paper)) {
+        QuizHeader(title, onBack)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(Spacing.screen),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Text(door.title, style = NuruType.display, color = Nuru.navy)
+            Row(
+                Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldChipBg)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.List, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(door.facts, style = NuruType.chipLabel, color = Nuru.goldChipText)
+            }
+            door.lines.forEach { line ->
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(Lucide.Check, null, tint = Nuru.gold, modifier = Modifier.padding(top = 2.dp).size(14.dp))
+                    Spacer(Modifier.width(Spacing.sm))
+                    Text(line, style = NuruType.body, color = Nuru.ink600)
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().background(Nuru.white).navigationBarsPadding().padding(Spacing.screen)) {
+            PrimaryButton(door.begin, onClick = onBegin)
+        }
     }
 }
 
 /** Pass / manual-review ceremony — dark ground, concentric gold rings + medal,
  *  a big gold score, and a gold "Continue Pathway" CTA (Figma pass result). */
 @Composable
-private fun PassResult(v: QuizVerdict, onDone: () -> Unit) {
+private fun PassResult(v: QuizVerdict, examLevel: Int?, onDone: () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Nuru.ceremonyGradient).padding(Spacing.screen),
         verticalArrangement = Arrangement.Center,
@@ -380,12 +453,21 @@ private fun PassResult(v: QuizVerdict, onDone: () -> Unit) {
             Spacer(Modifier.height(Spacing.xs))
         }
         Text(
-            if (v.requiresManualReview) "Submitted for review" else "Module Passed",
+            when {
+                v.requiresManualReview -> "Submitted for review"
+                // The exam's one name (§9.1 rule 1) — it read "Module Passed".
+                examLevel != null -> ExamWords.passedTitle(examLevel)
+                else -> "Module Passed"
+            },
             style = NuruType.title, color = Nuru.onNavy, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(Spacing.sm))
         Text(
-            if (v.requiresManualReview) "A mentor will review your written answers." else "Excellent work — this module is now complete.",
+            when {
+                v.requiresManualReview -> "A mentor will review your written answers."
+                examLevel != null -> "Excellent work — Level $examLevel is complete."
+                else -> "Excellent work — this module is now complete."
+            },
             style = NuruType.body, color = Nuru.onNavyDim, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(Spacing.xl))
@@ -395,13 +477,13 @@ private fun PassResult(v: QuizVerdict, onDone: () -> Unit) {
 
 /** Fail — light ground, review encouragement + Review/Retry (Figma fail result). */
 @Composable
-private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, onRetry: () -> Unit) {
+private fun FailResult(v: QuizVerdict, moduleId: String?, examLevel: Int?, onDone: () -> Unit, onRetry: () -> Unit) {
     var showCoach by remember { mutableStateOf(false) }
     if (showCoach && moduleId != null) {
         NuruCoachDialog(moduleId, onRetry = onRetry, onDismiss = { showCoach = false })
     }
     Column(
-        Modifier.fillMaxSize().background(Nuru.coolPaper).padding(Spacing.screen),
+        Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -414,7 +496,8 @@ private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, on
         Text("Almost there", style = NuruType.title, color = Nuru.ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(Spacing.sm))
         Text(
-            "You need ${v.passMark}% to pass. Take a moment to review the lesson — you've got this.",
+            if (examLevel != null) "You need ${v.passMark}% to pass the ${ExamWords.name(examLevel)}. Look back over Level $examLevel's lessons — then try again."
+            else "You need ${v.passMark}% to pass. Take a moment to review the lesson — you've got this.",
             style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(Spacing.xl))
@@ -434,10 +517,10 @@ private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, on
             }
             Spacer(Modifier.height(Spacing.sm))
         }
-        Box(Modifier.fillMaxWidth()) { PrimaryButton("Review lesson", onClick = onDone) }
+        Box(Modifier.fillMaxWidth()) { PrimaryButton(if (examLevel != null) "Back to Level $examLevel" else "Review lesson", onClick = onDone) }
         Spacer(Modifier.height(Spacing.sm))
         Box(Modifier.clickable { onRetry() }.padding(Spacing.md)) {
-            Text("Retry quiz", style = NuruType.cardCta, color = Nuru.navy)
+            Text(if (examLevel != null) "Try the exam again" else "Retry quiz", style = NuruType.cardCta, color = Nuru.navy)
         }
     }
 }

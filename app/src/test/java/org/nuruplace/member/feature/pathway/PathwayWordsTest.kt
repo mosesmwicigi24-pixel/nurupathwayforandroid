@@ -4,6 +4,7 @@
 package org.nuruplace.member.feature.pathway
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.nuruplace.member.data.net.LevelModule
@@ -29,11 +30,35 @@ class PathwayWordsTest {
     }
 
     @Test fun `the exam row keeps its own words`() {
-        assertEquals("Level exam · ready — tap to begin", ModuleWords.trailCaption(module(ModuleStatus.NEXT, exam = true)))
+        assertEquals("Ready — tap to begin", ModuleWords.trailCaption(module(ModuleStatus.NEXT, exam = true)))
         assertEquals("Start exam", ModuleWords.trailAction(module(ModuleStatus.NEXT, exam = true)))
         assertEquals("Ready", ModuleWords.levelPagePill(done = false, isNext = true, soon = false, isExam = true))
-        assertEquals("Level exam · opens soon", ModuleWords.trailCaption(module(ModuleStatus.LOCKED, exam = true, available = false)))
-        assertEquals("Level exam · passed", ModuleWords.trailCaption(module(ModuleStatus.COMPLETED, exam = true)))
+        assertEquals("Opens soon", ModuleWords.trailCaption(module(ModuleStatus.LOCKED, exam = true, available = false)))
+        assertEquals("Passed", ModuleWords.trailCaption(module(ModuleStatus.COMPLETED, exam = true)))
+    }
+
+    // EXPERIENCE.md §9.1 rules 1–2 (Cycle 5): one name for the exam, and a
+    // front door before question 1.
+    @Test fun `the exam is the Level N exam — never the server's Review title`() {
+        val exam = module(ModuleStatus.NEXT, exam = true).copy(title = "Level 1 Review")
+        assertEquals("Level 1 exam", ExamWords.rowTitle(exam))
+        assertEquals("God & His Nature", ExamWords.rowTitle(module(ModuleStatus.NEXT)))
+        assertEquals("You passed the Level 1 exam", ExamWords.passedTitle(1))
+        for (w in listOf(ExamWords.rowTitle(exam), ExamWords.passedTitle(1)) + ExamWords.frontDoor(1, 91, 80).let { listOf(it.title, it.facts) + it.lines }) {
+            assertFalse(w, w.contains("review", ignoreCase = true) || w.contains("module", ignoreCase = true))
+        }
+    }
+
+    @Test fun `the front door names the server's count and pass mark, and what a pass does`() {
+        val door = ExamWords.frontDoor(1, 91, 80)
+        assertEquals("The Level 1 exam", door.title)
+        assertEquals("91 questions · pass mark 80%", door.facts)
+        assertEquals("Begin", door.begin)
+        assertTrue(door.lines.any { it.startsWith("Your answers are kept if you leave") })
+        assertTrue(door.lines.contains("A pass opens the way to Level 2."))
+        // An older server sends no mark: the count alone, never "pass mark null%".
+        assertEquals("12 questions", ExamWords.facts(12, null))
+        assertEquals("1 question", ExamWords.facts(1, 0))
     }
 
     @Test fun `the trail's link starts until something is done, then continues`() {

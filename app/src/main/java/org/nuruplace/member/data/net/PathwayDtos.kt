@@ -307,6 +307,10 @@ data class AssembledExam(
     val levelNumber: Int = 0,
     val questionCount: Int = 0,
     val questions: List<QuizQuestion> = emptyList(),
+    /** The mark a pass needs, in percent — the exam's front door names it
+     *  before question 1 (EXPERIENCE.md §9.1 rule 2; pathway d230e35). Null
+     *  on an older server: the front door then names the count alone. */
+    val passMark: Int? = null,
 )
 
 @Serializable

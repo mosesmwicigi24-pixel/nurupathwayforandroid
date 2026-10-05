@@ -15,16 +15,61 @@ import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.ModuleStatus
 import org.nuruplace.member.data.net.PathwayLevel
 
+/**
+ * One name for the exam on the whole journey (EXPERIENCE.md §9.1 rule 1): "the
+ * Level N exam" — never "review", never "module". The server titles the exam
+ * container "Level 1 Review", so a row that shows the container shows this
+ * name instead. And its front door (rule 2): what it is, what it asks, what
+ * happens after — before question 1, never "Question 1 of 91" cold.
+ */
+object ExamWords {
+    /** "Level 1 exam" — the name a row, a header or a kicker gives it. */
+    fun name(levelNumber: Int): String = "Level $levelNumber exam"
+
+    /** What a row shows for [m]: the exam's one name, else the module's own title. */
+    fun rowTitle(m: LevelModule): String = if (m.isExam) name(m.levelNumber) else m.title
+
+    /** "91 questions · pass mark 80%" — the count and the mark the server
+     *  sent; without a mark (an older server), the count alone. */
+    fun facts(questionCount: Int, passMark: Int?): String =
+        listOfNotNull(
+            "$questionCount ${if (questionCount == 1) "question" else "questions"}",
+            passMark?.takeIf { it in 1..100 }?.let { "pass mark $it%" },
+        ).joinToString(" · ")
+
+    /** The front door for Level [levelNumber]'s exam. What happens after is
+     *  §3's own line for an open exam — never a leader's promise the church
+     *  may not keep yet (§9.1 rule 7). */
+    fun frontDoor(levelNumber: Int, questionCount: Int, passMark: Int?): QuizFrontDoor = QuizFrontDoor(
+        title = "The ${name(levelNumber)}",
+        facts = facts(questionCount, passMark),
+        lines = listOf(
+            "Your answers are kept if you leave — you pick up at the question you were on.",
+            "A pass opens the way to Level ${levelNumber + 1}.",
+        ),
+        begin = "Begin",
+    )
+
+    /** The exam's verdict, in its own name — it read "Module Passed". */
+    fun passedTitle(levelNumber: Int): String = "You passed the ${name(levelNumber)}"
+}
+
+/** A long test's front door (EXPERIENCE.md §9.1 rule 2): its title, what it
+ *  asks, what to know, and the one way in. */
+data class QuizFrontDoor(val title: String, val facts: String, val lines: List<String>, val begin: String)
+
 object ModuleWords {
     /** The trail row's line under a module's title (Pathway). */
     fun trailCaption(m: LevelModule): String {
         val done = m.status == ModuleStatus.COMPLETED
         val next = m.status == ModuleStatus.NEXT && !m.examOpensSoon
+        // The exam's row is titled "Level N exam" (ExamWords) — its line
+        // doesn't name it again.
         return when {
-            m.isExam && done -> "Level exam · passed"
-            m.examOpensSoon -> "Level exam · opens soon"
-            m.isExam && next -> "Level exam · ready — tap to begin"
-            m.isExam -> "Finish every module to unlock the exam"
+            m.isExam && done -> "Passed"
+            m.examOpensSoon -> "Opens soon"
+            m.isExam && next -> "Ready — tap to begin"
+            m.isExam -> "Finish every module to unlock it"
             done -> "Completed"
             next -> "Up next · tap to start"
             else -> "Locked"

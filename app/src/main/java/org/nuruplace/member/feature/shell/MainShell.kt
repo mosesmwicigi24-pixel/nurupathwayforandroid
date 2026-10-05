@@ -1155,7 +1155,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 val id = entry.arguments?.getString("moduleId") ?: ""
                 QuizScreen(
                     title = "Quiz",
-                    loadQuestions = { Net.client.api.quiz(id).questions },
+                    load = { org.nuruplace.member.feature.pathway.QuizSet(Net.client.api.quiz(id).questions) },
                     submit = { answers, mut ->
                         val r = Net.client.api.submitQuiz(id, SubmitBody(mut, answers))
                         QuizVerdict(r.scoreAchieved, r.passMark, r.isPassed, r.requiresManualReview)
@@ -1171,8 +1171,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 val n = entry.arguments?.getInt("n") ?: 1
                 QuizScreen(
-                    title = "Level $n exam",
-                    loadQuestions = { Net.client.api.levelExam(n).questions },
+                    // One name (EXPERIENCE.md §9.1 rule 1); its front door
+                    // names the count and the pass mark the server sends (rule 2).
+                    title = org.nuruplace.member.feature.pathway.ExamWords.name(n),
+                    load = {
+                        Net.client.api.levelExam(n).let { e ->
+                            org.nuruplace.member.feature.pathway.QuizSet(e.questions, e.questionCount, e.passMark)
+                        }
+                    },
+                    examLevel = n,
                     submit = { answers, mut ->
                         val r = Net.client.api.submitLevelExam(n, SubmitBody(mut, answers))
                         QuizVerdict(r.scoreAchieved, r.passMark, r.isPassed, r.requiresManualReview)

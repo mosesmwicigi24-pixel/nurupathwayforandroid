@@ -418,8 +418,9 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Kicker(if (module.isExam) "Level exam" else "Module ${module.moduleSequenceNumber}")
-                    Text(module.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    Kicker(if (module.isExam) "Exam" else "Module ${module.moduleSequenceNumber}")
+                    // The exam's one name (§9.1 rule 1) — the server titles it "Level 1 Review".
+                    Text(ExamWords.rowTitle(module), style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 }
                 ModuleStatusPill(done, isNext, soon, module.isExam)
             }
@@ -449,9 +450,9 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 when {
-                    module.isExam && done -> "Level exam · passed."
-                    soon -> "Level exam · opens soon."
-                    module.isExam && isNext -> "Level exam · ready — tap to begin."
+                    module.isExam && done -> "Passed."
+                    soon -> "Opens soon."
+                    module.isExam && isNext -> "Ready — tap to begin."
                     module.isExam -> "Unlocks when you finish every module."
                     done -> "Completed — nicely done."
                     isNext -> "Up next — tap to start."

@@ -615,7 +615,8 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 // A module's title wraps to two lines — never cut (§8.1 rule 9).
-                Text(m.title, style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // The exam's one name (§9.1 rule 1) — the server titles it "Level 1 Review".
+                Text(ExamWords.rowTitle(m), style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(caption, style = PW.t(11, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
