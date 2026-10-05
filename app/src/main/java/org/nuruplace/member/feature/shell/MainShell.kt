@@ -341,7 +341,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                                         Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
                                     }
                                 },
-                                label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
+                                label = { Text(tab.label, style = NuruType.micro, maxLines = 1, softWrap = false) },
                                 alwaysShowLabel = true,
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Nuru.navyDeep,

@@ -59,6 +59,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
+import org.nuruplace.member.ui.theme.scaledLineHeight
 
 private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
@@ -67,7 +68,10 @@ private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFF
  *  and hard-coding it here would silently ignore the member's own spacing
  *  choice on the one screen most worth reading comfortably. Font size rides
  *  AppPrefs.textScale through the theme's Density the same way. */
-private val LetterBody = NuruType.rowTitle.copy(fontWeight = FontWeight.Normal)
+// The letter is long reading: the one 16 sp reading body (§8.2 #21), in the
+// letter's Fraunces, with a reader's leading. A getter, so the member's
+// line-spacing choice is read each time it draws.
+private val LetterBody get() = NuruType.rowTitle.copy(fontSize = 16.sp, lineHeight = scaledLineHeight(25), fontWeight = FontWeight.Normal)
 
 /** Home, when no letter has arrived yet. The ritual IS the pull: telling a
  *  member when their letter comes is honest anticipation, and it beats showing

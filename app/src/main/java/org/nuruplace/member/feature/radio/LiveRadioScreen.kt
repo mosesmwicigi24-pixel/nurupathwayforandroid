@@ -296,7 +296,7 @@ private fun LiveReactionCounter(total: Int, pulse: Int, reduceMotion: Boolean, m
     ) {
         Text("❤️", fontSize = 12.sp)
         Text(abbreviateCount(total), style = gInter(15, FontWeight.Bold), color = Color.White)
-        Text("reactions", style = gInter(10, FontWeight.SemiBold, 0.6f), color = Color.White.copy(alpha = 0.5f))
+        Text("reactions", style = gInter(11, FontWeight.SemiBold, 0.6f), color = Color.White.copy(alpha = 0.5f))
     }
 }
 
@@ -545,7 +545,7 @@ private fun Centerpiece(now: RadioProgram?, modifier: Modifier = Modifier) {
                 Box(
                     Modifier.align(Alignment.TopStart).padding(12.dp).clip(Capsule).background(RADIO.navyDeep.copy(alpha = 0.7f))
                         .border(1.dp, RADIO.glassBorder, Capsule).padding(horizontal = 12.dp, vertical = 4.dp),
-                ) { Text("OFF AIR", style = gInter(10, FontWeight.Bold, 2.2f), color = Color.White) }
+                ) { Text("OFF AIR", style = gInter(11, FontWeight.Bold, 2.2f), color = Color.White) }
             }
         }
     }
@@ -560,10 +560,10 @@ private fun Titles(now: RadioProgram?) {
         else -> "NURU PLACE RADIO"
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(kicker, style = gInter(9, FontWeight.Bold, 2.0f), color = RADIO.goldLight, modifier = Modifier.padding(top = 24.dp))
+        Text(kicker, style = gInter(11, FontWeight.Bold, 2.0f), color = RADIO.goldLight, modifier = Modifier.padding(top = 24.dp))
         Text(
             now?.title ?: "We're off air right now",
-            style = gSerif(24, FontWeight.SemiBold, -0.48f), color = Color.White,
+            style = gSerif(26, FontWeight.SemiBold, -0.48f), color = Color.White,
             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
         )
         now?.speaker?.let {
@@ -578,9 +578,9 @@ private fun ProgressLine(now: RadioProgram?, programs: List<RadioProgram>, elaps
     if (now?.live == true) {
         Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(6.dp).clip(CircleShape).background(RADIO.redDeep))
-            Text("LIVE", style = gInter(10, FontWeight.Bold, 1.4f), color = RADIO.redSoft)
+            Text("LIVE", style = gInter(11, FontWeight.Bold, 1.4f), color = RADIO.redSoft)
             LiveWaveBar(Modifier.weight(1f))
-            Text(elapsed, style = gInter(10), color = Color.White.copy(alpha = 0.55f))
+            Text(elapsed, style = gInter(11), color = Color.White.copy(alpha = 0.55f))
         }
     } else {
         val nextUp = programs.firstOrNull { it.status == "scheduled" }?.title ?: "—"
@@ -732,7 +732,7 @@ private fun StatChip(icon: ImageVector, value: String, label: String) {
     ) {
         Icon(icon, contentDescription = null, tint = RADIO.goldLight, modifier = Modifier.size(12.dp))
         Text(value, style = gInter(11, FontWeight.Bold), color = Color.White)
-        Text(label, style = gInter(9, FontWeight.SemiBold, 0.9f), color = Color.White.copy(alpha = 0.45f))
+        Text(label, style = gInter(11, FontWeight.SemiBold, 0.9f), color = Color.White.copy(alpha = 0.45f))
     }
 }
 
@@ -809,7 +809,7 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                             }
                         },
                     contentAlignment = Alignment.Center,
-                ) { Text(emoji, fontSize = 20.sp) }
+                ) { Text(emoji, fontSize = 22.sp) }
             }
         }
         LiveReactionCounter(
@@ -913,7 +913,7 @@ private fun CommentRow(c: RadioComment) {
                     modifier = Modifier.matchParentSize().clip(CircleShape),
                 )
             } else {
-                Text(initials(c.authorName ?: ""), style = gInter(9, FontWeight.Bold), color = Color.White)
+                Text(initials(c.authorName ?: ""), style = gInter(11, FontWeight.Bold), color = Color.White)
             }
         }
         Column {
@@ -970,12 +970,12 @@ private fun RecordingRow(p: RadioProgram, tuned: Boolean, onToggle: () -> Unit) 
             if (p.category.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.clip(Capsule).background(RADIO.gold.copy(alpha = 0.2f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(p.category.uppercase(), style = gInter(8, FontWeight.Bold, 0.8f), color = Color.White)
+                        Text(p.category.uppercase(), style = gInter(11, FontWeight.Bold, 0.8f), color = Color.White)
                     }
                 }
             }
             Text(p.title, style = gInter(13, FontWeight.Bold), color = Color.White, modifier = Modifier.padding(top = 2.dp))
-            p.speaker?.let { Text(it, style = gInter(10), color = Color.White.copy(alpha = 0.55f)) }
+            p.speaker?.let { Text(it, style = gInter(11), color = Color.White.copy(alpha = 0.55f)) }
         }
     }
 }
@@ -1008,14 +1008,14 @@ private fun ScheduleRow(p: RadioProgram) {
             Text(p.title, style = gInter(13, FontWeight.Bold), color = Color.White)
             Text(
                 listOfNotNull(p.speaker, p.category.ifBlank { null }).joinToString(" · "),
-                style = gInter(10), color = Color.White.copy(alpha = 0.5f),
+                style = gInter(11), color = Color.White.copy(alpha = 0.5f),
             )
         }
         if (p.live) {
             Box(Modifier.clip(Capsule).background(RADIO.redDeep).padding(horizontal = 8.dp, vertical = 3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.size(4.dp).clip(CircleShape).background(Color.White))
-                    Text("LIVE", style = gInter(8, FontWeight.Bold, 0.8f), color = Color.White)
+                    Text("LIVE", style = gInter(11, FontWeight.Bold, 0.8f), color = Color.White)
                 }
             }
         } else {

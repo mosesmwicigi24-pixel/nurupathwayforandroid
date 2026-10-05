@@ -121,7 +121,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         CrossMark()
         Text(
             "Nuru Place",
-            style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 36.sp, letterSpacing = (-1.08).sp),
+            style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = (-0.84).sp),
             color = Color.White,
             modifier = Modifier.padding(top = Spacing.base),
         )
@@ -136,7 +136,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         }
         Text(
             "A MISSIONARY SENDING CHURCH",
-            style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.8.sp),
+            style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 1.8.sp),
             color = Color.White.copy(alpha = 0.45f),
             modifier = Modifier.padding(top = 12.dp),
         )

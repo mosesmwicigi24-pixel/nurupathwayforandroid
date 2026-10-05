@@ -122,7 +122,7 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text(
                 "Be found by your church family",
-                style = NuruType.rowTitle.copy(fontSize = 21.sp), color = Color.White,
+                style = NuruType.rowTitle.copy(fontSize = 22.sp), color = Color.White,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))

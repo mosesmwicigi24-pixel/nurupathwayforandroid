@@ -362,7 +362,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                             )
                             Text(
                                 if (earned) "Earned ${certDate(b.awardedAt)}" else "Locked",
-                                style = pInter(10, FontWeight.Bold),
+                                style = pInter(11, FontWeight.Bold),
                                 color = if (earned) PROF.success else PROF.rowLabel,
                             )
                         }
@@ -375,7 +375,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     ) {
                         Text(
                             (b.category ?: "").replaceFirstChar { it.uppercase() },
-                            style = pInter(10, FontWeight.Bold),
+                            style = pInter(11, FontWeight.Bold),
                             color = st.color,
                         )
                     }
@@ -512,7 +512,7 @@ private fun EditFieldSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(field.title, style = pSerif(20, FontWeight.SemiBold), color = PROF.navy)
+            Text(field.title, style = pSerif(18, FontWeight.SemiBold), color = PROF.navy)
             field.helper?.let { helper ->
                 Text(helper, style = pInter(11), color = PROF.sub)
             }
@@ -676,7 +676,7 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("MEMBER ID", style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
+                    Text("MEMBER ID", style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
                     Icon(Icons.Filled.Lock, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(10.dp))
                 }
                 Text(
@@ -691,7 +691,7 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
             }
             Text(
                 if (justCopied) "COPIED" else "PERMANENT",
-                style = pInter(9, FontWeight.SemiBold, 0.9f),
+                style = pInter(11, FontWeight.SemiBold, 0.9f),
                 color = if (justCopied) PROF.kicker else PROF.rowLabel,
             )
         }
@@ -743,7 +743,7 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
                 Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(label, style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
+                Text(label, style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
                 // A profile field is a control row (§8.1 rule 3): Inter 14 medium.
                 Text(value, style = NuruType.controlTitle, color = PROF.navy)
             }
@@ -780,7 +780,7 @@ private fun LanguagesRow() {
             Icon(Icons.Filled.Translate, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text("LANGUAGES SPOKEN", style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
+            Text("LANGUAGES SPOKEN", style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
             Box(Modifier.padding(top = 2.dp)) {
                 Box(
                     Modifier
@@ -860,7 +860,7 @@ private fun DisciplesEntryCard(onOpen: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Filled.Groups, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(20.dp)) }
         Column(Modifier.weight(1f)) {
-            Text("SHEPHERD THE FLOCK", style = pInter(8, FontWeight.Bold, 1.28f), color = PROF.gold)
+            Text("SHEPHERD THE FLOCK", style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.gold)
             Text("Your disciples", style = pInter(14, FontWeight.SemiBold), color = Color.White)
             Text("Roster, journeys & pending reflections", style = pInter(11), color = Color.White.copy(alpha = 0.7f))
         }
@@ -921,7 +921,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                         }
                         Text(
                             b.name,
-                            style = pInter(9, if (earned) FontWeight.SemiBold else FontWeight.Medium),
+                            style = pInter(11, if (earned) FontWeight.SemiBold else FontWeight.Medium),
                             color = if (earned) PROF.navy else PROF.rowLabel,
                             maxLines = 2,
                             textAlign = TextAlign.Center,
@@ -1235,7 +1235,7 @@ private fun CertificateCard(
                 )
                 Text(
                     if (copied) "Copied" else "Copy",
-                    style = pInter(10, FontWeight.Bold),
+                    style = pInter(11, FontWeight.Bold),
                     color = if (copied) PROF.success else PROF.gold,
                 )
             }
@@ -1255,7 +1255,7 @@ private fun CertificateCard(
             ) {
                 Spacer(Modifier.weight(1f))
                 Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(13.dp))
-                Text("Signed · Verify", style = pInter(10, FontWeight.Bold), color = PROF.verify)
+                Text("Signed · Verify", style = pInter(11, FontWeight.Bold), color = PROF.verify)
                 Spacer(Modifier.weight(1f))
             }
             Row(
@@ -1270,7 +1270,7 @@ private fun CertificateCard(
             ) {
                 Spacer(Modifier.weight(1f))
                 Icon(Icons.Filled.Download, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(13.dp))
-                Text("Download PDF", style = pInter(10, FontWeight.Bold), color = PROF.navy)
+                Text("Download PDF", style = pInter(11, FontWeight.Bold), color = PROF.navy)
                 Spacer(Modifier.weight(1f))
             }
         }

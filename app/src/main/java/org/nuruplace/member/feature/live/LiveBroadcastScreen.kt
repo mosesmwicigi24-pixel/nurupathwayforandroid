@@ -704,7 +704,7 @@ private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit
     Box(
         Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Text(emoji, fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = label }) }
+    ) { Text(emoji, fontSize = 18.sp, modifier = Modifier.semantics { contentDescription = label }) }
 }
 
 /** ✋ raise-hand queue toggle — gold badge counts hands from the 3s pulse
@@ -716,7 +716,7 @@ private fun HudHandButton(count: Int, onClick: () -> Unit) {
         Box(
             Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
             contentAlignment = Alignment.Center,
-        ) { Text("✋", fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
+        ) { Text("✋", fontSize = 18.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
         if (count > 0) {
             Box(
                 Modifier.size(20.dp).align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)

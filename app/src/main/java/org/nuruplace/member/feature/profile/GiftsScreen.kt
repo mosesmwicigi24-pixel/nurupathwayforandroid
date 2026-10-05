@@ -159,7 +159,7 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                         Box(Modifier.size(40.dp)) // symmetry spacer
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("Spiritual gifts", style = gSerif(24, FontWeight.SemiBold), color = GrowPal.navy)
+                    Text("Spiritual gifts", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
                 }
             }
 
@@ -191,7 +191,7 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
 
                         Text(
                             q.prompt,
-                            style = gSerif(20, FontWeight.Medium).copy(lineHeight = 27.sp),
+                            style = gSerif(18, FontWeight.Medium).copy(lineHeight = 25.sp),
                             color = GrowPal.navy,
                         )
 
@@ -245,7 +245,7 @@ private fun ResultsPane(gifts: MyGifts, onBack: () -> Unit, onRetake: () -> Unit
                     Box(Modifier.size(40.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Your Calling", style = gSerif(24, FontWeight.SemiBold), color = GrowPal.navy)
+                Text("Your Calling", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
 
@@ -294,7 +294,7 @@ private fun TopGiftsCard(gifts: MyGifts) {
         ) {
             Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(22.dp))
         }
-        Text("YOUR TOP GIFTS", style = gInter(10, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
+        Text("YOUR TOP GIFTS", style = gInter(11, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
         gifts.assessment?.personaSummary?.let {
             Text(it, style = gInter(12), color = GrowPal.ink600, textAlign = TextAlign.Center)
         }
@@ -332,7 +332,7 @@ private fun PersonaCard(p: GiftPersona) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            p.emoji?.let { Text(it, fontSize = 20.sp) }
+            p.emoji?.let { Text(it, fontSize = 22.sp) }
             Text(p.personaName.ifBlank { p.title }, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.navy)
         }
         p.tagline?.let { Text(it, style = gInter(12, FontWeight.SemiBold), color = GrowPal.gold) }
@@ -351,7 +351,7 @@ private fun ServingTracksCard(tracks: List<ServingTrack>) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("WHERE YOU MIGHT SERVE", style = gInter(10, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
+        Text("WHERE YOU MIGHT SERVE", style = gInter(11, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
         tracks.forEach { t ->
             Row(
                 Modifier
@@ -392,7 +392,7 @@ private fun IntroPane(onBack: () -> Unit, onStart: () -> Unit) {
                     Box(Modifier.size(40.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Your Calling", style = gSerif(24, FontWeight.SemiBold), color = GrowPal.navy)
+                Text("Your Calling", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
 

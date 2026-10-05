@@ -124,7 +124,7 @@ fun AiDraftButton(
                     Box(Modifier.size(22.dp).clip(CircleShape).background(AiOrb), contentAlignment = Alignment.Center) {
                         Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
                     }
-                    Text("NURU SUGGESTS", style = gInter(10, FontWeight.Bold, 1.6f), color = GrowPal.eyebrow)
+                    Text("NURU SUGGESTS", style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.eyebrow)
                 }
                 Text(
                     if (failed) "Nuru couldn't reach the assistant just now — you can still write your own reply below." else summary ?: "Here's a reply you could send.",

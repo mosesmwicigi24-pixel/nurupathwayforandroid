@@ -354,7 +354,7 @@ fun LiveFloatingChat(
                     .clickable { collapsed = false },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("💬", fontSize = 20.sp)
+                Text("💬", fontSize = 22.sp)
                 if (hasUnread) {
                     Box(
                         Modifier.size(11.dp).align(Alignment.TopEnd)
@@ -397,7 +397,7 @@ fun LiveFloatingChat(
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("⠿⠿", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
+                    Text("⠿⠿", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "Live chat", style = NuruType.micro, color = Color.White.copy(alpha = 0.85f),

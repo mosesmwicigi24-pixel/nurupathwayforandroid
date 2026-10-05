@@ -1,9 +1,11 @@
 // EXPERIENCE.md §8.3 — "The scale holds." Every text size the code decides is
 // on §8.1 rule 3's scale (11 · 12 · 13 · 14 · 15 · 16 · 18 · 22 · 26 · 28),
-// and no text is drawn in a system or default face. A ratchet: the counts
-// below are today's, the test fails if either rises, and it fails if either
-// falls without the ceiling coming down with it — so the number written here
-// is always the true one, and it only ever moves toward zero.
+// and no text is drawn in a system or default face.
+//
+// It began as a ratchet on 2026-10-05 at 318 sizes off the scale and 3
+// system faces, and fell to zero the same day, area by area. The ceilings
+// stay written as numbers so the history reads plainly: they are 0, and any
+// size or face off the rule fails the build.
 //
 // Allowed, and listed (§8.3: "icons and home-screen widgets are allowed and
 // listed"):
@@ -28,10 +30,10 @@ import org.junit.Test
 class TypeScaleSourceTest {
 
     private companion object {
-        /** Off-scale and computed text sizes today. May only fall; 0 is the goal (§8.3). */
-        const val OFF_SCALE_CEILING = 41
+        /** Off-scale and computed text sizes: 318 at the start of Cycle 4, now none. */
+        const val OFF_SCALE_CEILING = 0
 
-        /** System or default faces used for text today. May only fall; 0 is the goal. */
+        /** System or default faces used for text: 3 at the start of Cycle 4, now none. */
         const val SYSTEM_FACE_CEILING = 0
 
         val WIDGETS = listOf("org/nuruplace/member/widget/")
@@ -56,12 +58,12 @@ class TypeScaleSourceTest {
     }
 
     @Test
-    fun `every text size is on the scale — a ratchet that only falls`() {
+    fun `every text size is on the scale`() {
         ratchet("Off-scale text sizes", offScale(), OFF_SCALE_CEILING)
     }
 
     @Test
-    fun `no text is drawn in a system or default face — a ratchet that only falls`() {
+    fun `no text is drawn in a system or default face`() {
         ratchet(
             "System or default faces",
             TypeSourceScan.systemFaces(sources, excludedPaths = WIDGETS + MEMBER_CHOSEN_FACES),
