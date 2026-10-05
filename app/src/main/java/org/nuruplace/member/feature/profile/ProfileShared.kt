@@ -87,14 +87,14 @@ fun badgeStyle(category: String?): BadgeStyle = when (category?.lowercase()?.tri
 /** Settings row icon tile tint (bg, fg). */
 data class RowTint(val bg: Color, val fg: Color)
 
-// Row icons sit on the gold-tint tile (EXPERIENCE.md §8.1 rules 1 and 7) —
-// they were indigo, pink, sky and green: hues that said nothing. Only the
-// two-factor tile keeps a state colour: amber while off ("recommended"),
-// green once on.
+// Row icons sit on the gold-tint tile, navy (EXPERIENCE.md §8.1 rules 1 and
+// 7) — they were indigo, pink, sky and green: hues that said nothing. The
+// two-factor tile too, as iOS: its state is in its words ("Active · …",
+// "Not enabled · recommended").
 private val TINT_GOLD = RowTint(PROF.goldTint, PROF.navy)
 val TINT_PASSWORD = TINT_GOLD
-val TINT_2FA_OFF = RowTint(Color(0xFFFEF3C7), Color(0xFFD97706))
-val TINT_2FA_ON = RowTint(Color(0x2216A34A), Color(0xFF16A34A))
+val TINT_2FA_OFF = TINT_GOLD
+val TINT_2FA_ON = TINT_GOLD
 val TINT_SESSIONS = TINT_GOLD
 val TINT_NOTIF = TINT_GOLD
 val TINT_LANGUAGE = TINT_GOLD
