@@ -72,6 +72,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CreatePrayerBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerWallPost
@@ -86,7 +87,9 @@ import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.components.voiceClock
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
@@ -166,6 +169,7 @@ fun PrayerWallScreen(
                 }) { posts: List<PrayerWallPost>, reload ->
                     reloadRef[0] = reload
                     val scope = rememberCoroutineScope()
+                    val wallContext = LocalContext.current
                     val player = remember { VoicePlayer() }
                     DisposableEffect(Unit) { onDispose { player.release() } }
                     Column(
@@ -190,9 +194,8 @@ fun PrayerWallScreen(
                                     onOpen = { onOpenPost(p.postId) },
                                     onPray = {
                                         scope.launch {
-                                            try {
-                                                Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
-                                            } catch (_: Exception) {}
+                                            noticeOnFailure(wallContext) { Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")) }
+                                                ?.let { reload() }
                                         }
                                     },
                                 )
@@ -358,6 +361,11 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
         var title by remember { mutableStateOf("") }
         var body by remember { mutableStateOf("") }
         var posting by remember { mutableStateOf(false) }
+        // A post that didn't reach the wall keeps everything in the sheet and
+        // says why above the button (§7.4); its ids stay with it, so posting
+        // again can't put it up twice.
+        var postError by remember { mutableStateOf<String?>(null) }
+        var postIds by remember { mutableStateOf<Pair<String, String>?>(null) }
         // Voice prayer attachment — record, keep the file + its waveform, post.
         val recorder = remember { VoiceRecorder() }
         var attached by remember { mutableStateOf<File?>(null) }
@@ -483,6 +491,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                 }
             }
             val canPost = (body.isNotBlank() || attached != null) && !posting
+            postError?.let { Text(it, style = gInter(12), color = Nuru.danger) }
             Box(
                 Modifier.fillMaxWidth().height(52.dp)
                     .clip(RoundedCornerShape(14.dp))
@@ -492,8 +501,10 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                         val b = body
                         val f = attached
                         val wave = attachedWave
-                        val pid = UUID.randomUUID().toString()
+                        val ids = postIds ?: (UUID.randomUUID().toString() to UUID.randomUUID().toString()).also { postIds = it }
+                        val pid = ids.first
                         posting = true
+                        postError = null
                         scope.launch {
                             try {
                                 var url: String? = null
@@ -502,23 +513,30 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                         val part = MultipartBody.Part.createFormData("file", f.name, f.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
                                         Net.client.api.uploadVoiceNote(part).url.ifBlank { null }
                                     }
-                                    if (url == null) return@launch   // upload failed — keep the sheet open to retry
+                                    if (url == null) {   // upload answered with no address — keep the sheet open to retry
+                                        postError = "Couldn't post that. ${org.nuruplace.member.data.net.StateLanguage.serverError.sentence}"
+                                        return@launch
+                                    }
                                 }
                                 Net.client.api.createPrayerWallPost(
                                     CreatePrayerBody(
                                         postId = pid,
                                         title = t.ifBlank { null },
                                         body = b.trim().ifBlank { "Voice prayer" },
-                                        clientMutationId = UUID.randomUUID().toString(),
+                                        clientMutationId = ids.second,
                                         audioUrl = url,
                                         audioWaveform = if (url != null && wave.isNotEmpty()) wave else null,
                                     ),
                                 )
                                 // Warm toast — the server accepted the post (key = its uuid).
                                 CelebrationCenter.fire(Moment("wallpost-$pid", "Your prayer is on the wall", "Your cell is standing with you 🙏", confetti = false))
+                                postIds = null
                                 onPosted()
                                 onDismiss()
-                            } catch (_: Exception) {
+                            } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                                throw c
+                            } catch (e: Exception) {
+                                postError = ApiException.failureLine("Couldn't post that.", e, context)
                             } finally {
                                 posting = false
                             }
