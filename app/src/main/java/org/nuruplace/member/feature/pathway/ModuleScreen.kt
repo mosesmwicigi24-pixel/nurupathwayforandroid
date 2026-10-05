@@ -525,14 +525,34 @@ private fun PaceRail(progress: Float, modifier: Modifier) {
 
 // ─────────────────────────── Content: KEY VERSE + section + markdown ───────────────────────────
 
+/** The verse's words with its reference under them (walk E22) — it put the
+ *  reference itself in quotes ("“James 1:5”"). A module that names only the
+ *  reference has its words fetched; until they come (or if they can't), the
+ *  reference stands alone, never in quotes. */
 @Composable
-private fun KeyVerseCard(verse: String) {
+private fun KeyVerseCard(raw: String) {
+    val content = remember(raw) { keyVerseContent(raw) }
+    var words by remember(raw) { mutableStateOf((content as? KeyVerseContent.Words)?.text) }
+    val reference = when (content) {
+        is KeyVerseContent.Fetch -> content.reference
+        is KeyVerseContent.Words -> content.reference
+    }
+    if (content is KeyVerseContent.Fetch) {
+        LaunchedEffect(content.reference) {
+            org.nuruplace.member.feature.grow.ScriptureStore.passage(content.reference).getOrNull()
+                ?.let { p -> keyVerseWords(p.text, content.reference)?.let { words = it } }
+        }
+    }
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
         Column(Modifier.padding(16.dp)) {
             Text("KEY VERSE", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker)
             Spacer(Modifier.height(8.dp))
-            Text("“$verse”", style = mlSerif(16, FontWeight.Normal, italic = true), color = ML.navy)
+            words?.let { Text("“$it”", style = mlSerif(16, FontWeight.Normal, italic = true), color = ML.navy) }
+            reference?.let {
+                if (words != null) Spacer(Modifier.height(6.dp))
+                Text(it, style = ml(12, FontWeight.SemiBold), color = if (words != null) ML.kicker else ML.navy)
+            }
         }
     }
 }
