@@ -398,20 +398,25 @@ private fun PracticeSheet(v: MemoryVerseRow, saving: Boolean, error: String?, on
         }
         Text(v.reference, style = gInter(11), color = GrowPal.ink600)
 
-        Box(
-            Modifier.fillMaxWidth().heightIn(min = 110.dp).clip(RoundedCornerShape(14.dp))
-                .background(GrowPal.surface).border(1.dp, GrowPal.border, RoundedCornerShape(14.dp)).padding(12.dp),
-        ) {
-            if (attempt.isBlank()) {
-                Text("Type it from memory…", style = gInter(14), color = GrowPal.ink400)
-            }
-            BasicTextField(
-                value = attempt,
-                onValueChange = { attempt = it },
-                textStyle = gInter(14).copy(color = GrowPal.ink),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+        // The whole box is the field (its decoration): before, the box was
+        // 110dp tall and the field one line, so only the first line took a tap.
+        BasicTextField(
+            value = attempt,
+            onValueChange = { attempt = it },
+            textStyle = gInter(14).copy(color = GrowPal.ink),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { field ->
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 110.dp).clip(RoundedCornerShape(14.dp))
+                        .background(GrowPal.surface).border(1.dp, GrowPal.border, RoundedCornerShape(14.dp)).padding(12.dp),
+                ) {
+                    if (attempt.isBlank()) {
+                        Text("Type it from memory…", style = gInter(14), color = GrowPal.ink400)
+                    }
+                    field()
+                }
+            },
+        )
 
         Box(Modifier.fillMaxWidth().height(8.dp).clip(Capsule).background(GrowPal.track)) {
             Box(

@@ -237,31 +237,35 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         )
                     }
 
-                    // Field
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 110.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(GrowPal.surface)
-                            .border(1.dp, GrowPal.border, RoundedCornerShape(14.dp))
-                            .padding(12.dp),
-                    ) {
-                        if (reflection.isBlank()) {
-                            Text(
-                                "Write your reflection…",
-                                style = gInter(14),
-                                color = GrowPal.ink400,
-                            )
-                        }
-                        BasicTextField(
-                            value = reflection,
-                            onValueChange = { reflection = it; saved = false },
-                            textStyle = gInter(14).copy(color = GrowPal.ink),
-                            cursorBrush = SolidColor(GrowPal.gold),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                    // Field — the whole box is the field (its decoration):
+                    // before, only its first line took a tap.
+                    BasicTextField(
+                        value = reflection,
+                        onValueChange = { reflection = it; saved = false },
+                        textStyle = gInter(14).copy(color = GrowPal.ink),
+                        cursorBrush = SolidColor(GrowPal.gold),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { field ->
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 110.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(GrowPal.surface)
+                                    .border(1.dp, GrowPal.border, RoundedCornerShape(14.dp))
+                                    .padding(12.dp),
+                            ) {
+                                if (reflection.isBlank()) {
+                                    Text(
+                                        "Write your reflection…",
+                                        style = gInter(14),
+                                        color = GrowPal.ink400,
+                                    )
+                                }
+                                field()
+                            }
+                        },
+                    )
 
                     // Hint
                     val trimmed = reflection.trim()
