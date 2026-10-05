@@ -379,7 +379,10 @@ fun HomeScreen(
     val pendingSync by Net.client.offline.pending.collectAsState()
     // "Turn on notifications" — Home's one card while the phone has them off.
     val notificationsCard = org.nuruplace.member.data.firebase.rememberNotificationsCard()
-    val level = me?.enrollment?.currentLevel ?: 1
+    // Unknown until the member is (Cycle 3's closing walk, B11): never a
+    // "Level 1" or a "friend" that may not be true — a Level 3 member read
+    // "Level 1" until /me landed.
+    val level = me?.enrollment?.currentLevel
     val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
     // YOUR WEEK (§6.1): the five rows, in the journey's order.
     val week = remember(journey, plans, upcoming, homeEvents, rsvps, partnership, gifts, giveRails, cohort, me) {
@@ -407,7 +410,7 @@ fun HomeScreen(
         NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             HomeHeader(
-                firstName = me?.profile?.fullName?.substringBefore(' ') ?: "friend",
+                firstName = me?.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() },
                 streak = streak?.streak?.current ?: 0,
                 level = journey?.levelNumber ?: level,
                 journeyPill = journey?.pill,
@@ -707,9 +710,11 @@ fun HomeScreen(
 
 @Composable
 private fun HomeHeader(
-    firstName: String,
+    /** Null until the member is known — the greeting then stands alone. */
+    firstName: String?,
     streak: Int,
-    level: Int,
+    /** Null until the member is known — a shimmer, never a guess. */
+    level: Int?,
     /** The journey's pill (§3) — "12 of 20 modules", "Exam ready", … — null until it loads. */
     journeyPill: String?,
     /** The overall growth score, 0–100 — a score, never a percent; null
@@ -775,7 +780,7 @@ private fun HomeHeader(
             }
         }
         Spacer(Modifier.height(Spacing.md))
-        Text("$greeting, $firstName.", style = NuruType.greeting, color = Nuru.navy)
+        Text(if (firstName != null) "$greeting, $firstName." else "$greeting.", style = NuruType.greeting, color = Nuru.navy)
         // Nuru's daily word (GET /me/home/greeting) — hanging gold quote + serif
         // voice, mirroring iOS HomePersonalWord. Absent until the wire answers.
         personalWord?.let { word ->
@@ -795,8 +800,11 @@ private fun HomeHeader(
         }
         Spacer(Modifier.height(Spacing.sm))
         // Level jewel capsule — the level, the journey's pill (§3), the streak
-        // when there is one ("🔥 0-day" was no streak at all).
-        Row(
+        // when there is one ("🔥 0-day" was no streak at all). Until the level
+        // is known, a shimmer in its place (B11).
+        if (level == null) {
+            org.nuruplace.member.ui.components.SkeletonBlock(height = 26.dp, width = 140.dp, corner = 999.dp)
+        } else Row(
             Modifier.clip(RoundedCornerShape(999.dp))
                 .background(Nuru.white)
                 .border(1.dp, Nuru.gold.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
