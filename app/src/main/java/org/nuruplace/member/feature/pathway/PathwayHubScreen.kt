@@ -68,7 +68,6 @@ import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.data.net.PathwaySummary
 import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.ui.components.FailedState
-import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.pressScale
@@ -719,10 +718,26 @@ private fun ExamPassedRow(step: JourneyStep) {
     }
 }
 
+/** A photograph that fills its card — cropped from the centre, never fitted
+ *  with bands (§8.1 rule 5; Cycle 4 walk 10: the summit photo left a grey band
+ *  at the top and a dark one at the foot, because FitImage sizes itself to the
+ *  picture and these boxes have their own height). Navy behind it while it
+ *  loads, or if it can't. */
+@Composable
+private fun CoverPhoto(url: String) {
+    Box(Modifier.fillMaxSize().background(PW.navyGrad)) {
+        coil.compose.AsyncImage(
+            model = url, contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
 @Composable
 private fun SurrenderFigure() {
     Box(Modifier.fillMaxWidth().height(224.dp)) {
-        FitImage("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
+        CoverPhoto("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080")
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x26081424), Color(0x8C081424), Color(0xE6081424)))))
         Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
             Text("PAUSE & SURRENDER", style = PW.over(11), color = PW.goldLight)
@@ -844,12 +859,13 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
         ) {
             // Real sending: a worship gathering, hands raised, JESUS over the stage —
             // visually verified (not picked blind from an ID).
-            FitImage("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
+            CoverPhoto("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080")
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x260A1628), Color(0x730A1628), Color(0xF20A1628)))))
-            // status chip
+            // status chip — on a navy scrim, so its white words read on any part
+            // of the photograph (it was white on a light-grey band, §8.1 rule 5)
             Row(
                 Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(999.dp))
-                    .background(if (reached) PW.gold else Color.White.copy(alpha = 0.18f))
+                    .background(if (reached) PW.gold else PW.navy.copy(alpha = 0.62f))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
