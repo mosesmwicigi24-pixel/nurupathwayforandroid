@@ -101,6 +101,23 @@ android {
                 nativeSymbolUploadEnabled = true
             }
         }
+        // A release-MODE build for measuring on the emulator — R8, no
+        // debuggable runtime, the same code as release — signed with the
+        // DEBUG key, so it installs over the debug app and can never be
+        // uploaded to Play (EXPERIENCE.md §9.4: the Cycle 1 cold-launch freeze
+        // is measured here, not on a store build). It talks to the local API
+        // (-PapiBaseUrl, default the emulator's host) and uploads nothing.
+        create("localRelease") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            val apiBase = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8080/v1/"
+            buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+            configure<CrashlyticsExtension> {
+                mappingFileUploadEnabled = false
+                nativeSymbolUploadEnabled = false
+            }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
