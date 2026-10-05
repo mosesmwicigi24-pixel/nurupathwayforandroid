@@ -73,6 +73,7 @@ import org.nuruplace.member.data.net.TalkPostBody
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.util.relTime
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -290,7 +291,27 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
         // parity): it finishes Talk it Over and returns to the day. Hidden
         // while the keyboard is up, so the composer keeps the room; clear of
         // the system's gesture bar, never under it (§7.1 rule 3).
-        if (!WindowInsets.isImeVisible) {
+        // A part the server already has (Cycle 3's closing walk, B5) says so —
+        // "Completed ✓" and a quiet way back to the day — instead of asking to
+        // be finished again.
+        val talkDone = talkSegs?.let { segs -> segs.isNotEmpty() && segs.all { it.completed } } == true
+        if (!WindowInsets.isImeVisible && talkDone) {
+            Column(
+                Modifier.fillMaxWidth().background(GrowPal.white).navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Check, null, tint = Nuru.success, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Completed", style = gInter(14, FontWeight.SemiBold), color = Nuru.successText)
+                }
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(GrowPal.white)
+                        .border(1.dp, GrowPal.border, RoundedCornerShape(14.dp)).clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) { Text("Back to Day $dayNumber", style = gInter(14, FontWeight.SemiBold), color = PL.navy) }
+            }
+        } else if (!WindowInsets.isImeVisible) {
             Column(Modifier.fillMaxWidth().background(GrowPal.white).navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 12.dp)) {
                 finishError?.let { err ->
                     Text(err, style = gInter(11), color = Color(0xFFB91C1C), modifier = Modifier.padding(bottom = 6.dp))
