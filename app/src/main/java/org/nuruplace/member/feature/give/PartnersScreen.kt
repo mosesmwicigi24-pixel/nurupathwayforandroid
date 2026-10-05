@@ -448,9 +448,14 @@ fun PartnersScreen(
                         // iOS's rule: the membership decides; an older server's is_partner otherwise.
                         p.isProgrammeMember -> {
                             StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
-                            if (p.due.isNotEmpty()) {
+                            // "DUE" only within the fortnight; further out the
+                            // same rows read "COMING UP" (EXPERIENCE.md §9.3 rule 2).
+                            val (soon, later) = p.due.partition { dueIsSoon(it, LocalDate.now()) }
+                            for ((label, rows) in listOf("DUE" to soon, "COMING UP" to later)) {
+                                if (rows.isEmpty()) continue
                                 DueSection(
-                                    p.due, p, vm, onPayNow,
+                                    rows, p, vm, onPayNow,
+                                    label = label,
                                     onOpenSchedule = { id ->
                                         // "Collected on …": the gift's own sheet, here, as the
                                         // pledge page's collector row opens it.
@@ -688,6 +693,8 @@ private fun DueSection(
     p: Partnership,
     vm: PartnersViewModel,
     onPayNow: (GivePreset) -> Unit,
+    /** "DUE" within the fortnight, "COMING UP" further out (§9.3 rule 2). */
+    label: String = "DUE",
     /** A running recurring gift's "Collected on …" chip: open that gift. */
     onOpenSchedule: (String) -> Unit,
     /** A pledge's "Collected on …" chip (EXPERIENCE.md §6.4): open that pledge. */
@@ -696,7 +703,7 @@ private fun DueSection(
     val view = LocalView.current
     val today = LocalDate.now()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Eyebrow("DUE")
+        Eyebrow(label)
         Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).border(1.dp, GIVE.border, CardShape)) {
             // The server's order, as iOS lists them.
             due.forEachIndexed { i, d ->

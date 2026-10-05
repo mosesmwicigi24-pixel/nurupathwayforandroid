@@ -358,6 +358,19 @@ internal fun dueOverdue(d: DueItem, today: LocalDate): Boolean {
     return partnerDate(d.dueOn)?.isBefore(today) == true
 }
 
+/** How near a due must be to be called DUE (EXPERIENCE.md §9.3 rule 2): the
+ *  fortnight. */
+internal const val DUE_SOON_DAYS = 14L
+
+/** Nothing is urgent before it is (§9.3 rule 2): a row is DUE when it is
+ *  overdue or falls within the fortnight; further out it is coming up — a
+ *  total pledge's 31 Dec read "DUE" 87 days ahead. An undated row stays DUE. */
+internal fun dueIsSoon(d: DueItem, today: LocalDate): Boolean {
+    if (dueOverdue(d, today)) return true
+    val day = partnerDate(d.dueOn) ?: return true
+    return !day.isAfter(today.plusDays(DUE_SOON_DAYS))
+}
+
 /**
  * The DUE row's "when" (iOS dueWhen). Overdue ([dueOverdue]) reads "overdue
  * since 10 Aug" — "2 overdue since 10 Aug" with two or more behind (the

@@ -20,4 +20,15 @@ class DueContextTest {
         assertNull(dueClaimLine(due(claim = 0)))
         assertNull(dueClaimLine(due(claim = 200_000, kind = "schedule")))
     }
+
+    @Test fun `DUE only within the fortnight — further out it is coming up`() {
+        val today = java.time.LocalDate.of(2026, 10, 5)
+        fun on(day: String, overdue: Boolean? = false) = DueItem(kind = "pledge", id = "p", dueOn = day, overdue = overdue, amountMinor = 500_000)
+        org.junit.Assert.assertTrue(dueIsSoon(on("2026-10-05"), today))           // today
+        org.junit.Assert.assertTrue(dueIsSoon(on("2026-10-19"), today))           // the 14th day
+        org.junit.Assert.assertFalse(dueIsSoon(on("2026-10-20"), today))          // a day past the fortnight
+        org.junit.Assert.assertFalse(dueIsSoon(on("2026-12-31"), today))          // Ada's Roof sheets, 87 days out
+        org.junit.Assert.assertTrue(dueIsSoon(on("2026-09-05", overdue = true), today))
+        org.junit.Assert.assertTrue(dueIsSoon(on(""), today))                     // undated: stays DUE
+    }
 }

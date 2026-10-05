@@ -223,6 +223,9 @@ object YourWeek {
         // their way, less those a collector takes.
         val owedByHand = p.due
             .filter { it.kind == "pledge" && it.action == "pay" && !it.fullyPending }
+            // Nothing is urgent before it is (§9.3 rule 2): a total pledge's
+            // far deadline is not this week's ask.
+            .filter { org.nuruplace.member.feature.give.dueIsSoon(it, today) }
             .filter { d -> pledgeCollectedOn(d, pledgeOf[d.id]?.let { pledgeCollector(it, gifts) }) == null }
         val owedIds = owedByHand.map { it.id }.toSet()
         val lastDay = today.plusDays(WEEK_DAYS)
