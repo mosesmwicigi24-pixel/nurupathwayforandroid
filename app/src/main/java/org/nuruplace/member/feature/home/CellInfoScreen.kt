@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Chair
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -118,7 +119,19 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
 
             NuruCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AvatarCircle(c.leader?.avatarUrl, c.leader?.name ?: name, size = 52)
+                    // No leader yet: an empty seat — not an avatar made of the
+                    // cell's own initial ("D" for Dev Cell A; walk E18).
+                    if (c.leader != null) {
+                        AvatarCircle(c.leader.avatarUrl, c.leader.name, size = 52)
+                    } else {
+                        Box(
+                            Modifier.size(52.dp).clip(CircleShape).background(Nuru.inputBg)
+                                .border(1.dp, Nuru.border, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Chair, contentDescription = "No leader yet", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
+                        }
+                    }
                     Spacer(Modifier.size(Spacing.md))
                     Column(Modifier.weight(1f)) {
                         Kicker("Cell leader")
@@ -128,9 +141,10 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                 }
             }
 
-            c.roster?.takeIf { it.count > 0 }?.let {
+            val facesShown = c.roster?.takeIf { it.count > 0 }?.let {
                 MembersFacesRow(it, c.members, onOpen = { onNavigate("cell-roster") })
-            }
+                true
+            } ?: false
 
             // Meeting rhythm — the OWN cell's server-derived (or admin-typed)
             // rhythm. When nothing is on the calendar and no real series
@@ -212,12 +226,18 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                 }
             }
 
-            NuruCard {
-                Kicker("Cell stats")
-                Spacer(Modifier.height(Spacing.xs))
-                StatRow("Members", c.members.toString())
-                c.levelLabel?.let { StatRow("Level", it) }
-                c.focus?.let { StatRow("Focus", it) }
+            // The member count once (walk E18): the faces row above says
+            // "5 members", so the stats don't say it again; nothing left to
+            // show, no card.
+            val showMembersStat = !facesShown
+            if (showMembersStat || c.levelLabel != null || c.focus != null) {
+                NuruCard {
+                    Kicker("Cell stats")
+                    Spacer(Modifier.height(Spacing.xs))
+                    if (showMembersStat) StatRow("Members", c.members.toString())
+                    c.levelLabel?.let { StatRow("Level", it) }
+                    c.focus?.let { StatRow("Focus", it) }
+                }
             }
 
             // A way forward (EXPERIENCE.md §7.4 #16 — the page ended in stats):
