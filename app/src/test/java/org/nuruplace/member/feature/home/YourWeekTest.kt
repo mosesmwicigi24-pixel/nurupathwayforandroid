@@ -4,6 +4,7 @@
 package org.nuruplace.member.feature.home
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.CellSummary
@@ -319,5 +320,40 @@ class YourWeekTest {
                 YourWeek.giving(null, null, rails, today), YourWeek.cell(null),
             ).map { it.form.pillar },
         )
+    }
+
+    // ── What needs you today never repeats a row (EXPERIENCE.md §9.1 rule 3) ──
+
+    private fun nudge(kind: String, vararg params: Pair<String, Any>) = org.nuruplace.member.data.net.HomeNudge(
+        id = kind, kind = kind, title = kind,
+        params = kotlinx.serialization.json.JsonObject(params.associate { (k, v) ->
+            k to if (v is Int) kotlinx.serialization.json.JsonPrimitive(v) else kotlinx.serialization.json.JsonPrimitive(v.toString())
+        }),
+    )
+
+    @Test
+    fun `the exam nudge goes when the Pathway row offers the exam, and stays when it doesn't`() {
+        val examWeek = listOf(YourWeek.pathway(JourneyState.derive(summary(LevelStatus.COMPLETED, 20), trail(20)), 1))
+        assertTrue(YourWeek.repeats(nudge("level_review", "levelNumber" to 1), examWeek))
+        val learningWeek = listOf(YourWeek.pathway(JourneyState.derive(summary(LevelStatus.ACTIVE, 5), trail(5)), 1))
+        assertTrue(!YourWeek.repeats(nudge("level_review", "levelNumber" to 1), learningWeek))
+    }
+
+    @Test
+    fun `the plan, the cell and the module's test are the rows' own — the rest of the rail stays`() {
+        val plan = ReadingPlanRow(planId = "p1", title = "First Steps", dayCount = 7, currentDay = 2, completedDays = listOf(1), enrolled = true)
+        val week = listOf(
+            YourWeek.pathway(JourneyState.derive(summary(LevelStatus.ACTIVE, 5), trail(5)), 1),
+            YourWeek.plans(listOf(plan)),
+            WeekRow(WeekForm.CELL, "Dev Cell A", "Next gathering Mon 5 Oct", WeekDest.Screen("cell-info")),
+        )
+        assertTrue(YourWeek.repeats(nudge("plan_day_due", "planId" to "p1"), week))
+        assertTrue(!YourWeek.repeats(nudge("plan_day_due", "planId" to "p9"), week))
+        assertTrue(YourWeek.repeats(nudge("cell_gathering"), week))
+        assertTrue(YourWeek.repeats(nudge("quiz_in_progress", "moduleId" to "m6"), week))
+        assertTrue(!YourWeek.repeats(nudge("quiz_in_progress", "moduleId" to "m2"), week))
+        for (k in listOf("reflection_due", "letter_unread", "reading_invite", "chat_unread")) assertTrue(k, !YourWeek.repeats(nudge(k), week))
+        // No cell: "Find your cell" is not the cell's gathering.
+        assertTrue(!YourWeek.repeats(nudge("cell_gathering"), listOf(YourWeek.cell(null))))
     }
 }

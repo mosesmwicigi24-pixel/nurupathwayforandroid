@@ -242,6 +242,25 @@ object YourWeek {
         return give
     }
 
+    /**
+     * "What needs you today" never repeats a YOUR WEEK row (EXPERIENCE.md §9.1
+     * rule 3): a server nudge that points where a row already points — the
+     * exam the Pathway row offers, the plan day the Plans row opens, the cell
+     * the Cell row opens, the test in the module the Pathway row continues —
+     * is the same ask twice on one page ("Take the Level 1 exam" over "Take
+     * the Level 1 exam"). The row keeps it; the rail drops it.
+     */
+    fun repeats(n: org.nuruplace.member.data.net.HomeNudge, week: List<WeekRow>): Boolean {
+        val routes = week.mapNotNull { (it.dest as? WeekDest.Screen)?.route }
+        return when (n.route.ifBlank { n.kind }) {
+            "level_exam", "level_review" -> n.levelNumber?.let { "exam/$it" in routes } ?: false
+            "plan", "plan_day_due" -> n.planId?.let { id -> routes.any { it == "plan/$id" || it.startsWith("plan/$id/") } } ?: false
+            "cell", "cell_gathering" -> week.any { it.form == WeekForm.CELL }
+            "quiz", "quiz_in_progress" -> n.moduleId?.let { "module/$it" in routes } ?: false
+            else -> false
+        }
+    }
+
     /** Cell — the member's own cell (GET /me/cell-summary): its name, "Next
      *  gathering EEE d MMM" or "Next gathering not set · N members", the cell
      *  page; no cell (or the read failed): "Find your cell" → Community. */

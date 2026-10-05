@@ -585,8 +585,9 @@ fun HomeScreen(
                 // purpose reflection strip stands in, so Home never loses the
                 // nudge that ticks the rhythm. The unread-letter nudge opens the
                 // same letter sheet the knock card does, in place.
-                // The exam's own nudge only while that exam can be taken (§7.2 #1).
-                val shownNudges = nudges.filter { nudgeOffered(it, pathway) }
+                // The exam's own nudge only while that exam can be taken (§7.2 #1),
+                // and never one that repeats a YOUR WEEK row below (§9.1 rule 3).
+                val shownNudges = nudges.filter { nudgeOffered(it, pathway) && !YourWeek.repeats(it, week) }
                 // Android only (§7.3): while the phone has notifications off,
                 // "Turn on notifications" goes first.
                 val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
