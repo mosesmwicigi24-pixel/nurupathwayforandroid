@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -447,7 +448,9 @@ private fun JourneyNode(
     // A walked or current level opens; a locked one is not a button and
     // doesn't look like one (§9.2 #9) — its lock seal says why.
     Column(
-        Modifier.width(76.dp).then(if (locked) Modifier else Modifier.clickable(onClickLabel = "Open Level $number") { onTap() }),
+        // At least the circle's column; a longer name ("Transformation")
+        // widens it rather than being cut (§8.1 rule 9) — the rail scrolls.
+        Modifier.widthIn(min = 76.dp).then(if (locked) Modifier else Modifier.clickable(onClickLabel = "Open Level $number") { onTap() }),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -499,7 +502,7 @@ private fun JourneyNode(
             levelShortName(level),
             style = PW.t(11, if (active) FontWeight.Bold else FontWeight.Medium),
             color = when { active -> PW.navy; upNext -> PW.goldDeep; else -> PW.ink2 },
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
+            maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
         )
     }
 }
