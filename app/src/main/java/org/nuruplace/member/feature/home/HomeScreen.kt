@@ -185,9 +185,10 @@ fun HomeScreen(
     var partnership by rememberHeld("Home.partnership") { mutableStateOf<Partnership?>(null) }
     var gifts by rememberHeld("Home.gifts") { mutableStateOf<List<GivingSchedule>?>(null) }
     var prayers by rememberHeld("Home.prayers") { mutableStateOf<List<PrayerWallPost>>(emptyList()) }
-    // Whether the member has a discipler (GET /growth/mentor) — Home says
-    // "No discipler yet — your leader will pair you" once when not (§9.2 #8).
-    var hasDiscipler by rememberHeld("Home.hasDiscipler") { mutableStateOf<Boolean?>(null) }
+    // The member's discipler (GET /growth/mentor) — null until the server
+    // answers; with none, Home says "No discipler yet — your leader will pair
+    // you" once (§9.2 #8). With one, their photo (or initials) and name.
+    var discipler by rememberHeld("Home.discipler") { mutableStateOf<HomeDiscipler?>(null) }
     var radio by rememberHeld("Home.radio") { mutableStateOf<RadioProgram?>(null) }
     var videoPlaying by remember { mutableStateOf(false) }
     var personalWord by rememberHeld("Home.personalWord") { mutableStateOf<String?>(null) }
@@ -315,7 +316,7 @@ fun HomeScreen(
         // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
         // parity) — distinct from the community/prayer-wall feed's sort query.
         prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrElse { prayers }
-        hasDiscipler = runCatching { Net.client.api.mentor().mentor != null }.getOrElse { hasDiscipler }
+        discipler = runCatching { HomeDiscipler(Net.client.api.mentor().mentor) }.getOrElse { discipler }
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrElse { radio }
         runCatching { Net.client.api.getLiveNow().data }.onSuccess { rows ->
             liveNow = rows
@@ -671,7 +672,7 @@ fun HomeScreen(
                 // grow your faith, and the encouragement.
                 scores?.let { ProgressCard(it, journey?.progressLine) { onNavigate("pathway") } }
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
-                GrowSection(onNavigate, hasDiscipler)
+                GrowSection(onNavigate, discipler)
                 EncouragementCard(prayers.size)
                 // 7 · Support God's work — only while the Giving row says "Give".
                 if (askToGive) GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
@@ -1806,7 +1807,7 @@ private fun ScoreBar(line: ScoreLine, deltaWidth: Dp, valueWidth: Dp) {
  *  The reading plan lives in YOUR WEEK (and the Plans tab); the discipler
  *  opens Mentor, as the old disciplers card did. */
 @Composable
-private fun GrowSection(onNavigate: (String) -> Unit, hasDiscipler: Boolean?) {
+private fun GrowSection(onNavigate: (String) -> Unit, discipler: HomeDiscipler?) {
     Column {
         SectionLabel("Grow your faith")
         HomeCard(pad = Spacing.md) {
@@ -1823,41 +1824,53 @@ private fun GrowSection(onNavigate: (String) -> Unit, hasDiscipler: Boolean?) {
                 GrowTile("Your Calling", "Discover your gifts", Lucide.Sparkles, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             // Unknown until GET /growth/mentor answers — never a guess.
-            hasDiscipler?.let { has ->
+            discipler?.let { d ->
                 Spacer(Modifier.height(Spacing.sm))
-                DisciplerRow(has) { onNavigate("mentor") }
+                DisciplerRow(d.mentor) { onNavigate("mentor") }
             }
         }
     }
 }
 
-/** "YOUR DISCIPLER · Meet your discipler" (iOS growCard's row) → Mentor —
+/** What Home knows of the member's discipler once the server answers:
+ *  [mentor] null means none (GET /growth/mentor). */
+internal data class HomeDiscipler(val mentor: org.nuruplace.member.data.net.MentorInfo.Mentor?)
+
+/** "YOUR DISCIPLER · ‹their name›" with their photo (or initials) → Mentor —
  *  or, for a member who has none, the one place that says so: "No discipler
- *  yet — your leader will pair you" (EXPERIENCE.md §9.2 #8), with nothing to
- *  tap. The icon sits on a gold-tint tile (§8.1 rule 7) — it was a blank
- *  gold disc. */
+ *  yet — your leader will pair you" (EXPERIENCE.md §9.2 #8) beside the
+ *  heart-handshake on a gold-tint tile, with nothing to tap. As iOS
+ *  (HomeView's grow card); it was a blank gold disc (Cycle 4 walk 07). */
 @Composable
-private fun DisciplerRow(hasDiscipler: Boolean, onClick: () -> Unit) {
+private fun DisciplerRow(mentor: org.nuruplace.member.data.net.MentorInfo.Mentor?, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     Row(
         Modifier.fillMaxWidth().clip(shape).background(Nuru.verseBg)
             .border(1.dp, Nuru.gold.copy(alpha = 0.2f), shape)
-            .then(if (hasDiscipler) Modifier.clickable { onClick() } else Modifier)
+            .then(if (mentor != null) Modifier.clickable { onClick() } else Modifier)
             .padding(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
-            Icon(Lucide.Users, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
+        if (mentor != null) {
+            org.nuruplace.member.feature.community.Avatar(name = mentor.fullName, url = mentor.avatarUrl, size = 36.dp)
+        } else {
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+                Icon(Lucide.HeartHandshake, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
+            }
         }
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
-            CardKicker("Your discipler")
-            Text(
-                if (hasDiscipler) "Meet your discipler" else DISCIPLER_NONE,
-                style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold,
-            )
+            if (mentor != null) {
+                CardKicker("Your discipler")
+                Text(
+                    mentor.fullName.ifBlank { "Your discipler" },
+                    style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Text(DISCIPLER_NONE, style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
+            }
         }
-        if (hasDiscipler) Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
+        if (mentor != null) Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
     }
 }
 

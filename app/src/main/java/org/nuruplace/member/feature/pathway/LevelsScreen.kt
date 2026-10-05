@@ -189,8 +189,10 @@ private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, pct: F
             .padding(Spacing.base),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.navy.copy(alpha = 0.06f)), contentAlignment = Alignment.Center) {
-            Text("📖", style = NuruType.title)
+        // Lucide on a gold-tint tile, not a colour emoji on grey (§8.1 rule 7;
+        // Cycle 4 walk 18) — iOS's book-open.
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.BookOpen, null, tint = Nuru.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.size(Spacing.base))
         Column(Modifier.weight(1f)) {
@@ -232,7 +234,9 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
             when {
                 done -> Icon(Lucide.Check, null, tint = Nuru.goldLo, modifier = Modifier.size(22.dp))
                 locked -> Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(18.dp))
-                else -> Text("✝", style = NuruType.title, color = Nuru.gold)
+                // The level being walked: the cross, drawn — not a "✝" typed in
+                // a text face (§8.1 rule 7; Cycle 4 walk 18) — as iOS draws it.
+                else -> CrossMark(18.dp, Nuru.gold)
             }
         }
         Spacer(Modifier.size(Spacing.base))
@@ -302,4 +306,15 @@ internal fun countWord(n: Int): String = when (n) {
     1 -> "One"; 2 -> "Two"; 3 -> "Three"; 4 -> "Four"; 5 -> "Five"
     6 -> "Six"; 7 -> "Seven"; 8 -> "Eight"; 9 -> "Nine"; 10 -> "Ten"
     else -> n.toString()
+}
+
+/** The cross on the level being walked — two rounded bars, as iOS's CrossMark
+ *  ("Figma's lucide Cross"): a mark, not a glyph in a text face. */
+@Composable
+private fun CrossMark(size: androidx.compose.ui.unit.Dp, color: androidx.compose.ui.graphics.Color) {
+    val bar = size * 0.32f
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width = bar, height = size).clip(RoundedCornerShape(999.dp)).background(color))
+        Box(Modifier.size(width = size, height = bar).clip(RoundedCornerShape(999.dp)).background(color))
+    }
 }

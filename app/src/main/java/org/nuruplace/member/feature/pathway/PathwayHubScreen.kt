@@ -96,7 +96,12 @@ private object PW {
     val surface = Color(0xFFFBF8F1)
     val mutedBg = Color(0xFFEEF1F5)
     val border = Color(0x140A2540)
-    val badge = listOf("🪨", "🕊️", "🌿", "🔥", "📖", "👑", "⭐", "🏅")
+    // Each level's milestone mark — Lucide, never colour emoji art (§8.1
+    // rule 7; the Cycle 4 walk's 🪨 🕊️ 🌿 🔥): the same marks as iOS.
+    val badge: List<androidx.compose.ui.graphics.vector.ImageVector> get() = listOf(
+        Lucide.Landmark, Lucide.Leaf, Lucide.Heart, Lucide.Flame,
+        Lucide.BookOpen, Lucide.Award, Lucide.Sparkles, Lucide.BadgeCheck,
+    )
     val navyGrad = Brush.linearGradient(listOf(navy, navyDeep))
     val goldGrad = Brush.linearGradient(listOf(gold, Color(0xFFA87F29)))
     val headerGrad = Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
@@ -735,8 +740,10 @@ private fun DisciplershipRow(onTap: () -> Unit) {
         Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(20.dp)).clickable { onTap() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldGrad), contentAlignment = Alignment.Center) {
-            Icon(Lucide.HandHeart, null, tint = PW.navy, modifier = Modifier.size(22.dp))
+        // A row's icon on a gold-tint tile (§8.1 rule 7) — it was a solid gold
+        // tile wearing Give's hand-heart; the hub is iOS's heart-handshake.
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.HeartHandshake, null, tint = PW.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -768,7 +775,7 @@ private fun Milestones(levels: List<PathwayLevel>) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
-                    Text(PW.badge[rewardIdx % PW.badge.size], style = nuruSans(22))
+                    Icon(PW.badge[rewardIdx % PW.badge.size], null, tint = PW.goldLight, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -789,7 +796,7 @@ private fun Milestones(levels: List<PathwayLevel>) {
 }
 
 @Composable
-private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
+private fun RewardBadge(name: String, glyph: androidx.compose.ui.graphics.vector.ImageVector, earned: Boolean) {
     Column(
         Modifier.width(84.dp).clip(RoundedCornerShape(16.dp))
             .background(if (earned) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.14f), PW.gold.copy(alpha = 0.03f))) else Brush.linearGradient(listOf(PW.surface, PW.surface)))
@@ -797,8 +804,9 @@ private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(if (earned) Color.White else PW.mutedBg).border(1.dp, if (earned) PW.gold.copy(alpha = 0.33f) else PW.border, RoundedCornerShape(999.dp)).alpha(if (earned) 1f else 0.7f), contentAlignment = Alignment.Center) {
-            Text(emoji, style = nuruSans(22))
+        // Lucide on a gold-tint disc once earned, quiet before (§8.1 rule 7; iOS ea37d94).
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(if (earned) PW.goldTint else PW.mutedBg).border(1.dp, if (earned) PW.gold.copy(alpha = 0.33f) else PW.border, RoundedCornerShape(999.dp)).alpha(if (earned) 1f else 0.7f), contentAlignment = Alignment.Center) {
+            Icon(glyph, null, tint = if (earned) PW.navy else PW.ink3, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.height(6.dp))
         Text(name, style = PW.t(11, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -912,12 +920,12 @@ private fun WalkRow(onTap: () -> Unit) {
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A row's icon on a gold-tint tile (§8.1 rule 7) — it sat on navy (iOS the same).
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
-                .background(Brush.linearGradient(listOf(PW.navy, Color(0xFF1B3A5C)))),
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Lucide.Flag, contentDescription = null, tint = PW.gold, modifier = Modifier.size(22.dp))
+            Icon(Lucide.Flag, contentDescription = null, tint = PW.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
