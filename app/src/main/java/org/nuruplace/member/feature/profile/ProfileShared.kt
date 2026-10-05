@@ -127,3 +127,45 @@ fun ProfCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
 }
 
 val FingerprintIcon: ImageVector = Icons.Filled.Fingerprint
+
+// ── Values that look like data never leak (EXPERIENCE.md §8.1 rule 8) ──────
+
+/** An empty profile value, said plainly — never "—" or a blank row. */
+internal const val NOT_SET = "Not set"
+
+/** The calendar date a date-only value carries: its leading "YYYY-MM-DD".
+ *  The server sends a birthday as midnight UTC ("1990-01-01T00:00:00.000Z");
+ *  reading it as an instant in the phone's zone would shift it a day (and
+ *  printed raw it read "1989-12-31T21:00:00.000Z"). Null when there is none. */
+internal fun calendarDateOf(raw: String?): java.time.LocalDate? {
+    val m = Regex("""^\s*(\d{4})-(\d{2})-(\d{2})""").find(raw.orEmpty()) ?: return null
+    val (y, mo, d) = m.destructured
+    return runCatching { java.time.LocalDate.of(y.toInt(), mo.toInt(), d.toInt()) }.getOrNull()
+}
+
+/** A birthday as a member reads it: "1 Jan 1990"; "Not set" when empty. */
+internal fun profileDateLabel(raw: String?): String =
+    calendarDateOf(raw)?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH))
+        ?: NOT_SET
+
+/** The edit sheet's starting value for a birthday: "1990-01-01" — the form
+ *  it asks for, so an unchanged birthday still saves. Empty when unset. */
+internal fun profileDateEditValue(raw: String?): String = calendarDateOf(raw)?.toString().orEmpty()
+
+/** The gender choices, as a member reads them and as the server stores them. */
+internal val GENDER_OPTIONS = listOf(
+    "Male" to "male",
+    "Female" to "female",
+    "Prefer not to say" to "prefer_not_to_say",
+)
+
+/** "Prefer not to say", never "prefer_not_to_say"; "Not set" when empty. */
+internal fun profileGenderLabel(raw: String?): String {
+    val v = raw?.trim().orEmpty()
+    if (v.isEmpty()) return NOT_SET
+    return GENDER_OPTIONS.firstOrNull { it.second == v.lowercase() }?.first
+        ?: v.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+/** Any other text value: itself, or "Not set" when empty. */
+internal fun profileValue(raw: String?): String = raw?.trim()?.takeIf { it.isNotEmpty() } ?: NOT_SET

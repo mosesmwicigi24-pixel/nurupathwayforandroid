@@ -100,6 +100,7 @@ import kotlinx.serialization.json.buildJsonObject
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.data.net.Achievements
 import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.data.net.ApiException
@@ -434,11 +435,6 @@ private enum class EditField(
 
 private val DOB_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
 private val EMAIL_SHAPE = Regex("""^[^@\s]+@[^@\s]+\.[^@\s]+$""")
-private val GENDER_OPTIONS = listOf(
-    "Male" to "male",
-    "Female" to "female",
-    "Prefer not to say" to "prefer_not_to_say",
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -455,7 +451,9 @@ private fun EditFieldSheet(
                 EditField.EMAIL -> profile?.email ?: ""
                 EditField.NAME -> profile?.fullName ?: ""
                 EditField.PHONE -> profile?.phoneNumber ?: ""
-                EditField.DOB -> profile?.dateOfBirth ?: ""
+                // "1990-01-01" — the form the field asks for (the server
+                // sends midnight UTC, which never matched it).
+                EditField.DOB -> profileDateEditValue(profile?.dateOfBirth)
                 EditField.GENDER -> profile?.gender ?: ""
                 EditField.COUNTRY -> profile?.countryCode ?: ""
                 EditField.CITY -> profile?.city ?: ""
@@ -698,25 +696,29 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
             )
         }
 
-        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—", onEdit = { onEdit(EditField.EMAIL) })
+        // Words, never data (§8.1 rule 8, §8.2 #8): an empty value reads
+        // "Not set" (it read "—"), a birthday "1 Jan 1990" — the calendar date
+        // sent, never shifted by the phone's zone (it read the raw
+        // "1989-12-31T21:00:00.000Z") — and a gender its own words.
+        InfoRow(Icons.Filled.MailOutline, "EMAIL", profileValue(p?.email), onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
-        InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", onEdit = { onEdit(EditField.NAME) })
+        InfoRow(Icons.Filled.Person, "FULL NAME", profileValue(p?.fullName), onEdit = { onEdit(EditField.NAME) })
         // Read the Kenyan way, as Give shows it ("0700 000 000", not "+254700000000");
         // the edit sheet still starts from the stored number.
         InfoRow(
             Icons.Filled.Call, "PHONE",
-            p?.phoneNumber?.takeIf { it.isNotBlank() }?.let(::kenyanMobileDisplay) ?: "—",
+            p?.phoneNumber?.takeIf { it.isNotBlank() }?.let(::kenyanMobileDisplay) ?: NOT_SET,
             onEdit = { onEdit(EditField.PHONE) },
         )
-        InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", p?.dateOfBirth ?: "Not set", onEdit = { onEdit(EditField.DOB) })
-        InfoRow(Icons.Filled.Group, "GENDER", p?.gender ?: "—", onEdit = { onEdit(EditField.GENDER) })
+        InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", profileDateLabel(p?.dateOfBirth), onEdit = { onEdit(EditField.DOB) })
+        InfoRow(Icons.Filled.Group, "GENDER", profileGenderLabel(p?.gender), onEdit = { onEdit(EditField.GENDER) })
         InfoRow(
             Icons.Filled.Public,
             "COUNTRY",
-            (flagEmoji(p?.countryCode) + " " + countryName(p?.countryCode)).trim(),
+            (flagEmoji(p?.countryCode) + " " + countryName(p?.countryCode)).trim().ifEmpty { NOT_SET },
             onEdit = { onEdit(EditField.COUNTRY) },
         )
-        InfoRow(Icons.Filled.LocationOn, "CITY", p?.city ?: "—", onEdit = { onEdit(EditField.CITY) })
+        InfoRow(Icons.Filled.LocationOn, "CITY", profileValue(p?.city), onEdit = { onEdit(EditField.CITY) })
         HairlineDivider()
         LanguagesRow()
     }
@@ -742,7 +744,8 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
             }
             Column(Modifier.weight(1f)) {
                 Text(label, style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
-                Text(value, style = pInter(13, FontWeight.Medium), color = PROF.navy)
+                // A profile field is a control row (§8.1 rule 3): Inter 14 medium.
+                Text(value, style = NuruType.controlTitle, color = PROF.navy)
             }
             if (onEdit != null) {
                 Box(
