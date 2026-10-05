@@ -840,14 +840,15 @@ private fun IconTile(icon: ImageVector, tint: RowTint) {
     }
 }
 
+/** Every Settings row icon is the same tile (§8.1 rule 7, as iOS): navy on
+ *  gold tint — these were cream with a hairline. */
 @Composable
 private fun NeutralTile(icon: ImageVector) {
     Box(
         Modifier
             .size(36.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(PROF.surface)
-            .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+            .background(PROF.goldTint),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, PROF.navy, 18.dp)
