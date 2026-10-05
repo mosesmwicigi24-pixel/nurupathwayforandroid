@@ -322,7 +322,8 @@ internal fun standingKeptLine(p: Partnership, currentYearStatement: GivingStatem
             val kept = maxOf(f.keptOnTime + f.late, 0)
             if (kept == 0 && f.dueCount <= 0) null else "$kept ${if (kept == 1) "commitment" else "commitments"} kept this year"
         }
-        hasSchedule -> "${p.kept} ${if (p.kept == 1) "gift" else "gifts"} kept"
+        // No zero counts (§7.4 #9): "0 gifts kept" is no gift at all.
+        hasSchedule && p.kept > 0 -> "${p.kept} ${if (p.kept == 1) "gift" else "gifts"} kept"
         else -> null
     }
     return listOfNotNull(count, state).joinToString(" · ").replaceFirstChar { it.uppercase() }
@@ -442,3 +443,13 @@ internal fun pledgeNextLabel(pl: Pledge, today: LocalDate): WhenLabel? {
     return if (next.isBefore(today)) WhenLabel("Overdue since ${dayMonthIn(next, today)}", overdue = true)
     else WhenLabel("Next ${PartnerFormat.dayMonth(next)}", overdue = false)
 }
+
+/**
+ * A partner has a standing to show — since when, what's been kept, the tier —
+ * once there is something real behind it: a pledge, or a gift collected.
+ * Ben, with a weekly gift set up that had never collected and no pledge,
+ * read "Partner since Oct 2026 · 0 gifts kept · on track" beside "carries one
+ * disciple through a level, every year" (Cycle 3's closing walk).
+ */
+internal fun hasStanding(p: Partnership): Boolean =
+    p.pledges.any { it.status != "cancelled" } || p.kept > 0

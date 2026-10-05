@@ -605,6 +605,14 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
     val paused = p.membership?.status == "paused" || p.status == "paused" || p.trouble?.paused == true
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Eyebrow("STANDING")
+        // Nothing to stand on yet — no pledge, no gift collected: no "since",
+        // no "0 gifts kept", no tier; the next step instead.
+        if (!hasStanding(p)) {
+            Text(
+                "Your standing begins with your first gift or pledge.",
+                style = giInter(14), color = GIVE.sub,
+            )
+        } else
         // iOS parity (HStack alignment .top): the standing and the tier chip
         // share the width (FairSplitRow) — a long tier name wraps inside its
         // chip instead of squeezing "Partner since Sep 2026" to a letter or

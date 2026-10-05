@@ -268,6 +268,18 @@ class PartnerStatementMathTest {
         // Neither a schedule nor a monthly pledge (a total pledge only, or just joined): the state alone.
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true, pledges = listOf(total(dueOn = "2026-12-15"))), null, false))
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true), null, false))
+        // No zero counts: a schedule that has never collected says its state alone.
+        assertEquals("On track", standingKeptLine(scheduleOnly.copy(kept = 0), null, false))
+    }
+
+    @Test
+    fun `a standing shows only once there is a pledge or a gift collected (Cycle 3 closing walk, Ben)`() {
+        // Ben: a weekly gift set up that never collected, no pledge — nothing to stand on.
+        org.junit.Assert.assertFalse(hasStanding(scheduleOnly.copy(kept = 0)))
+        org.junit.Assert.assertFalse(hasStanding(Partnership(isPartner = true)))
+        org.junit.Assert.assertFalse(hasStanding(Partnership(isPartner = true, pledges = listOf(monthly(status = "cancelled")))))
+        org.junit.Assert.assertTrue(hasStanding(scheduleOnly))
+        org.junit.Assert.assertTrue(hasStanding(pledgeOnly))
     }
 
     // ── A total pledge's card foot (iOS leftLine) ──
