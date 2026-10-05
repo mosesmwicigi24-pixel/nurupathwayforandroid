@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
@@ -95,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.EventAttendee
 import org.nuruplace.member.data.net.EventDetail
 import org.nuruplace.member.data.net.EventPost
@@ -106,6 +108,7 @@ import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.ui.components.AsyncContent
 import java.time.Instant
 import java.util.UUID
+import org.nuruplace.member.ui.theme.Nuru
 
 /** Pill / capsule corner. */
 private val Capsule = RoundedCornerShape(999.dp)
@@ -116,6 +119,27 @@ private fun isEventLive(occursAt: String?): Boolean {
     val now = Instant.now()
     return !now.isBefore(start.minusSeconds(3600)) && !now.isAfter(start.plusSeconds(4 * 3600))
 }
+
+/** What one RSVP came to (EXPERIENCE.md §4): sent, waiting in the offline
+ *  queue, or refused — never an exception out of the tap. */
+internal sealed interface RsvpOutcome {
+    object Sent : RsvpOutcome
+    data class Queued(val status: String) : RsvpOutcome
+    data class Failed(val line: String) : RsvpOutcome
+}
+
+/** Send one RSVP. [send] returns null when the write went to the offline
+ *  queue (§1.7); a refusal (422 "RSVP is not enabled for this event", a 404,
+ *  a 5xx) becomes [RsvpOutcome.Failed] in [failureLine]'s words. A cancel
+ *  (the member left) is not a failure. */
+internal suspend fun submitRsvp(status: String, send: suspend () -> Unit?, failureLine: (Throwable) -> String): RsvpOutcome =
+    try {
+        if (send() == null) RsvpOutcome.Queued(status) else RsvpOutcome.Sent
+    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+        throw c
+    } catch (e: Exception) {
+        RsvpOutcome.Failed(failureLine(e))
+    }
 
 /** First letters of up to two words, uppercase. */
 private fun initials(name: String): String =
@@ -156,16 +180,35 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 context.startActivity(insert)
             }
         }
+        // An RSVP (EXPERIENCE.md §4, §7.4): one at a time; a refusal — "RSVP is
+        // not enabled for this event", a 404, a 5xx — is said under the
+        // choices in the server's own words (it used to escape the launch and
+        // crash the app); offline, the choice waits in the queue (§1.7) and
+        // the card says so instead of looking ignored.
+        var rsvpBusy by remember(eventId) { mutableStateOf(false) }
+        var rsvpQueued by remember(eventId) { mutableStateOf<String?>(null) }
+        var rsvpError by remember(eventId) { mutableStateOf<String?>(null) }
         val setRsvp: (String) -> Unit = { status ->
-            scope.launch {
-                val payload = kotlinx.serialization.json.buildJsonObject {
-                    put("event_id", kotlinx.serialization.json.JsonPrimitive(eventId))
-                    put("status", kotlinx.serialization.json.JsonPrimitive(status))
+            if (!rsvpBusy) {
+                rsvpBusy = true
+                rsvpError = null
+                scope.launch {
+                    val payload = kotlinx.serialization.json.buildJsonObject {
+                        put("event_id", kotlinx.serialization.json.JsonPrimitive(eventId))
+                        put("status", kotlinx.serialization.json.JsonPrimitive(status))
+                    }
+                    val outcome = submitRsvp(
+                        status,
+                        send = { Net.client.offline.runOrQueue("event_rsvps", "set", payload) { Net.client.api.rsvp(eventId, RsvpBody(status)) } },
+                        failureLine = { ApiException.saveFailureLine(it, context) },
+                    )
+                    rsvpBusy = false
+                    when (outcome) {
+                        RsvpOutcome.Sent -> { rsvpQueued = null; reload() }
+                        is RsvpOutcome.Queued -> rsvpQueued = outcome.status
+                        is RsvpOutcome.Failed -> rsvpError = outcome.line
+                    }
                 }
-                Net.client.offline.runOrQueue("event_rsvps", "set", payload) {
-                    Net.client.api.rsvp(eventId, RsvpBody(status))
-                }
-                reload()
             }
         }
 
@@ -195,7 +238,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
 
                 e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it) }
 
-                RsvpCard(e, setRsvp)
+                RsvpCard(e, setRsvp, queued = rsvpQueued, busy = rsvpBusy, error = rsvpError)
 
                 BuzzCard(eventId)
 
@@ -535,7 +578,10 @@ private fun RosterCard(attendees: List<EventAttendee>) {
 // ── RSVP card ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit) {
+private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit, queued: String? = null, busy: Boolean = false, error: String? = null) {
+    // A choice waiting in the offline queue shows as chosen; the server's own
+    // answer otherwise.
+    val mine = queued ?: e.myRsvp
     Column(
         Modifier
             .fillMaxWidth()
@@ -546,12 +592,19 @@ private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit) {
     ) {
         EVOverline("Will you be there?")
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            RsvpOption(Modifier.weight(1f), "Going", "going", EV.going, e.myRsvp, setRsvp)
-            RsvpOption(Modifier.weight(1f), "Maybe", "maybe", EV.maybe, e.myRsvp, setRsvp)
-            RsvpOption(Modifier.weight(1f), "Can't", "declined", EV.declined, e.myRsvp, setRsvp)
+        Row(Modifier.alpha(if (busy) 0.6f else 1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            RsvpOption(Modifier.weight(1f), "Going", "going", EV.going, mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Maybe", "maybe", EV.maybe, mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Can't", "declined", EV.declined, mine, setRsvp)
         }
-        if (e.myRsvp == "going") {
+        if (error != null) {
+            Text(error, style = evInter(12), color = Nuru.danger, modifier = Modifier.padding(top = 10.dp))
+        } else if (queued != null) {
+            Text(
+                "You're offline — we'll send this when you're back.",
+                style = evInter(12), color = EV.secondary, modifier = Modifier.padding(top = 10.dp),
+            )
+        } else if (e.myRsvp == "going") {
             Row(
                 Modifier.padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
