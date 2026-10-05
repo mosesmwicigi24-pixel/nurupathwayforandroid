@@ -533,6 +533,7 @@ private fun TwoFactorRow() {
     var code by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
+    val mfaContext = androidx.compose.ui.platform.LocalContext.current
 
     ToggleRow(
         tile = { IconTile(FingerprintIcon, if (twoFAon) TINT_2FA_ON else TINT_2FA_OFF) },
@@ -547,8 +548,13 @@ private fun TwoFactorRow() {
                 if (enrollment == null && !busy) {
                     busy = true
                     scope.launch {
-                        enrollment = runCatching { Net.client.api.enrollMfa() }.getOrNull()
-                        if (enrollment == null) { expanded = false; msg = "Couldn't start 2FA. Try again." }
+                        val started = runCatching { Net.client.api.enrollMfa() }
+                        enrollment = started.getOrNull()
+                        // Why it didn't start (§4), not a bare "Try again".
+                        started.exceptionOrNull()?.let {
+                            expanded = false
+                            msg = ApiException.failureLine("Couldn't start two-factor authentication.", it, mfaContext)
+                        }
                         busy = false
                     }
                 }

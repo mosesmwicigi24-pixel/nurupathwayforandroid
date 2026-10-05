@@ -1279,7 +1279,10 @@ private fun certDate(iso: String?): String = org.nuruplace.member.util.NuruDates
 @androidx.compose.runtime.Composable
 private fun AiConsentCard() {
     var optOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var consentSaveFailed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Why the last change didn't land (§4) — "check your connection" was
+    // wrong whenever the server itself refused.
+    var consentSaveFailed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val consentContext = androidx.compose.ui.platform.LocalContext.current
     var loaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -1311,7 +1314,7 @@ private fun AiConsentCard() {
                 onCheckedChange = { on ->
                     val previous = optOut
                     optOut = !on
-                    consentSaveFailed = false
+                    consentSaveFailed = null
                     scope.launch {
                         // Consent must never lie: if the server didn't record
                         // it, don't display it.
@@ -1321,7 +1324,7 @@ private fun AiConsentCard() {
                             )
                         }.onFailure {
                             optOut = previous
-                            consentSaveFailed = true
+                            consentSaveFailed = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, consentContext)
                         }
                     }
                 },
@@ -1330,9 +1333,9 @@ private fun AiConsentCard() {
                 ),
             )
         }
-        if (consentSaveFailed) {
+        consentSaveFailed?.let { line ->
             androidx.compose.material3.Text(
-                "Couldn't save that — check your connection and try again.",
+                line,
                 style = org.nuruplace.member.ui.theme.NuruType.micro,
                 color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
                 modifier = Modifier.padding(top = 4.dp),

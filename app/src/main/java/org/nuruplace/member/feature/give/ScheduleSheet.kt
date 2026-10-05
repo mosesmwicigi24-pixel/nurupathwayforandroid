@@ -123,6 +123,7 @@ internal fun ScheduleSheet(
 ) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
+    val actContext = androidx.compose.ui.platform.LocalContext.current
     var s by remember(schedule.scheduleId) { mutableStateOf(schedule) }
     // The caller's newer row for this gift (its list reloaded) replaces ours.
     LaunchedEffect(schedule) { s = schedule }
@@ -148,8 +149,8 @@ internal fun ScheduleSheet(
     val profileNumber = kenyanMobileE164(phoneOnFile)
 
     /** One call at a time; its refusal is said in the server's words, else
-     *  [fallback] — never swallowed. */
-    fun act(fallback: String, call: suspend () -> Unit) {
+     *  [lead] and why (§4: offline, or our side) — never swallowed. */
+    fun act(lead: String, call: suspend () -> Unit) {
         if (busy) return
         busy = true; error = null; errorPledgeId = null
         scope.launch {
@@ -160,7 +161,7 @@ internal fun ScheduleSheet(
                 // Read ONCE (an error body is one-shot): the words, and the
                 // pledge a refused amount or day belongs to.
                 val refusal = ApiException.serverError(e)
-                error = refusal?.displayMessage ?: fallback
+                error = refusal?.displayMessage ?: ApiException.failureLine(lead, e, actContext)
                 errorPledgeId = refusal?.detail("pledge_id")
                 Haptics.reject(view)
             } finally {
@@ -222,7 +223,7 @@ internal fun ScheduleSheet(
                     }
                     if (p.canResume) {
                         FilledSheetButton("Resume", navy = true, busy = busy, enabled = !busy) {
-                            act("Couldn't resume — try again.") {
+                            act("Couldn't resume your gift.") {
                                 Net.client.api.resumeSchedule(s.scheduleId)
                                 onDone()
                             }
@@ -265,7 +266,7 @@ internal fun ScheduleSheet(
                                 enabled = !busy,
                                 onCheckedChange = { on ->
                                     headsUp = on
-                                    act("Couldn't change that — try again.") {
+                                    act("Couldn't change that.") {
                                         try {
                                             val row = Net.client.api.updateSchedule(s.scheduleId, UpdateScheduleBody(headsUp = on))
                                             if (row.fund.isNotBlank()) s = row else s = s.copy(headsUp = on)
@@ -369,7 +370,7 @@ internal fun ScheduleSheet(
                         }
                         FilledSheetButton("Save changes", navy = false, busy = busy, enabled = !busy && plan.patch != null, modifier = Modifier.weight(1f)) {
                             val patch = plan.patch ?: return@FilledSheetButton
-                            act("Couldn't save — try again.") {
+                            act("Couldn't save that.") {
                                 keep(Net.client.api.updateSchedule(s.scheduleId, patch))
                                 draft = scheduleDraftOf(s)
                                 headsUp = s.headsUp
@@ -404,7 +405,7 @@ internal fun ScheduleSheet(
                                 return@FilledSheetButton
                             }
                             val until = if (pauseUntilDate) resumeDate else null
-                            act("Couldn't pause — try again.") {
+                            act("Couldn't pause your gift.") {
                                 Net.client.api.pauseSchedule(s.scheduleId, PauseScheduleBody(until?.toString()))
                                 onDone()
                             }
@@ -433,7 +434,7 @@ internal fun ScheduleSheet(
                             Row(
                                 Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.cancelText)
                                     .clickable(enabled = !busy) {
-                                        act("Couldn't cancel — try again.") {
+                                        act("Couldn't cancel your gift.") {
                                             Net.client.api.cancelSchedule(s.scheduleId)
                                             onDone()
                                         }

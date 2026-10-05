@@ -161,7 +161,9 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     var chromeHidden by remember { mutableStateOf(false) }
     var reflection by remember { mutableStateOf("") }
     var reflectSaved by remember { mutableStateOf(false) }
-    var reflectError by remember { mutableStateOf(false) }
+    // Why the reflection didn't save (§4), or null; the words stay in the box.
+    var reflectError by remember { mutableStateOf<String?>(null) }
+    val reflectContext = androidx.compose.ui.platform.LocalContext.current
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // Living curriculum — "hear it another way": the same lesson re-rendered by
@@ -273,7 +275,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 if (m.completed && !editingReflection) {
                     ReflectionFolded(text = reflection) { showRevisit = true }
                 } else ReflectionCard(
-                    value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false; if (reflectError) reflectError = false },
+                    value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false; if (reflectError != null) reflectError = null },
                     saved = reflectSaved,
                     onSave = {
                         scope.launch {
@@ -281,13 +283,13 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                             // only say it when the write actually landed.
                             runCatching { Net.client.api.submitModuleReflection(m.moduleId, SaveReflectionBody(reflection.trim().take(4000), UUID.randomUUID().toString())) }
                                 .onSuccess { reflectSaved = true }
-                                .onFailure { reflectError = true }
+                                .onFailure { reflectError = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, reflectContext) }
                         }
                     },
                 )
-                if (reflectError) {
+                reflectError?.let { line ->
                     Text(
-                        "Couldn't save your reflection — check your connection and try again.",
+                        line,
                         style = ml(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
                         modifier = Modifier.padding(top = 6.dp),
                     )

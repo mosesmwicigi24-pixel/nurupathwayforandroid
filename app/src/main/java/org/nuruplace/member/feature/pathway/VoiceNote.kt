@@ -240,7 +240,8 @@ private fun VoiceRecordDialog(
                             )
                         }.onFailure {
                             uploading = false
-                            error = "Couldn't share the voice note. Try again."
+                            // Why it didn't go (§4); the recording stays to send again.
+                            error = org.nuruplace.member.data.net.ApiException.failureLine("Couldn't share the voice note.", it, ctx)
                         }
                     }
                 }) {

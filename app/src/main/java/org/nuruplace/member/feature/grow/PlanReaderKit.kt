@@ -289,9 +289,10 @@ internal fun RLongPressSave(
     val clipboard = LocalClipboardManager.current
     var menu by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
-    fun flash(t: String) {
+    val saveContext = androidx.compose.ui.platform.LocalContext.current
+    fun flash(t: String, ms: Long = 2_200) {
         note = t
-        scope.launch { delay(2_200); if (note == t) note = null }
+        scope.launch { delay(ms); if (note == t) note = null }
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })) {
@@ -303,15 +304,17 @@ internal fun RLongPressSave(
                         onClick = {
                             menu = false
                             scope.launch {
-                                val ok = runCatching {
+                                val failure = runCatching {
                                     Net.client.api.saveVerse(
                                         VerseUpsertBody(
                                             savedVerseId = UUID.randomUUID().toString(), reference = reference,
                                             version = version, verseText = text, clientMutationId = UUID.randomUUID().toString(),
                                         ),
                                     )
-                                }.isSuccess
-                                flash(if (ok) "Saved to your verses" else "Couldn't save — try again")
+                                }.exceptionOrNull()
+                                // Why it didn't save (§4), long enough to read.
+                                if (failure == null) flash("Saved to your verses")
+                                else flash(org.nuruplace.member.data.net.ApiException.saveFailureLine(failure, saveContext), 5_000)
                             }
                         },
                     )

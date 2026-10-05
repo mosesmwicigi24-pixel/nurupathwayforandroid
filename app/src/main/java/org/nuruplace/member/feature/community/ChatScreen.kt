@@ -1259,6 +1259,7 @@ private fun MyDisciplerTab(discipler: HubDiscipler?, onOpenThread: (String) -> U
     val scope = rememberCoroutineScope()
     var opening by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val openContext = androidx.compose.ui.platform.LocalContext.current
 
     Section("MY DISCIPLER", Icons.Filled.Person)
 
@@ -1279,7 +1280,7 @@ private fun MyDisciplerTab(discipler: HubDiscipler?, onOpenThread: (String) -> U
                     error = when {
                         isNoDiscipler(e) -> "A discipler has not yet been assigned to you."
                         isMinorBlocked(e) -> "Direct messages aren't available yet for your account."
-                        else -> "Couldn't open this conversation — please try again."
+                        else -> org.nuruplace.member.data.net.ApiException.failureLine("Couldn't open this conversation.", e, openContext)
                     }
                 }
         }
@@ -1330,6 +1331,7 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var opening by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val openContext = androidx.compose.ui.platform.LocalContext.current
     var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
     // Mirrored from the thread's own server `muted` (Chat Redesign C4) the
     // last time it loaded — see ChatThreadScreen's LaunchedEffect(thread.muted).
@@ -1355,7 +1357,7 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
                     error = when {
                         isNoPastor(e) -> "No pastor is available for your congregation right now — please check back later."
                         isMinorBlocked(e) -> "Direct messages aren't available yet for your account."
-                        else -> "Couldn't open this conversation — please try again."
+                        else -> org.nuruplace.member.data.net.ApiException.failureLine("Couldn't open this conversation.", e, openContext)
                     }
                 }
         }
@@ -1492,6 +1494,7 @@ private fun BroadcastTab(onOpenBroadcast: (String) -> Unit) {
     var sending by remember { mutableStateOf(false) }
     var sentTo by remember { mutableStateOf<Int?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    val openContext = androidx.compose.ui.platform.LocalContext.current
     // Held across a step-up so confirming and retrying resumes THIS send rather
     // than starting a second one — a fresh id is minted only once a send lands.
     var mutationId by remember { mutableStateOf<String?>(null) }
@@ -1533,7 +1536,7 @@ private fun BroadcastTab(onOpenBroadcast: (String) -> Unit) {
                 if (isPasswordRequired(e)) {
                     stepUp.requestStepUp { send() }    // draft + mutationId survive for the retry
                 } else {
-                    error = "Couldn't send the broadcast. Please try again."
+                    error = org.nuruplace.member.data.net.ApiException.failureLine("Couldn't send the broadcast.", e, openContext)
                 }
             }
         }

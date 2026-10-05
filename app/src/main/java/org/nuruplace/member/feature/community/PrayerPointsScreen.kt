@@ -74,7 +74,9 @@ fun PrayerPointsScreen() {
     val view = LocalView.current
     var optedOut by remember { mutableStateOf<Boolean?>(null) }
     var consentBusy by remember { mutableStateOf(false) }
-    var consentFailed by remember { mutableStateOf(false) }
+    // Why turning it on didn't land (§4), or null.
+    var consentFailed by remember { mutableStateOf<String?>(null) }
+    val consentContext = LocalContext.current
     val scope = rememberCoroutineScope()
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -96,10 +98,11 @@ fun PrayerPointsScreen() {
             true -> item {
                 ConsentGateCard(busy = consentBusy, failed = consentFailed) {
                     scope.launch {
-                        consentBusy = true; consentFailed = false
-                        val ok = runCatching { Net.client.api.setAiConsent(AiConsentBody(optOut = false)) }.isSuccess
+                        consentBusy = true; consentFailed = null
+                        val failure = runCatching { Net.client.api.setAiConsent(AiConsentBody(optOut = false)) }.exceptionOrNull()
                         consentBusy = false
-                        if (ok) { Haptics.confirm(view); optedOut = false } else { Haptics.reject(view); consentFailed = true }
+                        if (failure == null) { Haptics.confirm(view); optedOut = false }
+                        else { Haptics.reject(view); consentFailed = org.nuruplace.member.data.net.ApiException.saveFailureLine(failure, consentContext) }
                     }
                 }
             }
@@ -112,7 +115,7 @@ fun PrayerPointsScreen() {
 }
 
 @Composable
-private fun ConsentGateCard(busy: Boolean, failed: Boolean, enable: () -> Unit) {
+private fun ConsentGateCard(busy: Boolean, failed: String?, enable: () -> Unit) {
     val view = LocalView.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nuru.white)
@@ -132,9 +135,9 @@ private fun ConsentGateCard(busy: Boolean, failed: Boolean, enable: () -> Unit) 
             "Nuru remembers your journey to walk with you personally. Your prayer journal is never read — ever. This is the same switch as your Sunday Letter and personal companion; turning it on here turns it on everywhere, and you can turn it off again anytime in Profile.",
             style = NuruType.caption, color = Nuru.ink600,
         )
-        if (failed) {
+        failed?.let { line ->
             Spacer(Modifier.height(Spacing.sm))
-            Text("Couldn't save that — check your connection and try again.", style = NuruType.caption, color = Nuru.danger)
+            Text(line, style = NuruType.caption, color = Nuru.danger)
         }
         Spacer(Modifier.height(Spacing.sm))
         Box(
