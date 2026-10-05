@@ -316,7 +316,8 @@ private fun TopGiftsCard(gifts: MyGifts) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             bars.forEachIndexed { i, e ->
                 val pct = (e.value * 100).toInt().coerceIn(0, 100)
-                val col = listOf(Color(0xFF6366F1), Color(0xFFDC2626), GrowPal.gold)[i % 3]
+                // Progress is gold (§8.1 rule 1) — the bars were indigo and red.
+                val col = GrowPal.gold
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(e.key.replaceFirstChar { it.uppercase() }, style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)

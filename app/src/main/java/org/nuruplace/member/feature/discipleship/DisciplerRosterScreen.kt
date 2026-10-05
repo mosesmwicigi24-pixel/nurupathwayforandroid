@@ -59,7 +59,8 @@ private val ControlShape = RoundedCornerShape(14.dp)
 private val Capsule = RoundedCornerShape(999.dp)
 private val Green = Color(0xFF16A34A)
 private val Red = Color(0xFFDC2626)
-private val Blue = Color(0xFF2563EB)
+// "Steady" reads navy — neither green, amber nor red (§8.1 rule 1).
+private val Blue = Color(0xFF0B1F33)
 
 @Composable
 fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {

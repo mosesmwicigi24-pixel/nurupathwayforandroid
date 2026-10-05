@@ -83,7 +83,8 @@ import java.util.UUID
  *  PrayerRoomScreen can pin its "Answered" tab straight to this filter. */
 enum class PrayerTab { Active, Answered }
 
-private val ShareOrange = Color(0xFFF97316)
+// On the Corporate wall reads navy — orange is no colour of ours (§8.1 rule 1).
+private val ShareOrange = Color(0xFF0B1F33)
 private val PrayerGold = Color(0xFFC9A227)
 
 @Composable
@@ -281,7 +282,7 @@ private fun JournalCard(
     var menuOpen by remember { mutableStateOf(false) }
     var confirmShare by remember { mutableStateOf(false) }
 
-    // Green answered · orange on-the-wall · gold private — ONLY the avatar,
+    // Green answered · navy on-the-wall · gold private — ONLY the avatar,
     // name and timestamp carry this color; title/body stay neutral (iOS
     // build 80 parity).
     val statusColor = when {

@@ -1,5 +1,5 @@
 // Live radio — the immersive member player (GET /radio/now-playing + /radio/programs).
-// An immersive dark radio player: a blurred-artwork backdrop with breathing gold/indigo
+// An immersive dark radio player: a blurred-artwork backdrop with breathing gold
 // glows, a now-playing centerpiece (LIVE badge, title, speaker, gold play/pause with an
 // expanding ring), an indeterminate sweep progress line, transport controls (mute · play ·
 // sleep), live stat chips, and segmented tabs (Live · Recordings · Schedule) over a Media3
@@ -120,8 +120,6 @@ private object RADIO {
     val red = Color(0xFFEF4444)
     val redDeep = Color(0xFFDC2626)
     val redSoft = Color(0xFFFCA5A5)
-    val indigo = Color(0xFF4338CA)
-    val indigoSoft = Color(0xFF818CF8)
     val green = Color(0xFF16A34A)
     val textOnGold = Color(0xFF0B1F33)
 
@@ -431,7 +429,7 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             )
             Box(
                 Modifier.matchParentSize().background(
-                    Brush.radialGradient(listOf(RADIO.indigo.copy(alpha = 0.28f), Color.Transparent), center = Offset(900f, 1900f), radius = 320f),
+                    Brush.radialGradient(listOf(RADIO.gold.copy(alpha = 0.16f), Color.Transparent), center = Offset(900f, 1900f), radius = 320f),
                 ),
             )
 
@@ -792,9 +790,11 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             listOf(
-                Triple("❤️", RADIO.redDeep, "heart"),
+                // One accent for every reaction (§8.1 rule 1): red and indigo
+                // said nothing.
+                Triple("❤️", RADIO.gold, "heart"),
                 Triple("🙏", RADIO.gold, "amen"),
-                Triple("🙌", RADIO.indigoSoft, "fire"),
+                Triple("🙌", RADIO.gold, "fire"),
             ).forEach { (emoji, tint, kind) ->
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape)

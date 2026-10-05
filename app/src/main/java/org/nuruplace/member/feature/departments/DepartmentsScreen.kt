@@ -159,7 +159,7 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
             }
             val chips = buildList {
                 if (d.fit) add(Triple("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText) to Icons.Filled.AutoAwesome)
-                if (d.openNeeds > 0) add(Triple(if (d.openNeeds == 1) "1 open need" else "${d.openNeeds} open needs", Nuru.infoBg, Nuru.info) to Icons.Filled.VolunteerActivism)
+                if (d.openNeeds > 0) add(Triple(if (d.openNeeds == 1) "1 open need" else "${d.openNeeds} open needs", Nuru.goldChipBg, Nuru.goldChipText) to Icons.Filled.VolunteerActivism)
             }
             if (chips.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

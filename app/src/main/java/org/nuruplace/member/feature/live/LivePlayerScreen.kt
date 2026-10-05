@@ -733,7 +733,7 @@ private fun BigHeartPop(at: Offset, reduceMotion: Boolean, onExpire: () -> Unit)
     }
     // A picture, not words: the heart is an icon (64 dp), never a 64 sp emoji.
     Icon(
-        Icons.Filled.Favorite, contentDescription = null, tint = Color(0xFFE0245E),
+        Icons.Filled.Favorite, contentDescription = null, tint = Nuru.gold,
         modifier = Modifier.size(64.dp).graphicsLayer {
             translationX = at.x - 32.dp.toPx()
             translationY = at.y - 32.dp.toPx()

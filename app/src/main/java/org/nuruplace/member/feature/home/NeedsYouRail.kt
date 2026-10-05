@@ -203,6 +203,6 @@ private fun nudgeIcon(kind: String): ImageVector = when (kind) {
 private fun accentColor(accent: String): Color = when (accent.lowercase()) {
     "gold" -> Nuru.goldDeep
     "success" -> Nuru.success
-    "steady" -> Nuru.info
+    "steady" -> Nuru.navy
     else -> Nuru.navy
 }

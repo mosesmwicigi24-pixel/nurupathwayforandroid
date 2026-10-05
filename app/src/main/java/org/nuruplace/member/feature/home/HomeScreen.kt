@@ -773,7 +773,7 @@ private fun HomeHeader(
                 // The growth score — "45", never "45%" (§3).
                 // Not yet known: the empty ring, no number — never a "0"
                 // that isn't true (§7 rule 5).
-                ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.successBg, arc = Nuru.gold) {
+                ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
                     growthScore?.let { Text("$it", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold) }
                 }
                 trend?.takeIf { it.delta != 0 }?.let { t ->
@@ -948,7 +948,8 @@ private fun TrendBadge(t: org.nuruplace.member.data.net.ScoreTrend, modifier: Mo
     val up = !t.isDown
     Row(
         modifier.clip(RoundedCornerShape(999.dp))
-            .background(if (up) Color(0xFF16A34A) else Color(0xFFDC6B26))
+            // State colours only (§8.1 rule 1): up is green, down amber — it was orange.
+            .background(if (up) Nuru.success else Nuru.warning)
             .border(1.dp, Color.White, RoundedCornerShape(999.dp))
             .padding(horizontal = 3.dp, vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1643,7 +1644,7 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
                         t.isDown -> "▼ Down ${kotlin.math.abs(t.delta)} vs last 28 days"
                         else -> "▲ Up ${t.delta} vs last 28 days"
                     }
-                    Text(caption, style = NuruType.caption, color = if (t.isDown) Color(0xFFDC6B26) else if (t.isUp) Color(0xFF16A34A) else Nuru.ink600)
+                    Text(caption, style = NuruType.caption, color = if (t.isDown) Nuru.warning else if (t.isUp) Nuru.success else Nuru.ink600)
                 } else {
                     Text("Your rhythm across the disciplines", style = NuruType.caption, color = Nuru.ink600)
                 }
@@ -1653,10 +1654,11 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
         val d = s.trend?.domains
         val bars = listOf(
             ScoreLine("Habits", s.habits.score, Nuru.gold, d?.get("habits")),
-            ScoreLine("Word", s.word.score, Nuru.scoreWord, d?.get("word")),
-            ScoreLine("Prayer", s.prayer.score, Nuru.scorePrayer, d?.get("prayer")),
-            ScoreLine("Curriculum", s.curriculum.score, Nuru.homeNavy, d?.get("curriculum")),
-            ScoreLine("Attendance", s.attendance.score, Nuru.success, d?.get("attendance")),
+            // Progress is gold (§8.1 rule 1) — each pillar wore its own hue.
+            ScoreLine("Word", s.word.score, Nuru.gold, d?.get("word")),
+            ScoreLine("Prayer", s.prayer.score, Nuru.gold, d?.get("prayer")),
+            ScoreLine("Curriculum", s.curriculum.score, Nuru.gold, d?.get("curriculum")),
+            ScoreLine("Attendance", s.attendance.score, Nuru.gold, d?.get("attendance")),
         )
         // The figures' columns (EXPERIENCE.md §6.6) are as wide as their
         // widest figure at the member's text size — never narrower than they
@@ -1719,7 +1721,7 @@ private fun ScoreBar(line: ScoreLine, deltaWidth: Dp, valueWidth: Dp) {
             Text(
                 delta,
                 style = SCORE_DELTA_STYLE,
-                color = if ((line.delta ?: 0) < 0) Color(0xFFDC6B26) else Color(0xFF16A34A),
+                color = if ((line.delta ?: 0) < 0) Nuru.warning else Nuru.success,
                 maxLines = 1, softWrap = false,
                 modifier = Modifier.width(deltaWidth), textAlign = TextAlign.End,
             )

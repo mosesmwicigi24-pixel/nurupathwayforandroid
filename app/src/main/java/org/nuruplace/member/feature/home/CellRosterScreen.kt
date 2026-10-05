@@ -385,7 +385,7 @@ private fun BandPill(band: String?) {
  *  [Nuru.bandColor]'s foreground, so a band chip reads like every other chip. */
 private fun bandBg(band: String?): Color = when (band?.lowercase()) {
     "thriving" -> Nuru.successBg
-    "steady" -> Nuru.infoBg
+    "steady" -> Nuru.tintBlue
     "watch" -> Nuru.warningBg
     "at_risk", "at risk" -> Nuru.dangerBg
     else -> Nuru.tintBlue

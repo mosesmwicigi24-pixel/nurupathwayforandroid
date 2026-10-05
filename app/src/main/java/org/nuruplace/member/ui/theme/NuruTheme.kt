@@ -67,8 +67,6 @@ object Nuru {
     val danger = Color(0xFFDC2626)       // --nuru-danger
     val dangerBg = Color(0xFFFEE2E2)     // --nuru-danger-bg
     val destructive = Color(0xFFD4183D)  // --destructive (destructive-action red)
-    val info = Color(0xFF0EA5E9)         // --nuru-info
-    val infoBg = Color(0xFFE0F2FE)       // --nuru-info-bg
     val verseBg = Color(0xFFFFF8E6)
     val myBubble = Color(0xFFDDF4C6)     // chat outgoing bubble
 
@@ -98,15 +96,9 @@ object Nuru {
     val progressTrack = Color(0xFFEEF0F3)  // progress-bar + video placeholder track
     val dayWord = Color(0xFF475569)        // daily-blessing italic body
     val liveRed = Color(0xFFDC2626)        // LIVE pill / radio dot
-    // Mini-card + Grow-tile + score accents
-    val indigo = Color(0xFF6366F1)         // reading-plan tile
-    val indigoBg = Color(0xFFEEF2FF)
+    // Mini-card accents. The hues that were here (info sky, indigo, calling
+    // purple, the score bars' blue) are gone: §8.1 rule 1 has none of them.
     val answeredText = Color(0xFF92400E)   // "N answered" chip text (bg = warningBg)
-    val callingFg = Color(0xFFA855F7)      // "Your Calling" tile
-    val callingBg = Color(0xFFF5E8FF)
-    val hideWordFg = Color(0xFFB45309)     // "Hide His Word" tile (bg = warningBg)
-    val scoreWord = Color(0xFF2F6FB0)      // Word growth bar
-    val scorePrayer = Color(0xFFC98A3C)    // Prayer growth bar
     // Home dark-card gradient (#0A1628 → #060F1C) and its radial gold glow accent
     val homeNavyGradient = Brush.verticalGradient(listOf(homeNavy, homeNavyDark))
     val headerGradient = Brush.verticalGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
@@ -115,7 +107,9 @@ object Nuru {
     // canonical semantic palette so band chips read the same as every other chip.
     fun bandColor(band: String?): Color = when (band?.lowercase()) {
         "thriving" -> success
-        "steady" -> info
+        // Steady is neither state: navy (§8.1 rule 1 — green, amber, red say
+        // state; sky blue said nothing).
+        "steady" -> navy
         "watch" -> warning
         "at_risk", "at risk" -> danger
         else -> ink600
