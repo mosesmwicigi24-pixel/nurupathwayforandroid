@@ -60,6 +60,8 @@ fun PrayerRoomScreen(
      *  circle is hidden. Same precedent as PrayerWallScreen(embedded). */
     embedded: Boolean = false,
     onBack: () -> Unit = {},
+    /** The bell at the header's right (§8.1 rule 2) — given on the Pray door. */
+    onOpenNotifications: (() -> Unit)? = null,
     onOpenPost: (String) -> Unit,
 ) {
     var tab by remember { mutableStateOf(initialTab) }
@@ -79,11 +81,20 @@ fun PrayerRoomScreen(
                         }
                         Spacer(Modifier.width(Spacing.md))
                     }
-                    Text("MY PRAYER ROOM", style = NuruType.kicker, color = Nuru.eyebrow)
+                    // Rule 2's header (§8.1), as iOS: the kicker names where you
+                    // are — "PRAY" — and the title says it once (it read "MY
+                    // PRAYER ROOM" over "My Prayer Room"); the bell at the right.
+                    Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
+                    onOpenNotifications?.let {
+                        org.nuruplace.member.ui.components.InboxBell(
+                            onClick = it, size = 44.dp, shape = RoundedCornerShape(16.dp),
+                            container = Nuru.white, border = Nuru.border, tint = Nuru.navy, iconSize = 18.dp, dotInset = 6.dp,
+                        )
+                    }
                 }
                 Text(
                     "My Prayer Room", style = NuruType.title, color = Nuru.navy,
-                    modifier = Modifier.padding(start = Spacing.xs, top = Spacing.sm, bottom = Spacing.md),
+                    modifier = Modifier.padding(top = if (onOpenNotifications != null) 0.dp else Spacing.sm, bottom = Spacing.md),
                 )
                 SegmentedControl(tab) { tab = it }
             }

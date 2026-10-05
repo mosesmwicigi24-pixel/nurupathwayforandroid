@@ -129,6 +129,7 @@ fun YouScreen(
                     pray = {
                         org.nuruplace.member.feature.community.PrayerRoomScreen(
                             embedded = true,
+                            onOpenNotifications = { onNavigate("notifications") },
                             onOpenPost = { onNavigate("prayer-wall/$it") },
                         )
                     },
