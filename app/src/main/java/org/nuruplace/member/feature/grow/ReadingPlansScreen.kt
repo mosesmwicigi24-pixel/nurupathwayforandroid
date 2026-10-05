@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -258,6 +259,9 @@ fun ReadingPlansScreen(
                             reason = f.reason,
                             shimmer = true,
                             onOpenPlan = onOpenPlan,
+                            // The tab's one gold primary only while no plan is
+                            // being read; else the continue row holds it (as iOS).
+                            primary = continueReading.isEmpty(),
                         )
                     }
                 }
@@ -507,19 +511,24 @@ private fun ContinueSection(plans: List<ReadingPlanRow>, onOpenPlan: (String) ->
         PLOverline("CONTINUE READING")
         val active = activePlan(plans)
         for (plan in plans) {
-            ContinueRow(plan = plan, readToday = planReadToday(plan, sealedHere = plan == active && PlanDayLog.sealedToday()), onOpenPlan = onOpenPlan)
+            ContinueRow(
+                plan = plan,
+                readToday = planReadToday(plan, sealedHere = plan == active && PlanDayLog.sealedToday()),
+                onOpenPlan = onOpenPlan,
+                primary = plan == active,
+            )
         }
     }
 }
 
 @Composable
-private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (String) -> Unit) {
+private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (String) -> Unit, primary: Boolean = false) {
     val total = plan.dayCount.coerceAtLeast(1)
     val day = planDay(plan)
     val pct = (day.toFloat() / total).coerceIn(0f, 1f)
 
     val shape = RoundedCornerShape(20.dp)
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
             .clip(shape)
@@ -527,63 +536,85 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
             .border(1.dp, PL.border, shape)
             .clickable { onOpenPlan(plan.planId) }
             .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        PLCover(url = plan.imageUrl, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            // A plan is a content row (§8.1 rule 3): Fraunces 15 semibold,
-            // wrapping to two lines rather than cut (rule 9).
-            Text(
-                plan.title,
-                style = NuruType.rowTitle,
-                color = PL.navy,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // "Today ·" only while today's reading is still to do — the same
-            // story as the streak card and Home (Cycle 3's closing walk, B6).
-            Text(
-                if (readToday) "Done for today · Day $day is next" else "Today · ${plan.subtitle ?: "Day $day of $total"}",
-                style = plInter(12),
-                color = PL.ink2,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            Row(
-                Modifier.padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(PL.navy.copy(alpha = 0.08f)),
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PLCover(url = plan.imageUrl, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                // A plan is a content row (§8.1 rule 3): Fraunces 15 semibold,
+                // wrapping to two lines rather than cut (rule 9).
+                Text(
+                    plan.title,
+                    style = NuruType.rowTitle,
+                    color = PL.navy,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // "Today ·" only while today's reading is still to do — the same
+                // story as the streak card and Home (Cycle 3's closing walk, B6).
+                Text(
+                    if (readToday) "Done for today · Day $day is next" else "Today · ${plan.subtitle ?: "Day $day of $total"}",
+                    style = plInter(12),
+                    color = PL.ink2,
+                    // Wraps, never cut (rule 9).
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Row(
+                    Modifier.padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(fraction = pct.coerceAtLeast(0.05f))
+                            .weight(1f)
                             .height(6.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(PL.gold),
-                    )
+                            .background(PL.navy.copy(alpha = 0.08f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(fraction = pct.coerceAtLeast(0.05f))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(PL.gold),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text("Day $day/$total", style = plInter(11, FontWeight.SemiBold), color = PL.ink2)
                 }
-                Spacer(Modifier.width(8.dp))
-                Text("Day $day/$total", style = plInter(11, FontWeight.SemiBold), color = PL.ink2)
+            }
+            if (!primary) {
+                Spacer(Modifier.width(12.dp))
+                // Gold play button
+                Box(
+                    Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(PL.gold.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = PL.gold, modifier = Modifier.size(18.dp))
+                }
             }
         }
-        Spacer(Modifier.width(12.dp))
-        // Gold play button
-        Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(PL.gold.copy(alpha = 0.10f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = PL.gold, modifier = Modifier.size(18.dp))
+        // The tab's one gold primary (§8.1 rule 4; Cycle 3 close walk E3, as
+        // iOS): the plan being read — four gold "Begin the journey" promos sat
+        // here while the member's real next step was to continue.
+        if (primary) {
+            Row(
+                Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(PL.gold).padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Continue · Day $day", style = NuruType.cardCta, color = PL.navy, maxLines = 2)
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = PL.navy, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }
+
+/** A promo opens its plan, and says so (as iOS's PlanPromoWords). */
+internal const val PLAN_PROMO_CTA = "See the plan"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The plan promo ("an ad, beautifully done") — port of iOS PLPlanPromo
@@ -735,9 +766,9 @@ private fun PlanPromo(
     onOpenPlan: (String) -> Unit,
     reason: String? = null,
     shimmer: Boolean = false,
-    /** The page's one primary (§8.1 rule 4): the featured plan at the top. A
-     *  promo woven into the browse invites in the secondary style. */
-    primary: Boolean = true,
+    /** The page's one primary (§8.1 rule 4): the featured plan at the top,
+     *  only while no plan is being read. Every other promo is a secondary. */
+    primary: Boolean = false,
 ) {
     // When the server has a reason THIS member is being shown THIS plan, it
     // speaks instead of the plan's own opening line — it knows more than we do.
@@ -796,8 +827,11 @@ private fun PlanPromo(
                     .padding(horizontal = 14.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // It opens the plan, so it says so (as iOS); the one way to start
+                // a plan is the plan page's "Begin Day 1" — it said "Begin the
+                // journey" here, a second name for the same start.
                 Text(
-                    if (plan.enrolled) "Continue the journey" else "Begin the journey",
+                    PLAN_PROMO_CTA,
                     style = plInter(12, FontWeight.Bold),
                     color = PL.navy,
                 )
