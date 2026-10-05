@@ -84,6 +84,10 @@ fun SelahEditorScreen(
     onDismiss: () -> Unit,
     onSave: (SelahDraft) -> Unit,
     onDelete: (() -> Unit)?,
+    /** On its way to the server. */
+    saving: Boolean = false,
+    /** Why the last save or delete didn't land — the thought stays open. */
+    error: String? = null,
 ) {
     val view = LocalView.current
     val context = LocalContext.current
@@ -243,12 +247,13 @@ fun SelahEditorScreen(
             }
         }
 
+        error?.let { Text(it, style = NuruType.caption, color = Nuru.danger, modifier = Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.sm)) }
         Box(
             Modifier.fillMaxWidth().padding(Spacing.screen).height(52.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (!isEmpty) Nuru.gold else Nuru.ink300)
-                .clickable(enabled = !isEmpty) {
-                    Haptics.confirm(view)
+                .clickable(enabled = !isEmpty && !saving) {
+                    Haptics.tap(view)
                     val editable = editableRef ?: controller.editText?.text
                     val (body, spans) = editable?.let { SelahRichText.extract(it) } ?: (draft.body to draft.spans)
                     draft.title = title.trim()
@@ -259,7 +264,7 @@ fun SelahEditorScreen(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(if (draft.isNew) "Save thought" else "Save changes", style = NuruType.cardCta, color = Nuru.navy)
+            Text(if (saving) "Saving…" else if (draft.isNew) "Save thought" else "Save changes", style = NuruType.cardCta, color = Nuru.navy)
         }
     }
 

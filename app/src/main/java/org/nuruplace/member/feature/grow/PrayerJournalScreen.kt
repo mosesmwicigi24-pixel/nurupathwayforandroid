@@ -97,6 +97,10 @@ fun PrayerJournalScreen(
         var tab by remember { mutableStateOf(forcedTab ?: PrayerTab.Active) }
         var editing by remember { mutableStateOf<PrayerEntry?>(null) }
         var showComposer by remember { mutableStateOf(false) }
+        var composerSaving by remember { mutableStateOf(false) }
+        var composerError by remember { mutableStateOf<String?>(null) }
+        var composerIds by remember { mutableStateOf<Pair<String, String>?>(null) }
+        val journalContext = androidx.compose.ui.platform.LocalContext.current
         // Entry ids shared to Corporate Prayer during this session — session-
         // local exactly like iOS's `sharedToWall` (the server has no separate
         // "is this shared" flag on the entry; re-sharing is idempotent).
@@ -131,7 +135,7 @@ fun PrayerJournalScreen(
                             PrayerChip(org.nuruplace.member.util.ZeroCounts.labelled("Answered", answered.size) { l, n -> "$l ($n)" }, tab == PrayerTab.Answered) { tab = PrayerTab.Answered }
                         }
                         Spacer(Modifier.weight(1f))
-                        AddPrayerPill { editing = null; showComposer = true }
+                        AddPrayerPill { editing = null; composerIds = null; composerError = null; showComposer = true }
                     }
                 }
                 if (visible.isEmpty()) {
@@ -145,15 +149,18 @@ fun PrayerJournalScreen(
                             onReopenOrAnswer = {
                                 scope.launch {
                                     val dto = PrayerUpsertBody(entryId = e.entryId, title = e.title, body = e.body, isAnswered = !e.isAnswered, clientMutationId = UUID.randomUUID().toString())
-                                    runCatching { Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) } }
+                                    org.nuruplace.member.ui.components.noticeOnFailure(journalContext) {
+                                        Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) }
+                                    }
                                     reload()
                                 }
                             },
-                            onEdit = { editing = e; showComposer = true },
+                            onEdit = { editing = e; composerIds = null; composerError = null; showComposer = true },
                             onPublish = {
                                 scope.launch {
-                                    runCatching {
+                                    org.nuruplace.member.ui.components.noticeOnFailure(journalContext, lead = "Couldn't share that prayer.") {
                                         Net.client.api.sharePrayerToWall(e.entryId)
+                                    }?.let {
                                         sharedToWall = sharedToWall + e.entryId
                                         CelebrationCenter.fire(Moment("prayer-share-${e.entryId}", "Shared to Corporate Prayer", "Your cell is standing with you 🙏", confetti = false))
                                     }
@@ -162,7 +169,9 @@ fun PrayerJournalScreen(
                             onDelete = {
                                 scope.launch {
                                     val payload = kotlinx.serialization.json.buildJsonObject { put("entry_id", kotlinx.serialization.json.JsonPrimitive(e.entryId)) }
-                                    runCatching { Net.client.offline.runOrQueue("prayer_entries", "delete", payload) { Net.client.api.deletePrayer(e.entryId) } }
+                                    org.nuruplace.member.ui.components.noticeOnFailure(journalContext, lead = "Couldn't delete that prayer.") {
+                                        Net.client.offline.runOrQueue("prayer_entries", "delete", payload) { Net.client.api.deletePrayer(e.entryId) }
+                                    }
                                     reload()
                                 }
                             },
@@ -173,21 +182,38 @@ fun PrayerJournalScreen(
         }
 
         if (showComposer) {
+            // Closes once the server — or, offline, the queue (§1.7) — has the
+            // prayer; a refusal keeps the words in the dialog and says why
+            // (§7.4, §4). It used to close and lose the prayer.
             PrayerComposerDialog(
                 draft = editing,
-                onDismiss = { showComposer = false },
+                onDismiss = { showComposer = false; composerError = null },
+                saving = composerSaving,
+                error = composerError,
                 onSave = { title, body, answered2 ->
+                    composerSaving = true
+                    composerError = null
                     scope.launch {
+                        val ids = composerIds ?: ((editing?.entryId ?: UUID.randomUUID().toString()) to UUID.randomUUID().toString()).also { composerIds = it }
                         val dto = PrayerUpsertBody(
-                            entryId = editing?.entryId ?: UUID.randomUUID().toString(),
+                            entryId = ids.first,
                             title = title.trim().ifBlank { null },
                             body = body.trim(),
                             isAnswered = answered2,
-                            clientMutationId = UUID.randomUUID().toString(),
+                            clientMutationId = ids.second,
                         )
-                        runCatching { Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) } }
-                        showComposer = false
-                        reload()
+                        val outcome = org.nuruplace.member.data.offline.queuedWrite(
+                            send = { Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) } },
+                            failureLine = { org.nuruplace.member.data.net.ApiException.saveFailureLine(it, journalContext) },
+                        )
+                        composerSaving = false
+                        if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
+                            composerError = outcome.line
+                        } else {
+                            composerIds = null
+                            showComposer = false
+                            reload()
+                        }
                     }
                 },
             )
@@ -373,7 +399,14 @@ private fun JournalCard(
 }
 
 @Composable
-private fun PrayerComposerDialog(draft: PrayerEntry?, onDismiss: () -> Unit, onSave: (String, String, Boolean) -> Unit) {
+private fun PrayerComposerDialog(
+    draft: PrayerEntry?,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Boolean) -> Unit,
+    saving: Boolean = false,
+    /** Why the last save didn't land — the words stay in the fields. */
+    error: String? = null,
+) {
     var title by remember { mutableStateOf(draft?.title ?: "") }
     var body by remember { mutableStateOf(draft?.body ?: "") }
     var answered by remember { mutableStateOf(draft?.isAnswered ?: false) }
@@ -392,11 +425,15 @@ private fun PrayerComposerDialog(draft: PrayerEntry?, onDismiss: () -> Unit, onS
                     Text("Answered", style = NuruType.cardCta, color = Nuru.navy, modifier = Modifier.weight(1f))
                     Switch(checked = answered, onCheckedChange = { answered = it }, colors = SwitchDefaults.colors(checkedTrackColor = PrayerGold))
                 }
+                error?.let {
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text(it, style = NuruType.caption, color = Nuru.danger)
+                }
             }
         },
         confirmButton = {
-            TextButton(enabled = !bodyEmpty, onClick = { onSave(title, body, answered) }) {
-                Text(if (draft == null) "Save prayer" else "Save changes", style = NuruType.cardCta, color = if (bodyEmpty) Nuru.ink400 else PrayerGold)
+            TextButton(enabled = !bodyEmpty && !saving, onClick = { onSave(title, body, answered) }) {
+                Text(if (saving) "Saving…" else if (draft == null) "Save prayer" else "Save changes", style = NuruType.cardCta, color = if (bodyEmpty) Nuru.ink400 else PrayerGold)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = NuruType.cardCta, color = Nuru.ink600) } },

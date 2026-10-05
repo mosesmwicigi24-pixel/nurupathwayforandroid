@@ -115,15 +115,29 @@ fun SelahScreen() {
             }
         }
 
+        var selahSaving by remember { mutableStateOf(false) }
+        var selahError by remember { mutableStateOf<String?>(null) }
+        // One id per thought being saved: a retry after a save that did land
+        // can't write it twice.
+        val selahMutationId = remember(editing?.thoughtId) { UUID.randomUUID().toString() }
+        val selahContext = androidx.compose.ui.platform.LocalContext.current
         editing?.let { draft ->
             androidx.compose.ui.window.Dialog(
                 onDismissRequest = { editing = null },
                 properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
             ) {
+                // The thought closes once the server — or, offline, the queue
+                // (§1.7) — has it; a refusal keeps it open, words, spans and
+                // drawings, and says why (§7.4, §4). It used to close and lose
+                // it.
                 SelahEditorScreen(
                     draft = draft,
-                    onDismiss = { editing = null },
+                    onDismiss = { editing = null; selahError = null },
+                    saving = selahSaving,
+                    error = selahError,
                     onSave = { d ->
+                        selahSaving = true
+                        selahError = null
                         scope.launch {
                             val dto = ThoughtUpsertBody(
                                 thoughtId = d.thoughtId,
@@ -131,28 +145,43 @@ fun SelahScreen() {
                                 body = d.body,
                                 bodySpans = d.spans.ifEmpty { null },
                                 drawingUrls = d.drawingUrls,
-                                clientMutationId = UUID.randomUUID().toString(),
+                                clientMutationId = selahMutationId,
                             )
-                            runCatching {
-                                Net.client.offline.runOrQueue("member_thoughts", "upsert", queuePayload(dto)) {
-                                    Net.client.api.upsertThought(dto)
-                                }
+                            val outcome = org.nuruplace.member.data.offline.queuedWrite(
+                                send = {
+                                    Net.client.offline.runOrQueue("member_thoughts", "upsert", queuePayload(dto)) {
+                                        Net.client.api.upsertThought(dto)
+                                    }
+                                },
+                                failureLine = { org.nuruplace.member.data.net.ApiException.saveFailureLine(it, selahContext) },
+                            )
+                            selahSaving = false
+                            if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
+                                selahError = outcome.line
+                            } else {
+                                editing = null
+                                reload()
                             }
-                            editing = null
-                            reload()
                         }
                     },
                     onDelete = if (draft.isNew) null else {
                         {
                             scope.launch {
                                 val payload = buildJsonObject { put("thought_id", JsonPrimitive(draft.thoughtId)) }
-                                runCatching {
-                                    Net.client.offline.runOrQueue("member_thoughts", "delete", payload) {
-                                        Net.client.api.deleteThought(draft.thoughtId)
-                                    }
+                                val outcome = org.nuruplace.member.data.offline.queuedWrite(
+                                    send = {
+                                        Net.client.offline.runOrQueue("member_thoughts", "delete", payload) {
+                                            Net.client.api.deleteThought(draft.thoughtId)
+                                        }
+                                    },
+                                    failureLine = { org.nuruplace.member.data.net.ApiException.failureLine("Couldn't delete that.", it, selahContext) },
+                                )
+                                if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
+                                    selahError = outcome.line
+                                } else {
+                                    editing = null
+                                    reload()
                                 }
-                                editing = null
-                                reload()
                             }
                         }
                     },
