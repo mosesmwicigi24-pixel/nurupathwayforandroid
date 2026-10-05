@@ -48,10 +48,18 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun LiveReplaysScreen(onBack: () -> Unit, onOpenRecording: (LiveRecordingRow) -> Unit) {
+fun LiveReplaysScreen(
+    onBack: () -> Unit,
+    onOpenRecording: (LiveRecordingRow) -> Unit,
+    /** GET /live/recordings?scope=&cell_id= — the cell page opens its own
+     *  cell's replays (EXPERIENCE.md §7.4 #16); null = every replay. */
+    scope: String? = null,
+    cellId: String? = null,
+    cellName: String? = null,
+) {
     Column(Modifier.fillMaxSize().background(Nuru.paper)) {
-        ScreenHeader("Replays", kicker = "Nuru Live", onBack = onBack)
-        ReplaysList(onOpenRecording)
+        ScreenHeader("Replays", kicker = cellName?.takeIf { it.isNotBlank() } ?: "Nuru Live", onBack = onBack)
+        ReplaysList(onOpenRecording, scope = scope, cellId = cellId)
     }
 }
 
@@ -67,9 +75,14 @@ fun LiveReplaysScreen(onBack: () -> Unit, onOpenRecording: (LiveRecordingRow) ->
  * (infinite) height constraint.
  */
 @Composable
-fun ReplaysList(onOpenRecording: (LiveRecordingRow) -> Unit, modifier: Modifier = Modifier) {
+fun ReplaysList(
+    onOpenRecording: (LiveRecordingRow) -> Unit,
+    modifier: Modifier = Modifier,
+    scope: String? = null,
+    cellId: String? = null,
+) {
     Box(modifier.fillMaxSize()) {
-        AsyncContent(load = { Net.client.api.getLiveRecordings().data }) { recordings, _ ->
+        AsyncContent(key = scope to cellId, load = { Net.client.api.getLiveRecordings(scope = scope, cellId = cellId).data }) { recordings, _ ->
             if (recordings.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

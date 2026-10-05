@@ -264,7 +264,16 @@ data class CellSummary(val cell: Cell? = null) {
     data class Leader(val name: String = "", val role: String? = null, val avatarUrl: String? = null)
 
     @Serializable
-    data class Attendance(val attended: Int = 0, val expected: Int = 0)
+    data class Attendance(
+        val attended: Int = 0,
+        /** A scoring baseline (expected check-ins), never a schedule — not shown (EXPERIENCE.md §7.4 #16). */
+        val expected: Int = 0,
+        /** The member's part in the cell's real recent meetings; absent on an older server, null before any. */
+        val you: You? = null,
+    )
+
+    @Serializable
+    data class You(val attended: Int = 0, val meetings: Int = 0)
 
     @Serializable
     data class Next(

@@ -1033,10 +1033,23 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenReplays = { nav.navigate("live-replays") { popUpTo("home") } },
                 )
             }
-            composable("live-replays") {
+            // Optional scope: the cell page opens its own cell's replays
+            // ("live-replays?scope=cell&cellId=…", EXPERIENCE.md §7.4 #16, as
+            // iOS); a bare "live-replays" is every replay, as before.
+            composable(
+                "live-replays?scope={scope}&cellId={cellId}&cellName={cellName}",
+                arguments = listOf(
+                    navArgument("scope") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("cellId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("cellName") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { entry ->
                 org.nuruplace.member.feature.live.LiveReplaysScreen(
                     onBack = { nav.popBackStack() },
                     onOpenRecording = { row -> nav.navigate(org.nuruplace.member.feature.live.liveRecordingRoute(row)) },
+                    scope = entry.arguments?.getString("scope"),
+                    cellId = entry.arguments?.getString("cellId"),
+                    cellName = entry.arguments?.getString("cellName"),
                 )
             }
             // Nuru Live (L3, broadcaster) — the setup sheet (Home/CellInfo)
