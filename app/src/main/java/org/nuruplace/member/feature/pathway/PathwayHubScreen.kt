@@ -90,7 +90,6 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
-import java.time.LocalTime
 
 // Exact Figma palette (LevelsOverview.tsx) — local so the page is 1:1 with iOS.
 private object PW {
@@ -112,11 +111,6 @@ private object PW {
     val navyGrad = Brush.linearGradient(listOf(navy, navyDeep))
     val goldGrad = Brush.linearGradient(listOf(gold, Color(0xFFA87F29)))
     val headerGrad = Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
-    val subtitle = mapOf(
-        1 to "God, His Word, prayer & the Church", 2 to "Who God is — His character and heart",
-        3 to "Grace, repentance, and new life", 4 to "Who you are in Him",
-        5 to "How Scripture forms faith and life", 6 to "Walking in the Spirit's gifts and power",
-    )
     // Type helpers — delegate to the canonical schema (ui/theme/TypeSchema.kt).
     fun over(size: Int, ker: Float = 1.4f) = nuruSans(size, FontWeight.Bold, ker)
     fun t(size: Int, w: FontWeight = FontWeight.Normal, ker: Float = 0f) = nuruSans(size, w, ker.takeIf { it != 0f })
@@ -124,15 +118,6 @@ private object PW {
 }
 
 private fun pwShort(t: String): String = t.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: ""
-private fun pwSubtitle(l: PathwayLevel?): String {
-    if (l == null) return ""
-    l.theme?.takeIf { it.isNotBlank() }?.let { return it }
-    l.description?.takeIf { it.isNotBlank() }?.let { return it }
-    return PW.subtitle[l.levelNumber] ?: ""
-}
-private fun pwGreeting(): String = when (LocalTime.now().hour) {
-    in 0..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening"
-}
 
 @Composable
 fun PathwayHubScreen(
@@ -242,7 +227,7 @@ fun PathwayHubScreen(
                 FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
                 return@Column
             }
-            HubHeader(firstName, streak, active, levels, journey, ::go, onOpenNotifications)
+            HubHeader(streak, active, levels, journey, ::go, onOpenNotifications)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -278,9 +263,12 @@ fun PathwayHubScreen(
 
 // ─────────────────────────── Header ───────────────────────────
 
+/** The tab's one header (EXPERIENCE.md §8.1 rule 2, §8.2 #1): the gold
+ *  "PATHWAY" kicker, the level's title, one line — "Level 1 of 6 · 20 of 20
+ *  modules" — and the bell at the right. The greeting belongs to Home alone
+ *  (it used to open this header too, above the title). */
 @Composable
 private fun HubHeader(
-    firstName: String,
     streak: Int,
     active: PathwayLevel?,
     levels: List<PathwayLevel>,
@@ -305,7 +293,7 @@ private fun HubHeader(
     ) {
         // top bar
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("YOUR PATHWAY", style = PW.over(9, 1.8f), color = PW.eyebrow)
+            Text("PATHWAY", style = NuruType.kicker, color = Nuru.eyebrow)
             if (streak > 0) {
                 Spacer(Modifier.width(Spacing.sm))
                 Row(
@@ -330,9 +318,13 @@ private fun HubHeader(
             // no number, until the journey is known (§7 rule 5).
             HubRing(journey?.percent)
         }
-        Text("${pwGreeting()}, $firstName · Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}", style = PW.t(10), color = PW.ink2, modifier = Modifier.padding(top = 16.dp))
-        Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-        Text(pwSubtitle(active), style = PW.t(12), color = PW.ink2, modifier = Modifier.padding(top = 4.dp))
+        Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
+        // One Inter line: where the member is on the road, and how far through
+        // the level — lessons, the exam a step of its own (§8.2 #4).
+        Text(
+            journey?.headerLine ?: "Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}",
+            style = nuruSans(13), color = PW.ink2, modifier = Modifier.padding(top = 4.dp),
+        )
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
             Box(Modifier.weight(1f)) { PWBar(pct, PW.goldGrad, PW.navy.copy(alpha = 0.10f)) }
             Spacer(Modifier.width(Spacing.sm))
@@ -643,7 +635,8 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(m.title, style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // A module's title wraps to two lines — never cut (§8.1 rule 9).
+                Text(m.title, style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(caption, style = PW.t(9, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
