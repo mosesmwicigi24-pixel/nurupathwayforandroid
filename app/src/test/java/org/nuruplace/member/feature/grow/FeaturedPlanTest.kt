@@ -4,9 +4,9 @@
 // Android "FROM THE LIBRARY · Who Am I?". Both apps featured the server's
 // FIRST promo, and /growth/plans/promos rests every promo it hands out for ten
 // days (plan_promo_log), so each request — the other app, a refresh — gets
-// the next plans on the shelf. The rule: the server's "continue" promo (the
-// plan being walked — the one slot it answers the same every time), else the
-// plan of the day — the first plan not started, in the server's own order.
+// the next plans on the shelf. The rule: the plan of the day — the first plan
+// not started, in the server's own order. The plan being walked (the server's
+// "continue" promo) has its one card under CONTINUE READING (§7.4 #3).
 package org.nuruplace.member.feature.grow
 
 import org.junit.Assert.assertEquals
@@ -53,16 +53,41 @@ class FeaturedPlanTest {
         }
     }
 
-    @Test fun `the plan being walked leads, with the server's own words`() {
+    // EXPERIENCE.md §7.4 #3 — seen: "CONTINUE READING · First Steps" and,
+    // right under it, "PICK UP WHERE YOU LEFT OFF · First Steps". The plan in
+    // progress has one card, under CONTINUE READING.
+    @Test fun `the plan being walked never takes the top — CONTINUE READING holds it`() {
         val walking = library.map { if (it.planId == "00d5") it.copy(enrolled = true) else it }
         val promos = resolvePromos(
-            listOf(promo("faf2", "fresh"), promo("00d5", "continue", "PICK UP WHERE YOU LEFT OFF")),
+            listOf(promo("00d5", "continue", "PICK UP WHERE YOU LEFT OFF"), promo("faf2", "fresh")),
             walking,
         )
         val f = featuredPlan(walking, promos)!!
-        assertEquals("00d5", f.plan.planId)
-        assertEquals("PICK UP WHERE YOU LEFT OFF", f.kicker)
-        assertEquals("A few minutes a day is all it asks.", f.reason)
+        assertEquals("cb76", f.plan.planId)
+        assertEquals("PLAN OF THE DAY", f.kicker)
+        // …nor is it woven into the browse below.
+        assertEquals(listOf("faf2"), browsePromos(promos, f, walking).map { it.plan.planId })
+    }
+
+    @Test fun `a finished plan is not in progress — its promo may still show`() {
+        val finished = library.map { if (it.planId == "00d5") it.copy(enrolled = true, completedAt = "2026-10-01T08:00:00Z") else it }
+        val promos = resolvePromos(listOf(promo("00d5", "next_step", "BECAUSE YOU FINISHED")), finished)
+        val f = featuredPlan(finished, promos)!!
+        assertEquals("cb76", f.plan.planId)
+        assertEquals(listOf("00d5"), browsePromos(promos, f, finished).map { it.plan.planId })
+    }
+
+    @Test fun `every plan started — the one in progress still never leads`() {
+        val allStarted = library.map { it.copy(enrolled = true, completedAt = if (it.planId == "cb76") null else "2026-10-01T08:00:00Z") }
+        // The plan of the day falls back to the first plan, which is the one in progress.
+        assertNull(featuredPlan(allStarted, emptyList()))
+    }
+
+    @Test fun `the browse never repeats the featured plan`() {
+        val promos = resolvePromos(listOf(promo("cb76", "fresh"), promo("943a", "fresh")), library)
+        val f = featuredPlan(library, promos)!!
+        assertEquals("cb76", f.plan.planId)
+        assertEquals(listOf("943a"), browsePromos(promos, f, library).map { it.plan.planId })
     }
 
     @Test fun `the plan of the day keeps the server's order and skips what was started`() {

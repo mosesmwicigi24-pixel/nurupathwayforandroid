@@ -185,9 +185,10 @@ fun ReadingPlansScreen(
     val resolved = remember(promos, plans) { resolvePromos(promos, plans) }
     // The featured plan — the same pick on both apps for the same member and
     // day (EXPERIENCE.md §8.2 #6, featuredPlan). The other promos are woven
-    // into the browse below, never the featured plan twice.
+    // into the browse below, never the featured plan twice — and never a plan
+    // in progress, which has its one card under CONTINUE READING (§7.4 #3).
     val featured = featuredPlan(plans, resolved)
-    val restPromos = resolved.filter { it.plan.planId != featured?.plan?.planId }
+    val restPromos = browsePromos(resolved, featured, plans)
     // A second plan to promote further down the page — never the one already at
     // the top, and never one already being read — turning every second Nairobi day.
     val midPromo = midPromoPlan(plans, planOfDay?.planId, nairobiEpochDay())
@@ -616,24 +617,41 @@ internal data class FeaturedPlan(val plan: ReadingPlanRow, val kicker: String, v
 
 /**
  * The featured plan — the same pick on both apps for the same member and day
- * (EXPERIENCE.md §8.2 #6). It is the plan the member is walking, when the
- * server says so (its "continue" promo — the one promo that answers the same
- * every time it is asked); otherwise the plan of the day ([planOfTheDay]).
+ * (EXPERIENCE.md §8.2 #6) — and never a plan in progress: that plan has one
+ * card, under CONTINUE READING (§7.4 #3; "Continue reading" and "Pick up
+ * where you left off" showed the same plan, one above the other). So the
+ * server's "continue" promo leads only for a plan the page does not already
+ * hold as in progress; otherwise the plan of the day ([planOfTheDay]) leads,
+ * unless it is itself in progress (every plan started).
  *
- * Not the server's first promo whatever it is: /growth/plans/promos records
- * every promo it hands out and rests each for ten days, so each request —
- * the other app, a refresh, a return to the tab — gets the next plans on the
- * shelf. iOS showed "Rooted: 10 Days in the Psalms" and Android "Who Am I?",
+ * Not the server's first promo whatever it is: /growth/plans/promos rests
+ * every promo it hands out, and its "FROM THE LIBRARY" fillers still turn
+ * from one request to the next — the other app, a refresh, a return to the
+ * tab. iOS showed "Rooted: 10 Days in the Psalms" and Android "Who Am I?",
  * both "FROM THE LIBRARY", for the same member a minute apart. Those promos
  * still show, woven into the browse.
  */
 internal fun featuredPlan(plans: List<ReadingPlanRow>, promos: List<ResolvedPromo>): FeaturedPlan? {
-    promos.firstOrNull { it.slot == PROMO_SLOT_CONTINUE }?.let { return FeaturedPlan(it.plan, it.kicker, it.reason) }
-    return planOfTheDay(plans)?.let { FeaturedPlan(it, "PLAN OF THE DAY", null) }
+    val inProgress = plans.filter { it.enrolled && it.completedAt == null }.mapTo(HashSet()) { it.planId }
+    promos.firstOrNull { it.slot == PROMO_SLOT_CONTINUE && it.plan.planId !in inProgress }
+        ?.let { return FeaturedPlan(it.plan, it.kicker, it.reason) }
+    return planOfTheDay(plans)?.takeIf { it.planId !in inProgress }?.let { FeaturedPlan(it, "PLAN OF THE DAY", null) }
 }
 
 /** The server's slot for a plan the member is already walking (promos.ts). */
 internal const val PROMO_SLOT_CONTINUE = "continue"
+
+/** The promos woven into the browse, in the server's order: never the
+ *  featured plan, and never a plan in progress — its one card is under
+ *  CONTINUE READING (EXPERIENCE.md §7.4 #3). */
+internal fun browsePromos(
+    resolved: List<ResolvedPromo>,
+    featured: FeaturedPlan?,
+    plans: List<ReadingPlanRow>,
+): List<ResolvedPromo> {
+    val inProgress = plans.filter { it.enrolled && it.completedAt == null }.mapTo(HashSet()) { it.planId }
+    return resolved.filter { it.plan.planId != featured?.plan?.planId && it.plan.planId !in inProgress }
+}
 
 /**
  * The second plan promoted further down the browse: never the one already
