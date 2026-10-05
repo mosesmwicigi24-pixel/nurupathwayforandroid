@@ -403,7 +403,7 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
                             }
                         } ?: Modifier,
                     ),
-                    Icons.Filled.Place, "WHERE", e.location ?: "—", accent,
+                    Icons.Filled.Place, "WHERE", e.location?.takeIf { it.isNotBlank() } ?: "Not set", accent,
                 )
                 // No zero counts (EXPERIENCE.md §7.4 #9): nobody going yet
                 // leaves WHERE the row — the RSVP card below asks.
@@ -437,7 +437,9 @@ private fun MetaTile(modifier: Modifier, icon: ImageVector, label: String, value
         ) { Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp)) }
         Column {
             Text(label, style = evInter(11, FontWeight.Bold, 1.3f), color = EV.tertiary)
-            Text(value, style = evInter(11, FontWeight.SemiBold), color = EV.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Wraps rather than cuts (§8.1 rule 9): "The Good News Mi…" was the
+            // venue a newcomer needed to find.
+            Text(value, style = evInter(11, FontWeight.SemiBold), color = EV.ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }
