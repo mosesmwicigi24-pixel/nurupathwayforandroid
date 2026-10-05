@@ -484,6 +484,11 @@ data class DueItem(
      *  false on a schedule row). Null from an older server that does not
      *  send it — the row then reads its own due date. */
     val overdue: Boolean? = null,
+    /** kind "pledge": what the office is checking toward it — the member's
+     *  pending "I paid another way" claims, in the pledge's currency (pathway
+     *  563185e). Shown beside the row so nobody pays twice; never subtracted:
+     *  a claim counts once the office confirms it. 0 from an older server. */
+    val pendingClaimMinor: Int = 0,
 ) {
     /** What is still uncovered once the money already on its way lands
      *  (iOS DueItem.uncoveredMinor). */

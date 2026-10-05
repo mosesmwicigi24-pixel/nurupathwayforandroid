@@ -428,6 +428,14 @@ internal fun pledgeCollectedChip(d: DueItem, collector: GivingSchedule?): String
 /** The DUE row's first line (iOS dueRow): "KSh 5,000 · in 3 days" — or,
  *  part of it already on its way, the uncovered rest: "KSh 3,000 left · in
  *  3 days". */
+/** What is already happening is said first (EXPERIENCE.md §9.3 rule 1): a
+ *  claim the office is checking sits on the DUE row it covers — "KSh 2,000
+ *  is being checked by the office" — so nobody pays twice. Said, never
+ *  subtracted: a claim counts once confirmed. Null with none. */
+internal fun dueClaimLine(d: DueItem): String? =
+    d.pendingClaimMinor.takeIf { d.kind == "pledge" && it > 0 }
+        ?.let { "${money(it, d.currency)} is being checked by the office" }
+
 internal fun dueLeadLine(d: DueItem, view: DueRowView, whenText: String): String =
     "${money(view.leadMinor, d.currency)}${if (view.processingNote != null) " left" else ""} · $whenText"
 

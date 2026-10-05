@@ -739,10 +739,17 @@ private fun DueSection(
                         )
                     },
                     rest = {
-                        Text(
-                            listOfNotNull(what, shown.processingNote).joinToString(" · "),
-                            style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                        )
+                        Column {
+                            Text(
+                                listOfNotNull(what, shown.processingNote).joinToString(" · "),
+                                style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
+                            )
+                            // A claim the office is checking, on the row it
+                            // covers (§9.3 rule 1) — said, never subtracted.
+                            dueClaimLine(d)?.let {
+                                Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                            }
+                        }
                     },
                     trailing = {
                         if (d.action == "resume") {
