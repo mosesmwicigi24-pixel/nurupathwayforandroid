@@ -51,7 +51,15 @@ import org.nuruplace.member.ui.icons.Lucide
 // "Map view" link. The hub itself is PathwayHubScreen.
 @Composable
 fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> Unit = {}) {
-    AsyncContent(load = { Net.client.api.pathway() }) { summary: PathwaySummary, _ ->
+    // The current level's trail rides along, as on Home, Pathway and the
+    // level page: production counts the exam among a level's modules, so the
+    // summary alone says "learning" at 10 of 10 — Map view read "In progress"
+    // and "Complete Level 1 to unlock" while every other screen said "Exam
+    // ready" (Cycle 4's closing walk, 18–19).
+    AsyncContent(load = {
+        val s = Net.client.api.pathway()
+        s to JourneyState.derive(s)?.levelNumber?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
+    }) { (summary: PathwaySummary, trail), _ ->
         val levels = summary.levels
         // Lessons, never the exams (§8.2 #4).
         val totalModules = levels.sumOf { it.lessonCount }
@@ -59,10 +67,13 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
         // The journey in levels (docs/EXPERIENCE.md §3), the same number the
         // hub's ring shows — never a share of published modules (20 of 20
         // read 100% at Level 1 of 6).
-        val journey = JourneyState.derive(summary)
+        val journey = JourneyState.derive(summary, trail)
         val pct = journey?.percent ?: 0
         val levelsDone = levels.count { it.status == LevelStatus.COMPLETED }
-        val active = levels.firstOrNull { it.status == LevelStatus.ACTIVE }
+        // The member's own level — the journey's, whatever its status — then
+        // the server's active one.
+        val active = levels.firstOrNull { it.levelNumber == journey?.levelNumber }
+            ?: levels.firstOrNull { it.status == LevelStatus.ACTIVE }
 
         LazyColumn(
             Modifier.fillMaxWidth().background(Nuru.paper),
@@ -247,7 +258,7 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(Spacing.xs))
-                    Text(LevelsMapWords.lockLine(level.levelNumber, journey), style = NuruType.caption, color = Nuru.ink400)
+                    Text(LevelsMapWords.lockLine(level.levelNumber, journey, preparing = level.lessonCount <= 0), style = NuruType.caption, color = Nuru.ink400)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {

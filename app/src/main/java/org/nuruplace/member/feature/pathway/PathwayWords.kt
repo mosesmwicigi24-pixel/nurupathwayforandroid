@@ -144,15 +144,25 @@ object LevelsMapWords {
         return Card(journey.kicker.uppercase(), journey.next.title, journey.next.line.takeIf { it.isNotBlank() })
     }
 
-    /** What opens a locked level: the step before it, in the journey's words. */
-    fun lockLine(levelNumber: Int, journey: Journey?): String {
+    /** What opens a locked level: the step before it, in the journey's words.
+     *  A level with no lessons yet is being prepared, and says so — nobody is
+     *  promised to open it (§9.1 rule 7). */
+    fun lockLine(levelNumber: Int, journey: Journey?, preparing: Boolean = false): String {
         val prev = levelNumber - 1
-        if (journey == null || journey.levelNumber != prev) return "Complete Level $prev to unlock"
+        if (journey == null || journey.levelNumber != prev) {
+            return if (preparing) "Level $levelNumber is being prepared" else "Complete Level $prev to unlock"
+        }
         return when (journey.stage) {
             JourneyStage.LEARNING -> "Complete Level $prev to unlock"
-            JourneyStage.EXAM_READY -> "Pass the Level $prev exam — then your leader opens Level $levelNumber"
-            JourneyStage.EXAM_SOON -> "The Level $prev exam opens soon — then your leader opens Level $levelNumber"
-            JourneyStage.AWAITING_USHER, JourneyStage.FINISHED -> "Your leader will open Level $levelNumber — you'll get a notice"
+            JourneyStage.EXAM_READY ->
+                if (preparing) "Pass the Level $prev exam — Level $levelNumber is being prepared"
+                else "Pass the Level $prev exam — then your leader opens Level $levelNumber"
+            JourneyStage.EXAM_SOON ->
+                if (preparing) "The Level $prev exam opens soon — Level $levelNumber is being prepared"
+                else "The Level $prev exam opens soon — then your leader opens Level $levelNumber"
+            JourneyStage.AWAITING_USHER, JourneyStage.FINISHED ->
+                if (preparing) "Level $levelNumber is being prepared — we'll let you know"
+                else "Your leader will open Level $levelNumber — you'll get a notice"
         }
     }
 }

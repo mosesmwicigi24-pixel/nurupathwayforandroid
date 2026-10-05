@@ -143,7 +143,11 @@ object JourneyState {
         val isLast = current.levelNumber == last.levelNumber
         val position = levels.indexOf(current) + 1
         val n = current.levelNumber
-        val nextLevel = levels.getOrNull(position)?.levelNumber ?: (n + 1)
+        val nextRow = levels.getOrNull(position)
+        val nextLevel = nextRow?.levelNumber ?: (n + 1)
+        // The next level has no lessons yet (Levels 2–6 in production today):
+        // nobody can open it, so no one is promised to (§9.1 rule 7).
+        val nextPreparing = nextRow != null && nextRow.lessonCount <= 0
 
         val trail = currentModules?.filter { it.levelNumber == n }.orEmpty()
         // The exam container's own row: completed = exam passed; NEXT = every
@@ -218,7 +222,14 @@ object JourneyState {
                 line = "Every module is done. The exam opens soon — we'll let you know.",
                 action = null,
             )
-            JourneyStage.AWAITING_USHER -> JourneyStep(
+            // "Level 2 is being prepared — we'll let you know" while it has no
+            // lessons (EXPERIENCE.md §9.2 #7): Eli was told "Your leader will
+            // open Level 2" for a level with none, and no cell has a leader.
+            JourneyStage.AWAITING_USHER -> if (nextPreparing) JourneyStep(
+                title = "Level $nextLevel is being prepared",
+                line = "You passed the Level $n exam — we'll let you know when Level $nextLevel opens.",
+                action = JourneyAction("See Level $n", JourneyDestination.Level(n)),
+            ) else JourneyStep(
                 title = "Level $nextLevel is next",
                 line = "You passed the Level $n exam. Your leader will open Level $nextLevel — you'll get a notice.",
                 action = JourneyAction("See Level $n", JourneyDestination.Level(n)),

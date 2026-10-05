@@ -117,11 +117,17 @@ fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
                 ) {
                     Text("NEXT LEVEL", style = NuruType.micro, color = Nuru.onNavyDim)
                     Text(next.title, style = NuruType.cardTitle, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
-                    Text("${next.lessonCount} modules" + (next.minutes.takeIf { it > 0 }?.let { " · ≈ ${it} min" } ?: ""), style = NuruType.caption, color = Nuru.onNavyFaint)
+                    // A level with no lessons yet is being prepared (§9.2 #7) —
+                    // never "0 modules", never a promise of who opens it.
+                    Text(
+                        if (next.lessonCount <= 0) "Level ${next.levelNumber} is being prepared — we'll let you know"
+                        else "${next.lessonCount} modules" + (next.minutes.takeIf { it > 0 }?.let { " · ≈ ${it} min" } ?: ""),
+                        style = NuruType.caption, color = Nuru.onNavyFaint,
+                    )
                 }
                 Spacer(Modifier.height(Spacing.md))
                 Box(Modifier.fillMaxWidth().alpha(t)) {
-                    PrimaryButton(if (next.status != LevelStatus.LOCKED) "Begin Level ${next.levelNumber}" else "Continue", onClick = onContinue)
+                    PrimaryButton(if (next.status != LevelStatus.LOCKED && next.lessonCount > 0) "Begin Level ${next.levelNumber}" else "Continue", onClick = onContinue)
                 }
             } else {
                 Box(Modifier.fillMaxWidth().alpha(t)) { PrimaryButton("Continue", onClick = onContinue) }

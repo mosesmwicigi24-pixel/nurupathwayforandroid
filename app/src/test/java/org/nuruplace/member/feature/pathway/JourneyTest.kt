@@ -38,6 +38,8 @@ class JourneyTest {
         /** The server's lesson counts (§8.2 #4) — null: an older server. */
         lessonsTotal: Int? = null,
         lessonsCompleted: Int? = null,
+        /** The next level's modules — 0, as production has Levels 2–6 today. */
+        nextModules: Int = 0,
     ) = PathwaySummary(
         currentLevel = current,
         levels = (1..6).map { n ->
@@ -48,7 +50,7 @@ class JourneyTest {
                     examPublished = examPublished, examAvailable = examAvailable, awaitingReview = awaitingFlag,
                     lessonsTotal = lessonsTotal, lessonsCompleted = lessonsCompleted,
                 )
-                else -> PathwayLevel(n, titles[n - 1], totalModules = 0, completedModules = 0, status = LevelStatus.LOCKED)
+                else -> PathwayLevel(n, titles[n - 1], totalModules = if (n == current + 1) nextModules else 0, completedModules = 0, status = LevelStatus.LOCKED)
             }
         },
     )
@@ -254,8 +256,20 @@ class JourneyTest {
 
     // ── the usher ──
 
-    @Test fun `awaiting the usher — the exam passed, the leader opens the next level`() {
+    @Test fun `awaiting the usher — a next level with no lessons is being prepared, and nobody is promised`() {
+        // EXPERIENCE.md §9.2 #7 (Eli): production's Level 2 has no lessons.
         val j = JourneyState.derive(summary(status = LevelStatus.AWAITING_REVIEW, done = 20, awaitingFlag = true), trail(done = 20))!!
+        assertEquals(JourneyStage.AWAITING_USHER, j.stage)
+        assertEquals("Exam passed", j.pill)
+        assertEquals("Level 2 is being prepared", j.next.title)
+        assertEquals("You passed the Level 1 exam — we'll let you know when Level 2 opens.", j.next.line)
+        assertFalse(j.next.line.contains("leader") || j.next.line.contains("discipler"))
+        assertEquals("Level 2 is being prepared — we'll let you know", LevelsMapWords.lockLine(2, j, preparing = true))
+        assertEquals("Level 3 is being prepared", LevelsMapWords.lockLine(3, j, preparing = true))
+    }
+
+    @Test fun `awaiting the usher — the exam passed, the leader opens the next level`() {
+        val j = JourneyState.derive(summary(status = LevelStatus.AWAITING_REVIEW, done = 20, awaitingFlag = true, nextModules = 8), trail(done = 20))!!
         assertEquals(JourneyStage.AWAITING_USHER, j.stage)
         assertEquals("Exam passed", j.pill)
         assertEquals("Exam passed · Level 1", j.kicker)

@@ -275,9 +275,13 @@ private fun WhereYouAreCard(p: HubProgression) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("🌿", fontSize = 18.sp)
+                    Icon(Lucide.Flag, null, tint = GrowPal.gold, modifier = Modifier.size(18.dp))
+                    // The journey's own words (§9.2 #7): one card, one word —
+                    // it said "Awaiting your discipler to usher you into Level 1"
+                    // while Pathway said "Your leader will open Level 2".
+                    val passed = p.awaitingLevel ?: p.currentLevel
                     Text(
-                        "Awaiting your discipler to usher you into Level ${p.awaitingLevel ?: p.currentLevel}",
+                        "You passed the Level $passed exam — we'll let you know when Level ${passed + 1} opens.",
                         style = gInter(12, FontWeight.SemiBold), color = GrowPal.ink,
                     )
                 }
