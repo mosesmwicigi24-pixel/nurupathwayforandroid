@@ -104,7 +104,13 @@ fun ReadingPlansScreen(
     var plans by rememberHeld("Plans.plans") { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
     var promos by rememberHeld("Plans.promos") { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
     var streak by rememberHeld("Plans.streak") { mutableStateOf(0) }
-    var todayWordDone by rememberHeld("Plans.todayWordDone") { mutableStateOf(false) }
+    // Today on the streak card (§7.4 #4): ticked only once the server has
+    // sealed a plan day today (PlanDayLog) — it was the rhythm's `word`, so
+    // reading one part ticked today beside "0-day streak".
+    var todaySealed by rememberHeld("Plans.todaySealed") { mutableStateOf(false) }
+    // The day the member is on in the plan in progress, as parts — the streak
+    // card says "Today: 2 of 3 parts" while it's under way.
+    var todayPlanParts by rememberHeld("Plans.todayPlanParts") { mutableStateOf<DayParts?>(null) }
     var loading by remember { mutableStateOf(true) }
     // Plans that never loaded say so (§4) — they used to read as a library
     // with no plans in it.
@@ -129,7 +135,12 @@ fun ReadingPlansScreen(
         // A part that fails keeps what is on screen.
         promos = runCatching { Net.client.api.planPromos().data }.getOrElse { promos }
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
-        todayWordDone = runCatching { Net.client.api.rhythmToday().word }.getOrElse { todayWordDone }
+        todaySealed = PlanDayLog.sealedToday()
+        // The plan in progress (the one CONTINUE READING and the header name):
+        // how far the day the member is on stands. No plan, no parts.
+        todayPlanParts = activePlan(plans)?.let { p ->
+            runCatching { todayParts(Net.client.api.plan(p.planId)) }.getOrElse { todayPlanParts }
+        }
         loading = false
     }
 
@@ -215,7 +226,7 @@ fun ReadingPlansScreen(
                 // Nothing published yet — the shared empty card, iOS's words.
                 EmptyState("Plans are being prepared — check back soon.")
             } else {
-                if (!searching) StreakStrip(count = streak, todayDone = todayWordDone)
+                if (!searching) StreakStrip(streakView(count = streak, todayDone = todaySealed, today = todayPlanParts))
                 if (!searching && continueReading.isNotEmpty()) {
                     ContinueSection(plans = continueReading, onOpenPlan = onOpenPlan)
                 }
@@ -345,7 +356,12 @@ private val WEEK = listOf("S", "M", "T", "W", "T", "F", "S")
 private const val STREAK_GOAL = 7
 
 @Composable
-private fun StreakStrip(count: Int, todayDone: Boolean) {
+private fun StreakStrip(view: StreakView) {
+    // Today's mark and the words come from [streakView] (§7.4 #4): today is
+    // ticked only once the server has sealed a plan day today, and a ticked
+    // today never sits beside "0-day streak".
+    val count = view.count
+    val todayDone = view.todayMarked
     val todayIdx = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1 // Sun=0
     val toReward = (STREAK_GOAL - count).coerceAtLeast(0)
     val pct = (count.toFloat() / STREAK_GOAL).coerceIn(0f, 1f)
@@ -387,7 +403,7 @@ private fun StreakStrip(count: Int, todayDone: Boolean) {
                     color = PL.navy,
                 )
                 Text(
-                    if (count > 0) "Read today to keep it alive 🔥" else "Read today to start your streak 🔥",
+                    view.line,
                     style = plInter(12),
                     color = PL.ink2,
                 )

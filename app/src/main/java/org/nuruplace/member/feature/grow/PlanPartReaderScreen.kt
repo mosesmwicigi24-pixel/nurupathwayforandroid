@@ -134,16 +134,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
             // day hub skip waiting on an extra "Seal the day" tap, and the
             // plan overview tell a genuine lock apart from a completion still
             // landing through the sync path.
-            lastAck?.let { ack ->
-                if (ack.dayComplete) {
-                    PlanProgressBus.dayUnlocked.tryEmit(
-                        org.nuruplace.member.data.net.PlanDayUnlockAck(
-                            planId = planId, dayNumber = ack.dayNumber,
-                            nextDayNumber = ack.nextDayNumber, nextDayUnlocked = ack.nextDayUnlocked,
-                        ),
-                    )
-                }
-            }
+            lastAck?.let { ack -> announceDaySealed(ack, planId) }
             done = true; saving = false
             onBack()
         }

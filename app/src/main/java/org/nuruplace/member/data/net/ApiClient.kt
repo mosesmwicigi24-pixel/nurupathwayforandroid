@@ -162,6 +162,7 @@ class ApiClient(context: Context) {
             if (!doRefresh()) {
                 vault.clear()
                 forgetLastGoodCopies()
+                forgetThisMembersDay()
                 onSessionExpired?.invoke()
                 return@Authenticator null
             }
@@ -242,6 +243,13 @@ class ApiClient(context: Context) {
     fun signOutLocally() {
         vault.clear()
         forgetLastGoodCopies()
+        forgetThisMembersDay()
+    }
+
+    /** The day this member sealed a plan day (the Plans streak card's tick,
+     *  EXPERIENCE.md §7.4 #4) is theirs alone — never the next member's. */
+    private fun forgetThisMembersDay() {
+        org.nuruplace.member.data.AppPrefs.planDaySealedOn = null
     }
 
     private fun baseUrl(): String {

@@ -4,6 +4,8 @@
 // sparkle that drafts / polishes the member's response through the dedicated
 // /growth/plans/:id/days/:n/talk/assist endpoint. Everyone walking the plan
 // meets here. Backend: growth module (plan_day_talk_posts + likes).
+// It ends with the gold "I've talked it over" (pathway docs/EXPERIENCE.md
+// §7.4 #1): posting or that button finishes the part; opening never does.
 package org.nuruplace.member.feature.grow
 
 import androidx.compose.foundation.background
@@ -12,14 +14,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,7 +49,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -49,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,6 +65,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.PlanSegment
+import org.nuruplace.member.data.net.SegmentCompleteResult
+import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.TalkAssistBody
 import org.nuruplace.member.data.net.TalkPost
 import org.nuruplace.member.data.net.TalkPostBody
@@ -64,9 +76,11 @@ import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.util.relTime
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val posts = remember { mutableStateListOf<TalkPost>() }
     var loaded by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
@@ -76,11 +90,60 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
     var aiBusy by remember { mutableStateOf(false) }
 
     // The day's question(s) come from the plan day's talk segment.
-    val prompt by produceState(initialValue = "") {
-        value = runCatching {
-            Net.client.api.plan(planId).days.firstOrNull { it.dayNumber == dayNumber }
-                ?.segments?.firstOrNull { it.kind.lowercase() == "talk" }?.content ?: ""
-        }.getOrDefault("")
+    var prompt by remember { mutableStateOf("") }
+    // Talk it Over is a required part of the day (owner, 2026-10-05,
+    // EXPERIENCE.md §7.4 #1): posting in the conversation OR the gold "I've
+    // talked it over" finishes it — nobody is forced to post, and opening the
+    // page never does. These are the part's segments (null until the day
+    // loads); the server's completion is the only thing that ticks them.
+    var talkSegs by remember { mutableStateOf<List<PlanSegment>?>(null) }
+    var finishing by remember { mutableStateOf(false) }
+    // Why "I've talked it over" did not land — said under the button (§4).
+    var finishError by remember { mutableStateOf<String?>(null) }
+
+    /** Load the day: its question and its Talk it Over part. Returns what went wrong, if anything. */
+    suspend fun loadDay(): Throwable? {
+        val loadedDay = runCatching { Net.client.api.plan(planId).days.firstOrNull { it.dayNumber == dayNumber } }
+        loadedDay.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it; return it }
+        val day = loadedDay.getOrNull() ?: return null
+        prompt = day.segments?.firstOrNull { it.kind.lowercase() == "talk" }?.content ?: ""
+        talkSegs = talkPartSegments(day)
+        return null
+    }
+
+    /**
+     * Complete the Talk it Over part on the server (`POST
+     * /growth/segments/{id}/complete` for each of its segments not yet done).
+     * The day hub ticks the row from the server on return, and — when this was
+     * the day's last part — the ack says the day sealed (relayed, as the part
+     * reader does, so the hub and the plan page trust it at once). Returns what
+     * went wrong, or null when the part is done.
+     */
+    suspend fun completeTalk(): StateMessage? {
+        if (talkSegs == null) loadDay()?.let { return ApiException.state(it, context) }
+        val pending = talkSegs.orEmpty().filterNot { it.completed }
+        var lastAck: SegmentCompleteResult? = null
+        for (seg in pending) {
+            val r = runCatching { Net.client.api.completeSegment(seg.segmentId) }
+            r.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it; return ApiException.state(it, context) }
+            lastAck = r.getOrNull()
+            talkSegs = talkSegs?.map { s -> if (s.segmentId == seg.segmentId) s.copy(completed = true) else s }
+            PlanProgressBus.finished.tryEmit(seg.segmentId)
+        }
+        lastAck?.let { ack -> announceDaySealed(ack, planId) }
+        return null
+    }
+
+    /** The gold button: finish the part, then back to the day. */
+    fun talkedItOver() {
+        if (finishing) return
+        finishing = true
+        finishError = null
+        scope.launch {
+            val failed = completeTalk()
+            finishing = false
+            if (failed == null) onBack() else finishError = "Couldn't save that. ${failed.sentence}"
+        }
     }
 
     suspend fun reload() {
@@ -89,6 +152,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
         }
         loaded = true
     }
+    LaunchedEffect(planId, dayNumber) { loadDay() }
     LaunchedEffect(planId, dayNumber) { reload() }
 
     fun send() {
@@ -97,7 +161,15 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
         posting = true
         scope.launch {
             runCatching { Net.client.api.talkPost(planId, dayNumber, TalkPostBody(body)) }
-                .onSuccess { posts.add(it); draft = ""; postError = null }
+                .onSuccess {
+                    posts.add(it); draft = ""; postError = null
+                    // Speaking in the conversation finishes the part too
+                    // (§7.4 #1). The server records the post, not the part, so
+                    // the app completes it here. If that call fails, the post
+                    // still stands and the part stays open — the gold button
+                    // below finishes it, and says so if it can't.
+                    completeTalk()
+                }
                 // The kept draft alone is too quiet a signal that the post
                 // never left the phone — say it.
                 .onFailure { postError = "Couldn't send. ${ApiException.message(it)}" }
@@ -210,6 +282,29 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
             ) {
                 if (posting) CircularProgressIndicator(color = GrowPal.navy, strokeWidth = 1.5.dp, modifier = Modifier.size(15.dp))
                 else Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = GrowPal.navy, modifier = Modifier.size(16.dp))
+            }
+        }
+        // The same gold button every other part of the day ends with (iOS
+        // parity): it finishes Talk it Over and returns to the day. Hidden
+        // while the keyboard is up, so the composer keeps the room; clear of
+        // the system's gesture bar, never under it (§7.1 rule 3).
+        if (!WindowInsets.isImeVisible) {
+            Column(Modifier.fillMaxWidth().background(GrowPal.white).navigationBarsPadding().padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 12.dp)) {
+                finishError?.let { err ->
+                    Text(err, style = gInter(11), color = Color(0xFFB91C1C), modifier = Modifier.padding(bottom = 6.dp))
+                }
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
+                        .background(PL.goldCtaGrad).clickable(enabled = !finishing) { talkedItOver() },
+                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (finishing) CircularProgressIndicator(color = PL.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    else {
+                        Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("I've talked it over", style = gInter(14, FontWeight.Bold), color = PL.navy)
+                    }
+                }
             }
         }
     }

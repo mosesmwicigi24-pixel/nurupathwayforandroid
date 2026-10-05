@@ -134,6 +134,24 @@ internal object PlanProgressBus {
     val dayUnlocked = MutableSharedFlow<PlanDayUnlockAck>(replay = 1, extraBufferCapacity = 4)
 }
 
+/**
+ * The server sealed a day — the LAST part's ack says so, computed in the same
+ * transaction as the write. Tell the day hub and the plan page, and note the
+ * day for the Plans streak card (EXPERIENCE.md §7.4 #4). Every part that can
+ * end a day (a part's finish, Talk it Over's post or its gold button) ends
+ * here; iOS's PlanDayUnlockAck.announce is the same.
+ */
+internal fun announceDaySealed(ack: org.nuruplace.member.data.net.SegmentCompleteResult, planId: String?) {
+    if (!ack.dayComplete) return
+    PlanDayLog.noteSealed()
+    PlanProgressBus.dayUnlocked.tryEmit(
+        org.nuruplace.member.data.net.PlanDayUnlockAck(
+            planId = planId, dayNumber = ack.dayNumber,
+            nextDayNumber = ack.nextDayNumber, nextDayUnlocked = ack.nextDayUnlocked,
+        ),
+    )
+}
+
 // ── Reading instruments ──
 
 /** Top 3dp gold progress hairline (how far through the whole read). */

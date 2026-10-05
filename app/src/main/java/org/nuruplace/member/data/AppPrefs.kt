@@ -56,6 +56,11 @@ object AppPrefs {
     // to "KSh •••• given this year" (a phone shown around in church). Visible
     // by default; persisted so the choice survives restarts.
     private const val KEY_GIVE_HIDE_YEAR_TOTAL = "give.hideYearTotal"
+    // The Nairobi day (epoch day) on which this phone last saw the server seal
+    // a plan day — the Plans streak card ticks today only then (EXPERIENCE.md
+    // §7.4 #4; feature/grow/PlanDayParts.kt PlanDayLog; iOS's
+    // "nuru.plans.daySealedOn"). Per account: forgotten at sign-out.
+    private const val KEY_PLAN_DAY_SEALED_ON = "nuru.plans.daySealedOn"
 
     private lateinit var prefs: SharedPreferences
 
@@ -230,6 +235,15 @@ object AppPrefs {
     fun clearGivingPhone() {
         if (::prefs.isInitialized) prefs.edit().remove(KEY_GIVING_LAST_PHONE).apply()
     }
+
+    /** The Nairobi epoch day of the last plan day the server sealed while
+     *  this phone watched; null when none (or since sign-out). */
+    var planDaySealedOn: Long?
+        get() = if (::prefs.isInitialized && prefs.contains(KEY_PLAN_DAY_SEALED_ON)) prefs.getLong(KEY_PLAN_DAY_SEALED_ON, 0L) else null
+        set(v) {
+            if (!::prefs.isInitialized) return
+            prefs.edit().apply { if (v == null) remove(KEY_PLAN_DAY_SEALED_ON) else putLong(KEY_PLAN_DAY_SEALED_ON, v) }.apply()
+        }
 
     /** Account sign-out — these are per-device but keyed to whoever is signed
      *  in right now; never let a pastoral cache/flag from account A leak into

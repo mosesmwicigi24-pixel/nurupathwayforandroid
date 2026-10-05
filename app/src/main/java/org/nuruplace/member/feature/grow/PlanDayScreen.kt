@@ -239,6 +239,9 @@ fun PlanDayScreen(
                             if (ok) {
                                 dayCompleted = true
                                 justDone = true
+                                // The server's 200 sealed it: today counts on
+                                // the Plans streak card (§7.4 #4).
+                                PlanDayLog.noteSealed()
                                 // If this sealed the WHOLE plan, open the keepsake.
                                 val allDone = runCatching { Net.client.api.plan(planId).days.all { it.completed == true } }.getOrDefault(false)
                                 if (allDone) { delay(900); onPlanComplete() }
@@ -909,10 +912,19 @@ internal data class HubPart(
     val id: String,
     val tag: String,          // "media" | "word" | "respond" | "talk"
     val label: String,
-    val icon: ImageVector,
     val segs: List<PlanSegment>,
     val firstIndex: Int,
-)
+) {
+    /** The row's icon, by part. Computed, so the grouping itself stays pure —
+     *  the plan's page and the Plans streak card count parts with it too
+     *  ([dayParts]), and PlanDayPartsTest pins it on the JVM. */
+    val icon: ImageVector get() = when (tag) {
+        "media" -> Icons.Filled.PlayArrow
+        "word" -> Icons.Filled.MenuBook
+        "respond" -> Icons.Filled.VolunteerActivism
+        else -> Icons.Filled.ChatBubbleOutline
+    }
+}
 
 private fun rankHub(s: PlanSegment): Int = when (s.kind.lowercase()) {
     "video", "audio" -> 0
@@ -931,17 +943,17 @@ internal fun hubParts(segments: List<PlanSegment>): List<HubPart> {
     sorted.forEachIndexed { i, s ->
         if (rankHub(s) == 0) {
             val audio = s.kind.lowercase() == "audio"
-            parts += HubPart(s.segmentId, "media", if (audio) "Listen" else "Watch", Icons.Filled.PlayArrow, listOf(s), i)
+            parts += HubPart(s.segmentId, "media", if (audio) "Listen" else "Watch", listOf(s), i)
         }
     }
     sorted.filter { rankHub(it) in listOf(1, 2, 5) }.let { word ->
-        if (word.isNotEmpty()) parts += HubPart("word", "word", "The Word", Icons.Filled.MenuBook, word, sorted.indexOf(word.first()))
+        if (word.isNotEmpty()) parts += HubPart("word", "word", "The Word", word, sorted.indexOf(word.first()))
     }
     sorted.filter { rankHub(it) == 4 }.let { respond ->
-        if (respond.isNotEmpty()) parts += HubPart("respond", "respond", "Respond", Icons.Filled.VolunteerActivism, respond, sorted.indexOf(respond.first()))
+        if (respond.isNotEmpty()) parts += HubPart("respond", "respond", "Respond", respond, sorted.indexOf(respond.first()))
     }
     sorted.filter { rankHub(it) == 3 }.let { talk ->
-        if (talk.isNotEmpty()) parts += HubPart("talk", "talk", "Talk it Over", Icons.Filled.ChatBubbleOutline, talk, sorted.indexOf(talk.first()))
+        if (talk.isNotEmpty()) parts += HubPart("talk", "talk", "Talk it Over", talk, sorted.indexOf(talk.first()))
     }
     return parts
 }

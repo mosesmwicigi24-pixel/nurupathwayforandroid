@@ -95,6 +95,10 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
     // back locked (a completion still catching up through the sync path)
     // reads as "finishing sync" rather than "you're not there yet".
     var awaitingUnlock by remember { mutableStateOf<Int?>(null) }
+    // "Start plan" in flight, and why it did not land (§4) — it used to fail
+    // without a word, and leave the button saying Start.
+    var starting by remember { mutableStateOf(false) }
+    var startError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
@@ -136,7 +140,25 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                 awaitingUnlock = awaitingUnlock,
                 onBack = onBack,
                 onOpenDay = onOpenDay,
-                onStart = { scope.launch { runCatching { Net.client.api.startPlan(planId) }; reload() } },
+                onStart = {
+                    if (!starting) {
+                        starting = true
+                        scope.launch {
+                            val started = runCatching { Net.client.api.startPlan(planId) }
+                            started.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+                            if (started.isSuccess) {
+                                reload()
+                                // Start lands where it points (§7.1 rule 1): the
+                                // day to read. Back from it, this page says
+                                // "Continue · Day 1" (EXPERIENCE.md §7.4 #2).
+                                onOpenDay(detail?.nextDay ?: 1)
+                            } else {
+                                startError = ApiException.message(started.exceptionOrNull()!!, failContext)
+                            }
+                            starting = false
+                        }
+                    }
+                },
                 onRetrySync = { scope.launch { reload() } },
                 onOpenChat = onOpenChat,
             )
@@ -152,6 +174,15 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                 modifier = Modifier.align(Alignment.Center).padding(20.dp),
             )
         }
+    }
+    startError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { startError = null },
+            confirmButton = { TextButton(onClick = { startError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
+            title = { Text("Couldn't start this plan", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
+            text = { Text(msg, style = plInter(13), color = PL.ink2) },
+            containerColor = Color.White,
+        )
     }
 }
 
@@ -301,7 +332,6 @@ private fun PlanDetailContent(
             }
             CtaBar(
                 d = d,
-                done = done,
                 allDone = allDone,
                 firstIncomplete = firstIncomplete,
                 onOpenDay = onOpenDay,
@@ -523,7 +553,6 @@ private fun PlanWhiteCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun CtaBar(
     d: ReadingPlanDetail,
-    done: Int,
     allDone: Boolean,
     firstIncomplete: ReadingPlanDay?,
     onOpenDay: (Int) -> Unit,
@@ -531,13 +560,12 @@ private fun CtaBar(
     inviting: Boolean,
     onInvite: () -> Unit,
 ) {
-    val target = if (allDone) d.days.firstOrNull() else firstIncomplete
-    val targetDay = target?.dayNumber ?: 1
-    val label = if (done > 0) {
-        if (allDone) "Review plan" else "Continue · Day $targetDay"
-    } else {
-        "Start plan"
-    }
+    // The day to read: the server's next_day (the same day the list marks),
+    // else the first unfinished one; Day 1 to review a finished plan.
+    val targetDay = if (allDone) d.days.firstOrNull()?.dayNumber ?: 1 else d.nextDay ?: firstIncomplete?.dayNumber ?: 1
+    // The page follows progress (EXPERIENCE.md §7.4 #2): it said "Start plan"
+    // until a whole day was done, even with parts of Day 1 read.
+    val label = planCtaLabel(begun = planBegun(d), allDone = allDone, day = targetDay)
 
     Column(Modifier.fillMaxWidth().background(Color.White)) {
         // Top hairline (iOS: 1px PL.border across the top of the white CTA bar).
@@ -692,8 +720,10 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
             )
         }
         if (isNext) {
+            // The day the member is on says what is left once it's begun
+            // ("1 part left"), not "Start" (EXPERIENCE.md §7.4 #2).
             Text(
-                "Start",
+                nextDayPill(day),
                 style = plInter(9, FontWeight.Bold),
                 color = PL.navy,
                 modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
