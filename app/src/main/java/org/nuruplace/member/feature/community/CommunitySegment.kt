@@ -18,9 +18,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -36,10 +33,11 @@ import androidx.compose.ui.unit.dp
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.icons.Lucide
 
 enum class CommunityDoor(val label: String, val icon: ImageVector) {
-    Talk("Talk", Icons.AutoMirrored.Filled.Chat),
-    Pray("Pray", Icons.Filled.VolunteerActivism),
+    Talk("Talk", Lucide.MessageCircle),
+    Pray("Pray", Lucide.HandHeart),
 }
 
 @Composable
@@ -95,7 +93,7 @@ private fun DoorRow(selected: CommunityDoor, chatUnread: Int, onSelect: (Communi
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Icon(d.icon, contentDescription = null, modifier = Modifier.size(11.dp),
+                Icon(d.icon, contentDescription = null, modifier = Modifier.size(14.dp),
                     tint = if (on) Nuru.gold else Color(0xFF59667C))
                 Text(d.label, style = nuruSans(12, FontWeight.SemiBold),
                     color = if (on) Color.White else Color(0xFF59667C))

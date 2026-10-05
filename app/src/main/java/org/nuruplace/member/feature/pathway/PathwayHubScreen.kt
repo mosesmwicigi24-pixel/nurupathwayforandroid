@@ -30,19 +30,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,6 +77,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
+import org.nuruplace.member.ui.icons.Lucide
 
 // Exact Figma palette (LevelsOverview.tsx) — local so the page is 1:1 with iOS.
 private object PW {
@@ -300,7 +288,7 @@ private fun HubHeader(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.LocalFireDepartment, null, tint = PW.eyebrow, modifier = Modifier.size(9.dp))
+                    Icon(Lucide.Flame, null, tint = PW.eyebrow, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("$streak-day streak", style = PW.over(11, 0f), color = PW.eyebrow)
                 }
@@ -308,10 +296,7 @@ private fun HubHeader(
             Spacer(Modifier.weight(1f))
             // The one bell (EXPERIENCE.md §7.2 #4) — it used to open nothing,
             // under a dot that was always there.
-            org.nuruplace.member.ui.components.InboxBell(
-                onClick = onBell, size = 36.dp, shape = RoundedCornerShape(999.dp),
-                container = Color.White, border = PW.border, tint = PW.navy, iconSize = 17.dp, dotInset = 5.dp,
-            )
+            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
             Spacer(Modifier.width(Spacing.sm))
             // Journey progress, counted in levels (§3) — not a share of
             // published modules, which read 100% at Level 1 of 6. Empty, with
@@ -332,7 +317,7 @@ private fun HubHeader(
         }
         if (remaining > 0) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = PW.eyebrow, modifier = Modifier.size(11.dp))
+                Icon(Lucide.Sparkles, null, tint = PW.eyebrow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(if (remaining == 1) "Just 1 module left to level up 🎉" else "Only $remaining modules to complete this level", style = PW.t(11, FontWeight.SemiBold), color = PW.eyebrow)
             }
@@ -357,11 +342,11 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(PW.gold), contentAlignment = Alignment.Center) {
             Icon(
                 when (journey.stage) {
-                    JourneyStage.LEARNING -> Icons.Filled.PlayArrow
-                    JourneyStage.EXAM_READY -> Icons.Filled.EmojiEvents
-                    JourneyStage.EXAM_SOON -> Icons.Filled.Schedule
-                    JourneyStage.AWAITING_USHER -> Icons.Filled.Flag
-                    JourneyStage.FINISHED -> Icons.Filled.WorkspacePremium
+                    JourneyStage.LEARNING -> Lucide.Play
+                    JourneyStage.EXAM_READY -> Lucide.Trophy
+                    JourneyStage.EXAM_SOON -> Lucide.Clock4
+                    JourneyStage.AWAITING_USHER -> Lucide.Flag
+                    JourneyStage.FINISHED -> Lucide.Award
                 },
                 null, tint = PW.navy, modifier = Modifier.size(22.dp),
             )
@@ -378,7 +363,7 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(action.label, style = PW.t(11, FontWeight.Bold), color = PW.navy, maxLines = 1)
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PW.navy, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.ChevronRight, null, tint = PW.navy, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -486,14 +471,14 @@ private fun JourneyNode(
                             .clip(RoundedCornerShape(999.dp)).background(PW.navy)
                             .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(9.dp)) }
+                    ) { Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                 } else if (!active) {
                     Box(
                         Modifier.offset(x = 3.dp, y = (-2).dp).size(16.dp)
                             .clip(RoundedCornerShape(999.dp)).background(PW.goldTint)
                             .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(9.dp)) }
+                    ) { Icon(Lucide.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(14.dp)) }
                 }
             }
         }
@@ -604,7 +589,7 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (exam) Icon(Icons.Filled.EmojiEvents, null, tint = if (active) PW.navy else PW.goldDeep, modifier = Modifier.size(15.dp))
+                    if (exam) Icon(Lucide.Trophy, null, tint = if (active) PW.navy else PW.goldDeep, modifier = Modifier.size(14.dp))
                     else Text(
                         "${m.moduleSequenceNumber}",
                         style = PW.t(13, FontWeight.Bold),
@@ -617,14 +602,14 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                             .clip(RoundedCornerShape(999.dp)).background(PW.navy)
                             .border(1.2.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(7.dp)) }
+                    ) { Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                 } else if (!active) {
                     Box(
                         Modifier.offset(x = 4.dp, y = (-3).dp).size(13.dp)
                             .clip(RoundedCornerShape(999.dp)).background(PW.mutedBg)
                             .border(1.2.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(7.dp)) }
+                    ) { Icon(Lucide.Lock, null, tint = PW.ink3, modifier = Modifier.size(14.dp)) }
                 }
             }
             Spacer(Modifier.width(12.dp))
@@ -636,7 +621,7 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             when {
                 active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(ModuleWords.trailAction(m), style = PW.over(11, 0f), color = PW.gold) }
                 soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(11, 0f), color = PW.goldDeep) }
-                done -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
+                done -> Icon(Lucide.ChevronRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(18.dp))
             }
         }
         if (!last) Box(Modifier.fillMaxWidth().height(1.dp).background(PW.border))
@@ -666,7 +651,7 @@ private fun FoldedTrailRow(line: String, expanded: Boolean, onToggle: () -> Unit
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Check, null, tint = PW.navy, modifier = Modifier.size(16.dp))
+            Icon(Lucide.Check, null, tint = PW.navy, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -692,7 +677,7 @@ private fun ExamPassedRow(step: JourneyStep) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Check, null, tint = PW.navy, modifier = Modifier.size(16.dp))
+                Icon(Lucide.Check, null, tint = PW.navy, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -725,7 +710,7 @@ private fun DisciplershipRow(onTap: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldGrad), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.VolunteerActivism, null, tint = PW.navy, modifier = Modifier.size(20.dp))
+            Icon(Lucide.HandHeart, null, tint = PW.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -733,7 +718,7 @@ private fun DisciplershipRow(onTap: () -> Unit) {
             Text("Your Discipleship Hub", style = PW.t(14, FontWeight.SemiBold), color = PW.navy, maxLines = 1)
             Text("Message, feedback & meeting notes", style = PW.t(11), color = PW.ink2, maxLines = 1)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFB5BDC9), modifier = Modifier.size(18.dp))
+        Icon(Lucide.ChevronRight, null, tint = Color(0xFFB5BDC9), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -792,8 +777,8 @@ private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
         Spacer(Modifier.height(6.dp))
         Text(name, style = PW.t(11, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(2.dp))
-        if (earned) Row { repeat(3) { Icon(Icons.Filled.Star, null, tint = PW.gold, modifier = Modifier.size(8.dp)) } }
-        else Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(9.dp))
+        if (earned) Row { repeat(3) { Icon(Lucide.Star, null, tint = PW.gold, modifier = Modifier.size(14.dp)) } }
+        else Icon(Lucide.Lock, null, tint = PW.ink3, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -834,7 +819,7 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (reached) Icon(Icons.Filled.Star, null, tint = PW.navy, modifier = Modifier.size(10.dp)) else Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                if (reached) Icon(Lucide.Star, null, tint = PW.navy, modifier = Modifier.size(14.dp)) else Icon(Lucide.Lock, null, tint = Color.White, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(11, 1f), color = if (reached) PW.navy else Color.White)
             }
@@ -851,7 +836,7 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
                             .border(1.dp, PW.goldLight.copy(alpha = if (reached) 0.8f else 0.35f), RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.WorkspacePremium, null, tint = if (reached) PW.goldLight else PW.gold.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
+                        Icon(Lucide.Award, null, tint = if (reached) PW.goldLight else PW.gold.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -906,7 +891,7 @@ private fun WalkRow(onTap: () -> Unit) {
                 .background(Brush.linearGradient(listOf(PW.navy, Color(0xFF1B3A5C)))),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Flag, contentDescription = null, tint = PW.gold, modifier = Modifier.size(20.dp))
+            Icon(Lucide.Flag, contentDescription = null, tint = PW.gold, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -914,6 +899,6 @@ private fun WalkRow(onTap: () -> Unit) {
             Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2, maxLines = 1)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = PW.ink3, modifier = Modifier.size(18.dp))
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = PW.ink3, modifier = Modifier.size(18.dp))
     }
 }

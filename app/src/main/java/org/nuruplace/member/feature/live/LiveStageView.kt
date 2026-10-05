@@ -59,8 +59,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 private const val HOST_TILE_KEY = "__host__"
 
@@ -312,7 +311,7 @@ private fun BoxScope.StageTileChrome(name: String, muted: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (muted) {
-            Icon(Icons.Filled.MicOff, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+            Icon(Lucide.MicOff, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
         }
         Text(
             name, style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,

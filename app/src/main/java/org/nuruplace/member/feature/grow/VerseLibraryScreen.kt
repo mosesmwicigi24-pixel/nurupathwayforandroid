@@ -11,11 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -28,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.offline.queuePayload
@@ -44,6 +44,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun VerseLibraryScreen(onBack: () -> Unit) {
@@ -122,7 +123,7 @@ fun VerseLibraryScreen(onBack: () -> Unit) {
                                         busy = false
                                     }
                                 }
-                            }) { Icon(Icons.Filled.Delete, "Delete", tint = Nuru.ink400) }
+                            }) { Icon(Lucide.Trash2, "Delete", tint = Nuru.ink400, modifier = Modifier.size(18.dp)) }
                         }
                     }
                 }

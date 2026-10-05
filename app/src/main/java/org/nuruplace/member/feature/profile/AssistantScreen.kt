@@ -5,8 +5,6 @@ package org.nuruplace.member.feature.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,7 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +46,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun AssistantScreen(onBack: () -> Unit) {
@@ -115,12 +113,12 @@ private fun NuruHeader(onBack: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         androidx.compose.material3.IconButton(onClick = onBack) {
-            androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.onNavy)
+            androidx.compose.material3.Icon(Lucide.ArrowLeft, "Back", tint = Nuru.onNavy)
         }
         androidx.compose.foundation.layout.Box(
             Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(NuruOrb),
             contentAlignment = Alignment.Center,
-        ) { androidx.compose.material3.Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
+        ) { androidx.compose.material3.Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -170,7 +168,7 @@ private fun Bubble(m: AssistantMessage) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
         if (!mine) {
             androidx.compose.foundation.layout.Box(Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(NuruOrb), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
+                androidx.compose.material3.Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.width(Spacing.sm))
         }

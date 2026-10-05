@@ -77,11 +77,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -134,6 +129,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import retrofit2.HttpException
 import java.io.IOException
 import java.time.LocalDate
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -409,9 +405,9 @@ private fun StatementTopBar(busy: Boolean, onBack: () -> Unit, onShare: () -> Un
         Modifier.fillMaxWidth().background(GIVE.navy).padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SquareButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClick = onBack)
+        SquareButton(Lucide.ArrowLeft, "Back", onClick = onBack)
         Spacer(Modifier.weight(1f))
-        SquareButton(Icons.Filled.Share, "Share PDF", busy = busy, onClick = onShare)
+        SquareButton(Lucide.Share2, "Share PDF", busy = busy, onClick = onShare)
     }
 }
 
@@ -820,7 +816,7 @@ private fun DownloadPdfButton(busy: Boolean, onClick: () -> Unit) {
         if (busy) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
         } else {
-            Icon(Icons.Filled.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
         }
         Spacer(Modifier.width(8.dp))
         Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.Bold), color = Color.White)
@@ -836,6 +832,6 @@ private fun GivingStatementButton(onClick: () -> Unit) {
     ) {
         Text("Giving statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
         Spacer(Modifier.width(6.dp))
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
+        Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
     }
 }

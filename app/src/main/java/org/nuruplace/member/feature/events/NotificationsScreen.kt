@@ -37,24 +37,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Handshake
-import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.RateReview
-import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -87,6 +69,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.relTime
+import org.nuruplace.member.ui.icons.Lucide
 
 /** A notice's push data: its template and the payload keys the push router
  *  reads, spelled as the dispatcher copies them into a push (snake_case —
@@ -142,33 +125,33 @@ private fun bodyOf(n: NotificationRow): String? =
  *  pins the families and their order. */
 internal enum class NoticeFamily(val icon: ImageVector, val reward: Boolean = false) {
     /** live_stream_started · live_guest_invite — the broadcast. */
-    LIVE(Icons.Filled.Sensors),
-    BADGE(Icons.Filled.Verified, reward = true),
-    CERTIFICATE(Icons.Filled.WorkspacePremium, reward = true),
+    LIVE(Lucide.Radio),
+    BADGE(Lucide.BadgeCheck, reward = true),
+    CERTIFICATE(Lucide.Award, reward = true),
     /** level_completed · level_ushered — the road moving on. */
-    LEVEL(Icons.AutoMirrored.Filled.TrendingUp, reward = true),
+    LEVEL(Lucide.TrendingUp, reward = true),
     /** reflection_approved · _returned · _deferred — the discipler's word. */
-    REFLECTION(Icons.Filled.RateReview),
+    REFLECTION(Lucide.MessageSquareText),
     /** department_* · serve_request_* — a team to serve on. */
-    DEPARTMENT(Icons.Filled.Handshake),
+    DEPARTMENT(Lucide.Handshake),
     /** giving_* · pledge_* · payment_* — the Give tab's hand and heart. */
-    GIVING(Icons.Filled.VolunteerActivism),
+    GIVING(Lucide.HandHeart),
     /** event_* — a gathering. */
-    EVENT(Icons.Filled.CalendarMonth),
+    EVENT(Lucide.CalendarDays),
     /** announcement — the church's megaphone. */
-    ANNOUNCEMENT(Icons.Filled.Campaign),
+    ANNOUNCEMENT(Lucide.Megaphone),
     /** plan_group_* — reading with a friend. */
-    PLAN(Icons.Filled.Bookmark),
+    PLAN(Lucide.BookMarked),
     /** sunday_letter — the letter. */
-    LETTER(Icons.Filled.MailOutline),
+    LETTER(Lucide.Mail),
     /** space_* · connection_* · community_* · prayer_* — the family. */
-    COMMUNITY(Icons.Filled.Groups),
+    COMMUNITY(Lucide.Users),
     /** check_in_* — a service's check-in. */
-    CHECK_IN(Icons.Filled.QrCodeScanner),
+    CHECK_IN(Lucide.ScanQrCode),
     /** security · login · password · mfa — the account. */
-    SECURITY(Icons.Filled.Shield),
+    SECURITY(Lucide.Shield),
     /** Anything else — a notice. */
-    OTHER(Icons.Filled.Notifications),
+    OTHER(Lucide.Bell),
 }
 
 /** A giving or Partners notice — giving_* · pledge_* · payment_*. Checked
@@ -262,7 +245,7 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                 Modifier.fillMaxWidth().background(Nuru.white).padding(horizontal = Spacing.sm).padding(top = Spacing.lg, bottom = Spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy) }
+                IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
                 Column(Modifier.weight(1f)) {
                     Text("Notifications", style = NuruType.cardTitle, color = Nuru.ink)
                     // Animates with the OPTIMISTIC count — mark-all lands here immediately.
@@ -370,8 +353,8 @@ private fun StatusCluster(unread: Boolean) {
                 }
                 // Double tick — two overlapping checks, the "received" cue.
                 Box(Modifier.size(width = 17.dp, height = 12.dp), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Check, null, tint = LumGreen, modifier = Modifier.size(12.dp).offset(x = (-2.5).dp))
-                    Icon(Icons.Filled.Check, null, tint = LumGreen, modifier = Modifier.size(12.dp).offset(x = 2.5.dp))
+                    Icon(Lucide.Check, null, tint = LumGreen, modifier = Modifier.size(14.dp).offset(x = (-2.5).dp))
+                    Icon(Lucide.Check, null, tint = LumGreen, modifier = Modifier.size(14.dp).offset(x = 2.5.dp))
                 }
             }
         }

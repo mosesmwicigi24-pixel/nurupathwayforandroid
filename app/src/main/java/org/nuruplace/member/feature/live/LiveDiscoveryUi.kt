@@ -22,10 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +51,7 @@ import org.nuruplace.member.ui.components.StateCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Home's floating mini-window: a MUTED autoplaying preview of the actual
  *  HLS (media3, volume 0 — falls back to the branded icon tile if the item
@@ -115,8 +112,8 @@ fun LiveMiniPopup(
                 )
             } else {
                 Icon(
-                    if (stream.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
-                    contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(20.dp),
+                    if (stream.isAudio) Lucide.AudioLines else Lucide.Video,
+                    contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -146,7 +143,7 @@ fun LiveMiniPopup(
                 .clickable { onDismiss() },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+            Icon(Lucide.X, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -189,7 +186,7 @@ fun LiveEndedState(name: String?, onBack: () -> Unit) {
         StateCard(
             title = "This Live has ended",
             line = name?.trim()?.takeIf { it.isNotEmpty() },
-            glyph = Icons.Filled.GraphicEq,
+            glyph = Lucide.AudioLines,
             actionLabel = "Go back",
             onAction = onBack,
         )

@@ -28,25 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -97,6 +78,7 @@ import org.nuruplace.member.ui.components.ListSkeleton
 import org.nuruplace.member.ui.components.QuickNotice
 import org.nuruplace.member.ui.theme.NuruType
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -106,16 +88,16 @@ private val Capsule = RoundedCornerShape(999.dp)
  *  role — a fixed index would silently point at the wrong tab body once a
  *  conditional segment is hidden. */
 private enum class ChatTab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    MySpace("My Space", Icons.Filled.Group),
-    Chat("Chat", Icons.AutoMirrored.Filled.Chat),
-    MyDiscipler("My Discipler", Icons.Filled.Person),
-    TalkWithPastor("Talk with My Pastor", Icons.Filled.Favorite),
+    MySpace("My Space", Lucide.Users),
+    Chat("Chat", Lucide.MessageCircle),
+    MyDiscipler("My Discipler", Lucide.User),
+    TalkWithPastor("Talk with My Pastor", Lucide.Heart),
     // Pastor/SuperAdmin-facing (client-loose-gated on Admin+; server is the
     // real authority — password step-up then FORBIDDEN_SCOPE for anyone who
     // has never held a pastor_assignments row and isn't SuperAdmin).
-    PastoralInbox("Pastoral Inbox", Icons.Filled.People),
+    PastoralInbox("Pastoral Inbox", Lucide.Users),
     // SuperAdmin only — unchanged from before this task, purely appended.
-    Broadcast("Broadcast", Icons.Filled.Campaign),
+    Broadcast("Broadcast", Lucide.Megaphone),
 }
 
 /** Hub bundle — one load for inbox + people + greeting name + the tailored verse
@@ -354,21 +336,18 @@ fun ChatInboxScreen(
                                 Box(
                                     Modifier
                                         .size(44.dp)
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
                                         .background(CHAT.white)
-                                        .border(1.dp, CHAT.border, RoundedCornerShape(16.dp))
+                                        .border(1.dp, CHAT.border, androidx.compose.foundation.shape.CircleShape)
                                         .clickable { onNewMessage() },
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Icon(Icons.Filled.Edit, contentDescription = "New message", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+                                    Icon(Lucide.Pencil, contentDescription = "New message", tint = CHAT.navy, modifier = Modifier.size(18.dp))
                                 }
                                 Spacer(Modifier.width(8.dp))
                             }
                             // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
-                            org.nuruplace.member.ui.components.InboxBell(
-                                onClick = onOpenNotifications, size = 44.dp, shape = RoundedCornerShape(16.dp),
-                                container = CHAT.white, border = CHAT.border, tint = CHAT.navy, iconSize = 19.dp, dotInset = 6.dp,
-                            )
+                            org.nuruplace.member.ui.components.InboxBell(onClick = onOpenNotifications)
                         }
                         // Search field
                         Row(
@@ -383,7 +362,7 @@ fun ChatInboxScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(Icons.Filled.Search, contentDescription = null, tint = CHAT.faint, modifier = Modifier.size(16.dp))
+                            Icon(Lucide.Search, contentDescription = null, tint = CHAT.faint, modifier = Modifier.size(18.dp))
                             BasicTextField(
                                 value = query,
                                 onValueChange = { query = it },
@@ -399,7 +378,7 @@ fun ChatInboxScreen(
                             )
                             if (query.isNotBlank()) {
                                 Icon(
-                                    Icons.Filled.Close,
+                                    Lucide.X,
                                     contentDescription = "Clear",
                                     tint = CHAT.faint,
                                     modifier = Modifier.size(14.dp).clickable { query = "" },
@@ -570,7 +549,7 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                     .background(CHAT.aiOrb),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(22.dp))
+                Icon(Lucide.Sparkles, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -599,7 +578,7 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                     .background(Color.White.copy(alpha = 0.10f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(18.dp))
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -625,7 +604,7 @@ private fun VerseCard(verse: TailoredVerse?) {
                 .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.FormatQuote, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(15.dp))
+            Icon(Lucide.Quote, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(14.dp))
         }
         Column {
             Text("VERSE FOR TODAY", style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.eyebrow)
@@ -717,7 +696,7 @@ private fun MySpaceTab(
     }
 
     if (filteredGroups.isNotEmpty() || query.isBlank()) {
-        Section("YOUR GROUPS", Icons.Filled.Group)
+        Section("YOUR GROUPS", Lucide.Users)
         if (filteredGroups.isEmpty()) {
             EmptyState("No groups yet.")
         } else {
@@ -874,10 +853,10 @@ private fun JoinButton(pending: Boolean, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (pending) {
-            Icon(Icons.Filled.HourglassEmpty, contentDescription = null, tint = CHAT.ink500, modifier = Modifier.size(11.dp))
+            Icon(Lucide.Hourglass, contentDescription = null, tint = CHAT.ink500, modifier = Modifier.size(14.dp))
             Text("Requested", style = cInter(11, FontWeight.Bold), color = CHAT.ink500)
         } else {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+            Icon(Lucide.Plus, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
             Text("Join", style = cInter(11, FontWeight.Bold), color = Color.White)
         }
     }
@@ -907,7 +886,7 @@ private fun DmTab(
     // Connection requests — incoming (needs YOUR action) leads outgoing
     // (waiting on someone else).
     if (query.isBlank() && (incoming.isNotEmpty() || outgoing.isNotEmpty())) {
-        Section("CONNECTION REQUESTS", Icons.Filled.People)
+        Section("CONNECTION REQUESTS", Lucide.Users)
         GroupedCard {
             incoming.forEachIndexed { idx, req ->
                 if (idx > 0) Divider()
@@ -949,7 +928,7 @@ private fun DmTab(
                             .border(3.dp, CHAT.paper, androidx.compose.foundation.shape.CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        Icon(Lucide.Plus, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                     }
                 }
                 Text("Your note", style = cInter(11, FontWeight.Medium), color = CHAT.navy, modifier = Modifier.padding(top = 6.dp))
@@ -989,7 +968,7 @@ private fun DmTab(
 
     // Direct messages
     val filteredDms = dms.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
-    Section("DIRECT MESSAGES", Icons.Filled.People)
+    Section("DIRECT MESSAGES", Lucide.Users)
     if (filteredDms.isEmpty()) {
         EmptyState(if (query.isBlank()) "Connect with someone before starting a chat." else "No conversations match your search.")
     } else {
@@ -1004,7 +983,7 @@ private fun DmTab(
     // People directory
     val filteredPeople = people.filter { query.isBlank() || it.fullName.contains(query, ignoreCase = true) }
     if (filteredPeople.isNotEmpty()) {
-        Section("PEOPLE", Icons.Filled.Group)
+        Section("PEOPLE", Lucide.Users)
         GroupedCard {
             filteredPeople.forEachIndexed { idx, p ->
                 if (idx > 0) Divider()
@@ -1041,11 +1020,11 @@ private fun IncomingRequestRow(req: ConnectionRequestRow, busy: Boolean, onAccep
                 Box(
                     Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.surface).clickable { onDecline() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Close, contentDescription = "Decline", tint = CHAT.ink600, modifier = Modifier.size(13.dp)) }
+                ) { Icon(Lucide.X, contentDescription = "Decline", tint = CHAT.ink600, modifier = Modifier.size(14.dp)) }
                 Box(
                     Modifier.size(30.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.storyRing).clickable { onAccept() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Check, contentDescription = "Accept", tint = Color.White, modifier = Modifier.size(13.dp)) }
+                ) { Icon(Lucide.Check, contentDescription = "Accept", tint = Color.White, modifier = Modifier.size(14.dp)) }
             }
         }
     }
@@ -1185,13 +1164,13 @@ private fun PersonRowAffordance(state: ConnectionState) {
         is ConnectionState.Connected -> Box(
             Modifier.size(32.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.gold.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Message", tint = CHAT.gold, modifier = Modifier.size(15.dp)) }
+        ) { Icon(Lucide.MessageCircle, contentDescription = "Message", tint = CHAT.gold, modifier = Modifier.size(14.dp)) }
         is ConnectionState.NotConnected -> Row(
             Modifier.clip(Capsule).background(CHAT.storyRing).padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+            Icon(Lucide.Plus, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
             Text("Connect", style = cInter(11, FontWeight.Bold), color = Color.White)
         }
         is ConnectionState.RequestSent -> Row(
@@ -1200,14 +1179,14 @@ private fun PersonRowAffordance(state: ConnectionState) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text("Request sent", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink500)
-            Icon(Icons.Filled.Close, contentDescription = "Cancel request", tint = CHAT.faint, modifier = Modifier.size(12.dp))
+            Icon(Lucide.X, contentDescription = "Cancel request", tint = CHAT.faint, modifier = Modifier.size(14.dp))
         }
         is ConnectionState.RequestReceived -> Box(
             Modifier.clip(Capsule).background(CHAT.gold.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 6.dp),
         ) { Text("Wants to connect", style = cInter(11, FontWeight.Bold), color = CHAT.navy) }
         is ConnectionState.Blocked -> Icon(
-            Icons.Filled.Close, contentDescription = null, tint = CHAT.faint,
-            modifier = Modifier.size(20.dp),
+            Lucide.X, contentDescription = null, tint = CHAT.faint,
+            modifier = Modifier.size(22.dp),
         )
     }
 }
@@ -1232,7 +1211,7 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
                 .background(chatTileBrush(chatRowTint(idx))),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Group, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp))
+            Icon(Lucide.Users, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1272,7 +1251,7 @@ private fun MyDisciplerTab(discipler: HubDiscipler?, onOpenThread: (String) -> U
     var error by remember { mutableStateOf<String?>(null) }
     val openContext = androidx.compose.ui.platform.LocalContext.current
 
-    Section("MY DISCIPLER", Icons.Filled.Person)
+    Section("MY DISCIPLER", Lucide.User)
 
     if (discipler == null) {
         EmptyState("A discipler has not yet been assigned to you.")
@@ -1315,7 +1294,7 @@ private fun MyDisciplerTab(discipler: HubDiscipler?, onOpenThread: (String) -> U
             if (opening) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), color = CHAT.gold, strokeWidth = 2.dp)
             } else {
-                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Open conversation", tint = CHAT.gold, modifier = Modifier.size(18.dp))
+                Icon(Lucide.MessageCircle, contentDescription = "Open conversation", tint = CHAT.gold, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -1324,7 +1303,7 @@ private fun MyDisciplerTab(discipler: HubDiscipler?, onOpenThread: (String) -> U
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Icon(Lucide.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
         Text("Private between you and your assigned discipler.", style = cInter(11), color = CHAT.ink500)
     }
     error?.let { Text(it, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318), modifier = Modifier.padding(top = 8.dp)) }
@@ -1348,7 +1327,7 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
     // last time it loaded — see ChatThreadScreen's LaunchedEffect(thread.muted).
     var muted by remember { mutableStateOf(AppPrefs.pastoralMuted) }
 
-    Section("TALK WITH MY PASTOR", Icons.Filled.Favorite)
+    Section("TALK WITH MY PASTOR", Lucide.Heart)
 
     fun open() {
         if (opening) return
@@ -1386,7 +1365,7 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
             Box(
                 Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(chatTileBrush(CHAT.gold)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp)) }
+            ) { Icon(Lucide.Heart, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp)) }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Talk with My Pastor", style = cInter(13, FontWeight.SemiBold, -0.12f), color = CHAT.navy, maxLines = 1)
@@ -1400,7 +1379,7 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
             if (opening) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), color = CHAT.gold, strokeWidth = 2.dp)
             } else {
-                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Open conversation", tint = CHAT.gold, modifier = Modifier.size(18.dp))
+                Icon(Lucide.MessageCircle, contentDescription = "Open conversation", tint = CHAT.gold, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -1409,7 +1388,7 @@ private fun TalkWithPastorTab(onOpenThread: (String) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Icon(Lucide.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
         Text("Private pastoral conversation.", style = cInter(11), color = CHAT.ink500)
     }
     error?.let { Text(it, style = cInter(12, FontWeight.Medium), color = Color(0xFFB42318), modifier = Modifier.padding(top = 8.dp)) }
@@ -1444,7 +1423,7 @@ private fun PastoralInboxTab(onOpenThread: (String) -> Unit) {
     }
     LaunchedEffect(Unit) { load() }
 
-    Section("PASTORAL INBOX", Icons.Filled.People)
+    Section("PASTORAL INBOX", Lucide.Users)
 
     val list = rows
     when {
@@ -1555,7 +1534,7 @@ private fun BroadcastTab(onOpenBroadcast: (String) -> Unit) {
 
     LaunchedEffect(Unit) { loadList() }
 
-    Section("BROADCAST", Icons.Filled.Campaign)
+    Section("BROADCAST", Lucide.Megaphone)
 
     // Navy explainer card
     Box(
@@ -1576,7 +1555,7 @@ private fun BroadcastTab(onOpenBroadcast: (String) -> Unit) {
                     .background(CHAT.gold.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Campaign, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(20.dp))
+                Icon(Lucide.Megaphone, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text("Message every member", style = cSerif(15, FontWeight.SemiBold, -0.16f), color = Color.White)
@@ -1749,14 +1728,14 @@ private fun BroadcastSentRow(b: org.nuruplace.member.data.net.BroadcastSummary, 
             overflow = TextOverflow.Ellipsis,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Filled.People, contentDescription = null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+            Icon(Lucide.Users, contentDescription = null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
             Text("${b.recipientCount}", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
-            Icon(Icons.Filled.DoneAll, contentDescription = null, tint = CHAT.tickBlue, modifier = Modifier.size(13.dp))
+            Icon(Lucide.CheckCheck, contentDescription = null, tint = CHAT.tickBlue, modifier = Modifier.size(14.dp))
             Text("${b.seenCount} seen", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
             Text("${b.repliedCount} replied", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
             Spacer(Modifier.weight(1f))
             Text(broadcastRelativeTime(b.createdAt), style = cInter(11), color = CHAT.ink600)
-            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = CHAT.ink600.copy(alpha = 0.6f), modifier = Modifier.size(13.dp))
+            Icon(Lucide.ChevronRight, contentDescription = null, tint = CHAT.ink600.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -1786,7 +1765,7 @@ private fun Section(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        icon?.let { Icon(it, contentDescription = null, tint = CHAT.overline, modifier = Modifier.size(13.dp)) }
+        icon?.let { Icon(it, contentDescription = null, tint = CHAT.overline, modifier = Modifier.size(14.dp)) }
         if (label.startsWith("#")) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("#", style = cInter(12, FontWeight.Bold), color = CHAT.overline)
@@ -1862,7 +1841,7 @@ private fun MemberStack(avatarUrl: String?, title: String?, idx: Int, memberCoun
 
 @Composable
 private fun DoubleCheck() {
-    Icon(Icons.Filled.DoneAll, contentDescription = null, tint = CHAT.doubleCheck, modifier = Modifier.size(14.dp))
+    Icon(Lucide.CheckCheck, contentDescription = null, tint = CHAT.doubleCheck, modifier = Modifier.size(14.dp))
 }
 
 /** Small bell-slash glyph for a muted conversation row (Chat Redesign C4) —
@@ -1870,10 +1849,10 @@ private fun DoubleCheck() {
 @Composable
 private fun MutedGlyph() {
     Icon(
-        Icons.Filled.NotificationsOff,
+        Lucide.BellOff,
         contentDescription = "Muted",
         tint = CHAT.faint,
-        modifier = Modifier.padding(start = 4.dp).size(12.dp),
+        modifier = Modifier.padding(start = 4.dp).size(14.dp),
     )
 }
 

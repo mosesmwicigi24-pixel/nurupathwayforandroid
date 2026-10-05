@@ -26,10 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -77,6 +73,7 @@ import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 private val LitGold = Color(0xFFE8CA6C)
 // Paper-card palette (iOS parity): the card body sits on the app's PAPER
@@ -357,7 +354,7 @@ private fun LiturgyRecorderEntryButton(onArt: Boolean, onOpen: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.Mic,
+            Lucide.Mic,
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(14.dp),
@@ -392,7 +389,7 @@ private fun LiturgyListenButton(speaking: Boolean, onArt: Boolean, onToggle: () 
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            if (speaking) Icons.Filled.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+            if (speaking) Lucide.Square else Lucide.Volume2,
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(14.dp),
@@ -440,10 +437,10 @@ private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (speaking) Icons.Filled.Stop else Icons.Filled.Mic,
+            if (speaking) Lucide.Square else Lucide.Mic,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(5.dp))
         Text(label, style = NuruType.micro.copy(fontWeight = FontWeight.Bold), color = tint, maxLines = 1)

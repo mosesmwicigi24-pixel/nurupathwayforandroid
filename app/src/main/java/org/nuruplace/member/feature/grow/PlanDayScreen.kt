@@ -38,19 +38,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -107,6 +94,7 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * Reading-plan DAY reader. Loads the plan detail, isolates [dayNumber], and
@@ -301,7 +289,7 @@ private fun DayHeader(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.weight(1f))
             Text("DAY $dayNumber", style = plInter(11, Bold, 1.8f), color = PL.gold)
@@ -357,7 +345,7 @@ private fun VerseBlock(reference: String, content: String?) {
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Icons.Filled.MenuBook, null, tint = PL.refInk, modifier = Modifier.size(12.dp))
+            Icon(Lucide.BookOpen, null, tint = PL.refInk, modifier = Modifier.size(14.dp))
             Text(
                 reference.uppercase(),
                 style = plInter(11, Bold, 1.4f),
@@ -440,9 +428,9 @@ private fun PLSegmentRow(
             contentAlignment = Alignment.Center,
         ) {
             if (done) {
-                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
             } else {
-                Icon(segmentIcon(segment.kind), null, tint = PL.gold, modifier = Modifier.size(15.dp))
+                Icon(segmentIcon(segment.kind), null, tint = PL.gold, modifier = Modifier.size(14.dp))
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -471,19 +459,19 @@ private fun PLSegmentRow(
                 Text("Start", style = plInter(11, Bold), color = PL.navy)
             }
         } else {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
+            Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         }
     }
 }
 
 /** kind → glyph, mirroring iOS `segmentIcon` (883-892). */
 private fun segmentIcon(kind: String): ImageVector = when (kind.lowercase()) {
-    "video" -> Icons.Filled.PlayArrow
-    "reading" -> Icons.Filled.MenuBook
-    "devotional" -> Icons.Filled.WbSunny
-    "talk" -> Icons.Filled.ChatBubbleOutline
-    "scripture" -> Icons.Filled.FormatQuote
-    else -> Icons.Filled.MenuBook
+    "video" -> Lucide.Play
+    "reading" -> Lucide.BookOpen
+    "devotional" -> Lucide.Sun
+    "talk" -> Lucide.MessageCircle
+    "scripture" -> Lucide.Quote
+    else -> Lucide.BookOpen
 }
 
 // MARK: reflection — the Figma textarea, backed by the real endpoint — 898-962
@@ -510,7 +498,7 @@ private fun ReflectionCard(
             Spacer(Modifier.weight(1f))
             AnimatedVisibility(visible = justSaved, enter = fadeIn(), exit = fadeOut()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
+                    Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
                     Text("Saved", style = plInter(11, Bold), color = Color(0xFF15803D))
                 }
             }
@@ -557,7 +545,7 @@ private fun ReflectionCard(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Edit, null, tint = PL.refInk, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Pencil, null, tint = PL.refInk, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             Text(
                 if (hasSaved) "Update" else "Save reflection",
@@ -621,10 +609,10 @@ private fun FooterBar(
                 nextPartLabel != null -> {
                     Text("Continue · $nextPartLabel", style = plInter(14, Bold), color = PL.navy)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.ArrowRight, null, tint = PL.navy, modifier = Modifier.size(14.dp))
                 }
                 else -> {
-                    Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                    Icon(Lucide.Check, null, tint = PL.navy, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Seal the day", style = plInter(14, Bold), color = PL.navy)
                 }
@@ -914,13 +902,13 @@ private fun TalkItOverEntry(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.ChatBubbleOutline, null, tint = PL.navy, modifier = Modifier.size(18.dp))
+            Icon(Lucide.MessageCircle, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Talk it Over", style = plSerif(16, Medium), color = PL.navy)
             Text("Share what God is showing you with the family", style = plInter(12), color = PL.blurb)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev)
+        Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -937,10 +925,10 @@ internal data class HubPart(
      *  the plan's page and the Plans streak card count parts with it too
      *  ([dayParts]), and PlanDayPartsTest pins it on the JVM. */
     val icon: ImageVector get() = when (tag) {
-        "media" -> Icons.Filled.PlayArrow
-        "word" -> Icons.Filled.MenuBook
-        "respond" -> Icons.Filled.VolunteerActivism
-        else -> Icons.Filled.ChatBubbleOutline
+        "media" -> Lucide.Play
+        "word" -> Lucide.BookOpen
+        "respond" -> Lucide.HandHeart
+        else -> Lucide.MessageCircle
     }
 }
 
@@ -1001,18 +989,18 @@ private fun HubRow(part: HubPart, done: Boolean, isNext: Boolean, onClick: () ->
                 .border(1.dp, if (done) PL.gold.copy(alpha = 0.5f) else if (isNext) PL.gold.copy(alpha = 0.4f) else PL.border, RoundedCornerShape(999.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(part.icon, null, tint = if (warm) PL.goldDeep else PL.blurb, modifier = Modifier.size(16.dp))
+            Icon(part.icon, null, tint = if (warm) PL.goldDeep else PL.blurb, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(part.label, style = plInter(14, SemiBold), color = PL.navy)
             Text(hubSub(part, done), style = plInter(11), color = if (done) PL.goldDeep else PL.blurb, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         when {
-            done -> Icon(Icons.Filled.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
+            done -> Icon(Lucide.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
             isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
                 Text("Next", style = plInter(11, Bold), color = PL.navy)
             }
-            else -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(20.dp))
+            else -> Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(22.dp))
         }
     }
 }

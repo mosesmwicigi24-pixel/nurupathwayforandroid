@@ -32,18 +32,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Message
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -98,6 +86,7 @@ import org.nuruplace.member.util.VoiceRecorder
 import org.nuruplace.member.util.relTime
 import java.io.File
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -142,12 +131,12 @@ fun PrayerWallScreen(
                                 Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.40f))
                                     .clickable { onBack() },
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Lucide.ArrowLeft, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                             Box(
                                 Modifier.size(40.dp).clip(CircleShape).background(GrowPal.gold)
                                     .clickable { composing = true },
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.Add, null, tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Lucide.Plus, null, tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
                         }
                         Column(
                             Modifier.align(Alignment.BottomStart).padding(24.dp),
@@ -197,7 +186,7 @@ fun PrayerWallScreen(
                             org.nuruplace.member.ui.components.StateCard(
                                 title = "No prayer requests yet",
                                 line = "Be the first to share one — your cell will stand with you.",
-                                glyph = Icons.Filled.VolunteerActivism,
+                                glyph = Lucide.HandHeart,
                                 actionLabel = "Share a prayer",
                                 onAction = { composing = true },
                                 modifier = Modifier.padding(top = 12.dp),
@@ -242,13 +231,13 @@ private fun SharePrayerPrompt(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(36.dp).clip(CircleShape).background(GrowPal.white), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Plus, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("Share a prayer", style = org.nuruplace.member.ui.theme.NuruType.rowTitle, color = GrowPal.navy)
             Text("Let the church carry it with you.", style = org.nuruplace.member.ui.theme.NuruType.micro, color = GrowPal.ink600)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -308,10 +297,10 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playing) Lucide.Pause else Lucide.Play,
                     if (playing) "Pause voice prayer" else "Play voice prayer",
                     tint = GrowPal.navyDeep,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
                 WaveformBars(
                     levels = p.audioWaveform.orEmpty(),
@@ -347,7 +336,7 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Message, null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
+                Icon(Lucide.MessageSquare, null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
                 Text((p.commentCount ?: 0).toString(), style = gInter(11), color = GrowPal.ink400)
             }
         }
@@ -378,7 +367,7 @@ private fun AnsweredChip() {
         Modifier.clip(Capsule).background(GrowPal.successBg).padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Icon(Icons.Filled.CheckCircle, null, tint = GrowPal.successText, modifier = Modifier.size(11.dp))
+            Icon(Lucide.CheckCircle, null, tint = GrowPal.successText, modifier = Modifier.size(14.dp))
             Text("Answered", style = gInter(11, FontWeight.Medium), color = GrowPal.successText)
         }
     }
@@ -468,7 +457,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                         Modifier.size(36.dp).clip(Capsule).background(GrowPal.white).border(1.dp, GrowPal.border, Capsule)
                             .clickable { recorder.cancel() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, "Discard recording", tint = GrowPal.ink400, modifier = Modifier.size(15.dp)) }
+                    ) { Icon(Lucide.X, "Discard recording", tint = GrowPal.ink400, modifier = Modifier.size(14.dp)) }
                     Box(
                         Modifier.size(36.dp).clip(Capsule).background(GrowPal.gold)
                             .clickable {
@@ -480,7 +469,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                 }
                             },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, "Keep recording", tint = GrowPal.navyDeep, modifier = Modifier.size(16.dp)) }
+                    ) { Icon(Lucide.Check, "Keep recording", tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
                 }
                 attached != null -> Row(
                     Modifier.fillMaxWidth()
@@ -491,7 +480,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = GrowPal.goldChipText, modifier = Modifier.size(16.dp))
+                    Icon(Lucide.Mic, null, tint = GrowPal.goldChipText, modifier = Modifier.size(18.dp))
                     WaveformBars(
                         levels = attachedWave,
                         color = GrowPal.goldLo.copy(alpha = 0.6f),
@@ -508,7 +497,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                 attachedDur = 0
                             },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, "Remove voice prayer", tint = GrowPal.ink400, modifier = Modifier.size(13.dp)) }
+                    ) { Icon(Lucide.X, "Remove voice prayer", tint = GrowPal.ink400, modifier = Modifier.size(14.dp)) }
                 }
                 else -> Row(
                     Modifier.clip(Capsule).background(GrowPal.coolPaper).border(1.dp, GrowPal.border, Capsule)
@@ -517,7 +506,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = GrowPal.navyDeep, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Mic, null, tint = GrowPal.navyDeep, modifier = Modifier.size(14.dp))
                     Text("Add voice", style = gInter(12, FontWeight.Bold), color = GrowPal.navyDeep)
                 }
             }

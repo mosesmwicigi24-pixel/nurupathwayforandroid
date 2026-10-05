@@ -38,16 +38,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloseFullscreen
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.OpenInFull
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -96,6 +86,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 // Screen-local palette — iOS `enum ML` (ModuleView.swift), distinct from global Nuru.
 private object ML {
@@ -332,7 +323,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                     .background(ML.navy.copy(alpha = 0.82f)).border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
                     .clickable { chromeHidden = false },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.CloseFullscreen, "Exit reading mode", tint = Color.White, modifier = Modifier.size(18.dp)) }
+            ) { Icon(Lucide.Minimize2, "Exit reading mode", tint = Color.White, modifier = Modifier.size(18.dp)) }
         }
 
         // Ten-minute whisper — one non-interactive scriptural line floating above
@@ -374,21 +365,21 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text("LEVEL ${m.levelNumber} · MODULE ${m.moduleSequenceNumber}", style = ml(11, FontWeight.Bold, 2f), color = ML.overline)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SquareBtn(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+                SquareBtn(Lucide.ArrowLeft, "Back", onBack)
                 Spacer(Modifier.weight(1f))
                 // "Hear it another way" — Nuru re-renders this lesson.
-                SquareBtn(Icons.Filled.AutoAwesome, "Hear it another way", onExplain)
+                SquareBtn(Lucide.Sparkles, "Hear it another way", onExplain)
                 Spacer(Modifier.width(8.dp))
-                SquareBtn(Icons.Filled.OpenInFull, "Reading mode", onExpand)
+                SquareBtn(Lucide.Maximize2, "Reading mode", onExpand)
                 Spacer(Modifier.width(8.dp))
-                SquareBtn(Icons.Filled.Share, "Share") {}
+                SquareBtn(Lucide.Share2, "Share") {}
             }
         }
         Text(m.title, style = mlSerif(26, FontWeight.Medium, -0.7f), color = ML.navy, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 14.dp))
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {
-            MetaPill(Icons.Filled.Schedule, "≈ $readMinutes min read")
+            MetaPill(Lucide.Clock4, "≈ $readMinutes min read")
             Spacer(Modifier.width(8.dp))
-            MetaPill(Icons.Filled.MenuBook, "$sectionCount section" + if (sectionCount == 1) "" else "s")
+            MetaPill(Lucide.BookOpen, "$sectionCount section" + if (sectionCount == 1) "" else "s")
         }
         if (m.completed) {
             // Completed ribbon — ✓ COMPLETED · score · finish time · Retake.
@@ -399,7 +390,7 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(12.dp))
+                Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("COMPLETED", style = ml(11, FontWeight.Bold, 1.4f), color = ML.navy)
                 if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
@@ -425,14 +416,14 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
 @Composable
 private fun SquareBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, cd: String, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(16.dp)).clickable { onClick() }, contentAlignment = Alignment.Center) {
-        Icon(icon, cd, tint = ML.navy, modifier = Modifier.size(17.dp))
+        Icon(icon, cd, tint = ML.navy, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun MetaPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = ML.secondary, modifier = Modifier.size(13.dp))
+        Icon(icon, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
         Text(text, style = ml(11), color = ML.secondary)
     }
@@ -441,7 +432,7 @@ private fun MetaPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text
 @Composable
 private fun Segment(label: String, done: Boolean, modifier: Modifier) {
     Row(modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else Color.Transparent).padding(vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        if (done) { Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(13.dp)); Spacer(Modifier.width(4.dp)) }
+        if (done) { Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
         Text(label, style = ml(12, FontWeight.SemiBold), color = if (done) ML.navy else ML.secondary)
     }
 }
@@ -474,7 +465,7 @@ private fun BottomGate(
         when {
             !complete -> Box(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Lock, null, tint = ML.secondary, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Lock, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(if (!readDone) "Read to the end to ${if (requiresQuiz) "unlock the quiz" else "continue"}" else "Add a reflection to ${if (requiresQuiz) "unlock the quiz" else "continue"}", style = ml(13, FontWeight.SemiBold), color = ML.secondary)
                 }
@@ -493,7 +484,7 @@ private fun GateSeg(done: Boolean, modifier: Modifier) {
 @Composable
 private fun StepChip(label: String, done: Boolean) {
     Row(Modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else Color.White).border(1.dp, if (done) Color.Transparent else ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (done) { Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(11.dp)); Spacer(Modifier.width(3.dp)) }
+        if (done) { Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)) }
         Text(label, style = ml(11, FontWeight.Bold), color = if (done) ML.navy else ML.secondary)
     }
 }
@@ -756,7 +747,7 @@ private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("YOUR REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
+                Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(3.dp))
                 Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D))
             }
@@ -772,7 +763,7 @@ private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
                     .clickable { onRevisit() }.padding(horizontal = 18.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.MenuBook, null, tint = ML.secondary, modifier = Modifier.size(13.dp))
+                Icon(Lucide.BookOpen, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Revisit this module", style = ml(13, FontWeight.SemiBold), color = ML.secondary)
             }
@@ -786,7 +777,7 @@ private fun ReflectionCard(value: String, onValue: (String) -> Unit, saved: Bool
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, if (saved) ML.gold.copy(alpha = 0.5f) else ML.border, RoundedCornerShape(16.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-            if (saved) { Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D)) }
+            if (saved) { Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D)) }
         }
         Spacer(Modifier.height(8.dp))
         Text("What is God showing you today?", style = mlSerif(16, FontWeight.Medium, italic = true), color = ML.navy)

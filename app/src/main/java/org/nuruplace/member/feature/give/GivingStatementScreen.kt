@@ -26,22 +26,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -86,6 +70,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.nuruplace.member.ui.theme.TypeScale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val NAIROBI: ZoneId = ZoneId.of("Africa/Nairobi")
 private val Capsule = RoundedCornerShape(999.dp)
@@ -197,10 +182,10 @@ fun GivingStatementScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
+                                Lucide.ArrowLeft,
                                 contentDescription = "Back",
                                 tint = Color.White,
-                                modifier = Modifier.size(17.dp),
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                         Spacer(Modifier.weight(1f))
@@ -231,10 +216,10 @@ fun GivingStatementScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                Icons.Filled.Download,
+                                Lucide.Download,
                                 contentDescription = "Download statement PDF",
                                 tint = Color.White,
-                                modifier = Modifier.size(17.dp),
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
@@ -350,7 +335,7 @@ fun GivingStatementScreen(
                                     Modifier.size(32.dp).clip(CircleShape).background(f.tint),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(15.dp))
+                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(14.dp))
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(f.name, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
@@ -431,7 +416,7 @@ private fun EmptyStatement() {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(48.dp).clip(CircleShape).background(GIVE.gold.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.VolunteerActivism, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(20.dp))
+            Icon(Lucide.HandHeart, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(22.dp))
         }
         Text("No gifts yet", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
         Text(
@@ -553,7 +538,7 @@ private fun PartnerPledgesGroup(
                 )
             }
             Icon(
-                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                if (open) Lucide.ChevronUp else Lucide.ChevronDown,
                 contentDescription = null,
                 tint = GIVE.navy,
                 modifier = Modifier.size(22.dp),
@@ -635,11 +620,11 @@ fun GivingReceiptScreen(
         val chip = receiptStatusChip(d)
         val firstName = receiptFirstName(d.memberName, profileName)
         val (badgeBg, badgeFg, badgeIcon) = when (chip?.tone) {
-            null -> Triple(RECEIPT_GREEN_BG, RECEIPT_GREEN, Icons.Filled.Verified)
-            ReceiptTone.Waiting -> Triple(GIVE.goldChipBg, GIVE.goldChipText, Icons.Filled.Schedule)
-            ReceiptTone.NotCompleted -> Triple(RECEIPT_RED_BG, RECEIPT_RED, Icons.Filled.Close)
-            ReceiptTone.Refunded -> Triple(GIVE.mutedBg, GIVE.ink600, Icons.AutoMirrored.Filled.Undo)
-            ReceiptTone.Other -> Triple(GIVE.mutedBg, GIVE.ink600, Icons.Filled.Schedule)
+            null -> Triple(RECEIPT_GREEN_BG, RECEIPT_GREEN, Lucide.BadgeCheck)
+            ReceiptTone.Waiting -> Triple(GIVE.goldChipBg, GIVE.goldChipText, Lucide.Clock4)
+            ReceiptTone.NotCompleted -> Triple(RECEIPT_RED_BG, RECEIPT_RED, Lucide.X)
+            ReceiptTone.Refunded -> Triple(GIVE.mutedBg, GIVE.ink600, Lucide.Undo2)
+            ReceiptTone.Other -> Triple(GIVE.mutedBg, GIVE.ink600, Lucide.Clock4)
         }
 
         fun copy(key: String, value: String) {
@@ -682,11 +667,11 @@ fun GivingReceiptScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    ReceiptHeaderButton(Icons.AutoMirrored.Filled.ArrowBack, "Back") { onBack() }
+                    ReceiptHeaderButton(Lucide.ArrowLeft, "Back") { onBack() }
                     Text("Receipt", style = giSerif(22, FontWeight.SemiBold), color = GIVE.navy)
                     Spacer(Modifier.weight(1f))
                     // Same action as "Share receipt" below; spins while it fetches.
-                    ReceiptHeaderButton(Icons.Filled.Share, "Share receipt", busy = sharing) { share() }
+                    ReceiptHeaderButton(Lucide.Share2, "Share receipt", busy = sharing) { share() }
                 }
             }
 
@@ -819,7 +804,7 @@ fun GivingReceiptScreen(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = RECEIPT_GREEN, modifier = Modifier.size(16.dp))
+                        Icon(Lucide.ShieldCheck, contentDescription = null, tint = RECEIPT_GREEN, modifier = Modifier.size(18.dp))
                         Text(receiptWhereItWent(d), style = giInter(12), color = GIVE.sub)
                     }
                 }
@@ -843,7 +828,7 @@ fun GivingReceiptScreen(
                             if (sharing) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Filled.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Icon(Lucide.Share2, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                             }
                             Spacer(Modifier.width(8.dp))
                             Text(if (sharing) "Preparing…" else "Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
@@ -860,7 +845,7 @@ fun GivingReceiptScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Filled.Description, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+                            Icon(Lucide.FileText, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("View statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
                         }
@@ -933,7 +918,7 @@ private fun ReceiptLinkRow(label: String, value: String, onClick: () -> Unit) {
                 textAlign = TextAlign.End, modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(4.dp))
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+            Icon(Lucide.ChevronRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
         }
         HairlineDivider()
     }
@@ -975,11 +960,11 @@ private fun ReceiptRow(
                 Spacer(Modifier.width(8.dp))
                 if (copied) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = RECEIPT_GREEN_TEXT, modifier = Modifier.size(13.dp))
+                        Icon(Lucide.Check, contentDescription = null, tint = RECEIPT_GREEN_TEXT, modifier = Modifier.size(14.dp))
                         Text("Copied", style = giInter(11, FontWeight.SemiBold), color = RECEIPT_GREEN_TEXT)
                     }
                 } else {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy $label", tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.Copy, contentDescription = "Copy $label", tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
                 }
             }
         }

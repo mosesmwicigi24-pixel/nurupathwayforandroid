@@ -82,9 +82,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -137,6 +134,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.webrtc.SurfaceViewRenderer
 import kotlin.math.PI
 import kotlin.math.sin
+import org.nuruplace.member.ui.icons.Lucide
 
 /** How long the viewer stays on the direct-origin fallback URL before
  *  swapping to the CDN one — long enough for R2's mirror to have almost
@@ -733,7 +731,7 @@ private fun BigHeartPop(at: Offset, reduceMotion: Boolean, onExpire: () -> Unit)
     }
     // A picture, not words: the heart is an icon (64 dp), never a 64 sp emoji.
     Icon(
-        Icons.Filled.Favorite, contentDescription = null, tint = Nuru.gold,
+        Lucide.Heart, contentDescription = null, tint = Nuru.gold,
         modifier = Modifier.size(64.dp).graphicsLayer {
             translationX = at.x - 32.dp.toPx()
             translationY = at.y - 32.dp.toPx()
@@ -749,7 +747,7 @@ private fun BigHeartPop(at: Offset, reduceMotion: Boolean, onExpire: () -> Unit)
 private fun EndedState(onOpenReplays: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
+            Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(16.dp))
             Text("The stream has ended", style = NuruType.title, color = Color.White, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
@@ -772,7 +770,7 @@ private fun AudioBackdrop(title: String) {
             Box(
                 Modifier.size(96.dp).clip(RoundedCornerShape(28.dp)).background(Color.White.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
+            ) { Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
             Spacer(Modifier.height(20.dp))
             Text(title.ifBlank { "Nuru Live" }, style = NuruType.title, color = Color.White, textAlign = TextAlign.Center)
             Spacer(Modifier.height(20.dp))

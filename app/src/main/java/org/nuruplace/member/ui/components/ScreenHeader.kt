@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun ScreenHeader(
@@ -48,7 +47,7 @@ fun ScreenHeader(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack, "Back",
+                            Lucide.ArrowLeft, "Back",
                             tint = Nuru.navy, modifier = Modifier.size(18.dp),
                         )
                     }

@@ -43,11 +43,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -83,6 +78,7 @@ import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.util.VoiceRecorder
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Server clock order — used only as a display fallback (the server's own
  *  GET admin/liturgy/recordings response already arrives in this order); if
@@ -196,7 +192,7 @@ private fun BandRow(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Filled.Delete,
+                        Lucide.Trash2,
                         "Delete the recording for ${bandLabel(row.band)}",
                         tint = Nuru.ink400,
                         modifier = Modifier.size(14.dp),
@@ -263,7 +259,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                     Modifier.size(28.dp).clip(CircleShape).background(Nuru.tintBlue)
                         .clickable { recorder.cancel() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Close, "Discard the recording", tint = Nuru.ink400, modifier = Modifier.size(13.dp)) }
+                ) { Icon(Lucide.X, "Discard the recording", tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
                 Box(
                     Modifier.size(28.dp).clip(CircleShape).background(Nuru.gold)
                         .clickable {
@@ -274,7 +270,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                             }
                         },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Check, "Keep the recording", tint = Nuru.navyDeep, modifier = Modifier.size(14.dp)) }
+                ) { Icon(Lucide.Check, "Keep the recording", tint = Nuru.navyDeep, modifier = Modifier.size(14.dp)) }
             }
             attached != null -> {
                 val f = attached
@@ -284,7 +280,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = Nuru.goldChipText, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Mic, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
                     Text(
                         voiceClock(attachedDur),
                         style = NuruType.micro.copy(fontWeight = FontWeight.Bold),
@@ -299,7 +295,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                                 .border(1.dp, Nuru.border, CircleShape)
                                 .clickable { f?.delete(); attached = null; attachedDur = 0 },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Close, "Discard this take", tint = Nuru.ink400, modifier = Modifier.size(12.dp)) }
+                        ) { Icon(Lucide.X, "Discard this take", tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
                         Box(
                             Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.navy)
                                 .clickable {
@@ -337,7 +333,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.Filled.Mic, null, tint = Nuru.navy, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Mic, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
                 Text("Tap to record", style = NuruType.micro.copy(fontWeight = FontWeight.Bold), color = Nuru.navy)
             }
         }

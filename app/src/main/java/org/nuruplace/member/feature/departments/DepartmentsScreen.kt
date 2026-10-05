@@ -27,11 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Diversity3
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,6 +53,7 @@ import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import org.nuruplace.member.util.relTime
+import org.nuruplace.member.ui.icons.Lucide
 
 private val CardShape = RoundedCornerShape(16.dp)
 
@@ -116,7 +112,7 @@ private fun DepartmentsEmpty() {
                     Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldTint),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Diversity3, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(26.dp))
+                    Icon(Lucide.Users2, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.height(Spacing.xs))
                 Text("No departments yet", style = NuruType.cardTitle, color = Nuru.ink, textAlign = TextAlign.Center)
@@ -158,8 +154,8 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
                 Text(servingCount(d.memberCount), style = NuruType.caption, color = Nuru.ink600)
             }
             val chips = buildList {
-                if (d.fit) add(Triple("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText) to Icons.Filled.AutoAwesome)
-                if (d.openNeeds > 0) add(Triple(if (d.openNeeds == 1) "1 open need" else "${d.openNeeds} open needs", Nuru.goldChipBg, Nuru.goldChipText) to Icons.Filled.VolunteerActivism)
+                if (d.fit) add(Triple("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText) to Lucide.Sparkles)
+                if (d.openNeeds > 0) add(Triple(if (d.openNeeds == 1) "1 open need" else "${d.openNeeds} open needs", Nuru.goldChipBg, Nuru.goldChipText) to Lucide.HandHeart)
             }
             if (chips.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -172,7 +168,7 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Filled.FormatQuote, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.Quote, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                     Text(post, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     relTime(d.latestPostAt).takeIf { it.isNotBlank() }?.let {
                         Text(it, style = NuruType.micro, color = Nuru.ink400)
@@ -193,7 +189,7 @@ internal fun DepartmentPhoto(url: String?, modifier: Modifier = Modifier, shape:
             AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
             Icon(
-                Icons.Filled.Diversity3, contentDescription = null,
+                Lucide.Users2, contentDescription = null,
                 tint = Nuru.navyDeep.copy(alpha = 0.55f), modifier = Modifier.size(44.dp),
             )
         }
@@ -223,7 +219,7 @@ internal fun DeptChip(text: String, bg: Color, fg: Color, icon: ImageVector? = n
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(11.dp))
+        if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
         Text(text, style = nuruSans(11, FontWeight.SemiBold), color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

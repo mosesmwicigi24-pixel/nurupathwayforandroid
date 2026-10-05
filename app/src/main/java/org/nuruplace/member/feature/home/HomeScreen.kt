@@ -51,18 +51,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -156,6 +144,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun HomeScreen(
@@ -752,13 +741,9 @@ private fun HomeHeader(
             // through tabs.
             ScanHeaderButton(onClick = onScan)
             Spacer(Modifier.width(Spacing.sm))
-            // The one bell (EXPERIENCE.md §7.2 #4): the inbox, a dot only
-            // while something is unread — in the scan button's gold circle.
-            org.nuruplace.member.ui.components.InboxBell(
-                onClick = onBell, size = 40.dp, shape = RoundedCornerShape(999.dp),
-                container = Nuru.goldChipBg, border = Nuru.gold.copy(alpha = 0.35f),
-                tint = Nuru.goldChipText, iconSize = 20.dp, dotInset = 6.dp,
-            )
+            // The one bell (EXPERIENCE.md §7.2 #4, §8.1 rule 7): the inbox, a
+            // dot only while something is unread — the same bell on every tab.
+            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
             Spacer(Modifier.width(Spacing.sm))
             // Nuru Live (L2) — a church stream is live right now. Same 40dp
             // circle language as the buttons either side of it, so the row reads
@@ -827,16 +812,18 @@ private fun HomeHeader(
 @Composable
 private fun ScanHeaderButton(onClick: () -> Unit) {
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg)
-            .border(1.dp, Nuru.gold.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+        // The bell's circle and size (§8.1 rule 7, as iOS): white, a hairline,
+        // the icon navy at 18 — it was a gold chip.
+        Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.white)
+            .border(1.dp, Nuru.border, RoundedCornerShape(999.dp))
             .clickable(onClickLabel = "Scan to check in") { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.QrCodeScanner,
+            Lucide.ScanQrCode,
             contentDescription = "Scan to check in",
-            tint = Nuru.goldChipText,
-            modifier = Modifier.size(20.dp),
+            tint = Nuru.navy,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -854,7 +841,7 @@ private fun LiveHeaderChip(onClick: () -> Unit) {
         label = "liveHeaderRingAlpha",
     )
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy)
+        Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy)
             .border(2.dp, Nuru.liveRed.copy(alpha = ringAlpha), RoundedCornerShape(999.dp))
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
@@ -1099,11 +1086,11 @@ private fun WeekRowView(row: WeekRow, onClick: () -> Unit) {
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
             Icon(
                 when (row.form.pillar) {
-                    WeekPillar.PATHWAY -> Icons.AutoMirrored.Filled.MenuBook
-                    WeekPillar.PLANS -> Icons.Filled.Bookmark
-                    WeekPillar.EVENTS -> Icons.Filled.Event
-                    WeekPillar.GIVING -> Icons.Filled.VolunteerActivism
-                    WeekPillar.CELL -> Icons.Filled.Groups
+                    WeekPillar.PATHWAY -> Lucide.BookOpen
+                    WeekPillar.PLANS -> Lucide.BookMarked
+                    WeekPillar.EVENTS -> Lucide.Calendar
+                    WeekPillar.GIVING -> Lucide.HandHeart
+                    WeekPillar.CELL -> Lucide.Users
                 },
                 contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp),
             )
@@ -1173,8 +1160,8 @@ private fun RhythmTile(words: RhythmTileWords, done: Boolean, modifier: Modifier
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (done) Icons.Filled.Check else Icons.Filled.Schedule, contentDescription = null,
-                tint = if (done) Nuru.white else Nuru.goldLo, modifier = Modifier.size(12.dp),
+                if (done) Lucide.Check else Lucide.Clock4, contentDescription = null,
+                tint = if (done) Nuru.white else Nuru.goldLo, modifier = Modifier.size(14.dp),
             )
         }
         Spacer(Modifier.height(Spacing.xs))
@@ -1749,13 +1736,13 @@ private fun GrowSection(onNavigate: (String) -> Unit) {
             // gold-tint tile (§8.1 rules 1 and 7): the tiles were amber, red
             // and purple — hues that say state, or nothing.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                GrowTile("Devotional", "Today's devotional", Icons.Filled.WbSunny, Modifier.weight(1f)) { onNavigate("devotional") }
-                GrowTile("Hide His Word", "Memorize Scripture", Icons.Filled.FormatQuote, Modifier.weight(1f)) { onNavigate("memory-verses") }
+                GrowTile("Devotional", "Today's devotional", Lucide.Sun, Modifier.weight(1f)) { onNavigate("devotional") }
+                GrowTile("Hide His Word", "Memorize Scripture", Lucide.Quote, Modifier.weight(1f)) { onNavigate("memory-verses") }
             }
             Spacer(Modifier.height(Spacing.sm))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                GrowTile("My Prayer Room", "Pray with the family", Icons.Filled.VolunteerActivism, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
-                GrowTile("Your Calling", "Discover your gifts", Icons.Filled.AutoAwesome, Modifier.weight(1f)) { onNavigate("gifts") }
+                GrowTile("My Prayer Room", "Pray with the family", Lucide.HandHeart, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
+                GrowTile("Your Calling", "Discover your gifts", Lucide.Sparkles, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             Spacer(Modifier.height(Spacing.sm))
             DisciplerRow { onNavigate("mentor") }

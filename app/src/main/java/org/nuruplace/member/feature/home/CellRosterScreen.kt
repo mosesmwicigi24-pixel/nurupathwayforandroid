@@ -32,8 +32,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -74,6 +72,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun CellRosterScreen(
@@ -332,10 +331,10 @@ private fun MemberRow(
                         CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     } else {
                         Icon(
-                            Icons.Filled.MoreVert,
+                            Lucide.EllipsisVertical,
                             contentDescription = "Options for ${m.fullName}",
                             tint = Nuru.ink400,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }

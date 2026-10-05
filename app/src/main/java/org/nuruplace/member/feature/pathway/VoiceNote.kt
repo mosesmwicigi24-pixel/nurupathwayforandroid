@@ -47,12 +47,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -65,6 +59,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
+import org.nuruplace.member.ui.icons.Lucide
 
 private val VnGold = Color(0xFFC89B3C)
 private val VnBg = Color(0xFFFFF8E6)
@@ -102,7 +97,7 @@ fun VoiceNoteCard(note: ModuleVoiceNote) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playing) Lucide.Pause else Lucide.Play,
                     contentDescription = if (playing) "Pause" else "Play",
                     tint = Nuru.navy, modifier = Modifier.size(18.dp),
                 )
@@ -127,7 +122,7 @@ fun VoiceNoteLeaderRow(moduleId: String, existing: ModuleVoiceNote?, onShared: (
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Mic, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Mic, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
         Text(
             if (existing == null) "Leave a word for your flock" else "Re-record your word",
@@ -189,7 +184,7 @@ private fun VoiceRecordDialog(
                             "%d:%02d".format(recorder.elapsedSec / 60, recorder.elapsedSec % 60),
                             style = NuruType.rowTitle.copy(fontSize = 28.sp), color = Nuru.navy,
                         )
-                        VnPill(Icons.Filled.Stop, "Stop", Color(0xFFB3261E)) { recordedFile = recorder.stop() }
+                        VnPill(Lucide.Square, "Stop", Color(0xFFB3261E)) { recordedFile = recorder.stop() }
                     }
                     recordedFile != null -> {
                         Text(
@@ -198,15 +193,15 @@ private fun VoiceRecordDialog(
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             VnPill(
-                                if (preview.playingId == "preview") Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                if (preview.playingId == "preview") Lucide.Pause else Lucide.Play,
                                 "Listen back", Nuru.navy,
                             ) { recordedFile?.let { preview.toggle("preview", it.absolutePath) } }
-                            VnPill(Icons.Filled.Mic, "Redo", Nuru.navy) {
+                            VnPill(Lucide.Mic, "Redo", Nuru.navy) {
                                 preview.stop(); recordedFile = null; askMic.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         }
                     }
-                    else -> VnPill(Icons.Filled.Mic, "Start recording", Nuru.navy) {
+                    else -> VnPill(Lucide.Mic, "Start recording", Nuru.navy) {
                         error = null
                         askMic.launch(Manifest.permission.RECORD_AUDIO)
                     }
@@ -300,7 +295,7 @@ fun CellPresenceLine() {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(Icons.Filled.LocalFireDepartment, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp).padding(top = 1.dp))
+        Icon(Lucide.Flame, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp).padding(top = 1.dp))
         Spacer(Modifier.width(8.dp))
         Text(text, style = NuruType.caption, color = Nuru.ink)
     }

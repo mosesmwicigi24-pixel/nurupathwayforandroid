@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +42,7 @@ import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // "Answered" used to be its own top-level tab; it now folds into Private's own
 // Active/Answered chips (PrayerJournalScreen already shows them whenever it
@@ -77,7 +76,7 @@ fun PrayerRoomScreen(
                                 .clickable { onBack() },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.ArrowLeft, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                         }
                         Spacer(Modifier.width(Spacing.md))
                     }
@@ -86,10 +85,7 @@ fun PrayerRoomScreen(
                     // PRAYER ROOM" over "My Prayer Room"); the bell at the right.
                     Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
                     onOpenNotifications?.let {
-                        org.nuruplace.member.ui.components.InboxBell(
-                            onClick = it, size = 44.dp, shape = RoundedCornerShape(16.dp),
-                            container = Nuru.white, border = Nuru.border, tint = Nuru.navy, iconSize = 18.dp, dotInset = 6.dp,
-                        )
+                        org.nuruplace.member.ui.components.InboxBell(onClick = it)
                     }
                 }
                 Text(

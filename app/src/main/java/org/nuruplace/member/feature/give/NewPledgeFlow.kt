@@ -62,19 +62,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EventRepeat
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Handshake
-import androidx.compose.material.icons.filled.TrackChanges
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -127,6 +114,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.nuruplace.member.ui.theme.TypeScale
+import org.nuruplace.member.ui.icons.Lucide
 
 /** A full pill (§8.1 rule 6) — Give's amount choices' shape. */
 private val PillShape = RoundedCornerShape(999.dp)
@@ -145,16 +133,16 @@ private class PledgeForLook(val icon: ImageVector, val tileBg: Color, val iconTi
  *  purple "gift" fallback, so nothing looks mislabelled); campaign and need
  *  by the department palette. An unknown kind still gets a card. */
 private fun pledgeForLook(option: PledgeOption): PledgeForLook = when (option.kind) {
-    PLEDGE_KIND_GENERAL -> PledgeForLook(Icons.Filled.Handshake, GIVE.mutedBg, Nuru.navy, "The church as a whole")
+    PLEDGE_KIND_GENERAL -> PledgeForLook(Lucide.Handshake, GIVE.mutedBg, Nuru.navy, "The church as a whole")
     PLEDGE_KIND_FUND -> {
         val fund = giveFund(option.fund)
         val known = GIVE_FUNDS.any { it.id.equals(option.fund?.trim(), ignoreCase = true) }
         if (known) PledgeForLook(fund.icon, fund.tint, fund.fg, fund.tagline.ifBlank { "A fund of the church" })
         else PledgeForLook(fund.icon, Nuru.goldChipBg, Nuru.gold, "A fund of the church")
     }
-    PLEDGE_KIND_CAMPAIGN -> PledgeForLook(Icons.Filled.Campaign, Nuru.goldChipBg, Nuru.gold, "Church campaign")
-    PLEDGE_KIND_NEED -> PledgeForLook(Icons.Filled.VolunteerActivism, Nuru.dangerBg, Nuru.danger, "Department need")
-    else -> PledgeForLook(Icons.Filled.Flag, GIVE.mutedBg, Nuru.navy, "Another cause of the church")
+    PLEDGE_KIND_CAMPAIGN -> PledgeForLook(Lucide.Megaphone, Nuru.goldChipBg, Nuru.gold, "Church campaign")
+    PLEDGE_KIND_NEED -> PledgeForLook(Lucide.HandHeart, Nuru.dangerBg, Nuru.danger, "Department need")
+    else -> PledgeForLook(Lucide.Flag, GIVE.mutedBg, Nuru.navy, "Another cause of the church")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -297,7 +285,7 @@ fun NewPledgeFlow(
                             .clickable(enabled = !busy) { Haptics.tap(view); close() }
                             .semantics { contentDescription = "Close" },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, null, tint = GIVE.navy, modifier = Modifier.size(16.dp)) }
+                    ) { Icon(Lucide.X, null, tint = GIVE.navy, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.weight(1f))
                     Text("Step ${idx + 1} of ${steps.size}", style = giInter(11, FontWeight.SemiBold), color = GIVE.tertiary)
                 }
@@ -328,11 +316,11 @@ fun NewPledgeFlow(
             when (step) {
                 PledgeStep.Shape -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ShapeCard(
-                        on = monthly, icon = Icons.Filled.EventRepeat, title = "Monthly",
+                        on = monthly, icon = Lucide.CalendarSync, title = "Monthly",
                         body = "An amount every month, for as long as you choose.",
                     ) { Haptics.tick(view); shape = "monthly" }
                     ShapeCard(
-                        on = !monthly, icon = Icons.Filled.TrackChanges, title = "A total, by a date",
+                        on = !monthly, icon = Lucide.Target, title = "A total, by a date",
                         body = "A goal you reach in instalments of any size.",
                     ) { Haptics.tick(view); shape = "total"; autoCharge = false }
                 }
@@ -384,7 +372,7 @@ fun NewPledgeFlow(
                         },
                         singleLine = true,
                         placeholder = { Text("Or enter your own amount", style = giInter(14), color = Nuru.ink400) },
-                        leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                        leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
                         textStyle = giInter(14).copy(color = Nuru.ink),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
@@ -424,7 +412,7 @@ fun NewPledgeFlow(
                         PledgeForEyebrow("Name it yourself")
                         PledgeForCard(
                             selected = customOn,
-                            icon = Icons.Filled.Edit, tileBg = Nuru.goldChipBg, iconTint = Nuru.gold,
+                            icon = Lucide.Pencil, tileBg = Nuru.goldChipBg, iconTint = Nuru.gold,
                             title = "Custom name", subtitle = "A promise in your own words",
                             onSelect = { pick(PledgeFor.Custom(customName)) },
                         ) {
@@ -439,7 +427,7 @@ fun NewPledgeFlow(
                                     },
                                     singleLine = true,
                                     placeholder = { Text("e.g. School fees for Grace", style = giInter(14), color = Nuru.ink400) },
-                                    leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                                    leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
                                     suffix = {
                                         Text(
                                             "$count/$PLEDGE_TITLE_MAX", style = giInter(11),
@@ -472,7 +460,7 @@ fun NewPledgeFlow(
                             .clickable { showDatePicker = true }.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(Icons.Filled.CalendarMonth, null, tint = GIVE.gold, modifier = Modifier.size(20.dp))
+                        Icon(Lucide.CalendarDays, null, tint = GIVE.gold, modifier = Modifier.size(22.dp))
                         Text(org.nuruplace.member.util.NuruDates.day(dueOn), style = giInter(15, FontWeight.SemiBold), color = GIVE.ink)
                     }
                     if (showDatePicker) {
@@ -525,7 +513,7 @@ fun NewPledgeFlow(
                                 Modifier.semantics(mergeDescendants = true) {},
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Icon(Icons.Filled.EventRepeat, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                                Icon(Lucide.CalendarSync, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                                 Text(firstCollectionLine(today, dueDay), style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
                             }
                             Text("BY", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
@@ -556,7 +544,7 @@ fun NewPledgeFlow(
                             Modifier.padding(top = 12.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(Icons.Filled.Handshake, null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
+                            Icon(Lucide.Handshake, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                             Text(PLEDGE_JOINS_NOTE, style = giInter(12), color = GIVE.goldChipText)
                         }
                     }
@@ -580,7 +568,7 @@ fun NewPledgeFlow(
                         .padding(horizontal = 18.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.ArrowLeft, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     Text("Back", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
                 }
             }
@@ -600,12 +588,12 @@ fun NewPledgeFlow(
                     last -> {
                         Text("Create pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                         Spacer(Modifier.width(6.dp))
-                        Icon(Icons.Filled.Check, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.Check, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     }
                     else -> {
                         Text("Continue", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                         Spacer(Modifier.width(6.dp))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.ArrowRight, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -673,7 +661,7 @@ private fun PledgeForCard(
             }
             if (selected) {
                 Box(Modifier.size(22.dp).clip(CircleShape).background(Nuru.gold), Alignment.Center) {
-                    Icon(Icons.Filled.Check, null, tint = Nuru.navyDeep, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Check, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
                 }
             } else {
                 Box(Modifier.size(22.dp).border(1.5.dp, GIVE.border, CircleShape))

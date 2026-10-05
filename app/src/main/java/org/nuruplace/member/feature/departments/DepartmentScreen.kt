@@ -36,16 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -106,6 +96,7 @@ import org.nuruplace.member.util.relTime
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 private val CardShape = RoundedCornerShape(14.dp)
@@ -178,13 +169,13 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 HeroCircleButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.weight(1f))
                 if (d.isActive) {
                     Box {
                         HeroCircleButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.EllipsisVertical, contentDescription = "More", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
@@ -202,7 +193,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                 Text(d.name, style = nuruSerif(26, FontWeight.SemiBold), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 d.meets?.takeIf { it.isNotBlank() }?.let { meets ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Icon(Icons.Filled.Schedule, contentDescription = null, tint = Nuru.goldHi, modifier = Modifier.size(13.dp))
+                        Icon(Lucide.Clock4, contentDescription = null, tint = Nuru.goldHi, modifier = Modifier.size(14.dp))
                         Text(meets, style = NuruType.caption, color = Color.White.copy(alpha = 0.85f))
                     }
                 }
@@ -224,10 +215,10 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                     }
                     Spacer(Modifier.weight(1f))
                 }
-                Icon(Icons.Filled.Groups, contentDescription = null, tint = Nuru.ink400, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Users, contentDescription = null, tint = Nuru.ink400, modifier = Modifier.size(14.dp))
                 Text(servingCount(d.memberCount), style = NuruType.caption, color = Nuru.ink600)
             }
-            if (d.fit) DeptChip("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText, Icons.Filled.AutoAwesome)
+            if (d.fit) DeptChip("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText, Lucide.Sparkles)
 
             // ── My standing ──
             StandingBlock(
@@ -246,9 +237,9 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Segment("Posts", Icons.Filled.Campaign, d.posts.size.takeIf { it > 0 }, section == SECTION_POSTS) { section = SECTION_POSTS }
-                Segment("Needs", Icons.Filled.VolunteerActivism, d.needs.size.takeIf { it > 0 }, section == SECTION_NEEDS) { section = SECTION_NEEDS }
-                Segment("Members", Icons.Filled.Groups, d.members.size.takeIf { it > 0 }, section == SECTION_MEMBERS) { section = SECTION_MEMBERS }
+                Segment("Posts", Lucide.Megaphone, d.posts.size.takeIf { it > 0 }, section == SECTION_POSTS) { section = SECTION_POSTS }
+                Segment("Needs", Lucide.HandHeart, d.needs.size.takeIf { it > 0 }, section == SECTION_NEEDS) { section = SECTION_NEEDS }
+                Segment("Members", Lucide.Users, d.members.size.takeIf { it > 0 }, section == SECTION_MEMBERS) { section = SECTION_MEMBERS }
             }
 
             when (section) {
@@ -340,7 +331,7 @@ private fun StandingBlock(d: Department, busy: Boolean, error: String?, onServe:
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when {
             d.isActive -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                DeptChip("You serve here", Nuru.successBg, Nuru.successText, Icons.Filled.Verified)
+                DeptChip("You serve here", Nuru.successBg, Nuru.successText, Lucide.BadgeCheck)
                 if (d.isLeader || d.myRole == "leader") DeptChip("Leader", Nuru.goldChipBg, Nuru.goldChipText)
                 if (busy) CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
             }
@@ -611,7 +602,7 @@ private fun MemberTile(m: DepartmentMember, modifier: Modifier) {
                 Box(
                     Modifier.align(Alignment.BottomEnd).size(18.dp).clip(CircleShape).background(Nuru.gold).border(2.dp, Nuru.white, CircleShape),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Verified, contentDescription = "Leader", tint = Nuru.navyDeep, modifier = Modifier.size(10.dp)) }
+                ) { Icon(Lucide.BadgeCheck, contentDescription = "Leader", tint = Nuru.navyDeep, modifier = Modifier.size(14.dp)) }
             }
         }
         Text(m.fullName, style = NuruType.micro, color = Nuru.ink, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -626,7 +617,7 @@ private fun LeaderPill(label: String, onClick: () -> Unit) {
         Modifier.clip(CircleShape).background(Nuru.navyDeep).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.Add, null, tint = Nuru.gold, modifier = Modifier.size(13.dp))
+        Icon(Lucide.Plus, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
         Text(label, style = nuruSans(12, FontWeight.SemiBold), color = Color.White)
     }
 }

@@ -30,13 +30,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.ScreenShare
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -64,6 +57,7 @@ import kotlinx.coroutines.withContext
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /** The three broadcast sources the sheet offers. Distinct from the engine's
  *  own [BroadcastSource] (CAMERA/SCREEN only) — DOCUMENT here maps to
@@ -82,19 +76,19 @@ internal fun LiveSourceSheet(
             Text("Broadcast source", style = NuruType.title, color = Nuru.ink)
             Spacer(Modifier.height(Spacing.md))
             SourceOptionRow(
-                icon = Icons.Filled.Videocam, label = "Camera",
+                icon = Lucide.Video, label = "Camera",
                 subtitle = "Your camera, front or back",
                 selected = current == SourceChoice.CAMERA,
                 onClick = { onPick(SourceChoice.CAMERA) },
             )
             SourceOptionRow(
-                icon = Icons.Filled.ScreenShare, label = "Screen share",
+                icon = Lucide.ScreenShare, label = "Screen share",
                 subtitle = "Share whatever's on your screen. Your mic keeps streaming.",
                 selected = current == SourceChoice.SCREEN,
                 onClick = { onPick(SourceChoice.SCREEN) },
             )
             SourceOptionRow(
-                icon = Icons.Filled.Description, label = "Document",
+                icon = Lucide.FileText, label = "Document",
                 subtitle = "Pick a PDF and swipe through it live",
                 selected = current == SourceChoice.DOCUMENT,
                 onClick = { onPick(SourceChoice.DOCUMENT) },
@@ -121,7 +115,7 @@ private fun SourceOptionRow(
         Box(
             Modifier.size(40.dp).clip(CircleShape).background(if (selected) Nuru.gold else Nuru.inputBg),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = if (selected) Nuru.homeNavy else Nuru.ink600, modifier = Modifier.size(20.dp)) }
+        ) { Icon(icon, contentDescription = null, tint = if (selected) Nuru.homeNavy else Nuru.ink600, modifier = Modifier.size(22.dp)) }
         Spacer(Modifier.width(Spacing.sm))
         Column {
             Text(label, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
@@ -156,8 +150,8 @@ internal fun ScreenModeControls(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, contentDescription = "Mute",
-                tint = Color.White, modifier = Modifier.size(20.dp),
+                if (muted) Lucide.MicOff else Lucide.Mic, contentDescription = "Mute",
+                tint = Color.White, modifier = Modifier.size(22.dp),
             )
         }
         Row(
@@ -167,7 +161,7 @@ internal fun ScreenModeControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Filled.ScreenShare, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(16.dp))
+            Icon(Lucide.ScreenShare, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
             Text("Sharing your screen", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.SemiBold)
             Text("· switch to camera", style = NuruType.caption, color = Color.White.copy(alpha = 0.7f))
         }
@@ -293,8 +287,8 @@ internal fun DocumentPagerScreen(uri: Uri, muted: Boolean, onToggleMute: () -> U
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, contentDescription = "Mute",
-                        tint = Color.White, modifier = Modifier.size(20.dp),
+                        if (muted) Lucide.MicOff else Lucide.Mic, contentDescription = "Mute",
+                        tint = Color.White, modifier = Modifier.size(22.dp),
                     )
                 }
                 MinimalEndPill(onEnd)
@@ -302,7 +296,7 @@ internal fun DocumentPagerScreen(uri: Uri, muted: Boolean, onToggleMute: () -> U
                     Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
                         .clickable { onExit() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Close, contentDescription = "Exit document, back to camera", tint = Color.White, modifier = Modifier.size(20.dp)) }
+                ) { Icon(Lucide.X, contentDescription = "Exit document, back to camera", tint = Color.White, modifier = Modifier.size(22.dp)) }
             }
         }
     }

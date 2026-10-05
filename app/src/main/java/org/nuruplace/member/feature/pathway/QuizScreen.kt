@@ -27,10 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +65,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /** The server's verdict, unified from QuizResult / ExamResult. */
 data class QuizVerdict(
@@ -124,7 +121,7 @@ private fun QuizHeader(title: String, onBack: () -> Unit, progress: (@Composable
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(Spacing.md))
                 Kicker(title)
@@ -344,7 +341,7 @@ private fun OptionRow(text: String, selected: Boolean, multi: Boolean, onClick: 
                 .border(1.dp, if (selected) Nuru.navyDeep else Nuru.ink300, if (multi) RoundedCornerShape(6.dp) else CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) Icon(Icons.Filled.Check, null, tint = Nuru.onNavy, modifier = Modifier.size(14.dp))
+            if (selected) Icon(Lucide.Check, null, tint = Nuru.onNavy, modifier = Modifier.size(14.dp))
         }
         Spacer(Modifier.size(Spacing.md))
         Text(text, style = NuruType.body, color = Nuru.ink)
@@ -431,7 +428,7 @@ private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, on
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(17.dp))
+                Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Review with Nuru", style = NuruType.cardCta, color = Nuru.navy)
             }

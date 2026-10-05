@@ -57,22 +57,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Autorenew
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.DragIndicator
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -132,6 +116,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import java.time.Instant
 import java.time.LocalDate
 import org.nuruplace.member.ui.theme.TypeScale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -320,7 +305,7 @@ private fun GiveHeaderBand(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.BadgeCheck, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                         Text(
                             (if (hidden) "KSh ••••" else moneyTotals(yearTotals)) + " given this year",
                             style = giInter(13, FontWeight.SemiBold), color = GIVE.eyebrow,
@@ -335,7 +320,7 @@ private fun GiveHeaderBand(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            if (hidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            if (hidden) Lucide.EyeOff else Lucide.Eye,
                             contentDescription = if (hidden) "Show this year's total" else "Hide this year's total",
                             tint = GIVE.navy, modifier = Modifier.size(18.dp),
                         )
@@ -367,7 +352,7 @@ private fun GiveTargetCard(copy: GiveTargetCopy, onGiveToFund: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(Icons.Filled.Verified, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(13.dp))
+            Icon(Lucide.BadgeCheck, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(14.dp))
             Text(copy.destination, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText)
         }
         Text(
@@ -393,7 +378,7 @@ private fun RepeatGiftCard(g: GivingRecord, onRepeat: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.gold), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+            Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("Repeat last gift", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
@@ -421,7 +406,7 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text("View statement", style = giInter(12, FontWeight.SemiBold), color = GIVE.gold)
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(11.dp))
+                Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
             }
         }
         if (recent.isEmpty()) {
@@ -430,7 +415,7 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Filled.VolunteerActivism, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                Icon(Lucide.HandHeart, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                 Text("No gifts yet — your first one will appear here the moment it settles.", style = giInter(13), color = GIVE.sub)
             }
         } else {
@@ -485,7 +470,7 @@ private fun SecureNote(text: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Icon(Icons.Outlined.VerifiedUser, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(13.dp))
+        Icon(Lucide.ShieldCheck, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
         Text(text, style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center)
     }
@@ -1067,7 +1052,7 @@ private fun GiveTab(
                                     .padding(12.dp),
                             ) {
                                 Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(f.tint), contentAlignment = Alignment.Center) {
-                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(17.dp))
+                                    Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(18.dp))
                                 }
                                 Text(f.name, style = giInter(13, FontWeight.SemiBold, -0.13f), color = GIVE.navy, modifier = Modifier.padding(top = 8.dp))
                                 Text(f.tagline, style = giInter(11), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
@@ -1146,7 +1131,7 @@ private fun GiveTab(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Enter a custom amount", style = giInter(13, FontWeight.Bold), color = GIVE.gold)
                     }
@@ -1168,7 +1153,7 @@ private fun GiveTab(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Autorenew, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(15.dp))
+                                Icon(Lucide.Repeat, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(14.dp))
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text("Your rhythm", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
@@ -1178,7 +1163,7 @@ private fun GiveTab(
                                     Text(it, style = giInter(11), color = GIVE.eyebrow, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(16.dp))
+                            Icon(Lucide.ChevronRight, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -1212,7 +1197,7 @@ private fun GiveTab(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.goldTile), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
                         }
                         Column {
                             Text("${kshMajor(chargedAmountMajor(amountMajor, coverFee))} every ${cadenceWord(freq)}", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
@@ -1233,7 +1218,7 @@ private fun GiveTab(
                     Spacer(Modifier.weight(1f))
                     if (canReorder) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
+                            Icon(Lucide.GripVertical, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
                             Text("Reorder", style = giInter(11), color = GIVE.tertiary)
                         }
                     }
@@ -1294,25 +1279,25 @@ private fun GiveTab(
                             }
                             if (on) {
                                 Box(Modifier.size(24.dp).clip(CircleShape).background(GIVE.gold), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Filled.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(13.dp))
+                                    Icon(Lucide.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                                 }
                             }
                             // reorder arrows — only with something to reorder
                             if (canReorder) Column {
                                 Icon(
-                                    Icons.Filled.KeyboardArrowUp, contentDescription = "Move up", tint = GIVE.ink300,
+                                    Lucide.ChevronUp, contentDescription = "Move up", tint = GIVE.ink300,
                                     modifier = Modifier.size(14.dp).clickable {
                                         if (i > 0) swapWith(shownMethods[i - 1])
                                     },
                                 )
                                 Icon(
-                                    Icons.Filled.KeyboardArrowDown, contentDescription = "Move down", tint = GIVE.ink300,
+                                    Lucide.ChevronDown, contentDescription = "Move down", tint = GIVE.ink300,
                                     modifier = Modifier.size(14.dp).clickable {
                                         if (i < shownMethods.lastIndex) swapWith(shownMethods[i + 1])
                                     },
                                 )
                             }
-                            if (canReorder) Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = Color(0xFFC4C9D0), modifier = Modifier.size(18.dp))
+                            if (canReorder) Icon(Lucide.GripVertical, contentDescription = null, tint = Color(0xFFC4C9D0), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -1330,7 +1315,7 @@ private fun GiveTab(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Smartphone, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.Smartphone, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(18.dp))
                         }
                         Column(Modifier.weight(1f)) {
                             Text("${method.label.uppercase()} PROMPT GOES TO", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
@@ -1384,7 +1369,7 @@ private fun GiveTab(
                                         .padding(12.dp),
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(12.dp))
+                                        Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                                         Text(
                                             if (freqOf(s.frequency) == FREQ_WEEKLY) "WEEKLY" else "MONTHLY",
                                             style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.overline,
@@ -1481,9 +1466,9 @@ private fun GiveTab(
                         modifier = Modifier.weight(1f, fill = false).padding(start = 16.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.padding(end = 16.dp).size(14.dp))
+                    Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.padding(end = 16.dp).size(14.dp))
                 } else if (freq != FREQ_ONCE && !inDollars) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Schedule ${kshMajor(chargedAmountMajor(amountMajor, coverFee))} / ${cadenceWord(freq)}", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
                 } else {
@@ -1492,7 +1477,7 @@ private fun GiveTab(
                         style = giInter(14, FontWeight.Bold), color = GIVE.navy,
                     )
                     Spacer(Modifier.width(6.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -1624,7 +1609,7 @@ private fun PromptNumberSheet(
                     Modifier.size(32.dp).clip(CircleShape).background(GIVE.surface).clickable { onDismiss() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.X, contentDescription = "Close", tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
             }
             Text(
@@ -1636,7 +1621,7 @@ private fun PromptNumberSheet(
                 onValueChange = { v -> text = v.filter { it.isDigit() || it == '+' || it == ' ' }.take(18) },
                 singleLine = true,
                 placeholder = { Text("07XX XXX XXX", style = giInter(15), color = GIVE.tertiary) },
-                leadingIcon = { Icon(Icons.Filled.Smartphone, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp)) },
+                leadingIcon = { Icon(Lucide.Smartphone, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp)) },
                 isError = wrong,
                 textStyle = giInter(15, FontWeight.SemiBold).copy(color = GIVE.navy),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -1699,7 +1684,7 @@ private fun ScheduledResult(created: CreatedScheduleRes, body: CreateScheduleBod
                 contentAlignment = Alignment.Center,
             ) {
                 Box(Modifier.size(80.dp).clip(CircleShape).background(GIVE.gold), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
+                    Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -1776,7 +1761,7 @@ private fun StkStage(pin: StkPinLine, note: String?, late: Boolean, promptPhone:
                 Modifier.clip(Capsule).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.Filled.Smartphone, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Smartphone, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                 Text("Prompt sent to ${kenyanMobileDisplay(phone)}", style = giInter(11), color = Color.White)
             }
         }
@@ -1960,7 +1945,7 @@ private fun GiveResult(
                 contentAlignment = Alignment.Center,
             ) {
                 Box(Modifier.size(80.dp).clip(CircleShape).background(if (failed) GIVE.ink300 else GIVE.gold), contentAlignment = Alignment.Center) {
-                    Icon(if (failed) Icons.Filled.Close else Icons.Filled.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
+                    Icon(if (failed) Lucide.X else Lucide.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -2008,7 +1993,7 @@ private fun GiveResult(
             if (promptPhone != null && outcome == GiftOutcome.Processing) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Filled.Smartphone, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(13.dp))
+                    Icon(Lucide.Smartphone, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                     Text("Prompt sent to ${kenyanMobileDisplay(promptPhone)}", style = giInter(12), color = GIVE.sub)
                 }
             }

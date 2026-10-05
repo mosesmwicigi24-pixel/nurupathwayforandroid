@@ -22,9 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -48,6 +45,7 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private val LSNavyTop = Color(0xFF0A1628)
 private val LSNavyBottom = Color(0xFF081020)
@@ -71,7 +69,7 @@ fun NuruCoachDialog(moduleId: String, onRetry: () -> Unit, onDismiss: () -> Unit
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
                 Spacer(Modifier.height(28.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.AutoAwesome, null, tint = LSGold, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Sparkles, null, tint = LSGold, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("REVIEW WITH NURU", style = NuruType.micro, color = LSGold, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
                     Spacer(Modifier.weight(1f))
@@ -176,7 +174,7 @@ private fun CloseDot(onDismiss: () -> Unit) {
     Box(
         Modifier.size(30.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.14f)).clickable { onDismiss() },
         contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Filled.Close, "Close", tint = Color.White, modifier = Modifier.size(14.dp)) }
+    ) { Icon(Lucide.X, "Close", tint = Color.White, modifier = Modifier.size(14.dp)) }
 }
 
 @Composable

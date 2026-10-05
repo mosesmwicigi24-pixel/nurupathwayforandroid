@@ -25,12 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -64,6 +58,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import kotlin.coroutines.cancellation.CancellationException
+import org.nuruplace.member.ui.icons.Lucide
 
 private sealed interface LoadState<out T> {
     data object Loading : LoadState<Nothing>
@@ -113,7 +108,7 @@ fun StateCard(
     title: String,
     modifier: Modifier = Modifier,
     line: String? = null,
-    glyph: ImageVector? = Icons.Filled.AutoAwesome,
+    glyph: ImageVector? = Lucide.Sparkles,
     glyphTint: Color = Nuru.gold,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
@@ -126,7 +121,7 @@ fun StateCard(
                 Box(
                     Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.surface),
                     contentAlignment = Alignment.Center,
-                ) { Icon(it, contentDescription = null, tint = glyphTint, modifier = Modifier.size(20.dp)) }
+                ) { Icon(it, contentDescription = null, tint = glyphTint, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.height(14.dp))
             }
             Text(title, style = NuruType.cardTitle, color = Nuru.navy, textAlign = TextAlign.Center)
@@ -181,10 +176,10 @@ fun FailedState(
         StateAction.NONE -> null
     }
     val (glyph, tint) = when (message.cause) {
-        StateCause.OFFLINE -> Icons.Filled.WifiOff to Nuru.ink600
-        StateCause.SESSION_ENDED -> Icons.Filled.Lock to Nuru.goldLo
-        StateCause.NOT_FOUND -> Icons.Filled.Search to Nuru.ink600
-        StateCause.SERVER, StateCause.REFUSAL -> Icons.AutoMirrored.Filled.HelpOutline to Nuru.ink600
+        StateCause.OFFLINE -> Lucide.WifiOff to Nuru.ink600
+        StateCause.SESSION_ENDED -> Lucide.Lock to Nuru.goldLo
+        StateCause.NOT_FOUND -> Lucide.Search to Nuru.ink600
+        StateCause.SERVER, StateCause.REFUSAL -> Lucide.CircleHelp to Nuru.ink600
     }
     StateCard(
         title = message.title,

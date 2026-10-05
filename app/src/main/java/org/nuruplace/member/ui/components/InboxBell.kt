@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -41,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.icons.Lucide
 
 /** The inbox's unread count — the one number every bell reads. */
 object InboxUnread {
@@ -86,7 +85,10 @@ fun bellShowsDot(unread: Int?): Boolean = (unread ?: 0) > 0
 fun InboxBell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    size: Dp = 40.dp,
+    // One bell on every tab (EXPERIENCE.md §8.1 rule 7, as iOS's NuruBell):
+    // a 44dp white circle, a hairline, the icon navy at 18. It was 36–46dp,
+    // circle or tile, gold or navy, by tab.
+    size: Dp = 44.dp,
     shape: Shape = CircleShape,
     container: Color = Nuru.white,
     border: Color = Nuru.border,
@@ -102,7 +104,7 @@ fun InboxBell(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.Notifications,
+            Lucide.Bell,
             contentDescription = if (dot) "Notifications — unread" else "Notifications",
             tint = tint,
             modifier = Modifier.size(iconSize),

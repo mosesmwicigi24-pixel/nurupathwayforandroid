@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -57,6 +55,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /** L6 cap — mirrors the pinned wire contract (docs/LIVE_INTERACTIVE.md:
  *  "broadcaster invites up to 6 viewers as guests") and the iOS port's
@@ -253,7 +252,7 @@ private fun SheetCloseChip(onDismiss: () -> Unit) {
     Box(
         Modifier.size(30.dp).clip(CircleShape).background(Nuru.white).clickable { onDismiss() },
         contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(14.dp)) }
+    ) { Icon(Lucide.X, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(14.dp)) }
 }
 
 @Composable

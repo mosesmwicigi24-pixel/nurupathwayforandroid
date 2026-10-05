@@ -73,9 +73,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -111,6 +108,7 @@ import org.nuruplace.member.ui.components.LivePulsingDot
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruTheme
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 class IncomingInviteActivity : ComponentActivity() {
     private var invite by mutableStateOf<LiveInvite?>(null)
@@ -424,8 +422,8 @@ private fun IncomingInviteScreen(invite: LiveInvite, joining: Boolean, onJoin: (
                 }
             } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    AnswerButton("Not now", Icons.Filled.Close, SolidColor(Color.White.copy(alpha = 0.14f)), Color.White, onNotNow)
-                    AnswerButton("Join", Icons.Filled.Videocam, Nuru.goldGradient, Nuru.homeNavy, onJoin)
+                    AnswerButton("Not now", Lucide.X, SolidColor(Color.White.copy(alpha = 0.14f)), Color.White, onNotNow)
+                    AnswerButton("Join", Lucide.Video, Nuru.goldGradient, Nuru.homeNavy, onJoin)
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -459,7 +457,7 @@ private fun RingingBadge() {
             Modifier.size(112.dp).clip(CircleShape).background(Nuru.goldGradient),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Videocam, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(46.dp))
+            Icon(Lucide.Video, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(46.dp))
         }
         Row(
             Modifier

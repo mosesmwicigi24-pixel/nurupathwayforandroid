@@ -21,10 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +44,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -122,9 +119,9 @@ private fun AllEventsCalendarBody(
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) { Text("TODAY", style = evInter(11, FontWeight.Bold, 1f), color = EV.overline) }
                 Spacer(Modifier.size(8.dp))
-                NavButton(Icons.Filled.ChevronLeft) { visibleMonth = visibleMonth.minusMonths(1) }
+                NavButton(Lucide.ChevronLeft) { visibleMonth = visibleMonth.minusMonths(1) }
                 Spacer(Modifier.size(8.dp))
-                NavButton(Icons.Filled.ChevronRight) { visibleMonth = visibleMonth.plusMonths(1) }
+                NavButton(Lucide.ChevronRight) { visibleMonth = visibleMonth.plusMonths(1) }
             }
 
             // Weekday header
@@ -221,7 +218,7 @@ private fun AllEventsCalendarBody(
                 Box(
                     Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.gold.copy(alpha = 0.08f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Lucide.CalendarDays, null, tint = EV.gold, modifier = Modifier.size(22.dp)) }
                 Text("Nothing scheduled", style = evInter(12, FontWeight.SemiBold), color = EV.navy)
                 Text("Pick another day to see what's on.", style = evInter(11), color = EV.tertiary)
             }

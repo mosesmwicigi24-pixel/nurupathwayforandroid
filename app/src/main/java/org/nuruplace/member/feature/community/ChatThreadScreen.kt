@@ -41,32 +41,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EmojiEmotions
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PersonRemove
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -143,6 +117,7 @@ import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -606,7 +581,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
                     Text(
                         "Only ${thread.title ?: "the pastor"} sees your reply",
                         style = cInter(11, FontWeight.SemiBold),
@@ -652,7 +627,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             Modifier.size(38.dp).clip(Capsule).background(CHAT.white).border(1.dp, CHAT.border, Capsule)
                                 .clickable { discardVoice() },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Delete, "Discard voice note", tint = CHAT.meta, modifier = Modifier.size(18.dp)) }
+                        ) { Icon(Lucide.Trash2, "Discard voice note", tint = CHAT.meta, modifier = Modifier.size(18.dp)) }
                         Box(
                             Modifier.clip(Capsule).background(CHAT.navy).clickable(enabled = !busy) { deliverVoice(v) }
                                 .padding(horizontal = 14.dp, vertical = 9.dp),
@@ -684,11 +659,11 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         Modifier.size(38.dp).clip(Capsule).background(CHAT.white).border(1.dp, CHAT.border, Capsule)
                             .clickable { recorder.cancel() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, "Cancel recording", tint = CHAT.meta, modifier = Modifier.size(16.dp)) }
+                    ) { Icon(Lucide.X, "Cancel recording", tint = CHAT.meta, modifier = Modifier.size(18.dp)) }
                     Box(
                         Modifier.size(44.dp).clip(Capsule).background(CHAT.gold).clickable { sendVoice() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.AutoMirrored.Filled.Send, "Send voice note", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                    ) { Icon(Lucide.Send, "Send voice note", tint = Color.White, modifier = Modifier.size(18.dp)) }
                 }
             } else {
                 Row(
@@ -705,7 +680,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.Add, null, tint = CHAT.meta, modifier = Modifier.size(19.dp))
+                        Icon(Lucide.Plus, null, tint = CHAT.meta, modifier = Modifier.size(18.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                             if (draft.isBlank()) Text("Message", style = cInter(12), color = CHAT.faint)
                             BasicTextField(
@@ -734,7 +709,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                                 },
                             conversationId = conversationId,
                         ) { text -> draft = text }
-                        Icon(Icons.Filled.EmojiEmotions, null, tint = CHAT.meta, modifier = Modifier.size(19.dp))
+                        Icon(Lucide.Smile, null, tint = CHAT.meta, modifier = Modifier.size(18.dp))
                     }
                     val hasDraft = draft.isNotBlank()
                     Box(
@@ -743,8 +718,8 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             .clickable { if (hasDraft) send(draft) else startRecording() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (hasDraft) Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(17.dp))
-                        else Icon(Icons.Filled.Mic, "Record voice note", tint = Color.White, modifier = Modifier.size(18.dp))
+                        if (hasDraft) Icon(Lucide.Send, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        else Icon(Lucide.Mic, "Record voice note", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -767,7 +742,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Icon(Icons.Filled.Edit, null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.Pencil, null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
                             Text("Edit", style = cInter(14, FontWeight.SemiBold), color = CHAT.navy)
                         }
                     }
@@ -781,7 +756,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(Icons.Filled.Delete, null, tint = Color(0xFFB3261E), modifier = Modifier.size(18.dp))
+                        Icon(Lucide.Trash2, null, tint = Color(0xFFB3261E), modifier = Modifier.size(18.dp))
                         Text("Delete", style = cInter(14, FontWeight.SemiBold), color = Color(0xFFB3261E))
                     }
                 }
@@ -883,7 +858,7 @@ private fun PrivacyLabelBanner(label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Icon(Lucide.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
         Text(label, style = cInter(11, FontWeight.SemiBold), color = CHAT.goldDeep)
     }
 }
@@ -923,7 +898,7 @@ private fun PastoralLockScreen(onBack: () -> Unit) {
         Box(
             Modifier.size(64.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.selectedSeg),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
+        ) { Icon(Lucide.Lock, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
         Spacer(Modifier.height(16.dp))
         Text("Talk with My Pastor is locked", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy, textAlign = TextAlign.Center)
         Text(
@@ -976,7 +951,7 @@ private fun ThreadHeader(
                 Box(
                     Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.white).border(1.dp, CHAT.border, RoundedCornerShape(999.dp)).clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = CHAT.navy, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Lucide.ArrowLeft, "Back", tint = CHAT.navy, modifier = Modifier.size(18.dp)) }
 
                 if (thread.kind == "dm") {
                     Box(Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.storyRing), contentAlignment = Alignment.Center) {
@@ -1024,7 +999,7 @@ private fun ThreadHeader(
                     Box(
                         Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.gold.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(Lucide.Sparkles, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
                 }
             }
         }
@@ -1034,7 +1009,7 @@ private fun ThreadHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Filled.Flag, null, tint = CHAT.ink600, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Flag, null, tint = CHAT.ink600, modifier = Modifier.size(14.dp))
                 Text(thread.topic!!, style = cInter(12), color = CHAT.ink600)
             }
         }
@@ -1059,22 +1034,22 @@ private fun ConnectionMenuButton(busy: Boolean, onRemove: () -> Unit, onBlock: (
         if (busy) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = CHAT.navy, strokeWidth = 2.dp)
         } else {
-            Icon(Icons.Filled.MoreVert, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+            Icon(Lucide.EllipsisVertical, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text("Remove connection") },
-                leadingIcon = { Icon(Icons.Filled.PersonRemove, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.UserMinus, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onRemove() },
             )
             DropdownMenuItem(
                 text = { Text("Block") },
-                leadingIcon = { Icon(Icons.Filled.Block, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.Ban, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onBlock() },
             )
             DropdownMenuItem(
                 text = { Text("Unblock") },
-                leadingIcon = { Icon(Icons.Filled.LockOpen, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.LockOpen, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onUnblock() },
             )
         }
@@ -1105,33 +1080,33 @@ private fun PastoralMenuButton(
             .clickable { expanded = true },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.MoreVert, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+        Icon(Lucide.EllipsisVertical, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (biometricOn) {
                 DropdownMenuItem(
                     text = { Text("Lock now") },
-                    leadingIcon = { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Lock, null, modifier = Modifier.size(22.dp)) },
                     onClick = { expanded = false; onLockNow() },
                 )
             }
             DropdownMenuItem(
                 text = { Text(if (biometricOn) "Disable biometric lock" else "Enable biometric lock") },
-                leadingIcon = { Icon(Icons.Filled.Fingerprint, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.FingerprintPattern, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onToggleBiometric() },
             )
             DropdownMenuItem(
                 text = { Text(if (muted) "Unmute" else "Mute") },
-                leadingIcon = { Icon(Icons.Filled.NotificationsOff, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.BellOff, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onToggleMute() },
             )
             DropdownMenuItem(
                 text = { Text(if (archived) "Unarchive" else "Archive") },
-                leadingIcon = { Icon(if (archived) Icons.Filled.Unarchive else Icons.Filled.Archive, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(if (archived) Lucide.ArchiveRestore else Lucide.Archive, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onArchive() },
             )
             DropdownMenuItem(
                 text = { Text("Privacy info") },
-                leadingIcon = { Icon(Icons.Filled.Info, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.Info, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onPrivacyInfo() },
             )
         }
@@ -1200,7 +1175,7 @@ private fun InviteCardBubble(invite: ChatInviteMeta, from: String, mine: Boolean
             if (!invite.imageUrl.isNullOrBlank()) {
                 AsyncImage(model = invite.imageUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
-                Icon(Icons.Filled.MenuBook, null, tint = CHAT.navy.copy(alpha = 0.6f), modifier = Modifier.size(28.dp))
+                Icon(Lucide.BookOpen, null, tint = CHAT.navy.copy(alpha = 0.6f), modifier = Modifier.size(28.dp))
             }
         }
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1345,10 +1320,10 @@ private fun MessageRow(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                    if (playing) Lucide.Pause else Lucide.Play,
                                     if (playing) "Pause voice note" else "Play voice note",
                                     tint = if (m.mine) CHAT.navy else CHAT.navy.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(17.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                             WaveformBars(
@@ -1365,7 +1340,7 @@ private fun MessageRow(
                         }
                     }
                     "video", "file" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Filled.Movie, null, tint = if (m.mine) Color.White else CHAT.textDark, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.Film, null, tint = if (m.mine) Color.White else CHAT.textDark, modifier = Modifier.size(14.dp))
                         Text(if (m.body.isNotBlank()) m.body else "Shared a video", style = cInter(13), color = if (m.mine) Color.White else CHAT.textDark)
                     }
                     else -> LinkifiedBubbleText(m.body, mine = m.mine, onOpenRoute = onOpenRoute)
@@ -1419,7 +1394,7 @@ private fun MessageRow(
                     }
                     if (pending) {
                         // Honest: not delivered yet — no tick until the server has it.
-                        Icon(Icons.Filled.Schedule, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        Icon(Lucide.Clock4, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Waiting to send", style = cInter(11), color = Color.White.copy(alpha = 0.7f))
                     } else {

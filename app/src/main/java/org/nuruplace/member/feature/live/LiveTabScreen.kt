@@ -47,13 +47,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -91,6 +84,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * @param onNavigate hands off to MainShell's NavHost — used for the
@@ -247,7 +241,7 @@ private fun BreathingGoLivePill(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Filled.Videocam, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Video, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(18.dp))
             Text("Go Live", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.Bold)
         }
     }
@@ -282,7 +276,7 @@ private fun MyBroadcastsList(onOpenRecording: (LiveRecordingRow) -> Unit, modifi
                 Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            Icons.Filled.Videocam, contentDescription = null,
+                            Lucide.Video, contentDescription = null,
                             tint = Nuru.gold.copy(alpha = 0.5f), modifier = Modifier.size(32.dp),
                         )
                         Spacer(Modifier.height(Spacing.sm))
@@ -335,7 +329,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (row.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
+                if (row.isAudio) Lucide.AudioLines else Lucide.Video,
                 contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp),
             )
         }
@@ -366,18 +360,18 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
                 if (deleting) {
                     CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                 } else {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Broadcast options", tint = Nuru.ink400, modifier = Modifier.size(20.dp))
+                    Icon(Lucide.EllipsisVertical, contentDescription = "Broadcast options", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
                 }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text("Play") },
-                    leadingIcon = { Icon(Icons.Filled.PlayArrow, null, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Play, null, modifier = Modifier.size(22.dp)) },
                     onClick = { menuOpen = false; onPlay() },
                 )
                 DropdownMenuItem(
                     text = { Text("Share") },
-                    leadingIcon = { Icon(Icons.Filled.Share, null, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Share2, null, modifier = Modifier.size(22.dp)) },
                     onClick = {
                         menuOpen = false
                         // recording_url is a RELATIVE path — resolve to an
@@ -393,7 +387,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
                 )
                 DropdownMenuItem(
                     text = { Text("Delete", color = Nuru.danger) },
-                    leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Nuru.danger, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Trash2, null, tint = Nuru.danger, modifier = Modifier.size(22.dp)) },
                     onClick = { menuOpen = false; showDeleteConfirm = true },
                 )
             }

@@ -24,12 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Mail
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +54,7 @@ import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import org.nuruplace.member.ui.icons.Lucide
 
 private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
@@ -94,7 +89,7 @@ fun LetterAwaitingCard(onClick: () -> Unit = {}) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(SealGrad), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("THE SUNDAY LETTER", style = nuruSans(11, FontWeight.Bold, tracking = 1.4f), color = Color(0xFFE8CA6C))
@@ -141,7 +136,7 @@ fun LetterReadRow(letter: PastoralLetter, onOpen: () -> Unit) {
         Box(
             Modifier.size(34.dp).clip(CircleShape).background(LetterTheme.resolve(letter.artKey).accentColor.copy(alpha = 0.20f)),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Mail, null, tint = LetterTheme.resolve(letter.artKey).accentColor, modifier = Modifier.size(15.dp)) }
+        ) { Icon(Lucide.Mail, null, tint = LetterTheme.resolve(letter.artKey).accentColor, modifier = Modifier.size(14.dp)) }
         Column(Modifier.weight(1f)) {
             Text(letter.displayTitle ?: "Your Sunday Letter", style = NuruType.rowTitle, color = Nuru.homeNavy, maxLines = 2)
             Text("Read again", style = NuruType.caption, color = Color(0xFFA8861C))
@@ -163,7 +158,7 @@ fun LetterKnockCard(letter: PastoralLetter, onOpen: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(44.dp).clip(CircleShape).background(SealGrad), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Mail, null, tint = Color(0xFF1E2A1F), modifier = Modifier.size(20.dp))
+            Icon(Lucide.Mail, null, tint = Color(0xFF1E2A1F), modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("THE SUNDAY LETTER", style = NuruType.micro, color = Color(0xFFE8CA6C), fontWeight = FontWeight.Bold)
@@ -251,7 +246,7 @@ fun LetterDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
-                            Icon(Icons.Filled.MenuBook, null, tint = Color(0xFFA8861C), modifier = Modifier.size(14.dp))
+                            Icon(Lucide.BookOpen, null, tint = Color(0xFFA8861C), modifier = Modifier.size(14.dp))
                             Text(ref, style = NuruType.caption, color = Color(0xFF8A6B1F), fontWeight = FontWeight.Bold)
                         }
                     }
@@ -300,7 +295,7 @@ fun LetterDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(step.label, style = NuruType.cardCta, color = Color(0xFFF3E6C8), fontWeight = FontWeight.SemiBold)
-                            Icon(Icons.Filled.ArrowForward, null, tint = Color(0xFFC9A227), modifier = Modifier.size(16.dp))
+                            Icon(Lucide.ArrowRight, null, tint = Color(0xFFC9A227), modifier = Modifier.size(18.dp))
                         }
                     }
                     Spacer(Modifier.height(18.dp))
@@ -324,7 +319,7 @@ fun LetterDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Icon(Icons.Filled.Share, null, tint = Color(0xFF8A6B1F), modifier = Modifier.size(14.dp))
+                            Icon(Lucide.Share2, null, tint = Color(0xFF8A6B1F), modifier = Modifier.size(14.dp))
                             Text("Share", style = NuruType.caption, color = Color(0xFF8A6B1F), fontWeight = FontWeight.Bold)
                         }
                     }
@@ -336,7 +331,7 @@ fun LetterDialog(
                     .size(34.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.14f))
                     .clickable { onDismiss() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Close, "Close", tint = Color.White, modifier = Modifier.size(16.dp)) }
+            ) { Icon(Lucide.X, "Close", tint = Color.White, modifier = Modifier.size(18.dp)) }
         }
     }
 }

@@ -129,10 +129,7 @@ internal fun GiveSegmentControl(segment: GiveSegment, onSelect: (GiveSegment) ->
  *  something is unread. */
 @Composable
 private fun GiveBell(onClick: () -> Unit) {
-    InboxBell(
-        onClick = onClick, size = 46.dp, shape = CircleShape,
-        container = GIVE.white, border = GIVE.border, tint = GIVE.navy, iconSize = 19.dp, dotInset = 10.dp,
-    )
+    InboxBell(onClick = onClick)
 }
 
 @Composable

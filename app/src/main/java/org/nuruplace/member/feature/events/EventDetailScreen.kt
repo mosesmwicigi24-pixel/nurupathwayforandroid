@@ -18,8 +18,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.draw.alpha
@@ -53,21 +51,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -110,6 +93,7 @@ import java.time.Instant
 import java.util.UUID
 import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Pill / capsule corner. */
 private val Capsule = RoundedCornerShape(999.dp)
@@ -317,7 +301,7 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         .background(Color.White.copy(alpha = 0.15f))
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Lucide.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
                 Box(
                     Modifier
                         .size(40.dp)
@@ -325,7 +309,7 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         .background(Color.White.copy(alpha = 0.15f))
                         .clickable { onShare() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Share, "Share", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                ) { Icon(Lucide.Share2, "Share", tint = Color.White, modifier = Modifier.size(18.dp)) }
             }
             // Bottom overlay
             Column(
@@ -384,8 +368,8 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetaTile(Modifier.weight(1f), Icons.Filled.CalendarMonth, "DATE", evDateFull(e.occursAt), accent)
-                MetaTile(Modifier.weight(1f), Icons.Filled.Schedule, "TIME", if (endAt != null) evTimeRange(e.occursAt, endAt) else evTime(e.occursAt), accent)
+                MetaTile(Modifier.weight(1f), Lucide.CalendarDays, "DATE", evDateFull(e.occursAt), accent)
+                MetaTile(Modifier.weight(1f), Lucide.Clock4, "TIME", if (endAt != null) evTimeRange(e.occursAt, endAt) else evTime(e.occursAt), accent)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // The venue is a DOOR, not a caption (owner, 2026-08-24):
@@ -403,16 +387,16 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
                             }
                         } ?: Modifier,
                     ),
-                    Icons.Filled.Place, "WHERE", e.location?.takeIf { it.isNotBlank() } ?: "Not set", accent,
+                    Lucide.MapPin, "WHERE", e.location?.takeIf { it.isNotBlank() } ?: "Not set", accent,
                 )
                 // No zero counts (EXPERIENCE.md §7.4 #9): nobody going yet
                 // leaves WHERE the row — the RSVP card below asks.
-                if (going > 0) MetaTile(Modifier.weight(1f), Icons.Filled.Person, "GOING", peopleLabel, accent)
+                if (going > 0) MetaTile(Modifier.weight(1f), Lucide.User, "GOING", peopleLabel, accent)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton(Modifier.weight(1f), Icons.Filled.CalendarMonth, "Add to calendar", onAddToCalendar)
-            ActionButton(Modifier.weight(1f), Icons.Filled.Share, "Share", onShare)
+            ActionButton(Modifier.weight(1f), Lucide.CalendarDays, "Add to calendar", onAddToCalendar)
+            ActionButton(Modifier.weight(1f), Lucide.Share2, "Share", onShare)
         }
     }
 }
@@ -436,7 +420,7 @@ private fun MetaTile(modifier: Modifier, icon: ImageVector, label: String, value
                 // category's hue.
                 .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(15.dp)) }
+        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(14.dp)) }
         Column {
             Text(label, style = evInter(11, FontWeight.Bold, 1.3f), color = EV.tertiary)
             // Wraps rather than cuts (§8.1 rule 9): "The Good News Mi…" was the
@@ -615,7 +599,7 @@ private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit, queued: String? 
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Check, null, tint = EV.goingText, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Check, null, tint = EV.goingText, modifier = Modifier.size(14.dp))
                 Text("Saved · we'll remind you the day before.", style = evInter(11, FontWeight.SemiBold), color = EV.goingText)
             }
         }
@@ -754,7 +738,7 @@ private fun BuzzCard(eventId: String) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.Group, null, tint = EV.overline, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Users, null, tint = EV.overline, modifier = Modifier.size(14.dp))
                     EVOverline("The wall")
                 }
                 if (posts.isNotEmpty()) {
@@ -825,7 +809,7 @@ private fun BuzzCard(eventId: String) {
                                 .background(Color.Black.copy(alpha = 0.55f))
                                 .clickable { pickedBytes = null; pickedPreview = null; uploadedUrl = null },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Close, "Remove photo", tint = Color.White, modifier = Modifier.size(15.dp)) }
+                        ) { Icon(Lucide.X, "Remove photo", tint = Color.White, modifier = Modifier.size(14.dp)) }
                     }
                 }
 
@@ -836,11 +820,11 @@ private fun BuzzCard(eventId: String) {
                                 .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
                                 .clickable { attachMenu = true },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Add, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
+                        ) { Icon(Lucide.Plus, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
                         DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("Take photo") },
-                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, null, modifier = Modifier.size(20.dp)) },
+                                leadingIcon = { Icon(Lucide.Camera, null, modifier = Modifier.size(22.dp)) },
                                 onClick = {
                                     attachMenu = false
                                     if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
@@ -850,7 +834,7 @@ private fun BuzzCard(eventId: String) {
                             )
                             DropdownMenuItem(
                                 text = { Text("Choose photo") },
-                                leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null, modifier = Modifier.size(20.dp)) },
+                                leadingIcon = { Icon(Lucide.Images, null, modifier = Modifier.size(22.dp)) },
                                 onClick = {
                                     attachMenu = false
                                     galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -880,7 +864,7 @@ private fun BuzzCard(eventId: String) {
                             .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
                             .clickable { draft += "🔥" },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.LocalFireDepartment, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(17.dp)) }
+                    ) { Icon(Lucide.Flame, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(18.dp)) }
                     val faded = (draft.isBlank() && pickedBytes == null) || busy
                     Box(
                         Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(EV.goldCta)
@@ -888,9 +872,9 @@ private fun BuzzCard(eventId: String) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.Send, "Post",
+                            Lucide.Send, "Post",
                             tint = EV.ink.copy(alpha = if (faded) 0.55f else 1f),
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
@@ -989,7 +973,7 @@ private fun CheckInFooter(occursAt: String, eventId: String, onCheckIn: (String)
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.QrCodeScanner, null, tint = EV.ink, modifier = Modifier.size(16.dp))
+            Icon(Lucide.ScanQrCode, null, tint = EV.ink, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Check in", style = evInter(13, FontWeight.Bold), color = EV.ink)
         }
@@ -1013,7 +997,7 @@ private fun CheckInFooter(occursAt: String, eventId: String, onCheckIn: (String)
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Lock, null, tint = EV.gold, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Lock, null, tint = EV.gold, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(8.dp))
             Text("Check-in opens when the event is live", style = evInter(13, FontWeight.SemiBold), color = Color(0xFF6A7686))
         }

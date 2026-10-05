@@ -26,15 +26,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatColorText
-import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatLineSpacing
-import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -64,6 +55,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 /** A new-or-existing thought being edited. */
 data class SelahDraft(
@@ -111,7 +103,7 @@ fun SelahEditorScreen(
             Box(
                 Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Close, "Close", tint = Nuru.navy, modifier = Modifier.size(14.dp)) }
+            ) { Icon(Lucide.X, "Close", tint = Nuru.navy, modifier = Modifier.size(14.dp)) }
             Spacer(Modifier.weight(1f))
             Text("SELAH", style = NuruType.sectionLabel, color = Nuru.eyebrow)
             Spacer(Modifier.weight(1f))
@@ -120,7 +112,7 @@ fun SelahEditorScreen(
                     Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface)
                         .clickable { Haptics.tap(view); pendingDelete = true },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Delete, "Delete thought", tint = Nuru.danger, modifier = Modifier.size(14.dp)) }
+                ) { Icon(Lucide.Trash2, "Delete thought", tint = Nuru.danger, modifier = Modifier.size(14.dp)) }
             } else {
                 Box(Modifier.size(32.dp))
             }
@@ -197,7 +189,7 @@ fun SelahEditorScreen(
                                 .background(Color.Black.copy(alpha = 0.55f))
                                 .clickable { Haptics.tap(view); drawingUrls = drawingUrls - url },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Close, null, tint = Color.White, modifier = Modifier.size(10.dp)) }
+                        ) { Icon(Lucide.X, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                     }
                 }
             }
@@ -210,10 +202,10 @@ fun SelahEditorScreen(
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ToolbarIcon(Icons.Filled.FormatBold, controller.selectionBold) { Haptics.tap(view); controller.toggleBold() }
-            ToolbarIcon(Icons.Filled.FormatItalic, controller.selectionItalic) { Haptics.tap(view); controller.toggleItalic() }
+            ToolbarIcon(Lucide.Bold, controller.selectionBold) { Haptics.tap(view); controller.toggleBold() }
+            ToolbarIcon(Lucide.Italic, controller.selectionItalic) { Haptics.tap(view); controller.toggleItalic() }
             Box {
-                ToolbarIcon(Icons.Filled.FormatColorText, false) { colorMenuOpen = true }
+                ToolbarIcon(Lucide.Baseline, false) { colorMenuOpen = true }
                 DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                     SelahColor.entries.forEach { c ->
                         DropdownMenuItem(text = { Text(c.label) }, onClick = {
@@ -223,7 +215,7 @@ fun SelahEditorScreen(
                 }
             }
             Box {
-                ToolbarIcon(Icons.Filled.TextFields, false) { fontMenuOpen = true }
+                ToolbarIcon(Lucide.Type, false) { fontMenuOpen = true }
                 DropdownMenu(expanded = fontMenuOpen, onDismissRequest = { fontMenuOpen = false }) {
                     SelahFont.entries.forEach { f ->
                         DropdownMenuItem(text = { Text(f.label) }, onClick = {
@@ -233,7 +225,7 @@ fun SelahEditorScreen(
                 }
             }
             Box {
-                ToolbarIcon(Icons.Filled.FormatLineSpacing, false) { spacingMenuOpen = true }
+                ToolbarIcon(Lucide.List, false) { spacingMenuOpen = true }
                 DropdownMenu(expanded = spacingMenuOpen, onDismissRequest = { spacingMenuOpen = false }) {
                     SelahSpacing.entries.forEach { s ->
                         DropdownMenuItem(text = { Text(s.label) }, onClick = {
@@ -243,7 +235,7 @@ fun SelahEditorScreen(
                 }
             }
             if (isPenCapableDevice(context)) {
-                ToolbarIcon(Icons.Filled.EditNote, false) { Haptics.tap(view); showDrawing = true }
+                ToolbarIcon(Lucide.NotebookPen, false) { Haptics.tap(view); showDrawing = true }
             }
         }
 
@@ -304,6 +296,6 @@ private fun ToolbarIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, a
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = if (active) Color.White else Nuru.navy, modifier = Modifier.size(17.dp))
+        Icon(icon, null, tint = if (active) Color.White else Nuru.navy, modifier = Modifier.size(18.dp))
     }
 }

@@ -24,8 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +46,7 @@ import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.InboxUnread
 import org.nuruplace.member.util.relTime
+import org.nuruplace.member.ui.icons.Lucide
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Announcements list — the "See all" screen. Cream sub-page header + a column of
@@ -170,7 +169,7 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
                             .background(EV.navyCard),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.PlayCircle, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(48.dp))
+                        Icon(Lucide.CirclePlay, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(48.dp))
                     }
                 }
                 // Gallery rail — the rest of the pictures. The server's

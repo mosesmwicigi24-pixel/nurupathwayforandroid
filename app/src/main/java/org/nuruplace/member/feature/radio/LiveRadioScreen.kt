@@ -39,19 +39,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -108,6 +95,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 private object RADIO {
@@ -495,7 +483,7 @@ private fun Header(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassSquare(Icons.AutoMirrored.Filled.ArrowBack, 20.dp) { onBack() }
+        GlassSquare(Lucide.ArrowLeft, 22.dp) { onBack() }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (live) PulsingDot(RADIO.red, 6.dp)
@@ -505,7 +493,7 @@ private fun Header(
         // The bell toggles the SAME "remind me when we're live" reminder as the
         // off-air CTA below (iOS parity) — a no-op while a show is live or when
         // nothing is scheduled next.
-        GlassSquare(Icons.Filled.Notifications, 18.dp, active = reminderOn) {
+        GlassSquare(Lucide.Bell, 18.dp, active = reminderOn) {
             if (reminderAvailable) onToggleReminder()
         }
     }
@@ -536,7 +524,7 @@ private fun Centerpiece(now: RadioProgram?, modifier: Modifier = Modifier) {
                 Box(
                     Modifier.matchParentSize().background(Brush.linearGradient(listOf(RADIO.panelTop, RADIO.navy))),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = RADIO.gold.copy(alpha = 0.8f), modifier = Modifier.size(44.dp)) }
+                ) { Icon(Lucide.AudioLines, contentDescription = null, tint = RADIO.gold.copy(alpha = 0.8f), modifier = Modifier.size(44.dp)) }
             }
             if (now?.live != true) {
                 Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.5f)))
@@ -634,9 +622,9 @@ private fun TransportRow(
 ) {
     if (now?.live == true || now?.streamUrl != null) {
         Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            GlassCircle(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, active = !muted) { onMute() }
+            GlassCircle(if (muted) Lucide.VolumeX else Lucide.Volume2, active = !muted) { onMute() }
             PlayButton(playing, enabled = now?.streamUrl != null, onClick = onPlay)
-            GlassCircle(Icons.Filled.Bedtime, active = false) { }
+            GlassCircle(Lucide.Moon, active = false) { }
         }
     } else if (nextScheduled != null) {
         // Off-air CTA — schedules a local notification for the next scheduled
@@ -651,8 +639,8 @@ private fun TransportRow(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
-                    Icons.Filled.Notifications, contentDescription = null,
-                    tint = if (reminderOn) Color.White else RADIO.textOnGold, modifier = Modifier.size(15.dp),
+                    Lucide.Bell, contentDescription = null,
+                    tint = if (reminderOn) Color.White else RADIO.textOnGold, modifier = Modifier.size(14.dp),
                 )
                 Text(
                     if (reminderOn) "We'll notify you 🔔" else "Remind me when we're live",
@@ -693,7 +681,7 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
             )
         }
         Icon(
-            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) Lucide.Pause else Lucide.Play,
             contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(30.dp),
         )
     }
@@ -716,9 +704,9 @@ private fun GlassCircle(icon: ImageVector, active: Boolean, onClick: () -> Unit)
 @Composable
 private fun StatChips(now: RadioProgram?, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatChip(Icons.Filled.Headphones, (now?.peakListeners ?: 0).toString(), "LISTENING")
-        StatChip(Icons.Filled.Schedule, "LIVE", "STARTED")
-        StatChip(Icons.Filled.Public, "🌍", "REACH")
+        StatChip(Lucide.Headphones, (now?.peakListeners ?: 0).toString(), "LISTENING")
+        StatChip(Lucide.Clock4, "LIVE", "STARTED")
+        StatChip(Lucide.Globe, "🌍", "REACH")
     }
 }
 
@@ -728,7 +716,7 @@ private fun StatChip(icon: ImageVector, value: String, label: String) {
         Modifier.clip(Capsule).background(RADIO.glass).border(1.dp, RADIO.glassBorder, Capsule).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = RADIO.goldLight, modifier = Modifier.size(12.dp))
+        Icon(icon, contentDescription = null, tint = RADIO.goldLight, modifier = Modifier.size(14.dp))
         Text(value, style = gInter(11, FontWeight.Bold), color = Color.White)
         Text(label, style = gInter(11, FontWeight.SemiBold, 0.9f), color = Color.White.copy(alpha = 0.45f))
     }
@@ -888,9 +876,9 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Send, contentDescription = null,
+                        Lucide.Send, contentDescription = null,
                         tint = if (draft.isNotBlank()) RADIO.textOnGold else Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier.size(15.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                 }
             }
@@ -971,7 +959,7 @@ private fun RecordingRow(p: RadioProgram, tuned: Boolean, onToggle: () -> Unit) 
                 Box(Modifier.matchParentSize().background(RADIO.navyDeep.copy(alpha = 0.4f)))
             }
             Box(Modifier.size(32.dp).clip(CircleShape).background(RADIO.goldGrad), contentAlignment = Alignment.Center) {
-                Icon(if (tuned) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(13.dp))
+                Icon(if (tuned) Lucide.Pause else Lucide.Play, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(14.dp))
             }
         }
         Column(Modifier.weight(1f)) {
@@ -1027,7 +1015,7 @@ private fun ScheduleRow(p: RadioProgram) {
                 }
             }
         } else {
-            Icon(Icons.Filled.Schedule, contentDescription = null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(13.dp))
+            Icon(Lucide.Clock4, contentDescription = null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(14.dp))
         }
     }
 }

@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
@@ -59,7 +58,7 @@ fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
                 Box(Modifier.size(150.dp).clip(CircleShape).border(1.dp, gold.copy(alpha = 0.15f), CircleShape))
                 Box(Modifier.size(122.dp).clip(CircleShape).border(1.dp, gold.copy(alpha = 0.3f), CircleShape))
                 Box(Modifier.size(96.dp).clip(CircleShape).background(gold.copy(alpha = 0.10f)).border(2.dp, gold, CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = gold, modifier = Modifier.size(40.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = gold, modifier = Modifier.size(40.dp))
                 }
             }
             Spacer(Modifier.height(24.dp))

@@ -27,17 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -77,6 +66,7 @@ import org.nuruplace.member.feature.community.ChatCircleAvatar
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 // --- Shared helpers ---
 
@@ -174,7 +164,7 @@ private fun ReadWithFriendEmptyState(onBrowse: () -> Unit) {
         Box(
             Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)).background(PL.gold.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.PersonAdd, null, tint = PL.gold, modifier = Modifier.size(26.dp)) }
+        ) { Icon(Lucide.UserPlus, null, tint = PL.gold, modifier = Modifier.size(26.dp)) }
         Text("Read together", style = plSerif(18, FontWeight.SemiBold), color = PL.navy)
         Text(
             "Invite a friend to any plan and keep each other going — see how far they've come and cheer them on.",
@@ -217,7 +207,7 @@ private fun ReadingGroupCard(group: ReadingGroupRow, myUserId: String, onClick: 
                     }
                 }
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.ink3, modifier = Modifier.size(16.dp))
+            Icon(Lucide.ChevronRight, null, tint = PL.ink3, modifier = Modifier.size(18.dp))
         }
         if (others.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -454,7 +444,7 @@ private fun PendingInvitesCard(invites: List<ReadingInviteRow>, onRevoke: (Readi
         PLOverline("PENDING INVITES", color = PL.goldDeep, kerning = 1.4f)
         invites.forEach { invite ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Schedule, null, tint = PL.ink3, modifier = Modifier.size(14.dp))
+                Icon(Lucide.Clock4, null, tint = PL.ink3, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(if (invite.isOpenLink) "Open link" else "Invite sent", style = plInter(12), color = PL.ink2, modifier = Modifier.weight(1f))
                 Text(
@@ -477,9 +467,9 @@ private fun GroupActionsCard(
         // One door: the friend picker, which carries "Share another way" (the
         // former "Share join link" row) at its foot — two rows opening the same
         // sheet would have been the same door twice.
-        ActionRow(Icons.Filled.PersonAdd, "Invite a friend", PL.navy, onInviteFriend)
-        if (isCreator) ActionRow(Icons.Filled.Flag, "End this shared plan", PL.ink2, onArchive)
-        ActionRow(Icons.AutoMirrored.Filled.Logout, "Leave", Color.Red, onLeave)
+        ActionRow(Lucide.UserPlus, "Invite a friend", PL.navy, onInviteFriend)
+        if (isCreator) ActionRow(Lucide.Flag, "End this shared plan", PL.ink2, onArchive)
+        ActionRow(Lucide.LogOut, "Leave", Color.Red, onLeave)
     }
 }
 
@@ -493,7 +483,7 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Text(label, style = plInter(13, FontWeight.SemiBold), color = tint)
     }
@@ -588,7 +578,7 @@ internal fun FriendPickerSheet(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.Share, null, tint = PL.goldLight, modifier = Modifier.size(15.dp))
+                        Icon(Lucide.Share2, null, tint = PL.goldLight, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Share another way", style = plInter(13, FontWeight.Bold), color = Color.White)
                     }
@@ -634,7 +624,7 @@ private fun ShareAnotherWayRow(onClick: () -> Unit) {
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+        Icon(Lucide.Share2, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Text("Share another way", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
     }
@@ -694,7 +684,7 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Box(Modifier.size(72.dp).clip(CircleShape).background(PL.gold.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Check, null, tint = PL.goldDeep, modifier = Modifier.size(30.dp))
+                    Icon(Lucide.Check, null, tint = PL.goldDeep, modifier = Modifier.size(30.dp))
                 }
                 Text("You're in!", style = plSerif(22, FontWeight.SemiBold), color = PL.navy)
                 Text(
@@ -714,7 +704,7 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(Icons.Filled.Close, null, tint = PL.ink3, modifier = Modifier.size(28.dp))
+                Icon(Lucide.X, null, tint = PL.ink3, modifier = Modifier.size(28.dp))
                 Text("Invite declined", style = plSerif(18, FontWeight.SemiBold), color = PL.navy)
                 Text("Close", style = plInter(13, FontWeight.Bold), color = PL.gold, modifier = Modifier.clickable(onClick = onClose))
             }
@@ -724,7 +714,7 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                         Modifier.size(40.dp).clip(CircleShape).background(Color.White).border(1.dp, PL.border, CircleShape)
                             .clickable(onClick = onClose),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, null, tint = PL.navy, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(Lucide.X, null, tint = PL.navy, modifier = Modifier.size(18.dp)) }
                 }
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(top = 20.dp, bottom = 24.dp),
@@ -758,7 +748,7 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (busy) CircularProgressIndicator(color = PL.navy, modifier = Modifier.size(16.dp))
-                        else Icon(Icons.Filled.MenuBook, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                        else Icon(Lucide.BookOpen, null, tint = PL.navy, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Join & start reading", style = plInter(14, FontWeight.Bold), color = PL.navy)
                     }
@@ -790,5 +780,5 @@ private fun CircleBackBtn(onClick: () -> Unit) {
         Modifier.size(40.dp).clip(CircleShape).background(Color.White).border(1.dp, PL.border, CircleShape)
             .clickable { Haptics.tap(view); onClick() },
         contentAlignment = Alignment.Center,
-    ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = PL.navy, modifier = Modifier.size(18.dp)) }
+    ) { Icon(Lucide.ArrowLeft, null, tint = PL.navy, modifier = Modifier.size(18.dp)) }
 }

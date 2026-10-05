@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -45,6 +43,7 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.AssistantChatBody
 import org.nuruplace.member.data.net.AssistantMessage
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.ui.icons.Lucide
 
 // The AI's mark is navy with gold, like Quick help (EXPERIENCE.md §8.1 rule
 // 1, §8.2 #3): the gold orb with a navy spark (CHAT.aiOrb) — it was purple.
@@ -109,7 +108,7 @@ fun AiDraftButton(
         if (busy) {
             CircularProgressIndicator(color = AiMark, strokeWidth = 1.5.dp, modifier = Modifier.size(13.dp))
         } else {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = "Draft a reply with Nuru", tint = AiMark, modifier = Modifier.size(15.dp))
+            Icon(Lucide.Sparkles, contentDescription = "Draft a reply with Nuru", tint = AiMark, modifier = Modifier.size(14.dp))
         }
     }
 
@@ -121,7 +120,7 @@ fun AiDraftButton(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(22.dp).clip(CircleShape).background(AiOrb), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = AiMark, modifier = Modifier.size(12.dp))
+                        Icon(Lucide.Sparkles, contentDescription = null, tint = AiMark, modifier = Modifier.size(14.dp))
                     }
                     Text("NURU SUGGESTS", style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.eyebrow)
                 }

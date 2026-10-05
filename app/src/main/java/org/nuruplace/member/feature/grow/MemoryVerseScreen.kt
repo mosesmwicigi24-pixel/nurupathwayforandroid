@@ -28,11 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,6 +63,7 @@ import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -125,7 +121,7 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
                             .clickable { onBack() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
+                        Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
                     }
                     Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("HIDE HIS WORD", style = gInter(11, FontWeight.Bold, 1.4f), color = GrowPal.eyebrow)
@@ -286,7 +282,7 @@ private fun MilestoneCard(verses: List<MemoryVerseRow>) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(34.dp).clip(CircleShape).background(GrowPal.goldGlow), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Sparkles, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(18.dp))
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
@@ -329,7 +325,7 @@ private fun ThisWeekCard(verses: List<MemoryVerseRow>, onPractice: (MemoryVerseR
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Edit, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(14.dp))
+                Icon(Lucide.Pencil, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(14.dp))
                 Text("Practice", style = gInter(13, FontWeight.Bold), color = GrowPal.navy)
             }
         }
@@ -393,7 +389,7 @@ private fun PracticeSheet(v: MemoryVerseRow, saving: Boolean, error: String?, on
                 Modifier.size(32.dp).clip(CircleShape).background(GrowPal.surface).clickable { onClose() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "Close", tint = GrowPal.navy, modifier = Modifier.size(15.dp))
+                Icon(Lucide.X, contentDescription = "Close", tint = GrowPal.navy, modifier = Modifier.size(14.dp))
             }
         }
         Text(v.reference, style = gInter(11), color = GrowPal.ink600)

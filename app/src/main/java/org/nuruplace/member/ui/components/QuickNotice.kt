@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +43,7 @@ import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import kotlin.coroutines.cancellation.CancellationException
+import org.nuruplace.member.ui.icons.Lucide
 
 object QuickNotice {
     /** One line on screen; a new one replaces it. */
@@ -117,7 +116,7 @@ fun QuickNoticeHost(modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(18.dp))
+            Icon(Lucide.AlertCircle, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(18.dp))
             Text(shown.line, style = NuruType.body, color = Color.White)
         }
     }

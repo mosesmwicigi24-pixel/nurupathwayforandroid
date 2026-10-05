@@ -15,12 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +29,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun CommunityHubScreen(onOpen: (String) -> Unit) {
@@ -47,11 +42,11 @@ fun CommunityHubScreen(onOpen: (String) -> Unit) {
         // Every tile navy on gold tint (§8.1 rules 1 and 7) — they were red,
         // sky, green and purple.
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            HubCard("prayer-room?tab=corporate", "My Prayer Room", "Share & carry each other's requests", Icons.Filled.Favorite, Nuru.navy, Nuru.goldTint, onOpen)
-            HubCard("chat", "Messages", "Spaces, groups and direct messages", Icons.Filled.Email, Nuru.navy, Nuru.goldTint, onOpen)
-            HubCard("events", "Events", "What's on — RSVP and see who's going", Icons.Filled.DateRange, Nuru.navy, Nuru.goldTint, onOpen)
-            HubCard("announcements", "Announcements", "News from your church", Icons.Filled.Notifications, Nuru.navy, Nuru.goldTint, onOpen)
-            HubCard("radio", "Live radio", "Tune in to Nuru Place on air", Icons.Filled.PlayArrow, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("prayer-room?tab=corporate", "My Prayer Room", "Share & carry each other's requests", Lucide.Heart, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("chat", "Messages", "Spaces, groups and direct messages", Lucide.Mail, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("events", "Events", "What's on — RSVP and see who's going", Lucide.CalendarRange, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("announcements", "Announcements", "News from your church", Lucide.Bell, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("radio", "Live radio", "Tune in to Nuru Place on air", Lucide.Play, Nuru.navy, Nuru.goldTint, onOpen)
         }
     }
 }

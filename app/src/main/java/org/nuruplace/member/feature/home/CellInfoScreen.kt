@@ -27,10 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Chair
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,6 +62,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.fmtEventTime
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
@@ -129,7 +126,7 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                                 .border(1.dp, Nuru.border, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Filled.Chair, contentDescription = "No leader yet", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
+                            Icon(Lucide.Armchair, contentDescription = "No leader yet", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
                         }
                     }
                     Spacer(Modifier.size(Spacing.md))
@@ -248,11 +245,11 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                         Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldTint),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.VideoLibrary, null, tint = Nuru.navy, modifier = Modifier.size(16.dp))
+                        Icon(Lucide.Clapperboard, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
                     }
                     Spacer(Modifier.size(Spacing.md))
                     Text("Watch replays", style = NuruType.controlTitle, color = Nuru.ink, modifier = Modifier.weight(1f))
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.ink300, modifier = Modifier.size(20.dp))
+                    Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(22.dp))
                 }
             }
             Box(
@@ -318,10 +315,10 @@ private fun MembersFacesRow(roster: CellSummary.Roster, members: Int, onOpen: ()
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                Lucide.ChevronRight,
                 contentDescription = "Open the roster",
                 tint = Nuru.ink300,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
     }

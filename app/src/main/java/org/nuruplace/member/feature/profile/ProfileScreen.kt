@@ -34,36 +34,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Diversity3
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.TrackChanges
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -124,6 +94,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.delay
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -263,7 +234,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                 .clickable { pickAvatar() },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Change photo", tint = PROF.navy, modifier = Modifier.size(14.dp))
+                            Icon(Lucide.Pencil, contentDescription = "Change photo", tint = PROF.navy, modifier = Modifier.size(14.dp))
                         }
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -279,7 +250,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(11.dp))
+                                Icon(Lucide.Award, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(14.dp))
                                 Text("Level $level", style = pInter(11, FontWeight.SemiBold), color = PROF.eyebrow)
                             }
                         }
@@ -378,10 +349,10 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(
-                                if (earned) Icons.Filled.Check else Icons.Filled.Lock,
+                                if (earned) Lucide.Check else Lucide.Lock,
                                 contentDescription = null,
                                 tint = if (earned) PROF.success else PROF.rowLabel,
-                                modifier = Modifier.size(11.dp),
+                                modifier = Modifier.size(14.dp),
                             )
                             Text(
                                 if (earned) "Earned ${certDate(b.awardedAt)}" else "Locked",
@@ -547,7 +518,7 @@ private fun EditFieldSheet(
                     Modifier.size(32.dp).clip(CircleShape).background(PROF.surface).clickable { onDismiss() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = PROF.navy, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.X, contentDescription = "Close", tint = PROF.navy, modifier = Modifier.size(18.dp))
                 }
             }
             field.helper?.let { helper ->
@@ -579,7 +550,7 @@ private fun EditFieldSheet(
                             modifier = Modifier.weight(1f),
                         )
                         if (selected) {
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(15.dp))
+                            Icon(Lucide.Check, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -647,7 +618,7 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 @Composable
 private fun SectionTitle(icon: ImageVector, title: String, trailing: (@Composable () -> Unit)? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(15.dp))
+        Icon(icon, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
         Text(title, style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.kicker)
         if (trailing != null) {
@@ -666,7 +637,7 @@ private fun HairlineDivider() {
 @Composable
 private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.Person, "PERSONAL INFORMATION")
+        SectionTitle(Lucide.User, "PERSONAL INFORMATION")
 
         // No raw Member ID (§8.1 rule 8; Cycle 3's closing walk): the row
         // showed the 36-character user_id — data, not a word for a member.
@@ -675,25 +646,25 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
         // "Not set" (it read "—"), a birthday "1 Jan 1990" — the calendar date
         // sent, never shifted by the phone's zone (it read the raw
         // "1989-12-31T21:00:00.000Z") — and a gender its own words.
-        InfoRow(Icons.Filled.MailOutline, "EMAIL", profileValue(p?.email), onEdit = { onEdit(EditField.EMAIL) })
+        InfoRow(Lucide.Mail, "EMAIL", profileValue(p?.email), onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
-        InfoRow(Icons.Filled.Person, "FULL NAME", profileValue(p?.fullName), onEdit = { onEdit(EditField.NAME) })
+        InfoRow(Lucide.User, "FULL NAME", profileValue(p?.fullName), onEdit = { onEdit(EditField.NAME) })
         // Read the Kenyan way, as Give shows it ("0700 000 000", not "+254700000000");
         // the edit sheet still starts from the stored number.
         InfoRow(
-            Icons.Filled.Call, "PHONE",
+            Lucide.Phone, "PHONE",
             p?.phoneNumber?.takeIf { it.isNotBlank() }?.let(::kenyanMobileDisplay) ?: NOT_SET,
             onEdit = { onEdit(EditField.PHONE) },
         )
-        InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", profileDateLabel(p?.dateOfBirth), onEdit = { onEdit(EditField.DOB) })
-        InfoRow(Icons.Filled.Group, "GENDER", profileGenderLabel(p?.gender), onEdit = { onEdit(EditField.GENDER) })
+        InfoRow(Lucide.Calendar, "DATE OF BIRTH", profileDateLabel(p?.dateOfBirth), onEdit = { onEdit(EditField.DOB) })
+        InfoRow(Lucide.Users, "GENDER", profileGenderLabel(p?.gender), onEdit = { onEdit(EditField.GENDER) })
         InfoRow(
-            Icons.Filled.Public,
+            Lucide.Globe,
             "COUNTRY",
             (flagEmoji(p?.countryCode) + " " + countryName(p?.countryCode)).trim().ifEmpty { NOT_SET },
             onEdit = { onEdit(EditField.COUNTRY) },
         )
-        InfoRow(Icons.Filled.LocationOn, "CITY", profileValue(p?.city), onEdit = { onEdit(EditField.CITY) })
+        InfoRow(Lucide.MapPin, "CITY", profileValue(p?.city), onEdit = { onEdit(EditField.CITY) })
         HairlineDivider()
         LanguagesRow()
     }
@@ -715,7 +686,7 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
                     .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
+                Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text(label, style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
@@ -730,7 +701,7 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
                         .clickable { onEdit() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit $label", tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.Pencil, contentDescription = "Edit $label", tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -752,7 +723,7 @@ private fun LanguagesRow() {
                 .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Translate, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
+            Icon(Lucide.Languages, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("LANGUAGES SPOKEN", style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
@@ -766,7 +737,7 @@ private fun LanguagesRow() {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("English", style = pInter(12, FontWeight.Medium), color = PROF.verify)
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(11.dp))
+                        Icon(Lucide.Check, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -782,7 +753,7 @@ private fun LanguagesRow() {
 @Composable
 private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.Diversity3, "SERVING IN")
+        SectionTitle(Lucide.Users2, "SERVING IN")
         Column(Modifier.padding(top = 4.dp)) {
             serving.forEachIndexed { index, d ->
                 Row(
@@ -800,7 +771,7 @@ private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
                                 modifier = Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)),
                             )
                         } else {
-                            Icon(Icons.Filled.Diversity3, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.Users2, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(18.dp))
                         }
                     }
                     Column(Modifier.weight(1f)) {
@@ -810,7 +781,7 @@ private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
                             style = pInter(11), color = PROF.sub,
                         )
                     }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.ChevronRight, null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
                 }
                 if (index != serving.lastIndex) HairlineDivider()
             }
@@ -833,13 +804,13 @@ private fun DisciplesEntryCard(onOpen: () -> Unit) {
         Box(
             Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PROF.gold),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Groups, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(20.dp)) }
+        ) { Icon(Lucide.Users, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(22.dp)) }
         Column(Modifier.weight(1f)) {
             Text("SHEPHERD THE FLOCK", style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.gold)
             Text("Your disciples", style = pInter(14, FontWeight.SemiBold), color = Color.White)
             Text("Roster, journeys & pending reflections", style = pInter(11), color = Color.White.copy(alpha = 0.7f))
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+        Icon(Lucide.ChevronRight, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -847,7 +818,7 @@ private fun DisciplesEntryCard(onOpen: () -> Unit) {
 @Composable
 private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, onBadge: (Badge) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.AutoAwesome, "ACHIEVEMENTS") {
+        SectionTitle(Lucide.Sparkles, "ACHIEVEMENTS") {
             Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.navy)
         }
         // Catalogue merge (GET /badges): earned first, locked after — the rail
@@ -866,7 +837,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                         .border(1.dp, PROF.border, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Verified, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(20.dp))
+                    Icon(Lucide.BadgeCheck, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(22.dp))
                 }
             }
         } else {
@@ -892,7 +863,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(st.icon, contentDescription = null, tint = if (earned) st.color else PROF.rowLabel, modifier = Modifier.size(20.dp))
+                            Icon(st.icon, contentDescription = null, tint = if (earned) st.color else PROF.rowLabel, modifier = Modifier.size(22.dp))
                         }
                         Text(
                             b.name,
@@ -920,7 +891,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
 @Composable
 private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.TrendingUp, "GROWTH SCORES")
+        SectionTitle(Lucide.TrendingUp, "GROWTH SCORES")
 
         Row(
             Modifier.padding(vertical = 6.dp),
@@ -953,15 +924,15 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
             }
         }
         HairlineDivider()
-        ScoreRow("Word", scores?.word?.score, "word", Icons.Filled.MenuBook, onOpen)
+        ScoreRow("Word", scores?.word?.score, "word", Lucide.BookOpen, onOpen)
         HairlineDivider()
-        ScoreRow("Prayer", scores?.prayer?.score, "prayer", Icons.Filled.FavoriteBorder, onOpen)
+        ScoreRow("Prayer", scores?.prayer?.score, "prayer", Lucide.Heart, onOpen)
         HairlineDivider()
-        ScoreRow("Habits", scores?.habits?.score, "habits", Icons.Filled.LocalFireDepartment, onOpen)
+        ScoreRow("Habits", scores?.habits?.score, "habits", Lucide.Flame, onOpen)
         HairlineDivider()
-        ScoreRow("Curriculum", scores?.curriculum?.score, "curriculum", Icons.Filled.School, onOpen)
+        ScoreRow("Curriculum", scores?.curriculum?.score, "curriculum", Lucide.GraduationCap, onOpen)
         HairlineDivider()
-        ScoreRow("Attendance", scores?.attendance?.score, "attendance", Icons.Filled.Group, onOpen)
+        ScoreRow("Attendance", scores?.attendance?.score, "attendance", Lucide.Users, onOpen)
 
         Text(
             "Tap a score to see why — scores are formative, never a leaderboard.",
@@ -990,7 +961,7 @@ private fun ScoreRow(name: String, value: Int?, pillar: String, icon: ImageVecto
                 .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
+            Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1017,7 +988,7 @@ private fun ScoreRow(name: String, value: Int?, pillar: String, icon: ImageVecto
                 }
             }
         }
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1047,7 +1018,7 @@ private fun MilestonesCard(me: MeResponse?) {
         MilestoneItem("Pathway completion", "Your journey continues", MilestoneState.FUTURE),
     )
     SectionCard {
-        SectionTitle(Icons.Filled.TrackChanges, "MILESTONES")
+        SectionTitle(Lucide.Target, "MILESTONES")
         Column(Modifier.padding(top = 8.dp)) {
             items.forEachIndexed { index, item ->
                 val last = index == items.lastIndex
@@ -1072,9 +1043,9 @@ private fun MilestonesCard(me: MeResponse?) {
                         ) {
                             Icon(
                                 when (item.state) {
-                                    MilestoneState.DONE -> Icons.Filled.Check
-                                    MilestoneState.ACTIVE -> Icons.Filled.CalendarToday
-                                    MilestoneState.FUTURE -> Icons.Filled.FavoriteBorder
+                                    MilestoneState.DONE -> Lucide.Check
+                                    MilestoneState.ACTIVE -> Lucide.Calendar
+                                    MilestoneState.FUTURE -> Lucide.Heart
                                 },
                                 contentDescription = null,
                                 tint = when (item.state) {
@@ -1082,7 +1053,7 @@ private fun MilestonesCard(me: MeResponse?) {
                                     MilestoneState.ACTIVE -> PROF.gold
                                     MilestoneState.FUTURE -> PROF.rowLabel
                                 },
-                                modifier = Modifier.size(if (item.state == MilestoneState.DONE) 14.dp else 13.dp),
+                                modifier = Modifier.size(14.dp),
                             )
                         }
                         if (!last) {
@@ -1117,7 +1088,7 @@ private fun CertificatesCard(
     onDownload: (Certificate) -> Unit,
 ) {
     SectionCard {
-        SectionTitle(Icons.Filled.Verified, "CERTIFICATES")
+        SectionTitle(Lucide.BadgeCheck, "CERTIFICATES")
         if (certs.isEmpty()) {
             Text(
                 "Your certificates will appear here as you complete each Pathway level.",
@@ -1169,7 +1140,7 @@ private fun CertificateCard(
                     .border(1.dp, PROF.gold.copy(alpha = 0.33f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(20.dp))
+                Icon(Lucide.Award, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text("Pathway Level $levelLabel".trim(), style = pInter(14, FontWeight.SemiBold, -0.14f), color = PROF.navy)
@@ -1188,7 +1159,7 @@ private fun CertificateCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(FingerprintIcon, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(13.dp))
+            Icon(FingerprintIcon, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
             Text(
                 c.verificationCode,
                 style = pInter(12, FontWeight.SemiBold, 1.1f),   // Inter + tracking, never system Monospace
@@ -1203,7 +1174,7 @@ private fun CertificateCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Icon(
-                    if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                    if (copied) Lucide.Check else Lucide.Copy,
                     contentDescription = null,
                     tint = if (copied) PROF.success else PROF.gold,
                     modifier = Modifier.size(14.dp),
@@ -1229,7 +1200,7 @@ private fun CertificateCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Spacer(Modifier.weight(1f))
-                Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(13.dp))
+                Icon(Lucide.ShieldCheck, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(14.dp))
                 Text("Signed · Verify", style = pInter(11, FontWeight.Bold), color = PROF.verify)
                 Spacer(Modifier.weight(1f))
             }
@@ -1244,7 +1215,7 @@ private fun CertificateCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Spacer(Modifier.weight(1f))
-                Icon(Icons.Filled.Download, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Download, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
                 Text("Download PDF", style = pInter(11, FontWeight.Bold), color = PROF.navy)
                 Spacer(Modifier.weight(1f))
             }
@@ -1298,7 +1269,7 @@ private fun AiConsentCard() {
         loaded = true
     }
     SectionCard {
-        SectionTitle(androidx.compose.material.icons.Icons.Filled.AutoAwesome, "NURU INTELLIGENCE")
+        SectionTitle(Lucide.Sparkles, "NURU INTELLIGENCE")
         androidx.compose.foundation.layout.Row(
             androidx.compose.ui.Modifier.fillMaxWidth(),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -1367,7 +1338,7 @@ private fun MemberIdFoot(onCopy: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (copied) Icons.Filled.Check else Icons.Filled.Fingerprint, contentDescription = null,
+            if (copied) Lucide.Check else Lucide.FingerprintPattern, contentDescription = null,
             tint = org.nuruplace.member.ui.theme.Nuru.goldChipText, modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(6.dp))

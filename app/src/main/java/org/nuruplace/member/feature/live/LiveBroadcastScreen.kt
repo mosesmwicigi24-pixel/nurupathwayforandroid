@@ -39,12 +39,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cameraswitch
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -85,6 +79,7 @@ import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun LiveBroadcastScreen(
@@ -587,7 +582,7 @@ private fun AudioHud(title: String) {
             Box(
                 Modifier.size(96.dp).clip(RoundedCornerShape(28.dp)).background(Color.White.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
+            ) { Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
             Spacer(Modifier.height(20.dp))
             Text(title.ifBlank { "Nuru Live" }, style = NuruType.title, color = Color.White, textAlign = TextAlign.Center)
             Spacer(Modifier.height(20.dp))
@@ -677,13 +672,13 @@ private fun LiveHudOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                HudIconButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", onToggleMute)
+                HudIconButton(if (muted) Lucide.MicOff else Lucide.Mic, "Mute", onToggleMute)
                 Row(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.danger).clickable { onEndTapped() }
                         .padding(horizontal = 18.dp, vertical = 12.dp),
                 ) { Text("End", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.Bold) }
-                if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
-                if (isVideo) HudIconButton(Icons.Filled.Tune, "Broadcast source", onSourceTapped)
+                if (isVideo) HudIconButton(Lucide.SwitchCamera, "Flip camera", onFlipCamera)
+                if (isVideo) HudIconButton(Lucide.SlidersHorizontal, "Broadcast source", onSourceTapped)
                 HudHandButton(count = handCount, onClick = onHandsTapped)
                 HudEmojiIconButton("💬", "Live chat", onChatTapped)
             }
@@ -699,7 +694,7 @@ private fun HudIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
     Box(
         Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(20.dp)) }
+    ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(22.dp)) }
 }
 
 @Composable
@@ -778,7 +773,7 @@ private fun SummaryView(
 
     Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(Spacing.lg)) {
-            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
+            Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(16.dp))
             Text(
                 if (endedInBackground) "Nuru Live ended" else "You were live!",

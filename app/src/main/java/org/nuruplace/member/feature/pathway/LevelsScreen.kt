@@ -21,10 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +45,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // The calm all-levels overview (iOS LevelsMapView) — reached from the Pathway hub's
 // "Map view" link. The hub itself is PathwayHubScreen.
@@ -198,7 +195,7 @@ private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, modifi
             ProgressBar(pct)
         }
         Spacer(Modifier.size(Spacing.sm))
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.gold)
+        Icon(Lucide.ChevronRight, null, tint = Nuru.gold, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -223,8 +220,8 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
             contentAlignment = Alignment.Center,
         ) {
             when {
-                done -> Icon(Icons.Filled.Check, null, tint = Nuru.goldLo, modifier = Modifier.size(20.dp))
-                locked -> Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(18.dp))
+                done -> Icon(Lucide.Check, null, tint = Nuru.goldLo, modifier = Modifier.size(22.dp))
+                locked -> Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(18.dp))
                 else -> Text("✝", style = NuruType.title, color = Nuru.gold)
             }
         }
@@ -248,7 +245,7 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
             Spacer(Modifier.height(Spacing.sm))
             if (locked) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(Spacing.xs))
                     Text(LevelsMapWords.lockLine(level.levelNumber, journey), style = NuruType.caption, color = Nuru.ink400)
                 }

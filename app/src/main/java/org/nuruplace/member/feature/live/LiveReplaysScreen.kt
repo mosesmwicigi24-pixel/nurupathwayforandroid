@@ -22,9 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,6 +43,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun LiveReplaysScreen(
@@ -121,7 +119,7 @@ private fun RecordingRow(row: LiveRecordingRow, onClick: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (row.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
+                if (row.isAudio) Lucide.AudioLines else Lucide.Video,
                 contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp),
             )
         }

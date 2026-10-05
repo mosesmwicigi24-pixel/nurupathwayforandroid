@@ -21,11 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +47,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * iOS Events palette — merges the global `Nuru` tokens the tab/calendar use with the
@@ -182,7 +178,7 @@ fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> 
                     Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(EV.white)
                         .border(1.dp, EV.border, RoundedCornerShape(16.dp)).clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.ChevronLeft, "Back", tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Lucide.ChevronLeft, "Back", tint = EV.navy, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.weight(1f))
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(EV.white)
@@ -240,7 +236,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    Icon(Icons.Filled.Schedule, null, tint = if (urgent) EV.navy else EV.white, modifier = Modifier.size(10.dp))
+                    Icon(Lucide.Clock4, null, tint = if (urgent) EV.navy else EV.white, modifier = Modifier.size(14.dp))
                     Text(cd, style = evInter(11, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
                 }
             }
@@ -274,12 +270,12 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                 Text(it, style = evInter(11), color = EV.secondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                EvMetaBit(Icons.Filled.Schedule, evTimeRange(occ.startAt, occ.endAt))
-                occ.location?.takeIf { it.isNotBlank() }?.let { EvMetaBit(Icons.Filled.Place, it) }
+                EvMetaBit(Lucide.Clock4, evTimeRange(occ.startAt, occ.endAt))
+                occ.location?.takeIf { it.isNotBlank() }?.let { EvMetaBit(Lucide.MapPin, it) }
             }
             Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(1.dp).background(EV.border))
             Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Person, null, tint = EV.secondary, modifier = Modifier.size(15.dp))
+                Icon(Lucide.User, null, tint = EV.secondary, modifier = Modifier.size(14.dp))
                 Text(
                     if (occ.going > 0) "${occ.going} going" else "Be the first to RSVP",
                     style = evInter(11, FontWeight.SemiBold), color = EV.secondary,
@@ -292,7 +288,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
 @Composable
 private fun EvMetaBit(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(icon, null, tint = EV.secondary, modifier = Modifier.size(12.dp))
+        Icon(icon, null, tint = EV.secondary, modifier = Modifier.size(14.dp))
         Text(text, style = evInter(11), color = EV.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

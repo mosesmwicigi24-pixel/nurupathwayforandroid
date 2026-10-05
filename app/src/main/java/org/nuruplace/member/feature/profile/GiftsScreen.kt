@@ -19,11 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,6 +56,7 @@ import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -97,7 +93,7 @@ private fun BackTile(onBack: () -> Unit) {
             .clickable { onBack() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
+        Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -231,7 +227,7 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                                 ) {
                                     Text(label, style = gInter(13, FontWeight.Medium), color = GrowPal.navy)
                                     Spacer(Modifier.weight(1f))
-                                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
+                                    Icon(Lucide.ChevronRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -304,7 +300,7 @@ private fun TopGiftsCard(gifts: MyGifts) {
             Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(GrowPal.gold.copy(alpha = 0.13f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(22.dp))
+            Icon(Lucide.Sparkles, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(22.dp))
         }
         Text("YOUR TOP GIFTS", style = gInter(11, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
         gifts.assessment?.personaSummary?.let {
@@ -379,7 +375,7 @@ private fun ServingTracksCard(tracks: List<ServingTrack>) {
                     Modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(GrowPal.gold),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(13.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(14.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(t.title, style = gInter(12, FontWeight.Medium), color = GrowPal.navy)

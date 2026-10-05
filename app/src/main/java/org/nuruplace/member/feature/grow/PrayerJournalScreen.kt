@@ -25,15 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -78,6 +69,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Active = still-open private prayers; Answered = resolved ones. Public so
  *  PrayerRoomScreen can pin its "Answered" tab straight to this filter. */
@@ -246,7 +238,7 @@ private fun AddPrayerPill(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         // Navy words on gold (§8.1 rule 4) — they were white.
-        Icon(Icons.Filled.Add, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Plus, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
         Text("Add Prayer", style = NuruType.actionLabel, color = Nuru.navy)
     }
 }
@@ -320,36 +312,36 @@ private fun JournalCard(
                 Modifier.size(36.dp).clip(CircleShape).clickable { menuOpen = true },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "Prayer options", tint = Nuru.ink400, modifier = Modifier.size(20.dp))
+                Icon(Lucide.EllipsisVertical, contentDescription = "Prayer options", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (entry.isAnswered) {
                         DropdownMenuItem(
                             text = { Text("Reopen prayer") },
-                            leadingIcon = { Icon(Icons.Filled.Replay, null, modifier = Modifier.size(20.dp)) },
+                            leadingIcon = { Icon(Lucide.RotateCcw, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; Haptics.tap(view); onReopenOrAnswer() },
                         )
                     } else {
                         DropdownMenuItem(
                             text = { Text("Mark answered") },
-                            leadingIcon = { Icon(Icons.Filled.Check, null, modifier = Modifier.size(20.dp)) },
+                            leadingIcon = { Icon(Lucide.Check, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; Haptics.confirm(view); onReopenOrAnswer() },
                         )
                     }
                     if (!shared) {
                         DropdownMenuItem(
                             text = { Text("Publish to Corporate") },
-                            leadingIcon = { Icon(Icons.Filled.Campaign, null, modifier = Modifier.size(20.dp)) },
+                            leadingIcon = { Icon(Lucide.Megaphone, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; confirmShare = true },
                         )
                     }
                     DropdownMenuItem(
                         text = { Text("Edit") },
-                        leadingIcon = { Icon(Icons.Filled.Edit, null, modifier = Modifier.size(20.dp)) },
+                        leadingIcon = { Icon(Lucide.Pencil, null, modifier = Modifier.size(22.dp)) },
                         onClick = { menuOpen = false; onEdit() },
                     )
                     DropdownMenuItem(
                         text = { Text("Delete") },
-                        leadingIcon = { Icon(Icons.Filled.Delete, null, modifier = Modifier.size(20.dp)) },
+                        leadingIcon = { Icon(Lucide.Trash2, null, modifier = Modifier.size(22.dp)) },
                         onClick = { menuOpen = false; onDelete() },
                     )
                 }
@@ -367,14 +359,14 @@ private fun JournalCard(
                     .background(Nuru.successBg).padding(vertical = 10.dp, horizontal = Spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Favorite, null, tint = Nuru.successText, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Heart, null, tint = Nuru.successText, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Answered${entry.answeredNote?.let { " · $it" } ?: ""} 🙏", style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold), color = Nuru.successText)
             }
         } else if (shared) {
             Spacer(Modifier.height(Spacing.sm))
             Row(Modifier.padding(horizontal = Spacing.base), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Campaign, null, tint = ShareOrange, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Megaphone, null, tint = ShareOrange, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("On the Corporate wall", style = NuruType.micro, color = ShareOrange)
             }

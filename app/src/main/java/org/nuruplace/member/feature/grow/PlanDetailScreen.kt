@@ -29,18 +29,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -83,6 +71,7 @@ import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // Vertical scrim over the hero cover (iOS #081424 @ 40% / 10% / 92%, top→bottom).
 private val heroScrim = Brush.verticalGradient(
@@ -398,8 +387,8 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                HeroMeta(Icons.Filled.Schedule, "${d.dayCount} days")
-                HeroMeta(Icons.Filled.MenuBook, "Devotional")
+                HeroMeta(Lucide.Clock4, "${d.dayCount} days")
+                HeroMeta(Lucide.BookOpen, "Devotional")
             }
         }
 
@@ -412,7 +401,7 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CircleBtn(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.weight(1f))
             CircleBtn(
@@ -423,9 +412,9 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
                 },
             ) {
                 if (liked) {
-                    Icon(Icons.Filled.Favorite, null, tint = PL.gold, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.Heart, null, tint = PL.gold, modifier = Modifier.size(18.dp))
                 } else {
-                    Icon(Icons.Filled.FavoriteBorder, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -435,7 +424,7 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
 @Composable
 private fun HeroMeta(icon: ImageVector, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = PL.goldLight, modifier = Modifier.size(13.dp))
+        Icon(icon, null, tint = PL.goldLight, modifier = Modifier.size(14.dp))
         Text(text, style = plInter(12), color = Color.White.copy(alpha = 0.8f))
     }
 }
@@ -538,7 +527,7 @@ private fun Nudge() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.AutoAwesome, null, tint = PL.gold, modifier = Modifier.size(16.dp))
+        Icon(Lucide.Sparkles, null, tint = PL.gold, modifier = Modifier.size(18.dp))
         Text(
             "Consistency over intensity — a few faithful minutes a day.",
             style = plSerif(12, FontWeight.Normal, italic = true),
@@ -605,7 +594,7 @@ private fun CtaBar(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.MenuBook, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                Icon(Lucide.BookOpen, null, tint = PL.navy, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = plInter(14, FontWeight.Bold), color = PL.navy)
             }
@@ -624,7 +613,7 @@ private fun CtaBar(
                 if (inviting) {
                     CircularProgressIndicator(color = PL.navy, modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Share2, null, tint = PL.navy, modifier = Modifier.size(14.dp))
                 }
                 Text("Invite", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
             }
@@ -653,7 +642,7 @@ private fun PLFinishEarnCard(category: String?, dayCount: Int) {
                 .border(1.dp, PL.gold.copy(alpha = 0.33f), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.EmojiEvents, null, tint = PL.goldLight, modifier = Modifier.size(20.dp))
+            Icon(Lucide.Trophy, null, tint = PL.goldLight, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
@@ -707,7 +696,7 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
             contentAlignment = Alignment.Center,
         ) {
             if (done) {
-                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("DAY", style = plInter(11, FontWeight.Bold).copy(lineHeight = 12.sp), color = PL.gold)
@@ -745,11 +734,11 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
                 modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
             )
         } else if (syncing) {
-            Icon(Icons.Filled.Schedule, null, tint = PL.goldDeep, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Clock4, null, tint = PL.goldDeep, modifier = Modifier.size(14.dp))
         } else if (locked) {
-            Icon(Icons.Filled.Lock, null, tint = PL.chev, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Lock, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         } else {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
+            Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         }
     }
 }

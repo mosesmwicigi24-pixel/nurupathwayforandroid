@@ -26,10 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -65,6 +61,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private const val EXPLAINER_PREF = "nuru_selah"
 private const val EXPLAINER_KEY = "explainer_dismissed"
@@ -201,7 +198,7 @@ private fun NewThoughtPill(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.Add, null, tint = Color.White, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Plus, null, tint = Color.White, modifier = Modifier.size(14.dp))
         Text("New Thought", style = NuruType.actionLabel, color = Color.White)
     }
 }
@@ -216,7 +213,7 @@ private fun ExplainerCard(onDismiss: () -> Unit) {
         Box(
             Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(Nuru.surface),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.EditNote, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
+        ) { Icon(Lucide.NotebookPen, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
         Spacer(Modifier.width(12.dp))
         Text(
             "Selah — a word from the Psalms meaning pause and reflect. This is your quiet page: write what's on your heart. Only you can see it.",
@@ -226,7 +223,7 @@ private fun ExplainerCard(onDismiss: () -> Unit) {
         Box(
             Modifier.size(24.dp).clip(CircleShape).clickable { onDismiss() },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(13.dp)) }
+        ) { Icon(Lucide.X, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
     }
 }
 
@@ -239,7 +236,7 @@ private fun EmptyThoughts(onCompose: () -> Unit) {
             .padding(vertical = Spacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Icons.Filled.EditNote, null, tint = Nuru.gold, modifier = Modifier.size(28.dp))
+        Icon(Lucide.NotebookPen, null, tint = Nuru.gold, modifier = Modifier.size(28.dp))
         Spacer(Modifier.height(Spacing.sm))
         Text(
             "Selah. Pause here — write your first thought.",

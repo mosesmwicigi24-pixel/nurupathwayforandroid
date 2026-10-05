@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -73,6 +71,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val CardShape = RoundedCornerShape(24.dp)
 private val ControlShape = RoundedCornerShape(14.dp)
@@ -116,7 +115,7 @@ fun DisciplerDossierScreen(studentId: String, onBack: () -> Unit, onOpenChat: (S
                         .border(1.dp, GrowPal.border, CircleShape)
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Lucide.ArrowLeft, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
                 val title = dossier?.member?.fullName?.let { firstName(it) }?.takeIf { it.isNotBlank() } ?: "Disciple"
                 Text(title, style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }

@@ -24,9 +24,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -55,6 +52,7 @@ import org.nuruplace.member.data.net.RequestConnectionBody
 import org.nuruplace.member.ui.components.AsyncContent
 import java.util.UUID
 import org.nuruplace.member.ui.components.QuickNotice
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -93,7 +91,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Lucide.ArrowLeft,
                             contentDescription = "Back",
                             tint = CHAT.navy,
                             modifier = Modifier.size(18.dp),
@@ -126,7 +124,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = CHAT.faint, modifier = Modifier.size(16.dp))
+            Icon(Lucide.Search, contentDescription = null, tint = CHAT.faint, modifier = Modifier.size(18.dp))
             BasicTextField(
                 value = query,
                 onValueChange = { query = it },

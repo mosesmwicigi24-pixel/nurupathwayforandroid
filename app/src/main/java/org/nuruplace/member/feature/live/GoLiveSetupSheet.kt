@@ -30,12 +30,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -69,6 +63,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import retrofit2.HttpException
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * @param lockedScope when non-null ("church" | "cell"), the picker is hidden
@@ -288,8 +283,8 @@ fun GoLiveSetupSheet(
             Text("Kind".uppercase(), style = NuruType.micro, color = Nuru.ink400)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                KindChip("Video", Icons.Filled.Videocam, kind == "video") { kind = "video" }
-                KindChip("Audio only", Icons.Filled.GraphicEq, kind == "audio") { kind = "audio" }
+                KindChip("Video", Lucide.Video, kind == "video") { kind = "video" }
+                KindChip("Audio only", Lucide.AudioLines, kind == "audio") { kind = "audio" }
             }
 
             // Audience — hidden entirely when locked (Cell Info's entry
@@ -372,7 +367,7 @@ private fun Box2Close(onDismiss: () -> Unit) {
         Modifier.size(32.dp).clip(CircleShape).background(Nuru.inputBg).clickable { onDismiss() },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
-    ) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(15.dp)) }
+    ) { Icon(Lucide.X, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(14.dp)) }
 }
 
 /** A full-width, selectable "who sees this" row — the Audience picker.
@@ -402,7 +397,7 @@ private fun AudienceOption(title: String, subtitle: String, selected: Boolean, o
                 .border(1.dp, if (selected) Nuru.gold else Nuru.border, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(13.dp))
+            if (selected) Icon(Lucide.Check, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -436,7 +431,7 @@ private fun CellChoiceRow(name: String, selected: Boolean, onClick: () -> Unit) 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(Icons.Filled.Groups, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Users, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
         Text(
             name,
             style = NuruType.cardCta,
@@ -444,7 +439,7 @@ private fun CellChoiceRow(name: String, selected: Boolean, onClick: () -> Unit) 
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
-        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(15.dp))
+        if (selected) Icon(Lucide.Check, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -459,7 +454,7 @@ private fun KindChip(label: String, icon: androidx.compose.ui.graphics.vector.Im
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = if (selected) Nuru.onNavy else Nuru.ink600, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = null, tint = if (selected) Nuru.onNavy else Nuru.ink600, modifier = Modifier.size(18.dp))
         Text(label, style = NuruType.cardCta, color = if (selected) Nuru.onNavy else Nuru.ink600, fontWeight = FontWeight.SemiBold)
     }
 }

@@ -161,7 +161,7 @@ fun NuruField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            leadingIcon = { Icon(leadingIcon, contentDescription = null, tint = Nuru.ink400) },
+            leadingIcon = { Icon(leadingIcon, contentDescription = null, tint = Nuru.ink400, modifier = Modifier.size(18.dp)) },
             visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             textStyle = NuruType.bodyLg,

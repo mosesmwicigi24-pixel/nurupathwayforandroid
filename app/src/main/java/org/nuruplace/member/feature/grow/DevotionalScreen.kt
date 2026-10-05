@@ -27,13 +27,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -65,6 +58,7 @@ import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun DevotionalScreen(onBack: () -> Unit) {
@@ -134,7 +128,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Lucide.ArrowLeft,
                             contentDescription = "Back",
                             tint = GrowPal.navy,
                             modifier = Modifier.size(18.dp),
@@ -215,10 +209,10 @@ fun DevotionalScreen(onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Icon(
-                                    Icons.Filled.Check,
+                                    Lucide.Check,
                                     contentDescription = null,
                                     tint = GrowPal.gold,
-                                    modifier = Modifier.size(10.dp),
+                                    modifier = Modifier.size(14.dp),
                                 )
                                 Text(
                                     "Submitted",
@@ -329,10 +323,10 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Icon(
-                            if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            if (liked) Lucide.Heart else Lucide.Heart,
                             contentDescription = null,
                             tint = if (liked) GrowPal.gold else GrowPal.navy,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(18.dp),
                         )
                         Text(
                             "Like",
@@ -349,10 +343,10 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Icon(
-                            Icons.Filled.Share,
+                            Lucide.Share2,
                             contentDescription = null,
                             tint = GrowPal.navy,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(18.dp),
                         )
                         Text(
                             "Share",
@@ -373,10 +367,10 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
-                        Icons.Filled.VolunteerActivism,
+                        Lucide.HandHeart,
                         contentDescription = null,
                         tint = GrowPal.gold,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                     Text(
                         "Every faithful day adds up. There's no rush — just presence.",

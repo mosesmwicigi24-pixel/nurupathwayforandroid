@@ -23,13 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -92,6 +85,7 @@ import org.nuruplace.member.ui.components.CelebrationHost
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
@@ -171,12 +165,12 @@ private val TAB_LEVEL_ROUTES = YOU_ALIAS_ROUTES + GIVE_ALIAS_ROUTES + EVENTS_ALI
     GIVE_SUB_ROUTES + (EVENTS_SUB_ROUTES - TAB_FLOW_ROUTES)
 
 private val BASE_TABS = listOf(
-    Tab("home", "Home", Icons.Filled.Home),
-    Tab("pathway", "Pathway", Icons.Filled.MenuBook),
-    Tab("plans", "Plans", Icons.Filled.Bookmark),
-    Tab(EVENTS_TAB_ROUTE, "Events", Icons.Filled.Event),
-    Tab(GIVE_TAB_ROUTE, "Give", Icons.Filled.VolunteerActivism),
-    Tab(YOU_TAB_ROUTE, "You", Icons.Filled.Person),
+    Tab("home", "Home", Lucide.Home),
+    Tab("pathway", "Pathway", Lucide.BookOpen),
+    Tab("plans", "Plans", Lucide.BookMarked),
+    Tab(EVENTS_TAB_ROUTE, "Events", Lucide.Calendar),
+    Tab(GIVE_TAB_ROUTE, "Give", Lucide.HandHeart),
+    Tab(YOU_TAB_ROUTE, "You", Lucide.User),
 )
 
 @Composable

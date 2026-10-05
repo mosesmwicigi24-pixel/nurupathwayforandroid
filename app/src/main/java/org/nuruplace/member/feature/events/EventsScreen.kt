@@ -32,17 +32,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.EventRepeat
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -78,6 +67,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -166,18 +156,15 @@ fun EventsScreen(
                             Text(eventsHeaderLine(events, today), style = evInter(13), color = EV.secondary)
                         }
                         // The one bell (§7.2 #4): a dot only while something is unread.
-                        InboxBell(
-                            onClick = onOpenNotifications, size = 44.dp, shape = RoundedCornerShape(16.dp),
-                            container = EV.white, border = EV.border, tint = EV.navy, iconSize = 19.dp, dotInset = 9.dp,
-                        )
+                        InboxBell(onClick = onOpenNotifications)
                     }
                     // The counts only when there is something to count — a quiet
                     // week's header line already says it, and a chip never
                     // reads "0 you're going" (EXPERIENCE.md §7.4 #9).
                     if (!quiet && (thisWeek > 0 || going > 0)) {
                         Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (thisWeek > 0) HeaderPill("$thisWeek this week", Icons.Filled.CalendarMonth)
-                            if (going > 0) HeaderPill("$going you're going", Icons.Filled.Check)
+                            if (thisWeek > 0) HeaderPill("$thisWeek this week", Lucide.CalendarDays)
+                            if (going > 0) HeaderPill("$going you're going", Lucide.Check)
                         }
                     }
                 }
@@ -275,7 +262,7 @@ fun EventsScreen(
                                 Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint)
                                     .border(1.dp, EV.gold.copy(alpha = 0.25f), RoundedCornerShape(16.dp)),
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                            ) { Icon(Lucide.CalendarDays, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                 Text("CALENDAR", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.overline)
                                 Text("All events & calendar", style = evSerif(15, FontWeight.SemiBold), color = EV.navy)
@@ -284,7 +271,7 @@ fun EventsScreen(
                                     style = evInter(11), color = EV.secondary,
                                 )
                             }
-                            Icon(Icons.Filled.ChevronRight, null, tint = EV.secondary, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.ChevronRight, null, tint = EV.secondary, modifier = Modifier.size(18.dp))
                         }
                     }
 
@@ -302,7 +289,7 @@ fun EventsScreen(
                             Box(
                                 Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.QrCodeScanner, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
+                            ) { Icon(Lucide.ScanQrCode, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                 Text("CHURCH ATTENDANCE", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.goldLight)
                                 Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
@@ -314,7 +301,7 @@ fun EventsScreen(
                             Box(
                                 Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Lucide.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                         }
                     }
 
@@ -338,7 +325,7 @@ fun EventsScreen(
                             .border(1.dp, EV.border, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 11.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Filled.Search, null, tint = EV.tertiary, modifier = Modifier.size(15.dp))
+                            Icon(Lucide.Search, null, tint = EV.tertiary, modifier = Modifier.size(14.dp))
                             BasicTextField(
                                 value = query,
                                 onValueChange = { query = it },
@@ -393,7 +380,7 @@ fun EventsScreen(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
                             Text("All & calendar", style = evInter(11, FontWeight.SemiBold), color = EV.navy)
-                            Icon(Icons.Filled.ChevronRight, null, tint = EV.navy, modifier = Modifier.size(12.dp))
+                            Icon(Lucide.ChevronRight, null, tint = EV.navy, modifier = Modifier.size(14.dp))
                         }
                     }
 
@@ -424,7 +411,7 @@ fun EventsScreen(
                             Box(
                                 Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.tile),
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(20.dp)) }
+                            ) { Icon(Lucide.CalendarDays, null, tint = EV.gold, modifier = Modifier.size(22.dp)) }
                             Text("Nothing on this day", style = evInter(12, FontWeight.SemiBold), color = EV.navy)
                             Text(
                                 "Browse the full calendar to find a gathering.",
@@ -436,7 +423,7 @@ fun EventsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                Icon(Icons.Filled.CalendarMonth, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                                Icon(Lucide.CalendarDays, null, tint = Color.White, modifier = Modifier.size(14.dp))
                                 Text("View calendar", style = evInter(11, FontWeight.SemiBold), color = Color.White)
                             }
                         }
@@ -479,7 +466,7 @@ fun EventsScreen(
                             Modifier.padding(bottom = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Filled.Campaign, null, tint = EV.overline, modifier = Modifier.size(13.dp))
+                            Icon(Lucide.Megaphone, null, tint = EV.overline, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
                             EVOverline("ANNOUNCEMENTS")
                             Spacer(Modifier.weight(1f))
@@ -506,7 +493,7 @@ fun EventsScreen(
                                             contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize(),
                                         )
                                     } else {
-                                        Icon(Icons.Filled.Campaign, null, tint = EV.gold, modifier = Modifier.size(15.dp))
+                                        Icon(Lucide.Megaphone, null, tint = EV.gold, modifier = Modifier.size(14.dp))
                                     }
                                 }
                                 Column(Modifier.weight(1f)) {
@@ -519,7 +506,7 @@ fun EventsScreen(
                                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f, fill = false),
                                         )
-                                        Icon(Icons.Filled.Verified, null, tint = EV.gold, modifier = Modifier.size(12.dp))
+                                        Icon(Lucide.BadgeCheck, null, tint = EV.gold, modifier = Modifier.size(14.dp))
                                     }
                                     Text(
                                         org.nuruplace.member.ui.components.LightMarkdown.plain(a.body), style = evInter(11), color = EV.secondary,
@@ -555,7 +542,7 @@ private fun QuietWeekCard() {
         Box(
             Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(EV.tile),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(18.dp)) }
+        ) { Icon(Lucide.CalendarDays, null, tint = EV.gold, modifier = Modifier.size(18.dp)) }
         Text(
             "The calendar is quiet this week — gatherings the church posts appear here.",
             style = evInter(12), color = EV.secondary, modifier = Modifier.weight(1f),
@@ -571,9 +558,9 @@ private fun QuietEntries(onOpenCalendar: () -> Unit, onOpenAttendance: () -> Uni
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
             .border(1.dp, EV.border, RoundedCornerShape(22.dp)),
     ) {
-        QuietEntryRow(Icons.Filled.CalendarMonth, "All events & calendar", onOpenCalendar)
+        QuietEntryRow(Lucide.CalendarDays, "All events & calendar", onOpenCalendar)
         Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(EV.border))
-        QuietEntryRow(Icons.Filled.QrCodeScanner, "Check in to a service", onOpenAttendance)
+        QuietEntryRow(Lucide.ScanQrCode, "Check in to a service", onOpenAttendance)
     }
 }
 
@@ -587,10 +574,10 @@ private fun QuietEntryRow(icon: androidx.compose.ui.graphics.vector.ImageVector,
         Box(
             Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(EV.goldTile),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(16.dp)) }
+        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(18.dp)) }
         // A menu entry is a control row (§8.1 rule 3): Inter 14 medium.
         Text(title, style = NuruType.controlTitle, color = EV.navy, modifier = Modifier.weight(1f))
-        Icon(Icons.Filled.ChevronRight, null, tint = EV.tertiary, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ChevronRight, null, tint = EV.tertiary, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -602,7 +589,7 @@ private fun HeaderPill(text: String, icon: androidx.compose.ui.graphics.vector.I
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(icon, null, tint = EV.gold, modifier = Modifier.size(11.dp))
+        Icon(icon, null, tint = EV.gold, modifier = Modifier.size(14.dp))
         Text(text, style = evInter(11, FontWeight.Bold), color = EV.secondary)
     }
 }
@@ -638,8 +625,8 @@ private fun FollowButton(following: Boolean, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
-            if (following) Icons.Filled.Check else Icons.Filled.Add, null,
-            tint = if (following) Color.White else EV.navy, modifier = Modifier.size(12.dp),
+            if (following) Lucide.Check else Lucide.Plus, null,
+            tint = if (following) Color.White else EV.navy, modifier = Modifier.size(14.dp),
         )
         Text(
             if (following) "Following" else "Follow",
@@ -665,7 +652,7 @@ private fun SeriesRail(
             Modifier.padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.AutoAwesome, null, tint = EV.overline, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Sparkles, null, tint = EV.overline, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             EVOverline(overline)
             Spacer(Modifier.weight(1f))
@@ -687,7 +674,7 @@ private fun SeriesRail(
                     Modifier.size(36.dp).clip(RoundedCornerShape(12.dp))
                         .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.EventRepeat, contentDescription = null, tint = EV.navy, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Lucide.CalendarSync, contentDescription = null, tint = EV.navy, modifier = Modifier.size(18.dp)) }
                 Column(Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

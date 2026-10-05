@@ -32,8 +32,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,6 +72,7 @@ import kotlin.math.PI
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
+import org.nuruplace.member.ui.icons.Lucide
 
 /** System-wide "Remove animations" (Settings > Accessibility) reflected via
  *  the animator duration scale — 0 means the user asked for no motion.
@@ -452,7 +451,7 @@ fun LiveFloatingChat(
                     }
                     Spacer(Modifier.width(6.dp))
                     Icon(
-                        Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Nuru.gold,
+                        Lucide.Send, contentDescription = "Send", tint = Nuru.gold,
                         modifier = Modifier.size(18.dp).clickable {
                             val body = draft.trim()
                             if (body.isNotEmpty()) {

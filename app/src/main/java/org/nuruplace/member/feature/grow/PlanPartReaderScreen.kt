@@ -29,11 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -71,6 +66,7 @@ import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private fun rankOf(s: PlanSegment): Int = when (s.kind.lowercase()) {
     "video", "audio" -> 0
@@ -166,7 +162,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                     .padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ReaderChip(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
+                    ReaderChip(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(8.dp))
                     Text("DAY $dayNumber", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
                     // Text size: Small → Regular → Large → Small, one tap each,
@@ -176,7 +172,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                     }
                     Spacer(Modifier.width(8.dp))
                     ReaderChip(onClick = { ReaderMode.night = !ReaderMode.night }) {
-                        Icon(if (ReaderMode.night) Icons.Filled.LightMode else Icons.Filled.DarkMode, "Reader mode", tint = Color.White, modifier = Modifier.size(16.dp))
+                        Icon(if (ReaderMode.night) Lucide.Sun else Lucide.Moon, "Reader mode", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
                 Text(partName, style = rSerif(26, FontWeight.Medium), color = Color.White, modifier = Modifier.padding(top = 10.dp))
@@ -234,7 +230,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                 ) {
                     if (saving) CircularProgressIndicator(color = pal.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                     else {
-                        Icon(Icons.Filled.Check, null, tint = pal.navy, modifier = Modifier.size(16.dp))
+                        Icon(Lucide.Check, null, tint = pal.navy, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             if (done) "Done" else when (part) {

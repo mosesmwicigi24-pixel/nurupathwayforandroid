@@ -11,13 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Percent
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
+import org.nuruplace.member.ui.icons.Lucide
 
 /** iOS Give palette — global Nuru tokens + the inline literals used across the give files. */
 object GIVE {
@@ -92,15 +86,15 @@ internal val TILE_TINT = org.nuruplace.member.ui.theme.Nuru.goldTint
 internal val TILE_ICON = org.nuruplace.member.ui.theme.Nuru.navy
 
 val GIVE_FUNDS = listOf(
-    GiveFund("tithe", "Tithe", "A faithful portion", Icons.Filled.Percent, TILE_TINT, TILE_ICON),
-    GiveFund("offering", "Offering", "Freewill worship", Icons.Filled.VolunteerActivism, TILE_TINT, TILE_ICON),
-    GiveFund("gift", "Gift", "A special gift", Icons.Filled.CardGiftcard, TILE_TINT, TILE_ICON),
-    GiveFund("mission", "Mission", "Beyond our walls", Icons.Filled.Public, TILE_TINT, TILE_ICON),
-    GiveFund("discipleship", "Discipleship", "Growing the Pathway", Icons.Filled.MenuBook, TILE_TINT, TILE_ICON),
+    GiveFund("tithe", "Tithe", "A faithful portion", Lucide.Percent, TILE_TINT, TILE_ICON),
+    GiveFund("offering", "Offering", "Freewill worship", Lucide.HandHeart, TILE_TINT, TILE_ICON),
+    GiveFund("gift", "Gift", "A special gift", Lucide.Gift, TILE_TINT, TILE_ICON),
+    GiveFund("mission", "Mission", "Beyond our walls", Lucide.Globe, TILE_TINT, TILE_ICON),
+    GiveFund("discipleship", "Discipleship", "Growing the Pathway", Lucide.BookOpen, TILE_TINT, TILE_ICON),
 )
 
 fun giveFund(id: String?): GiveFund = GIVE_FUNDS.firstOrNull { it.id.equals(id?.trim(), true) }
-    ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Icons.Filled.CardGiftcard, TILE_TINT, TILE_ICON)
+    ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Lucide.Gift, TILE_TINT, TILE_ICON)
 
 /** A payment method (iOS `PayMethod`). `provider == null` → "SOON" (disabled).
  *  Only rails GET /giving/methods can list have a row (Giving Cycle 5): the
@@ -119,7 +113,7 @@ val GIVE_METHODS = listOf(
     // tint — M-Pesa green and Airtel red read as "on track" and "failed".
     GiveMethod("mpesa", "Pay with M-Pesa", "A prompt on your phone", TILE_TINT, TILE_ICON, "M-PESA", null, "mpesa"),
     GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", TILE_TINT, TILE_ICON, "AIRTEL", null, "airtel"),
-    GiveMethod("card", "Pay with Card", "Visa · Mastercard", TILE_TINT, TILE_ICON, null, Icons.Filled.CreditCard, "card"),
+    GiveMethod("card", "Pay with Card", "Visa · Mastercard", TILE_TINT, TILE_ICON, null, Lucide.CreditCard, "card"),
     GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", TILE_TINT, TILE_ICON, "PP", null, "paypal"),
 )
 

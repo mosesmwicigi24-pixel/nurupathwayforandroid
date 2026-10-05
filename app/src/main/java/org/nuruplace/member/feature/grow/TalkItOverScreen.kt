@@ -33,13 +33,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,6 +68,7 @@ import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.util.relTime
+import org.nuruplace.member.ui.icons.Lucide
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -211,7 +205,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                 .padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.weight(1f))
                 Text("DAY $dayNumber", style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.gold)
                 Spacer(Modifier.weight(1f))
@@ -278,14 +272,14 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 if (aiBusy) CircularProgressIndicator(color = GrowPal.goldLo, strokeWidth = 1.5.dp, modifier = Modifier.size(15.dp))
-                else Icon(Icons.Filled.AutoAwesome, "Compose with AI", tint = GrowPal.goldLo, modifier = Modifier.size(18.dp))
+                else Icon(Lucide.Sparkles, "Compose with AI", tint = GrowPal.goldLo, modifier = Modifier.size(18.dp))
             }
             Box(
                 Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(GrowPal.goldGrad).clickable(enabled = draft.isNotBlank() && !posting) { send() },
                 contentAlignment = Alignment.Center,
             ) {
                 if (posting) CircularProgressIndicator(color = GrowPal.navy, strokeWidth = 1.5.dp, modifier = Modifier.size(15.dp))
-                else Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = GrowPal.navy, modifier = Modifier.size(16.dp))
+                else Icon(Lucide.Send, "Send", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
             }
         }
         // The same gold button every other part of the day ends with (iOS
@@ -302,7 +296,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Check, null, tint = Nuru.success, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.Check, null, tint = Nuru.success, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Completed", style = gInter(14, FontWeight.SemiBold), color = Nuru.successText)
                 }
@@ -324,7 +318,7 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                 ) {
                     if (finishing) CircularProgressIndicator(color = PL.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                     else {
-                        Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                        Icon(Lucide.Check, null, tint = PL.navy, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("I've talked it over", style = gInter(14, FontWeight.Bold), color = PL.navy)
                     }
@@ -363,7 +357,7 @@ private fun TalkRow(p: TalkPost, onLike: () -> Unit) {
             }
             Text(p.body, style = gInter(13).copy(lineHeight = 18.sp), color = GrowPal.ink)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.clickable { onLike() }.padding(vertical = 4.dp)) {
-                Icon(if (p.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, "Encourage", tint = if (p.liked) GrowPal.gold else GrowPal.ink300, modifier = Modifier.size(15.dp))
+                Icon(if (p.liked) Lucide.Heart else Lucide.Heart, "Encourage", tint = if (p.liked) GrowPal.gold else GrowPal.ink300, modifier = Modifier.size(14.dp))
                 if (p.likeCount > 0) Text("${p.likeCount}", style = gInter(11, FontWeight.SemiBold), color = if (p.liked) GrowPal.goldLo else GrowPal.ink400)
             }
         }

@@ -76,26 +76,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Autorenew
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EventRepeat
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.outlined.Cancel
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -176,6 +156,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 private val CardShape = RoundedCornerShape(16.dp)
@@ -641,7 +622,7 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(Icons.Filled.Add, null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+                Icon(Lucide.Plus, null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Make a pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
@@ -668,7 +649,7 @@ private fun TierChip(name: String, spoken: String) {
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.WorkspacePremium, null, tint = GIVE.goldChipText, modifier = Modifier.size(12.dp))
+        Icon(Lucide.Award, null, tint = GIVE.goldChipText, modifier = Modifier.size(14.dp))
         Text(name, style = giInter(11, FontWeight.Bold), color = GIVE.goldChipText)
     }
 }
@@ -693,7 +674,7 @@ private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
             Text(if (joining) "Joining…" else "Join the programme", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
             if (!joining) {
                 Spacer(Modifier.width(8.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                Icon(Lucide.ArrowRight, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -846,7 +827,7 @@ private fun TroubleRow(t: PartnerTrouble, resuming: Boolean, onResume: (() -> Un
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.warningBg).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Filled.Warning, null, tint = Nuru.answeredText, modifier = Modifier.size(14.dp))
+        Icon(Lucide.AlertTriangle, null, tint = Nuru.answeredText, modifier = Modifier.size(14.dp))
         Text(troubleLine(t), style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText, modifier = Modifier.weight(1f))
         if (t.paused && onResume != null) {
             Row(
@@ -1024,7 +1005,7 @@ private fun EditPledgeSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Edit pledge", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy, modifier = Modifier.weight(1f))
                 Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() }, Alignment.Center) {
-                    Icon(Icons.Filled.Close, "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.X, "Close", tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1034,7 +1015,7 @@ private fun EditPledgeSheet(
                     onValueChange = { v -> name = v.take(PLEDGE_TITLE_MAX) },
                     singleLine = true,
                     placeholder = { Text("Name this pledge", style = giInter(14), color = Nuru.ink400) },
-                    leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                    leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
                     suffix = {
                         Text("${name.trim().length}/$PLEDGE_TITLE_MAX", style = giInter(11), color = if (nameValid) Nuru.ink400 else Nuru.danger)
                     },
@@ -1084,7 +1065,7 @@ private fun EditPledgeSheet(
                 placeholder = {
                     Text(if (dollars) "Or enter your own amount, e.g. 20.00" else "Or enter your own amount", style = giInter(14), color = Nuru.ink400)
                 },
-                leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
                 textStyle = giInter(14).copy(color = Nuru.ink),
                 keyboardOptions = KeyboardOptions(keyboardType = if (dollars) KeyboardType.Decimal else KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
@@ -1332,7 +1313,7 @@ private fun PledgePageHeader(title: String, onBack: () -> Unit) {
     val view = LocalView.current
     GiveCreamHeaderBox {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 24.dp)) {
-            ReceiptHeaderButton(Icons.AutoMirrored.Filled.ArrowBack, "Back") { Haptics.tap(view); onBack() }
+            ReceiptHeaderButton(Lucide.ArrowLeft, "Back") { Haptics.tap(view); onBack() }
             Text("YOUR PLEDGE", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.eyebrow, modifier = Modifier.padding(top = 12.dp))
             Text(
                 title, style = giSerif(26, FontWeight.SemiBold), color = GIVE.navy,
@@ -1353,7 +1334,7 @@ private fun PledgePromiseCard(pl: Pledge, today: LocalDate) {
         // A total pledge's pace (Giving Cycle 9), as the server sets it.
         paceLine(pl, today)?.let { line ->
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Filled.EventRepeat, null, tint = GIVE.gold, modifier = Modifier.padding(top = 2.dp).size(12.dp))
+                Icon(Lucide.CalendarSync, null, tint = GIVE.gold, modifier = Modifier.padding(top = 2.dp).size(14.dp))
                 Text(line, style = giInter(12, FontWeight.SemiBold), color = GIVE.navy)
             }
         }
@@ -1369,9 +1350,9 @@ private fun CollectorCard(line: String, onOpen: () -> Unit) {
         Modifier.partnerCard(onClick = onOpen),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(Icons.Filled.Autorenew, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Repeat, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
         Text(line, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.weight(1f))
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GIVE.ink300, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ChevronRight, null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1392,7 +1373,7 @@ private fun PaceOfferCard(starting: Boolean, enabled: Boolean, online: Boolean, 
             if (starting) {
                 CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
             } else {
-                Icon(Icons.Filled.EventRepeat, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                Icon(Lucide.CalendarSync, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.width(8.dp))
             Text(
@@ -1451,7 +1432,7 @@ private fun PledgeActionsCard(
                     color = GIVE.navy, textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.width(6.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
+                Icon(Lucide.ArrowRight, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
             }
             Row(
                 Modifier.weight(1f).heightIn(min = 40.dp)
@@ -1463,16 +1444,16 @@ private fun PledgeActionsCard(
                 if (busy) {
                     CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
                 } else {
-                    Icon(if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause, null, tint = GIVE.navy, modifier = Modifier.size(12.dp))
+                    Icon(if (paused) Lucide.Play else Lucide.Pause, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
                 Spacer(Modifier.width(6.dp))
                 Text(if (paused) "Resume" else "Pause", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SmallAction("Edit", Icons.Filled.Edit, GIVE.ink600, enabled = !busy, modifier = Modifier.weight(1f), onClick = onEdit)
+            SmallAction("Edit", Lucide.Pencil, GIVE.ink600, enabled = !busy, modifier = Modifier.weight(1f), onClick = onEdit)
             Box(Modifier.width(1.dp).height(16.dp).background(GIVE.border))
-            SmallAction("Cancel", Icons.Filled.Close, GIVE.danger, enabled = !busy, modifier = Modifier.weight(1f), onClick = onCancel)
+            SmallAction("Cancel", Lucide.X, GIVE.danger, enabled = !busy, modifier = Modifier.weight(1f), onClick = onCancel)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val tint = if (online) GIVE.navy else GIVE.ink300
@@ -1481,14 +1462,14 @@ private fun PledgeActionsCard(
                     .clickable(enabled = online && !busy) { Haptics.tap(view); onPaidAnotherWay() },
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.Filled.Check, null, tint = tint, modifier = Modifier.size(12.dp))
+                Icon(Lucide.Check, null, tint = tint, modifier = Modifier.size(14.dp))
                 Text("I paid another way", style = giInter(12, FontWeight.SemiBold), color = tint, modifier = Modifier.weight(1f))
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
+                Icon(Lucide.ChevronRight, null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
             }
             if (!online) Text("You're offline — telling the office needs a connection.", style = giInter(11), color = Nuru.ink400)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Outlined.Notifications, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Bell, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
             Text("Remind me before it's due", style = giInter(13), color = GIVE.ink, modifier = Modifier.weight(1f))
             Switch(
                 checked = reminders, enabled = !busy,
@@ -1513,7 +1494,7 @@ private fun SmallAction(label: String, icon: ImageVector, tint: Color, enabled: 
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(12.dp))
+        Icon(icon, null, tint = tint, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(5.dp))
         Text(label, style = giInter(12, FontWeight.SemiBold), color = tint)
     }
@@ -1546,14 +1527,14 @@ private fun PledgePaymentRow(pay: PledgePayment, onOpenReceipt: (String) -> Unit
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(TILE_TINT), Alignment.Center) {
-            Icon(Icons.Filled.VolunteerActivism, null, tint = TILE_ICON, modifier = Modifier.size(14.dp))
+            Icon(Lucide.HandHeart, null, tint = TILE_ICON, modifier = Modifier.size(14.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
             val meta = listOfNotNull(pay.at?.let { PartnerFormat.dayMonthYear(it) }, pay.receiptCode?.takeIf { it.isNotBlank() })
             if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = giInter(11), color = GIVE.tertiary)
         }
-        if (opens) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = GIVE.ink300, modifier = Modifier.size(16.dp))
+        if (opens) Icon(Lucide.ChevronRight, null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1583,9 +1564,9 @@ private fun PledgeClaimsCard(claims: List<PledgeClaim>?, failed: Boolean, today:
 @Composable
 private fun ClaimRow(c: PledgeClaim, today: LocalDate) {
     val (tint, icon) = when (claimTone(c.status)) {
-        ClaimTone.Waiting -> GIVE.goldChipText to Icons.Filled.Schedule
-        ClaimTone.Recorded -> GIVE.successText to Icons.Filled.Verified
-        ClaimTone.Unmatched -> GIVE.ink600 to Icons.Outlined.Cancel
+        ClaimTone.Waiting -> GIVE.goldChipText to Lucide.Clock4
+        ClaimTone.Recorded -> GIVE.successText to Lucide.BadgeCheck
+        ClaimTone.Unmatched -> GIVE.ink600 to Lucide.CircleX
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), Alignment.Center) {
@@ -1652,7 +1633,7 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("I paid another way", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy, modifier = Modifier.weight(1f))
             Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable(enabled = !sending) { onClose() }, Alignment.Center) {
-                Icon(Icons.Filled.Close, "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
+                Icon(Lucide.X, "Close", tint = GIVE.navy, modifier = Modifier.size(14.dp))
             }
         }
         Text(claimIntro(pl.displayTitle), style = giInter(12), color = Nuru.ink600)
@@ -1678,7 +1659,7 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
                     .clickable { picking = true }.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(Icons.Filled.CalendarMonth, null, tint = GIVE.gold, modifier = Modifier.size(18.dp))
+                Icon(Lucide.CalendarDays, null, tint = GIVE.gold, modifier = Modifier.size(18.dp))
                 Text(org.nuruplace.member.util.NuruDates.day(paidOn), style = giInter(14), color = Nuru.ink)
             }
             Text("Today, or any day in the last year.", style = giInter(12), color = Nuru.ink400)
@@ -1689,7 +1670,7 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
                 value = note,
                 onValueChange = { v -> note = v.take(CLAIM_NOTE_MAX); error = null },
                 placeholder = { Text("e.g. Cash at the 9am service", style = giInter(14), color = Nuru.ink400) },
-                leadingIcon = { Icon(Icons.Filled.Edit, null, tint = GIVE.gold, modifier = Modifier.size(15.dp)) },
+                leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
                 minLines = 2, maxLines = 5,
                 textStyle = giInter(14).copy(color = Nuru.ink),
                 modifier = Modifier.fillMaxWidth(),
@@ -1766,13 +1747,13 @@ private fun AutoScheduleNotice(message: String, onDismiss: () -> Unit) {
             .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Filled.Warning, null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 2.dp).size(14.dp))
+        Icon(Lucide.AlertTriangle, null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 2.dp).size(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("Your pledge is made — automatic collection isn't set up.", style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText)
             Text(message, style = giInter(12), color = GIVE.ink600)
         }
         Box(Modifier.size(28.dp).clip(CircleShape).clickable { onDismiss() }, Alignment.Center) {
-            Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(12.dp))
+            Icon(Lucide.X, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(14.dp))
         }
     }
 }

@@ -34,11 +34,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -66,6 +61,7 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // The AI's mark: gold with navy, like Quick help (§8.1 rule 1) — it was purple.
 private val AiOrb = Nuru.goldGradient
@@ -124,7 +120,7 @@ private fun ConsentGateCard(busy: Boolean, failed: String?, enable: () -> Unit) 
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(26.dp).clip(CircleShape).background(AiOrb), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.width(8.dp))
             Text("NURU INTELLIGENCE", style = NuruType.sectionLabel, color = Nuru.eyebrow)
@@ -168,7 +164,7 @@ private fun AssistComposerCard() {
             .border(1.dp, Nuru.border, RoundedCornerShape(18.dp)).padding(Spacing.base),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.FavoriteBorder, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Heart, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Draft a prayer", style = NuruType.cardTitle, color = Nuru.navy)
         }
@@ -207,7 +203,7 @@ private fun AssistComposerCard() {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (busy) CircularProgressIndicator(color = Nuru.navy, modifier = Modifier.size(14.dp))
-                    else Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.navy, modifier = Modifier.size(13.dp))
+                    else Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(if (busy) "Drafting…" else "Draft with Nuru", style = NuruType.cardCta.copy(fontWeight = FontWeight.Bold), color = Nuru.navy)
                 }
@@ -263,7 +259,7 @@ private fun GatherPointsCard() {
             .border(1.dp, Nuru.border, RoundedCornerShape(18.dp)).padding(Spacing.base),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.List, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
+            Icon(Lucide.List, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Gather my prayer points", style = NuruType.cardTitle, color = Nuru.navy)
         }
@@ -330,7 +326,7 @@ private fun PrayerPointRow(index: Int, text: String, onEdit: (String) -> Unit, o
         Box(
             Modifier.size(22.dp).clip(CircleShape).clickable { Haptics.tap(view); onRemove() },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Close, null, tint = Nuru.ink400, modifier = Modifier.size(11.dp)) }
+        ) { Icon(Lucide.X, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
     }
 }
 

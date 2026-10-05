@@ -22,17 +22,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Mail
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Quiz
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +43,7 @@ import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.nuruSans
+import org.nuruplace.member.ui.icons.Lucide
 
 // The letter nudge keeps the Sunday Letter's own gold wax-seal disc (LetterScreen.kt).
 private val NudgeSealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
@@ -137,7 +127,7 @@ fun NotificationsOffCard(onTurnOn: () -> Unit, onNotNow: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.white), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.NotificationsActive, null, tint = Nuru.goldDeep, modifier = Modifier.size(19.dp))
+                Icon(Lucide.BellRing, null, tint = Nuru.goldDeep, modifier = Modifier.size(18.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(NOTIFICATIONS_CARD_TITLE, style = nuruSans(13, FontWeight.SemiBold), color = Nuru.navy)
@@ -166,12 +156,12 @@ fun NotificationsOffCard(onTurnOn: () -> Unit, onNotNow: () -> Unit) {
 private fun NudgeIconTile(n: HomeNudge) {
     if (n.kind == "letter_unread") {
         Box(Modifier.size(40.dp).clip(CircleShape).background(NudgeSealGrad), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
         return
     }
     Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.white), contentAlignment = Alignment.Center) {
-        Icon(nudgeIcon(n.kind), null, tint = accentColor(n.accent), modifier = Modifier.size(19.dp))
+        Icon(nudgeIcon(n.kind), null, tint = accentColor(n.accent), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -189,15 +179,15 @@ private fun dueLabel(due: String?): String? = when (due?.lowercase()) {
 }
 
 private fun nudgeIcon(kind: String): ImageVector = when (kind) {
-    "reflection_due" -> Icons.Filled.EditNote
-    "quiz_in_progress" -> Icons.Filled.Quiz
-    "level_review" -> Icons.Filled.School
-    "letter_unread" -> Icons.Filled.Mail
-    "cell_gathering" -> Icons.Filled.Groups
-    "plan_day_due" -> Icons.Filled.MenuBook
-    "reading_invite" -> Icons.Filled.PersonAdd
-    "chat_unread" -> Icons.Filled.ChatBubble
-    else -> Icons.Filled.AutoAwesome
+    "reflection_due" -> Lucide.NotebookPen
+    "quiz_in_progress" -> Lucide.CircleHelp
+    "level_review" -> Lucide.GraduationCap
+    "letter_unread" -> Lucide.Mail
+    "cell_gathering" -> Lucide.Users
+    "plan_day_due" -> Lucide.BookOpen
+    "reading_invite" -> Lucide.UserPlus
+    "chat_unread" -> Lucide.MessageCircle
+    else -> Lucide.Sparkles
 }
 
 private fun accentColor(accent: String): Color = when (accent.lowercase()) {

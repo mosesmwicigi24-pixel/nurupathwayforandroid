@@ -27,27 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Help
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -85,6 +64,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationPreferences
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * @param embedded true when hosted as the You tab's Settings segment
@@ -135,7 +115,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
                             .clickable { onBack() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, PROF.navy, 18.dp)
+                        Icon(Lucide.ArrowLeft, PROF.navy, 18.dp)
                     }
                 }
                 Text("PREFERENCES", style = NuruType.kicker, color = PROF.eyebrow)
@@ -184,9 +164,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
 private fun SecurityCard() {
     var showPassword by remember { mutableStateOf(false) }
     SectionCard {
-        SectionTitle(Icons.Filled.Lock, "SECURITY & LOGIN")
+        SectionTitle(Lucide.Lock, "SECURITY & LOGIN")
         ActionRow(
-            tile = { IconTile(Icons.Filled.VpnKey, TINT_PASSWORD) },
+            tile = { IconTile(Lucide.Key, TINT_PASSWORD) },
             title = "Change password",
             subtitle = "Keep your account secure",
             onClick = { showPassword = !showPassword },
@@ -198,7 +178,7 @@ private fun SecurityCard() {
         TwoFactorRow()
         RowDivider()
         ActionRow(
-            tile = { IconTile(Icons.Filled.Smartphone, TINT_SESSIONS) },
+            tile = { IconTile(Lucide.Smartphone, TINT_SESSIONS) },
             title = "Active sessions",
             subtitle = "This device",
             onClick = {},
@@ -217,10 +197,10 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
     // now, with why, never cold on launch (EXPERIENCE.md §7.2 #12).
     val notifyAsk = org.nuruplace.member.data.firebase.rememberNotificationAsk()
     SectionCard {
-        SectionTitle(Icons.Filled.Notifications, "NOTIFICATIONS")
+        SectionTitle(Lucide.Bell, "NOTIFICATIONS")
         if (prefs != null) {
             ToggleRow(
-                tile = { NeutralTile(Icons.Filled.Notifications) },
+                tile = { NeutralTile(Lucide.Bell) },
                 title = "Push notifications",
                 subtitle = "Devotionals, events, reminders",
                 checked = prefs.pushEnabled,
@@ -237,7 +217,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
             // Live invite stops ringing. Off still delivers everything.
             ToggleRow(
                 tile = {
-                    NeutralTile(if (prefs.soundEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff)
+                    NeutralTile(if (prefs.soundEnabled) Lucide.Volume2 else Lucide.VolumeX)
                 },
                 title = "Sound and vibration",
                 subtitle = if (prefs.soundEnabled) {
@@ -250,7 +230,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
             )
             RowDivider()
             ToggleRow(
-                tile = { NeutralTile(Icons.Filled.MailOutline) },
+                tile = { NeutralTile(Lucide.Mail) },
                 title = "Email",
                 subtitle = "Weekly summary & receipts",
                 checked = prefs.emailEnabled,
@@ -258,7 +238,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
             )
             RowDivider()
             ToggleRow(
-                tile = { NeutralTile(Icons.Filled.Call) },
+                tile = { NeutralTile(Lucide.Phone) },
                 title = "SMS",
                 subtitle = "Critical updates only",
                 checked = prefs.smsEnabled,
@@ -270,7 +250,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
         // (Messages, Updates and reminders, Live invites, Quiet) keeps its
         // own sound and vibration there, which the member may change.
         ActionRow(
-            tile = { IconTile(Icons.Filled.Notifications, TINT_NOTIF) },
+            tile = { IconTile(Lucide.Bell, TINT_NOTIF) },
             title = "Notification settings",
             subtitle = "Manage sounds & toggles in phone settings",
             onClick = {
@@ -300,7 +280,7 @@ private val LINE_SPACINGS = listOf("Compact" to 0.85f, "Default" to 1.0f, "Relax
 @Composable
 private fun DisplayCard() {
     SectionCard {
-        SectionTitle(Icons.Filled.LightMode, "DISPLAY")
+        SectionTitle(Lucide.Sun, "DISPLAY")
         Text("Text size", style = NuruType.controlTitle, color = PROF.navy)
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -371,9 +351,9 @@ private fun DisplayCard() {
 @Composable
 private fun LanguageCard() {
     SectionCard {
-        SectionTitle(Icons.Filled.Translate, "LANGUAGE")
+        SectionTitle(Lucide.Languages, "LANGUAGE")
         ActionRow(
-            tile = { IconTile(Icons.Filled.Translate, TINT_LANGUAGE) },
+            tile = { IconTile(Lucide.Languages, TINT_LANGUAGE) },
             title = "Language",
             subtitle = "App language · English",
             onClick = {},
@@ -409,9 +389,9 @@ private fun PrivacyCard() {
     }
 
     SectionCard {
-        SectionTitle(Icons.Filled.LocationOn, "PRIVACY")
+        SectionTitle(Lucide.MapPin, "PRIVACY")
         ToggleRow(
-            tile = { NeutralTile(Icons.Filled.LocationOn) },
+            tile = { NeutralTile(Lucide.MapPin) },
             title = "Share my approximate location",
             subtitle = "Helps you connect with believers near you. Approximate only; you can turn this off anytime.",
             checked = AppPrefs.shareLocation,
@@ -435,16 +415,16 @@ private fun PrivacyCard() {
 @Composable
 private fun HelpCard() {
     SectionCard {
-        SectionTitle(Icons.Filled.Help, "HELP & PRIVACY")
+        SectionTitle(Lucide.CircleHelp, "HELP & PRIVACY")
         ActionRow(
-            tile = { IconTile(Icons.Filled.Help, TINT_HELP) },
+            tile = { IconTile(Lucide.CircleHelp, TINT_HELP) },
             title = "Help & support",
             subtitle = "FAQs, contact us",
             onClick = {},
         )
         RowDivider()
         ActionRow(
-            tile = { IconTile(Icons.Filled.Shield, TINT_PRIVACY) },
+            tile = { IconTile(Lucide.Shield, TINT_PRIVACY) },
             title = "Privacy policy",
             subtitle = "How we handle your data",
             onClick = {},
@@ -470,7 +450,7 @@ private fun ActionsRow() {
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Logout, PROF.navy, 18.dp)
+                Icon(Lucide.LogOut, PROF.navy, 18.dp)
                 Text("Sign out", style = pInter(14, FontWeight.SemiBold), color = PROF.navy)
             }
         }
@@ -485,7 +465,7 @@ private fun ActionsRow() {
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.DeleteOutline, PROF.danger, 18.dp)
+                Icon(Lucide.Trash2, PROF.danger, 18.dp)
                 Text("Delete account", style = pInter(14, FontWeight.SemiBold), color = PROF.danger)
             }
         }
@@ -695,7 +675,7 @@ private fun ChangePasswordSection() {
                 Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)).background(PROF.successBg),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.CheckCircle, PROF.success, 26.dp)
+                Icon(Lucide.CheckCircle, PROF.success, 26.dp)
             }
             Text(
                 "Your password has been changed.",
@@ -804,7 +784,7 @@ private fun PasswordField(value: String, onValueChange: (String) -> Unit, label:
         trailingIcon = {
             IconButton(onClick = { visible = !visible }) {
                 Icon(
-                    if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    if (visible) Lucide.EyeOff else Lucide.Eye,
                     PROF.sub,
                     22.dp,
                 )
@@ -845,7 +825,7 @@ private fun SectionTitle(icon: ImageVector, label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, PROF.kicker, 15.dp)
+        Icon(icon, PROF.kicker, 14.dp)
         Text(label, style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.kicker)
     }
 }
@@ -856,7 +836,7 @@ private fun IconTile(icon: ImageVector, tint: RowTint) {
         Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(tint.bg),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, tint.fg, 16.dp)
+        Icon(icon, tint.fg, 18.dp)
     }
 }
 
@@ -870,7 +850,7 @@ private fun NeutralTile(icon: ImageVector) {
             .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, PROF.navy, 16.dp)
+        Icon(icon, PROF.navy, 18.dp)
     }
 }
 
@@ -892,7 +872,7 @@ private fun ActionRow(
             Text(title, style = NuruType.controlTitle, color = PROF.navy)
             Text(subtitle, style = pInter(11), color = PROF.sub)
         }
-        Icon(Icons.Filled.ChevronRight, PROF.rowLabel, 16.dp)
+        Icon(Lucide.ChevronRight, PROF.rowLabel, 18.dp)
     }
 }
 

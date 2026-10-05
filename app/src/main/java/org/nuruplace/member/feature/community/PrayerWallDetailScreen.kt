@@ -21,11 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +55,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.relTime
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -84,7 +80,7 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                     Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Lucide.ArrowLeft, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                 Text("Prayer", style = gSerif(22, FontWeight.SemiBold), color = Color.White)
             }
 
@@ -257,7 +253,7 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(17.dp))
+                    Icon(Lucide.Send, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -278,7 +274,7 @@ private fun VoicePrayerRow(id: String, url: String, wave: List<Int>, player: Voi
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) Lucide.Pause else Lucide.Play,
             if (playing) "Pause voice prayer" else "Play voice prayer",
             tint = GrowPal.navyDeep,
             modifier = Modifier.size(18.dp),

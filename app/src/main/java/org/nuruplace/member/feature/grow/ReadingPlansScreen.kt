@@ -42,18 +42,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -89,6 +77,7 @@ import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import org.nuruplace.member.ui.theme.NuruType
 import java.util.Calendar
+import org.nuruplace.member.ui.icons.Lucide
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -321,10 +310,7 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
             }
             Spacer(Modifier.width(8.dp))
             // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
-            InboxBell(
-                onClick = onOpenNotifications, size = 40.dp, shape = RoundedCornerShape(16.dp),
-                container = Color.White, border = PL.border, tint = PL.navy, iconSize = 18.dp, dotInset = 8.dp,
-            )
+            InboxBell(onClick = onOpenNotifications)
         }
         Spacer(Modifier.height(16.dp))
         SearchBar(query = query, onQuery = onQuery)
@@ -342,7 +328,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(16.dp))
+        Icon(Lucide.Search, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) {
@@ -360,10 +346,10 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
         if (query.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
             Icon(
-                Icons.Filled.Close,
+                Lucide.X,
                 contentDescription = "Clear search",
                 tint = PL.ink3,
-                modifier = Modifier.size(15.dp).clickable { onQuery("") },
+                modifier = Modifier.size(14.dp).clickable { onQuery("") },
             )
         }
     }
@@ -412,7 +398,7 @@ private fun StreakStrip(view: StreakView) {
                     .background(Brush.linearGradient(listOf(PL.gold.copy(alpha = 0.15f), PL.gold.copy(alpha = 0.05f)))),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.LocalFireDepartment, contentDescription = null, tint = PL.gold, modifier = Modifier.size(20.dp))
+                Icon(Lucide.Flame, contentDescription = null, tint = PL.gold, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -462,7 +448,7 @@ private fun StreakStrip(view: StreakView) {
             }
             Spacer(Modifier.width(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = PL.catText, modifier = Modifier.size(12.dp))
+                Icon(Lucide.Gift, contentDescription = null, tint = PL.catText, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(
                     if (toReward == 0) "Reward ready!" else "$toReward day${if (toReward == 1) "" else "s"} to a badge",
@@ -484,7 +470,7 @@ private fun WeekDot(label: String, done: Boolean, today: Boolean) {
             when {
                 done -> {
                     Box(Modifier.matchParentSize().clip(RoundedCornerShape(999.dp)).background(PL.gold))
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                 }
                 today -> {
                     Box(
@@ -591,7 +577,7 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
                     Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(PL.gold.copy(alpha = 0.10f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = PL.gold, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.Play, contentDescription = null, tint = PL.gold, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -607,7 +593,7 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
             ) {
                 Text("Continue · Day $day", style = NuruType.cardCta, color = PL.navy, maxLines = 2)
                 Spacer(Modifier.width(6.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = PL.navy, modifier = Modifier.size(14.dp))
+                Icon(Lucide.ArrowRight, contentDescription = null, tint = PL.navy, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -837,14 +823,14 @@ private fun PlanPromo(
                 )
                 Spacer(Modifier.width(6.dp))
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
+                    Lucide.ArrowRight,
                     contentDescription = null,
                     tint = PL.navy,
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Schedule, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(11.dp))
+                Icon(Lucide.Clock4, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("${plan.dayCount} days · a few minutes a day", style = plInter(11), color = PL.ink3)
             }
@@ -864,7 +850,7 @@ private fun PromoKicker(label: String, shimmer: Boolean) {
             Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = PL.navy, modifier = Modifier.size(9.dp))
+            Icon(Lucide.Sparkles, contentDescription = null, tint = PL.navy, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
             Text(label, style = plInter(11, FontWeight.Bold, 1.26f), color = PL.navy)
         }
@@ -1038,7 +1024,7 @@ private fun FilteredResults(category: String, plans: List<ReadingPlanRow>, onOpe
                     Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(PL.gold.copy(alpha = 0.08f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Search, contentDescription = null, tint = PL.gold, modifier = Modifier.size(22.dp))
+                    Icon(Lucide.Search, contentDescription = null, tint = PL.gold, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.height(12.dp))
                 Text("No plans found", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
@@ -1075,7 +1061,7 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
                         .background(PL.gold),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                 }
             }
             // Progress rail for a plan already in progress — the browse grid now
@@ -1149,7 +1135,7 @@ private fun InvitationCard(onClick: () -> Unit) {
             Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Groups, null, tint = PL.navy, modifier = Modifier.size(19.dp))
+            Icon(Lucide.Users, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text("Read with a friend", style = plInter(13, FontWeight.Bold), color = PL.navy)
@@ -1158,6 +1144,6 @@ private fun InvitationCard(onClick: () -> Unit) {
                 style = plInter(11), color = PL.ink2,
             )
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.ink3, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ChevronRight, null, tint = PL.ink3, modifier = Modifier.size(18.dp))
     }
 }

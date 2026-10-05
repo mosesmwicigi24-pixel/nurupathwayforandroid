@@ -29,11 +29,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Diversity3
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +46,7 @@ import org.nuruplace.member.feature.departments.DepartmentsSegment
 import org.nuruplace.member.feature.profile.ProfileScreen
 import org.nuruplace.member.feature.profile.SettingsScreen
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -59,10 +55,10 @@ private val Capsule = RoundedCornerShape(999.dp)
  *  full-screen route (kept for links). The Settings segment's gear is the
  *  tab's one gear (EXPERIENCE.md §6.2) — Profile no longer carries its own. */
 enum class YouSegment(val route: String, val label: String, val icon: ImageVector) {
-    Chat("chat", "Community", Icons.Filled.Groups),   // name + route stay: deep links resolve to them
-    Departments("departments", "Departments", Icons.Filled.Diversity3),
-    Profile("profile", "Profile", Icons.Filled.Person),
-    Settings("settings", "Settings", Icons.Filled.Settings),
+    Chat("chat", "Community", Lucide.Users),   // name + route stay: deep links resolve to them
+    Departments("departments", "Departments", Lucide.Users2),
+    Profile("profile", "Profile", Lucide.User),
+    Settings("settings", "Settings", Lucide.Settings),
 }
 
 @Composable

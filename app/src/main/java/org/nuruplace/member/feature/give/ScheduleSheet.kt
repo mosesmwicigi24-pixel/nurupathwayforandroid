@@ -37,12 +37,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Autorenew
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -86,6 +80,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val SheetCapsule = RoundedCornerShape(999.dp)
 
@@ -190,7 +185,7 @@ internal fun ScheduleSheet(
                     Modifier.size(32.dp).clip(CircleShape).background(GIVE.surface).clickable { onClose() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GIVE.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.X, contentDescription = "Close", tint = GIVE.navy, modifier = Modifier.size(14.dp))
                 }
             }
             // The summary: the amount, its day and fund, the pledge it collects.
@@ -200,7 +195,7 @@ internal fun ScheduleSheet(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(19.dp))
+                    Icon(Lucide.Repeat, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(18.dp))
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(money(s.amountMinor, s.currency), style = giInter(18, FontWeight.Bold), color = GIVE.navy)
@@ -218,7 +213,7 @@ internal fun ScheduleSheet(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.Pause, contentDescription = null, tint = GIVE.ink600, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.Pause, contentDescription = null, tint = GIVE.ink600, modifier = Modifier.size(14.dp))
                         Text(p.line, style = giInter(12, FontWeight.SemiBold), color = GIVE.navy)
                     }
                     if (p.canResume) {
@@ -239,7 +234,7 @@ internal fun ScheduleSheet(
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 1.dp).size(14.dp))
+                    Icon(Lucide.AlertTriangle, contentDescription = null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 1.dp).size(14.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(f.reason, style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText)
                         f.hint.takeIf { it.isNotBlank() }?.let { Text(it, style = giInter(11), color = GIVE.sub) }
@@ -338,7 +333,7 @@ internal fun ScheduleSheet(
                             value = draft.numberText,
                             onValueChange = { v -> draft = draft.copy(numberText = v.filter { it.isDigit() || it == '+' || it == ' ' }.take(18)) },
                             singleLine = true,
-                            leadingIcon = { Icon(Icons.Filled.Smartphone, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(16.dp)) },
+                            leadingIcon = { Icon(Lucide.Smartphone, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp)) },
                             placeholder = { Text("07XX XXX XXX", style = giInter(15), color = GIVE.tertiary) },
                             textStyle = giInter(15, FontWeight.SemiBold).copy(color = GIVE.navy),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),

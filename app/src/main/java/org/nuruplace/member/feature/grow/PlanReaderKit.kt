@@ -28,12 +28,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -85,6 +79,7 @@ import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 // ── Type helpers (exact-size brand faces) ──
 internal fun rInter(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
@@ -406,10 +401,10 @@ internal fun RScriptureRefCard(reference: String, pal: ReaderPalette) {
             Modifier.fillMaxWidth().clickable { open = !open }.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.goldDeep, modifier = Modifier.size(16.dp))
+            Icon(Lucide.BookOpen, null, tint = pal.goldDeep, modifier = Modifier.size(18.dp))
             Text(reference, style = rInter(13, FontWeight.SemiBold), color = pal.ink, modifier = Modifier.weight(1f))
             if (loading) CircularProgressIndicator(color = pal.goldDeep, strokeWidth = 1.5.dp, modifier = Modifier.size(14.dp))
-            else Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, if (open) "Hide" else "Read", tint = pal.inkDim, modifier = Modifier.size(18.dp))
+            else Icon(if (open) Lucide.ChevronUp else Lucide.ChevronDown, if (open) "Hide" else "Read", tint = pal.inkDim, modifier = Modifier.size(18.dp))
         }
         if (open) {
             passage?.let { p ->
@@ -506,7 +501,7 @@ internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: (
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(36.dp).clip(CircleShape).background(pal.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.gold, modifier = Modifier.size(16.dp))
+                    Icon(Lucide.BookOpen, null, tint = pal.gold, modifier = Modifier.size(18.dp))
                 }
                 Column {
                     Text("SCRIPTURE", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
@@ -544,7 +539,7 @@ internal fun RPullQuote(text: String, caption: String, quoted: Boolean, pal: Rea
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(pal.gold))
         Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Filled.FormatQuote, null, tint = pal.gold, modifier = Modifier.size(16.dp))
+            Icon(Lucide.Quote, null, tint = pal.gold, modifier = Modifier.size(18.dp))
             val alreadyQuoted = text.trimStart().firstOrNull()?.let { it == '“' || it == '"' } == true
             Text(if (quoted && !alreadyQuoted) "“$text”" else text, style = rSerif(18, FontWeight.Normal, 25, italic = true), color = pal.ink)
             Text(caption.uppercase(), style = rInter(11, FontWeight.Bold, 1.4f), color = pal.inkDim)
@@ -601,7 +596,7 @@ internal fun RMediaCard(imageUrl: String?, videoUrl: String?, portrait: Boolean)
                 AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
             Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFC89B3C)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
+                Icon(Lucide.Play, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
             }
         }
     }

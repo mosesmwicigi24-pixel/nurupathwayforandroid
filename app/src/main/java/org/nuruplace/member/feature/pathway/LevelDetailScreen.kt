@@ -31,18 +31,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -85,6 +73,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private data class LevelBundle(
     val level: PathwayLevel?,
@@ -218,7 +207,7 @@ fun LevelDetailScreen(
             Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Nuru.heroGradient)) {
                 IconButton(onClick = onBack, modifier = Modifier.padding(top = Spacing.md, start = Spacing.sm)) {
                     Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.navyDeep.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.onNavy)
+                        Icon(Lucide.ArrowLeft, "Back", tint = Nuru.onNavy, modifier = Modifier.size(22.dp))
                     }
                 }
                 Column(Modifier.align(Alignment.BottomStart).padding(Spacing.screen)) {
@@ -403,14 +392,14 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                             .clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
                             .border(1.5.dp, Nuru.white, RoundedCornerShape(Radii.pill)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, null, tint = Nuru.white, modifier = Modifier.size(9.dp)) }
+                    ) { Icon(Lucide.Check, null, tint = Nuru.white, modifier = Modifier.size(14.dp)) }
                 } else if (locked) {
                     Box(
                         Modifier.offset(x = 4.dp, y = (-3).dp).size(15.dp)
                             .clip(RoundedCornerShape(Radii.pill)).background(Nuru.inputBg)
                             .border(1.5.dp, Nuru.white, RoundedCornerShape(Radii.pill)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(8.dp)) }
+                    ) { Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
                 }
             }
             if (!isLast) {
@@ -453,7 +442,7 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(ModuleWords.trailAction(module), style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.ChevronRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -490,7 +479,7 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
                 if (!e.emoji.isNullOrBlank()) {
                     Text(e.emoji, style = NuruType.caption)
                 } else {
-                    Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.gold, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Sparkles, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                 }
             }
             if (!isLast) {
@@ -512,7 +501,7 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
                 Spacer(Modifier.height(Spacing.sm))
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.goldChipText, modifier = Modifier.size(11.dp))
+                Icon(Lucide.Sparkles, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
                 Text(encouragementKicker(e.kind), style = NuruType.kicker, color = Nuru.goldChipText)
             }
             e.title?.takeIf { it.isNotBlank() }?.let {
@@ -558,7 +547,7 @@ private fun LevelGateCard(title: String, line: String?, actionLabel: String?, on
         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.WorkspacePremium, null, tint = Nuru.goldGlow, modifier = Modifier.size(12.dp))
+            Icon(Lucide.Award, null, tint = Nuru.goldGlow, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             Text("THE LEVEL GATE", style = NuruType.kicker, color = Nuru.goldGlow)
         }
@@ -572,7 +561,7 @@ private fun LevelGateCard(title: String, line: String?, actionLabel: String?, on
             ) {
                 Text(actionLabel, style = NuruType.actionLabel, color = Nuru.navyDeep)
                 Spacer(Modifier.width(6.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Nuru.navyDeep, modifier = Modifier.size(13.dp))
+                Icon(Lucide.ArrowRight, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -594,7 +583,7 @@ private fun StatsStation(
             Box(
                 Modifier.size(28.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+            ) { Icon(Lucide.TrendingUp, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
             if (!isLast) {
                 Box(Modifier.width(2.dp).height(46.dp).background(Nuru.gold.copy(alpha = 0.35f)))
             }
@@ -608,7 +597,7 @@ private fun StatsStation(
                 .padding(Spacing.base),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Nuru.gold, modifier = Modifier.size(12.dp))
+                Icon(Lucide.TrendingUp, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                 Text("YOUR JOURNEY SO FAR", style = NuruType.kicker, color = Nuru.gold)
             }
             Spacer(Modifier.height(Spacing.xs))
@@ -636,7 +625,7 @@ private fun StatsStation(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
+                Icon(Lucide.MessageCircle, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
                 Text("Message your discipler", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold)
             }
         }
@@ -728,13 +717,13 @@ private fun DisciplerReminderCard(mentor: MentorInfo.Mentor?, onMessage: () -> U
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                Icon(Lucide.MessageCircle, null, tint = Color.White, modifier = Modifier.size(14.dp))
                 Text("Message", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
         IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
             Box(Modifier.size(26.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(13.dp))
+                Icon(Lucide.X, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(14.dp))
             }
         }
     }

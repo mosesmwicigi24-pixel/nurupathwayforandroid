@@ -9,13 +9,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
+import org.nuruplace.member.ui.icons.Lucide
 
 /** iOS Profile palette — global Nuru tokens + the inline literals used across profile/settings. */
 object PROF {
@@ -77,11 +71,11 @@ data class BadgeStyle(val icon: ImageVector, val color: Color, val tint: Color)
 // One badge look (§8.1 rules 1 and 7): the category's icon, navy on gold tint
 // — they wore green, sky and purple by category, hues that say nothing.
 fun badgeStyle(category: String?): BadgeStyle = when (category?.lowercase()?.trim()) {
-    "journey" -> BadgeStyle(Icons.Filled.AutoAwesome, PROF.navy, PROF.goldTint)
-    "consistency" -> BadgeStyle(Icons.Filled.LocalFireDepartment, PROF.navy, PROF.goldTint)
-    "community" -> BadgeStyle(Icons.Filled.Group, PROF.navy, PROF.goldTint)
-    "service" -> BadgeStyle(Icons.Filled.VolunteerActivism, PROF.navy, PROF.goldTint)
-    else -> BadgeStyle(Icons.Filled.Verified, PROF.navy, PROF.goldTint)
+    "journey" -> BadgeStyle(Lucide.Sparkles, PROF.navy, PROF.goldTint)
+    "consistency" -> BadgeStyle(Lucide.Flame, PROF.navy, PROF.goldTint)
+    "community" -> BadgeStyle(Lucide.Users, PROF.navy, PROF.goldTint)
+    "service" -> BadgeStyle(Lucide.HandHeart, PROF.navy, PROF.goldTint)
+    else -> BadgeStyle(Lucide.BadgeCheck, PROF.navy, PROF.goldTint)
 }
 
 /** Settings row icon tile tint (bg, fg). */
@@ -133,7 +127,7 @@ fun ProfCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
     }
 }
 
-val FingerprintIcon: ImageVector = Icons.Filled.Fingerprint
+val FingerprintIcon: ImageVector = Lucide.FingerprintPattern
 
 // ── Values that look like data never leak (EXPERIENCE.md §8.1 rule 8) ──────
 

@@ -27,9 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +44,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import java.time.Instant
 import java.time.OffsetDateTime
+import org.nuruplace.member.ui.icons.Lucide
 
 /** A pulsing dot — the universal "something is happening right now" signal
  *  (radio's on-air dot, ported here for Nuru Live). */
@@ -114,7 +112,7 @@ fun LiveStreamBanner(row: LiveNowRow, onOpen: () -> Unit, onReplays: () -> Unit,
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (row.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
+                    if (row.isAudio) Lucide.AudioLines else Lucide.Video,
                     contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(22.dp),
                 )
             }
