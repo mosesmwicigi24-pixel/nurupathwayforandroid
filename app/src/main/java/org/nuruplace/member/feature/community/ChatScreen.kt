@@ -154,15 +154,17 @@ fun ChatInboxScreen(
     // docs/LIVE_STREAMING.md L4). Fired once per load/refresh; a no-op
     // default keeps every other caller (none today) unaffected.
     onUnreadChange: (Int) -> Unit = {},
+    /** Community's Pray door (§9.2 #13): the prayer room, on its own page. */
+    onOpenPrayerRoom: (() -> Unit)? = null,
 ) {
     // Held by the tab (§7.2 #8): Back from a thread finds the same list.
     AsyncContent(loading = { ListSkeleton(rows = 8) }, refreshable = true, heldAs = "Community", load = {
         val inbox = Net.client.api.chatInbox()
         val people = runCatching { Net.client.api.chatPeople(null).people }.getOrDefault(emptyList())
         val name = runCatching { Net.client.api.me().profile.fullName }.getOrDefault("")
-        // Verse for today comes from the same tailored-verse service Home uses —
-        // the hub card must reflect the server's pick, not a hardcoded verse.
-        val verse = runCatching { Net.client.api.homeVerse() }.getOrNull()
+        // The verse of the day is Home's, said once there (EXPERIENCE.md §9.2
+        // #13) — Community repeated it; no longer fetched here.
+        val verse: TailoredVerse? = null
         // Chat Redesign C3a — "no unsolicited DMs": who I'm already connected
         // to, and who's asked / been asked. Best-effort so an older server
         // (or a hiccup) never blanks the whole tab.
@@ -397,7 +399,11 @@ fun ChatInboxScreen(
                 ) {
                     AiCard(totalUnread = totalUnread, spaceCount = spaces.size, onOpenAssistant = onOpenAssistant)
 
-                    if (query.isBlank()) VerseCard(verse)
+                    // Community's one switcher is the chips below (§9.2 #13): Pray is
+                    // a door here — the prayer room, with its own tabs, on its own
+                    // page — where a Talk | Pray row stood stacked over them. The
+                    // verse of the day is Home's alone.
+                    if (query.isBlank() && onOpenPrayerRoom != null) PrayerRoomDoor(onOpenPrayerRoom)
 
                     // Segmented control — member tabs (4): My Space · Chat ·
                     // My Discipler · Talk with My Pastor, per the owner brief
@@ -588,42 +594,35 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
     }
 }
 
-// ── Verse-for-today card ──
+// ── The prayer room's door (§9.2 #13) — a row on gold tint, like the
+// "Quick help" door above it. ──
 @Composable
-private fun VerseCard(verse: TailoredVerse?) {
+private fun PrayerRoomDoor(onOpen: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(CHAT.gold.copy(alpha = 0.08f), CHAT.gold.copy(alpha = 0.02f))))
-            .border(1.dp, CHAT.gold.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+            .background(CHAT.white)
+            .border(1.dp, CHAT.border, RoundedCornerShape(20.dp))
+            .clickable(onClickLabel = "Open My Prayer Room") { onOpen() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             Modifier
-                .size(32.dp)
+                .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Lucide.Quote, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(14.dp))
+            Icon(Lucide.HandHeart, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
         }
-        Column {
-            Text("VERSE FOR TODAY", style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.eyebrow)
-            Text(
-                verse?.text?.takeIf { it.isNotBlank() }
-                    ?: "The heartfelt counsel of a friend is as sweet as perfume and incense.",
-                style = cSerif(13, FontWeight.Normal).copy(fontStyle = FontStyle.Italic, lineHeight = 19.sp),
-                color = CHAT.navy,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Text(
-                verse?.reference?.takeIf { it.isNotBlank() } ?: "Proverbs 27:9",
-                style = cInter(11, FontWeight.Bold), color = CHAT.eyebrow, modifier = Modifier.padding(top = 4.dp),
-            )
+        Column(Modifier.weight(1f)) {
+            Text("My Prayer Room", style = org.nuruplace.member.ui.theme.NuruType.rowTitle, color = CHAT.navy)
+            Text("Pray with the family — private, corporate, Selah", style = cInter(12), color = CHAT.ink600, modifier = Modifier.padding(top = 2.dp))
         }
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = CHAT.ink500, modifier = Modifier.size(18.dp))
     }
 }
 

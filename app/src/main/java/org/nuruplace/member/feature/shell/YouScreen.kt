@@ -107,28 +107,20 @@ fun YouScreen(
 
         Box(Modifier.weight(1f)) {
             when (segment) {
-                YouSegment.Chat -> org.nuruplace.member.feature.community.CommunitySegment(
-                    chatUnread = chatUnread,
-                    talk = {
-                        ChatInboxScreen(
-                            onOpenThread = { onNavigate("chat/$it") },
-                            onNewMessage = { onNavigate("new-message") },
-                            onOpenAssistant = { onNavigate("assistant") },
-                            onOpenNotifications = { onNavigate("notifications") },
-                            isStaff = isStaff,
-                            pastoralEligible = pastoralEligible,
-                            onOpenBroadcast = { onNavigate("broadcast/$it") },
-                            onOpenThreadWithContext = { id, ctx -> onNavigate("chat/$id?ctx=$ctx") },
-                            onUnreadChange = onChatUnreadChange,
-                        )
-                    },
-                    pray = {
-                        org.nuruplace.member.feature.community.PrayerRoomScreen(
-                            embedded = true,
-                            onOpenNotifications = { onNavigate("notifications") },
-                            onOpenPost = { onNavigate("prayer-wall/$it") },
-                        )
-                    },
+                // Community: the inbox and its one switcher (EXPERIENCE.md §9.2
+                // #13) — the Talk | Pray row that stood over it is gone; Pray
+                // is a door inside, to the prayer room's own page.
+                YouSegment.Chat -> ChatInboxScreen(
+                    onOpenThread = { onNavigate("chat/$it") },
+                    onNewMessage = { onNavigate("new-message") },
+                    onOpenAssistant = { onNavigate("assistant") },
+                    onOpenNotifications = { onNavigate("notifications") },
+                    isStaff = isStaff,
+                    pastoralEligible = pastoralEligible,
+                    onOpenBroadcast = { onNavigate("broadcast/$it") },
+                    onOpenThreadWithContext = { id, ctx -> onNavigate("chat/$id?ctx=$ctx") },
+                    onUnreadChange = onChatUnreadChange,
+                    onOpenPrayerRoom = { onNavigate("prayer-room") },
                 )
                 YouSegment.Departments -> DepartmentsSegment(onOpen = { onNavigate("department/$it") })
                 YouSegment.Profile -> ProfileScreen(me, onOpen = { onNavigate(it) }, onSignOut = onSignOut)
