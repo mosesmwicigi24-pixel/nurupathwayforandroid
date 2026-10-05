@@ -628,73 +628,11 @@ private fun HairlineDivider() {
 // ── Personal information ────────────────────────────────────────────────────
 @Composable
 private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit) {
-    val userId = p?.userId ?: ""
-    // The member's user_id, in full. This used to render "NRU-" + the LAST eight
-    // characters + a hardcoded "2026" — while iOS built its own variant from the
-    // FIRST eight plus the real join year, so one member saw two different
-    // "member IDs" depending on which phone they opened. Neither string existed
-    // anywhere in the system: unpasteable, unsearchable, and useless to quote.
-    // A UUID is not pretty, but it is the one thing about a member that cannot
-    // change, which is what a padlocked row labelled MEMBER ID should hold.
-    val memberId = userId.ifBlank { "—" }
-    val clipboard = LocalClipboardManager.current
-    val haptics = LocalHapticFeedback.current
-    var justCopied by remember { mutableStateOf(false) }
-    LaunchedEffect(justCopied) {
-        if (justCopied) { delay(1600); justCopied = false }
-    }
     SectionCard {
         SectionTitle(Icons.Filled.Person, "PERSONAL INFORMATION")
 
-        // Member ID row
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Brush.linearGradient(listOf(PROF.gold.copy(alpha = 0.08f), PROF.surface)))
-                .border(1.dp, PROF.gold.copy(alpha = 0.23f), RoundedCornerShape(16.dp))
-                .clickable(enabled = userId.isNotBlank()) {
-                    clipboard.setText(AnnotatedString(userId))
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    justCopied = true
-                }
-                .semantics { contentDescription = "Member ID, permanent. Double tap to copy." }
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PROF.white)
-                    .border(1.dp, PROF.gold.copy(alpha = 0.33f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(FingerprintIcon, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(16.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("MEMBER ID", style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(10.dp))
-                }
-                Text(
-                    memberId,
-                    // App fonts only (owner, 2026-08-26): Inter with wide tracking, not the
-                    // device's Monospace face — the tracking is what makes an id
-                    // scannable, and the foreign typeface was the only thing it added.
-                    style = pInter(11, FontWeight.Medium, 0.8f),
-                    color = PROF.navy,
-                    maxLines = 2,
-                )
-            }
-            Text(
-                if (justCopied) "COPIED" else "PERMANENT",
-                style = pInter(11, FontWeight.SemiBold, 0.9f),
-                color = if (justCopied) PROF.kicker else PROF.rowLabel,
-            )
-        }
+        // No raw Member ID (§8.1 rule 8; Cycle 3's closing walk): the row
+        // showed the 36-character user_id — data, not a word for a member.
 
         // Words, never data (§8.1 rule 8, §8.2 #8): an empty value reads
         // "Not set" (it read "—"), a birthday "1 Jan 1990" — the calendar date

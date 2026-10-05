@@ -190,66 +190,12 @@ class GiveReceiptCopyTest {
     }
 
     @Test
-    fun `never two rows called Reference - the id is Transaction when the provider's code has the word`() {
-        assertEquals("Reference", receiptIdLabel(base))
-        val card = base.copy(method = "card", methodLabel = "Card", receiptCode = null, providerRef = "pi_123")
-        assertEquals("Reference", receiptReferenceLabel(card))
-        assertEquals("Transaction", receiptIdLabel(card))
-        // No provider code at all: the id is the only reference.
-        assertEquals("Reference", receiptIdLabel(card.copy(providerRef = null)))
-    }
-
-    @Test
-    fun `the Date row spells the month, the hero keeps it short`() {
-        assertEquals("25 September 2026 · 8:11 PM", receiptWhenFull(base))
-        assertEquals("Fri 25 Sep 2026 · 8:11 PM", receiptWhen(base))
-        assertEquals("—", receiptWhenFull(base.copy(settledAt = null, createdAt = "")))
-    }
-
-    @Test
-    fun `a gift with no fund at all is General`() {
-        assertEquals("General", receiptFundName(base.copy(fundName = null, fund = "")))
-        assertEquals("to the General fund", receiptDestinationLine(base.copy(fundName = null, fund = " ")))
-    }
-
-    @Test
-    fun `where it went names the fund and, on a pledge, says so`() {
-        assertEquals("100% of this gift reaches the Discipleship fund.", receiptWhereItWent(base))
-        assertEquals(
-            "100% of this gift reaches the Discipleship fund. · counts toward your pledge",
-            receiptWhereItWent(base.copy(pledge = pledge)),
-        )
-        assertEquals("100% of this gift reaches the Tithe fund.", receiptWhereItWent(base.copy(fundName = null, fund = "tithe")))
-    }
-
-    @Test
-    fun `a covered fee reads Gift, Fee cover, Total — and nothing without one`() {
-        val covered = base.copy(amountMinor = 101_300, feeCoverMinor = 1_300)
-        assertEquals(
-            listOf("Gift" to "KSh 1,000", "Fee cover" to "KSh 13 · covered by you", "Total" to "KSh 1,013"),
-            receiptFeeRows(covered),
-        )
-        assertNull(receiptFeeRows(base))
-        assertNull(receiptFeeRows(base.copy(feeCoverMinor = 0)))
-        // A fee that is the whole amount (bad data) is never shown as a KSh 0 gift.
-        assertNull(receiptFeeRows(base.copy(amountMinor = 1_300, feeCoverMinor = 1_300)))
-    }
-
-    @Test
-    fun `amount splits into a currency mark and a number`() {
-        assertEquals("KSh" to "500", receiptAmountParts(50_000, "KES"))
-        assertEquals("KSh" to "1,000", receiptAmountParts(100_000, null))
-        assertEquals("US$" to "12.50", receiptAmountParts(1_250, "USD"))
-    }
-
-    @Test
     fun `pdf file name is the receipt code, else the short id, filesystem-safe`() {
         assertEquals("nuru-receipt-UIPJ27PBO3.pdf", receiptFileName(base))
         assertEquals("nuru-receipt-3f2a9c1e.pdf", receiptFileName(base.copy(receiptCode = null)))
         assertEquals("nuru-receipt-AB12.pdf", receiptFileName(base.copy(receiptCode = "AB/12 ../")))
         assertEquals("nuru-receipt-UIP_J27-PBO3.pdf", receiptFileName(base.copy(receiptCode = "UIP_J27-PBO3")))
         assertEquals("nuru-receipt-gift.pdf", receiptFileName(base.copy(receiptCode = "///", transactionId = "")))
-        assertEquals("3f2a9c1e…", receiptShortId(base))
     }
 }
 

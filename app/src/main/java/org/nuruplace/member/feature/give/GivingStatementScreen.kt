@@ -802,8 +802,10 @@ fun GivingReceiptScreen(
                     receiptProviderRef(d)?.let { ref ->
                         ReceiptRow(receiptReferenceLabel(d), ref, mono = true, copied = copied == "ref") { copy("ref", ref) }
                     }
-                    ReceiptRow("Date", receiptWhenFull(d))
-                    ReceiptRow(receiptIdLabel(d), receiptShortId(d), mono = true, copied = copied == "id", last = true) { copy("id", d.transactionId) }
+                    // No internal transaction id (§8.1 rules 8 and 9): "bd48d11d…"
+                    // was the system's own key, cut short — the provider's receipt
+                    // above is the member's reference.
+                    ReceiptRow("Date", receiptWhenFull(d), last = true)
                 }
 
                 // ── Where it went — never under a gift that failed or was

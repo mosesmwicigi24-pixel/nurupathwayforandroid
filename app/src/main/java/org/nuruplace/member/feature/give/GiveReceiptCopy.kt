@@ -165,11 +165,6 @@ fun receiptWhen(d: GivingDetail): String = receiptInstant(d)?.format(WHEN_FMT) ?
  *  Date row (iOS whenFull). */
 fun receiptWhenFull(d: GivingDetail): String = receiptInstant(d)?.format(WHEN_FULL_FMT) ?: "—"
 
-/** The internal id's row label. Never two rows called "Reference": when the
- *  provider's code already owns that word (a card or PayPal reference), the
- *  id is "Transaction". */
-fun receiptIdLabel(d: GivingDetail): String =
-    if (receiptProviderRef(d) != null && receiptReferenceLabel(d) == "Reference") "Transaction" else "Reference"
 
 /** The receipt's verse, on the Give page's verse card (iOS verseFooter). */
 const val RECEIPT_VERSE = "“God loves a cheerful giver.”"
@@ -199,5 +194,3 @@ fun receiptFileName(d: GivingDetail): String {
     return "nuru-receipt-${key.ifEmpty { "gift" }}.pdf"
 }
 
-/** "3f2a9c1e…" — the transaction id shortened for the eye (a tap copies the full id). */
-fun receiptShortId(d: GivingDetail): String = d.transactionId.take(8) + "…"
