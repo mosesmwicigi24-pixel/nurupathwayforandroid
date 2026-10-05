@@ -150,7 +150,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle as JTextStyle
 import java.util.Locale
 
 @Composable
@@ -700,18 +699,11 @@ private fun HomeHeader(
     churchLive: LiveNowRow? = null,
     onLive: () -> Unit = {},
 ) {
-    val now = LocalDate.now()
-    val kicker = buildString {
-        append(now.dayOfWeek.getDisplayName(JTextStyle.FULL, Locale.getDefault()).uppercase())
-        append(" · ")
-        append(now.month.getDisplayName(JTextStyle.SHORT, Locale.getDefault()).uppercase())
-        append(" ${now.dayOfMonth} · EAT")
-    }
-    val greeting = when (LocalDate.now().let { java.time.LocalTime.now().hour }) {
-        in 0..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        else -> "Good evening"
-    }
+    // iOS's words (HomeGreeting, §8.2 #13): Sunday is the Lord's Day —
+    // "Happy Lord's Day, Ada." — and late evening is "Rest well".
+    val now = java.time.LocalDateTime.now()
+    val kicker = HomeGreeting.kicker(now.toLocalDate())
+    val greeting = HomeGreeting.greeting(now)
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
