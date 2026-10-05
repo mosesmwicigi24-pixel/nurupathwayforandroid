@@ -292,7 +292,9 @@ private fun HubHeader(
             // Journey progress, counted in levels (§3) — not a share of
             // published modules, which read 100% at Level 1 of 6. Empty, with
             // no number, until the journey is known (§7 rule 5).
-            HubRing(journey?.percent)
+            // Shown once there is progress to show — never a "0%" ring on a
+            // first day (§9.2 #4).
+            journey?.percent?.takeIf { it > 0 }?.let { HubRing(it) }
         }
         Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
         // One Inter line: where the member is on the road, and how far through
@@ -301,7 +303,9 @@ private fun HubHeader(
             journey?.headerLine ?: "Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}",
             style = nuruSans(13), color = PW.ink2, modifier = Modifier.padding(top = 4.dp),
         )
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
+        // The level's bar once a lesson is done — not an empty "0/10" on a
+        // first day (§9.2 #4; the line above says "10 modules").
+        if ((active?.lessonsDone ?: 0) > 0) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
             Box(Modifier.weight(1f)) { PWBar(pct, PW.goldGrad, PW.navy.copy(alpha = 0.10f)) }
             Spacer(Modifier.width(Spacing.sm))
             Text("${active?.lessonsDone ?: 0}/${active?.lessonCount ?: 0}", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2)

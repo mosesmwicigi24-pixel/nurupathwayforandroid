@@ -50,12 +50,19 @@ class YourWeekTest {
     }
 
     @Test
+    fun `Pathway — a first day leads with the path's first step, its verb first`() {
+        // EXPERIENCE.md §9.1 rules 3–4: "Start Level 1 · God & His Nature", no "0 of".
+        val first = YourWeek.pathway(JourneyState.derive(summary(LevelStatus.ACTIVE, 0), trail(0)), 1)
+        assertEquals(WeekRow(WeekForm.JOURNEY, "Start Level 1 · Module 1", "Level 1 · 20 modules", WeekDest.Screen("module/m1")), first)
+    }
+
+    @Test
     fun `Pathway — the journey's next step, its level and pill, its destination`() {
         val exam = YourWeek.pathway(JourneyState.derive(summary(LevelStatus.COMPLETED, 20), trail(20)), 1)
         assertEquals(WeekRow(WeekForm.JOURNEY, "Take the Level 1 exam", "Level 1 · Exam ready", WeekDest.Screen("exam/1")), exam)
 
         val learning = YourWeek.pathway(JourneyState.derive(summary(LevelStatus.ACTIVE, 5), trail(5)), 1)
-        assertEquals(WeekRow(WeekForm.JOURNEY, "Module 6", "Level 1 · 5 of 20 modules", WeekDest.Screen("module/m6")), learning)
+        assertEquals(WeekRow(WeekForm.JOURNEY, "Continue · Module 6", "Level 1 · 5 of 20 modules", WeekDest.Screen("module/m6")), learning)
     }
 
     @Test
@@ -74,8 +81,8 @@ class YourWeekTest {
 
     @Test
     fun `Pathway — without the journey, the level alone`() {
-        assertEquals(WeekRow(WeekForm.JOURNEY_UNKNOWN, "Your pathway", "Level 2", WeekDest.Tab("pathway")), YourWeek.pathway(null, 2))
-        assertEquals(WeekRow(WeekForm.JOURNEY_UNKNOWN, "Your pathway", "", WeekDest.Tab("pathway")), YourWeek.pathway(null, null))
+        assertEquals(WeekRow(WeekForm.JOURNEY_UNKNOWN, "Open your pathway", "Level 2", WeekDest.Tab("pathway")), YourWeek.pathway(null, 2))
+        assertEquals(WeekRow(WeekForm.JOURNEY_UNKNOWN, "Open your pathway", "", WeekDest.Tab("pathway")), YourWeek.pathway(null, null))
     }
 
     // ── Plans ──
@@ -87,7 +94,7 @@ class YourWeekTest {
             ReadingPlanRow(planId = "rooted", title = "Rooted: 10 Days in the Psalms", dayCount = 10, currentDay = 3, enrolled = true),
         )
         assertEquals(
-            WeekRow(WeekForm.PLAN_DAY, "Rooted: 10 Days in the Psalms", "Day 3 of 10 · today's reading", WeekDest.Screen("plan/rooted/day/3")),
+            WeekRow(WeekForm.PLAN_DAY, "Continue · Rooted: 10 Days in the Psalms", "Day 3 of 10 · today's reading", WeekDest.Screen("plan/rooted/day/3")),
             YourWeek.plans(plans),
         )
     }
@@ -104,7 +111,7 @@ class YourWeekTest {
             ReadingPlanRow(planId = "first", title = "First Steps", dayCount = 7, currentDay = 4, enrolled = true, lastDayFinishedAt = "2026-10-05T08:45:00Z"),
         )
         assertEquals(
-            WeekRow(WeekForm.PLAN_DAY, "First Steps", "Day 3 done today · Day 4 next", WeekDest.Screen("plan/first")),
+            WeekRow(WeekForm.PLAN_DAY, "Done today · First Steps", "Day 3 done today · Day 4 next", WeekDest.Screen("plan/first")),
             YourWeek.plans(readToday, now = now),
         )
         val readYesterday = listOf(readToday[0].copy(lastDayFinishedAt = "2026-10-04T08:45:00Z"))
@@ -127,7 +134,7 @@ class YourWeekTest {
     fun `Events — a gathering the member is going to leads, You're going`() {
         val rsvps = listOf(MyRsvp(eventId = "tue", status = "going", title = "Youth Night", occursAt = tue.startAt))
         assertEquals(
-            WeekRow(WeekForm.EVENT_GOING, "Youth Night", "Tue 6 Oct · 6:00 PM · You're going", WeekDest.Event("tue", "2026-10-06T17:00:00Z")),
+            WeekRow(WeekForm.EVENT_GOING, "Going · Youth Night", "Tue 6 Oct · 6:00 PM", WeekDest.Event("tue", "2026-10-06T17:00:00Z")),
             YourWeek.events(listOf(mon, tue), emptyList(), rsvps, now),
         )
         // Home's own events carry the member's answer too.
@@ -136,7 +143,7 @@ class YourWeekTest {
         // An RSVP to a gathering the calendar did not send still counts.
         val only = listOf(MyRsvp(eventId = "cell", status = "going", title = "Cell night", occursAt = "2026-10-07T16:00:00Z"))
         assertEquals(
-            WeekRow(WeekForm.EVENT_GOING, "Cell night", "Wed 7 Oct · 7:00 PM · You're going", WeekDest.Event("cell", null)),
+            WeekRow(WeekForm.EVENT_GOING, "Going · Cell night", "Wed 7 Oct · 7:00 PM", WeekDest.Event("cell", null)),
             YourWeek.events(null, null, only, now),
         )
     }
@@ -144,14 +151,14 @@ class YourWeekTest {
     @Test
     fun `Events — otherwise the soonest gathering this week, its day and time`() {
         assertEquals(
-            WeekRow(WeekForm.EVENT_NEXT, "Sunday Service", "Mon 5 Oct · 9:00 AM", WeekDest.Event("mon", "2026-10-05T08:00:00Z")),
+            WeekRow(WeekForm.EVENT_NEXT, "Join · Sunday Service", "Mon 5 Oct · 9:00 AM", WeekDest.Event("mon", "2026-10-05T08:00:00Z")),
             YourWeek.events(listOf(tue, mon), null, emptyList(), now),
         )
         // One the member declined steps aside for the next…
         val declined = listOf(MyRsvp(eventId = "mon", status = "declined"))
-        assertEquals("Youth Night", YourWeek.events(listOf(mon, tue), null, declined, now).title)
+        assertEquals("Join · Youth Night", YourWeek.events(listOf(mon, tue), null, declined, now).title)
         // …unless it is all that is on.
-        assertEquals("Sunday Service", YourWeek.events(listOf(mon), null, declined, now).title)
+        assertEquals("Join · Sunday Service", YourWeek.events(listOf(mon), null, declined, now).title)
         // The member's own answers have the last word over Home's copy.
         val home = listOf(HomeEventRow("mon", title = "Sunday Service", startsAt = mon.startAt, myRsvp = "going"))
         assertEquals(WeekForm.EVENT_NEXT, YourWeek.events(listOf(mon), home, listOf(MyRsvp(eventId = "mon", status = "maybe")), now).form)
@@ -160,8 +167,8 @@ class YourWeekTest {
     @Test
     fun `Events — the week is today through the seventh day after, from now`() {
         // Sun 11 Oct is the seventh day: in. Tue 13 Oct: out. Earlier today: past.
-        assertEquals("Harvest Sunday", YourWeek.events(listOf(nextSun, farTue, earlier), null, null, now).title)
-        val none = WeekRow(WeekForm.EVENT_NONE, "No gatherings this week", "See the church calendar", WeekDest.Tab("events"))
+        assertEquals("Join · Harvest Sunday", YourWeek.events(listOf(nextSun, farTue, earlier), null, null, now).title)
+        val none = WeekRow(WeekForm.EVENT_NONE, "See the church calendar", "No gatherings this week", WeekDest.Tab("events"))
         assertEquals(none, YourWeek.events(listOf(farTue, earlier), null, null, now))
         // Nothing read at all: the none form.
         assertEquals(none, YourWeek.events(null, null, null, now))
@@ -192,10 +199,10 @@ class YourWeekTest {
     fun `Giving — a recurring gift prompting this week says when it is collected`() {
         val p = Partnership(isPartner = true)
         assertEquals(
-            WeekRow(WeekForm.GIFT_COLLECTED, "Your monthly gift", "Collected on Tue 6 Oct", WeekDest.Screen("schedules?open=g1")),
+            WeekRow(WeekForm.GIFT_COLLECTED, "Giving · Your monthly gift", "Collected on Tue 6 Oct", WeekDest.Screen("schedules?open=g1")),
             YourWeek.giving(p, listOf(gift()), rails, today),
         )
-        assertEquals("Your weekly gift", YourWeek.giving(p, listOf(gift(frequency = "weekly")), rails, today).title)
+        assertEquals("Giving · Your weekly gift", YourWeek.giving(p, listOf(gift(frequency = "weekly")), rails, today).title)
         // The seventh day is in; the eighth is not; nor is a paused gift, or one asking nothing.
         assertEquals("Collected on Sun 11 Oct", YourWeek.giving(p, listOf(gift(next = "2026-10-11T06:00:00Z")), rails, today).line)
         assertEquals(give, YourWeek.giving(p, listOf(gift(next = "2026-10-12T06:00:00Z")), rails, today))
@@ -209,7 +216,7 @@ class YourWeekTest {
     fun `Giving — a pledge's collector prompting this week, on or before its instalment, is collected — it opens the pledge`() {
         val p = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue()))
         assertEquals(
-            WeekRow(WeekForm.GIFT_COLLECTED, "Roof", "Collected on Mon 5 Oct", WeekDest.Screen("partners-pledge/roof")),
+            WeekRow(WeekForm.GIFT_COLLECTED, "Giving · Roof", "Collected on Mon 5 Oct", WeekDest.Screen("partners-pledge/roof")),
             YourWeek.giving(p, listOf(gift(pledgeId = "roof", next = "2026-10-05T06:00:00Z")), rails, today),
         )
         // With nothing due yet on the pledge, its collector's prompt is still the week's.
@@ -220,7 +227,7 @@ class YourWeekTest {
     @Test
     fun `Giving — an instalment no collector takes is due — Partners`() {
         val p = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue()))
-        val due = WeekRow(WeekForm.PLEDGE_DUE, "Roof", "KSh 5,000 due Mon 5 Oct", WeekDest.Tab("partners"))
+        val due = WeekRow(WeekForm.PLEDGE_DUE, "Pay · Roof", "KSh 5,000 due Mon 5 Oct", WeekDest.Tab("partners"))
         // No collector at all.
         assertEquals(due, YourWeek.giving(p, emptyList(), rails, today))
         // A collector whose prompt comes after the instalment does not take it (§6.4).
@@ -234,7 +241,7 @@ class YourWeekTest {
     fun `Giving — an instalment the server says is past reads overdue since`() {
         val p = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue(dueOn = "2026-10-04", overdue = true, since = "2026-09-05")))
         assertEquals(
-            WeekRow(WeekForm.PLEDGE_DUE, "Roof", "KSh 5,000 overdue since Sat 5 Sep", WeekDest.Tab("partners")),
+            WeekRow(WeekForm.PLEDGE_DUE, "Pay · Roof", "KSh 5,000 overdue since Sat 5 Sep", WeekDest.Tab("partners")),
             YourWeek.giving(p, emptyList(), rails, today),
         )
         // Its own currency, as Partners says it.
@@ -251,7 +258,7 @@ class YourWeekTest {
         assertEquals(give, YourWeek.giving(onItsWay, emptyList(), rails, today))
         val partly = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofOn6.copy(pendingMinor = 200_000)))
         assertEquals(
-            WeekRow(WeekForm.PLEDGE_DUE, "Roof", "KSh 3,000 due Tue 6 Oct", WeekDest.Tab("partners")),
+            WeekRow(WeekForm.PLEDGE_DUE, "Pay · Roof", "KSh 3,000 due Tue 6 Oct", WeekDest.Tab("partners")),
             YourWeek.giving(partly, emptyList(), rails, today),
         )
         // A paused pledge's Resume is not a payment.
@@ -298,10 +305,10 @@ class YourWeekTest {
 
     @Test
     fun `Cell — the member's cell, its next gathering, the cell page`() {
-        assertEquals(WeekRow(WeekForm.CELL, "Kilimani Cell", "Next gathering Thu 8 Oct", WeekDest.Screen("cell-info")), YourWeek.cell(cell()))
+        assertEquals(WeekRow(WeekForm.CELL, "Gather · Kilimani Cell", "Next gathering Thu 8 Oct", WeekDest.Screen("cell-info")), YourWeek.cell(cell()))
         assertEquals("Next gathering not set · 12 members", YourWeek.cell(cell(next = null)).line)
         assertEquals("Next gathering not set · 1 member", YourWeek.cell(cell(next = null, members = 1)).line)
-        assertEquals("Your cell", YourWeek.cell(cell(name = "")).title)
+        assertEquals("Gather · Your cell", YourWeek.cell(cell(name = "")).title)
     }
 
     @Test
@@ -330,6 +337,18 @@ class YourWeekTest {
             k to if (v is Int) kotlinx.serialization.json.JsonPrimitive(v) else kotlinx.serialization.json.JsonPrimitive(v.toString())
         }),
     )
+
+    @Test
+    fun `a first day holds the reflection back so the path's first step leads — never a person waiting`() {
+        val first = JourneyState.derive(summary(LevelStatus.ACTIVE, 0), trail(0))
+        assertTrue(YourWeek.firstDay(first))
+        assertTrue(YourWeek.heldOnFirstDay(nudge("reflection_due"), first))
+        for (k in listOf("chat_unread", "reading_invite", "letter_unread", "cell_gathering")) assertTrue(k, !YourWeek.heldOnFirstDay(nudge(k), first))
+        val begun = JourneyState.derive(summary(LevelStatus.ACTIVE, 1), trail(1))
+        assertTrue(!YourWeek.firstDay(begun))
+        assertTrue(!YourWeek.heldOnFirstDay(nudge("reflection_due"), begun))
+        assertTrue(!YourWeek.firstDay(null))
+    }
 
     @Test
     fun `the exam nudge goes when the Pathway row offers the exam, and stays when it doesn't`() {

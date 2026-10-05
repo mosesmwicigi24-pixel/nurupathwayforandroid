@@ -89,10 +89,13 @@ class JourneyTest {
 
     @Test fun `learning — nothing done yet says Start`() {
         val j = JourneyState.derive(summary(done = 0), trail(done = 0))!!
-        assertEquals("0 of 20 modules", j.pill)
+        // A first day has no zero counts (EXPERIENCE.md §9.2 #4): what lies ahead.
+        assertEquals("20 modules", j.pill)
         assertEquals("Start · Level 1", j.kicker)
         assertEquals("Module 1", j.next.title)
-        assertEquals("0 of 20 modules in Level 1", j.next.line)
+        assertEquals("20 modules in Level 1", j.next.line)
+        assertEquals("20 modules", j.modulesLine)
+        assertEquals("20 modules in Level 1", j.progressLine.text)
         assertEquals("Start", j.next.action?.label)
         assertEquals(JourneyDestination.Module("m1-1"), j.next.action?.destination)
     }

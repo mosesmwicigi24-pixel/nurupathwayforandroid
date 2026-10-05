@@ -34,6 +34,7 @@ import org.nuruplace.member.feature.grow.planReadToday
 import org.nuruplace.member.feature.grow.planTodayLine
 import org.nuruplace.member.feature.grow.planDay
 import org.nuruplace.member.feature.pathway.Journey
+import org.nuruplace.member.feature.pathway.JourneyStage
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -99,10 +100,18 @@ object YourWeek {
      *  Without the journey: "Your pathway" and the level alone. */
     fun pathway(journey: Journey?, enrolledLevel: Int?): WeekRow {
         val j = journey ?: return WeekRow(
-            WeekForm.JOURNEY_UNKNOWN, "Your pathway", enrolledLevel?.let { "Level $it" }.orEmpty(), WeekDest.Tab("pathway"),
+            WeekForm.JOURNEY_UNKNOWN, "Open your pathway", enrolledLevel?.let { "Level $it" }.orEmpty(), WeekDest.Tab("pathway"),
         )
         val dest = j.next.action?.destination?.let { WeekDest.Screen(it.route) } ?: WeekDest.Tab("pathway")
-        return WeekRow(WeekForm.JOURNEY, j.next.title, "Level ${j.levelNumber} · ${j.pill}", dest)
+        // Each row says its verb (EXPERIENCE.md §9.1 rule 3): a lesson to read
+        // is "Continue · God & His Nature"; a level not yet begun is "Start
+        // Level 1 · God & His Nature" — a first day leads with the path's
+        // first step (rule 4). The other stages' titles are their own verbs
+        // or facts ("Take the Level 1 exam", "Level 2 is being prepared").
+        val title = if (j.stage == JourneyStage.LEARNING && j.next.action != null) {
+            if (j.completedModules == 0) "Start Level ${j.levelNumber} · ${j.next.title}" else "Continue · ${j.next.title}"
+        } else j.next.title
+        return WeekRow(WeekForm.JOURNEY, title, "Level ${j.levelNumber} · ${j.pill}", dest)
     }
 
     /** Plans — an enrolled, unfinished plan: its title and today's word on it
@@ -118,7 +127,14 @@ object YourWeek {
         val day = planDay(p)
         val readToday = planReadToday(p, sealedHere, now)
         val dest = if (readToday) WeekDest.Screen("plan/${p.planId}") else WeekDest.Screen("plan/${p.planId}/day/$day")
-        return WeekRow(WeekForm.PLAN_DAY, p.title, planTodayLine(p, readToday), dest)
+        // Its verb (§9.1 rule 3): "Done today ·" once today's day is read,
+        // "Start ·" before the first day, "Continue ·" between.
+        val verb = when {
+            readToday -> "Done today"
+            p.completedDays.isNullOrEmpty() && day == 1 -> "Start"
+            else -> "Continue"
+        }
+        return WeekRow(WeekForm.PLAN_DAY, "$verb · ${p.title}", planTodayLine(p, readToday), dest)
     }
 
     /** One gathering, from whichever reads know it. */
@@ -162,13 +178,16 @@ object YourWeek {
         val week = byId.values
             .filter { it.title.isNotBlank() && !it.start.isBefore(now) && !it.start.toLocalDate().isAfter(lastDay) }
             .sortedBy { it.start }
+        // Each row says its verb (§9.1 rule 3): "Going ·" a gathering the
+        // member said yes to, "Join ·" one they haven't answered, and "See the
+        // church calendar" in a quiet week.
         week.firstOrNull { it.rsvp == "going" }?.let { g ->
-            return WeekRow(WeekForm.EVENT_GOING, g.title, "${g.start.format(DAY_TIME)} · You're going", WeekDest.Event(g.id, g.end))
+            return WeekRow(WeekForm.EVENT_GOING, "Going · ${g.title}", g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end))
         }
         (week.firstOrNull { it.rsvp != "declined" } ?: week.firstOrNull())?.let { g ->
-            return WeekRow(WeekForm.EVENT_NEXT, g.title, g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end))
+            return WeekRow(WeekForm.EVENT_NEXT, "Join · ${g.title}", g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end))
         }
-        return WeekRow(WeekForm.EVENT_NONE, "No gatherings this week", "See the church calendar", WeekDest.Tab("events"))
+        return WeekRow(WeekForm.EVENT_NONE, "See the church calendar", "No gatherings this week", WeekDest.Tab("events"))
     }
 
     /**
@@ -220,12 +239,13 @@ object YourWeek {
         }.minByOrNull { it.day }
         soonest?.let { pr ->
             val line = collectedOnLine(pr.day)
+            // "Giving ·" — in motion, nothing to do (§9.1 rule 3).
             return if (pr.pledgeId != null) {
                 val title = pledgeOf[pr.pledgeId]?.displayTitle ?: pr.gift.pledge?.title?.takeIf { it.isNotBlank() } ?: "Your pledge"
-                WeekRow(WeekForm.GIFT_COLLECTED, title, line, WeekDest.Screen(pledgeRoute(pr.pledgeId)))
+                WeekRow(WeekForm.GIFT_COLLECTED, "Giving · $title", line, WeekDest.Screen(pledgeRoute(pr.pledgeId)))
             } else {
                 val title = if (pr.gift.frequency.equals("weekly", ignoreCase = true)) "Your weekly gift" else "Your monthly gift"
-                WeekRow(WeekForm.GIFT_COLLECTED, title, line, WeekDest.Screen(scheduleRoute(pr.gift.scheduleId)))
+                WeekRow(WeekForm.GIFT_COLLECTED, "Giving · $title", line, WeekDest.Screen(scheduleRoute(pr.gift.scheduleId)))
             }
         }
         owedByHand.firstOrNull()?.let { d ->
@@ -237,10 +257,24 @@ object YourWeek {
             } else {
                 "$amount due" + (partnerDate(d.dueOn)?.let { " ${it.format(DAY)}" } ?: "")
             }
-            return WeekRow(WeekForm.PLEDGE_DUE, title, line, WeekDest.Tab("partners"))
+            return WeekRow(WeekForm.PLEDGE_DUE, "Pay · $title", line, WeekDest.Tab("partners"))
         }
         return give
     }
+
+    /** A first day on the path: Level 1, nothing done yet (Ben). It leads
+     *  with the path's first step — YOUR WEEK's "Start Level 1 · …" — not a
+     *  side task (EXPERIENCE.md §9.1 rule 4): "Reflection due today" sat
+     *  above it, pressing a member on day one. */
+    fun firstDay(journey: Journey?): Boolean =
+        journey != null && journey.stage == JourneyStage.LEARNING && journey.levelPosition == 1 &&
+            journey.completedModules == 0 && journey.totalModules > 0
+
+    /** Whether "What needs you today" holds [n] back on a first day: the
+     *  rhythm's side task waits; a person waiting (a message, an invite, the
+     *  letter, the cell) never does. */
+    fun heldOnFirstDay(n: org.nuruplace.member.data.net.HomeNudge, journey: Journey?): Boolean =
+        firstDay(journey) && n.kind == "reflection_due"
 
     /**
      * "What needs you today" never repeats a YOUR WEEK row (EXPERIENCE.md §9.1
@@ -270,6 +304,6 @@ object YourWeek {
         )
         val line = evZdt(c.next?.startAt)?.let { "Next gathering ${it.format(DAY)}" }
             ?: "Next gathering not set · ${c.members} ${if (c.members == 1) "member" else "members"}"
-        return WeekRow(WeekForm.CELL, c.name.ifBlank { "Your cell" }, line, WeekDest.Screen("cell-info"))
+        return WeekRow(WeekForm.CELL, "Gather · ${c.name.ifBlank { "Your cell" }}", line, WeekDest.Screen("cell-info"))
     }
 }

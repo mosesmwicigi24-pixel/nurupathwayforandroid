@@ -586,7 +586,11 @@ fun HomeScreen(
                 // same letter sheet the knock card does, in place.
                 // The exam's own nudge only while that exam can be taken (§7.2 #1),
                 // and never one that repeats a YOUR WEEK row below (§9.1 rule 3).
-                val shownNudges = nudges.filter { nudgeOffered(it, pathway) && !YourWeek.repeats(it, week) }
+                // A first day leads with the path's first step, not a side
+                // task (§9.1 rule 4): the reflection waits.
+                val shownNudges = nudges.filter {
+                    nudgeOffered(it, pathway) && !YourWeek.repeats(it, week) && !YourWeek.heldOnFirstDay(it, journey)
+                }
                 // Android only (§7.3): while the phone has notifications off,
                 // "Turn on notifications" goes first.
                 val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
@@ -600,7 +604,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                if (shownNudges.isEmpty() && reflectionDue) {
+                if (shownNudges.isEmpty() && reflectionDue && !YourWeek.firstDay(journey)) {
                     // Reflection due — deep-links to the devotional's reflection
                     // composer, the one act that ticks the rhythm and clears this.
                     Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
@@ -753,10 +757,10 @@ private fun HomeHeader(
                 LiveHeaderChip(onClick = onLive)
                 Spacer(Modifier.width(Spacing.sm))
             }
-            Box {
-                // The growth score — "45", never "45%" (§3).
-                // Not yet known: the empty ring, no number — never a "0"
-                // that isn't true (§7 rule 5).
+            // The growth score — "45", never "45%" (§3) — once there is one:
+            // not while it loads, and not a "0" ring on a first day (§9.2 #4;
+            // iOS HomeHeaderWords.showsScore).
+            if ((growthScore ?: 0) > 0) Box {
                 ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
                     growthScore?.let { Text("$it", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold) }
                 }

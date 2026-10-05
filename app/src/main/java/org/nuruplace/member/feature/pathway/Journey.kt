@@ -100,7 +100,12 @@ data class Journey(
     /** "20 of 20 modules" — the current level's lessons; "Modules open soon"
      *  for a level with none published yet (never "0 of 0 modules"). */
     val modulesLine: String
-        get() = if (totalModules > 0) "$completedModules of $totalModules modules" else "Modules open soon"
+        get() = when {
+            totalModules <= 0 -> "Modules open soon"
+            // A first day says what lies ahead, never a zero count (§9.2 #4, §7.4 #9).
+            completedModules == 0 -> "$totalModules modules"
+            else -> "$completedModules of $totalModules modules"
+        }
 
     /** The Pathway header's one line (EXPERIENCE.md §8.2 #1): where the
      *  member is on the road and how far through the level — "Level 1 of 6 ·
@@ -111,7 +116,7 @@ data class Journey(
      *  the step itself — never "0 modules left before Level 2". */
     val progressLine: JourneyLine
         get() = if (stage == JourneyStage.LEARNING && totalModules > 0)
-            JourneyLine("$completedModules of $totalModules modules", " in Level $levelNumber")
+            JourneyLine(modulesLine, " in Level $levelNumber")
         else JourneyLine(next.title, "")
 }
 
@@ -172,7 +177,13 @@ object JourneyState {
         // (Levels 2–6 today): no "0 of 0 modules", no step to take yet.
         val preparing = stage == JourneyStage.LEARNING && total <= 0
         val pill = when (stage) {
-            JourneyStage.LEARNING -> if (preparing) "Modules open soon" else "$done of $total modules"
+            // Nothing done yet: what lies ahead ("10 modules"), never "0 of 10"
+            // (§9.2 #4 — a first day has no zero counts).
+            JourneyStage.LEARNING -> when {
+                preparing -> "Modules open soon"
+                done == 0 -> "$total modules"
+                else -> "$done of $total modules"
+            }
             JourneyStage.EXAM_READY -> "Exam ready"
             JourneyStage.EXAM_SOON -> "Exam opens soon"
             JourneyStage.AWAITING_USHER -> "Exam passed"
@@ -261,7 +272,7 @@ object JourneyState {
         val opensModule = module != null && module.status != ModuleStatus.LOCKED && !module.locked
         return JourneyStep(
             title = module?.title ?: level.title,
-            line = "$done of $total modules in Level ${level.levelNumber}",
+            line = (if (done == 0) "$total modules" else "$done of $total modules") + " in Level ${level.levelNumber}",
             action = JourneyAction(
                 verb,
                 if (opensModule) JourneyDestination.Module(module!!.moduleId) else JourneyDestination.Level(level.levelNumber),
