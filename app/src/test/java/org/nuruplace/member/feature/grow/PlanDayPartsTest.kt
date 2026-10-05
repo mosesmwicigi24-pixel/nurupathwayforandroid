@@ -14,6 +14,8 @@ import org.junit.Test
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.data.net.ReadingPlanRow
+import java.time.Instant
 
 class PlanDayPartsTest {
     private fun seg(id: String, sort: Int, kind: String, title: String, done: Boolean) =
@@ -125,5 +127,31 @@ class PlanDayPartsTest {
         assertTrue(isSealedToday(mon, now))
         assertFalse(isSealedToday(mon - 1, now))
         assertFalse(isSealedToday(null, now))
+    }
+
+    // §7.4 #4, the tick on every phone: GET /growth/plans' last_day_finished_at.
+    // 12:00 on Mon 5 Oct in Nairobi.
+    private val noonOct5 = Instant.parse("2026-10-05T09:00:00Z")
+    private fun row(finishedAt: String?, enrolled: Boolean = true) =
+        ReadingPlanRow(planId = "21c7", title = "First Steps", dayCount = 7, enrolled = enrolled, lastDayFinishedAt = finishedAt)
+
+    @Test fun `a day finished on another phone ticks today — on the church's calendar`() {
+        // 21:10 UTC on 4 Oct is 00:10 on 5 Oct in Nairobi: today.
+        assertTrue(planDayFinishedToday(listOf(row("2026-10-04T21:10:00Z")), noonOct5))
+        // 20:50 UTC on 4 Oct is 23:50 on 4 Oct in Nairobi: not today.
+        assertFalse(planDayFinishedToday(listOf(row("2026-10-04T20:50:00Z")), noonOct5))
+        // The server's own shape, fractional seconds included; an offset reads the same.
+        assertTrue(planDayFinishedToday(listOf(row("2026-10-05T08:41:07.512Z")), noonOct5))
+        assertTrue(planDayFinishedToday(listOf(row("2026-10-05T00:10:00+03:00")), noonOct5))
+    }
+
+    @Test fun `any started plan counts, and nothing else does`() {
+        val older = row("2026-10-03T09:00:00Z").copy(planId = "68871876")
+        assertTrue(planDayFinishedToday(listOf(older, row("2026-10-05T06:00:00Z")), noonOct5))
+        assertFalse(planDayFinishedToday(listOf(older), noonOct5))
+        assertFalse(planDayFinishedToday(listOf(row(null)), noonOct5))
+        assertFalse(planDayFinishedToday(listOf(row("yesterday")), noonOct5))
+        assertFalse(planDayFinishedToday(listOf(row("2026-10-05T06:00:00Z", enrolled = false)), noonOct5))
+        assertFalse(planDayFinishedToday(emptyList(), noonOct5))
     }
 }

@@ -105,7 +105,8 @@ fun ReadingPlansScreen(
     var promos by rememberHeld("Plans.promos") { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
     var streak by rememberHeld("Plans.streak") { mutableStateOf(0) }
     // Today on the streak card (§7.4 #4): ticked only once the server has
-    // sealed a plan day today (PlanDayLog) — it was the rhythm's `word`, so
+    // sealed a plan day today — seen by this phone (PlanDayLog) or any other
+    // (the plan rows' last_day_finished_at). It was the rhythm's `word`, so
     // reading one part ticked today beside "0-day streak".
     var todaySealed by rememberHeld("Plans.todaySealed") { mutableStateOf(false) }
     // The day the member is on in the plan in progress, as parts — the streak
@@ -135,7 +136,7 @@ fun ReadingPlansScreen(
         // A part that fails keeps what is on screen.
         promos = runCatching { Net.client.api.planPromos().data }.getOrElse { promos }
         streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
-        todaySealed = PlanDayLog.sealedToday()
+        todaySealed = PlanDayLog.sealedToday() || planDayFinishedToday(plans)
         // The plan in progress (the one CONTINUE READING and the header name):
         // how far the day the member is on stands. No plan, no parts.
         todayPlanParts = activePlan(plans)?.let { p ->

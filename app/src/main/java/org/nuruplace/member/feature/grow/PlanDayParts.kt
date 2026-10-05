@@ -10,7 +10,9 @@ import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.data.net.ReadingPlanRow
 import java.time.Instant
+import java.time.OffsetDateTime
 
 /** How many of a day's parts are done, of how many. */
 internal data class DayParts(val done: Int, val total: Int) {
@@ -75,9 +77,9 @@ internal fun todayParts(plan: ReadingPlanDetail?): DayParts? {
  * the server's own answer (the last part's `day_complete` ack, or the day's
  * complete-day 200 — [announceDaySealed], the hub's seal), never from a
  * guess; forgotten at sign-out (ApiClient.signOutLocally) so the next member
- * starts clean. A day sealed on another phone is not ticked here: the card
- * under-claims, it never ticks a day that wasn't. iOS keeps the same note
- * (PlanDayLog, "nuru.plans.daySealedOn").
+ * starts clean. A day sealed on another phone reaches this card through the
+ * server instead ([planDayFinishedToday], `last_day_finished_at`). iOS keeps
+ * the same note (PlanDayLog, "nuru.plans.daySealedOn").
  */
 internal object PlanDayLog {
     fun noteSealed(now: Instant = Instant.now()) {
@@ -90,6 +92,24 @@ internal object PlanDayLog {
 /** The note says today, on the church's (Nairobi) calendar. */
 internal fun isSealedToday(sealedOn: Long?, now: Instant): Boolean = sealedOn != null && sealedOn == nairobiEpochDay(now)
 
+/**
+ * A day of any plan the member has started was finished today, on the
+ * church's (Nairobi) calendar, by the server's word — `last_day_finished_at`
+ * on GET /growth/plans, the moment the last part of a fully-read day was read.
+ * It carries a day finished on another phone (§7.4 #4: the tick on every
+ * phone); the card ticks today when this OR [PlanDayLog] says so. A missing or
+ * unreadable timestamp is not today.
+ */
+internal fun planDayFinishedToday(plans: List<ReadingPlanRow>, now: Instant = Instant.now()): Boolean {
+    val today = nairobiEpochDay(now)
+    return plans.any { p -> p.enrolled && p.lastDayFinishedAt?.let(::parseInstant)?.let(::nairobiEpochDay) == today }
+}
+
+/** An ISO-8601 instant — "…Z" as the server sends it, or with an offset. Null when unreadable. */
+internal fun parseInstant(iso: String): Instant? =
+    runCatching { Instant.parse(iso) }.getOrNull()
+        ?: runCatching { OffsetDateTime.parse(iso).toInstant() }.getOrNull()
+
 /** What the Plans streak card shows (EXPERIENCE.md §7.4 #4). */
 internal data class StreakView(val count: Int, val todayMarked: Boolean, val line: String)
 
@@ -97,8 +117,9 @@ internal data class StreakView(val count: Int, val todayMarked: Boolean, val lin
  * The streak card's count, today's mark and its line — the same rule as iOS
  * (StreakWords). [count] — the server's streak (GET /me/achievements,
  * recomputed overnight, so it does not hold today yet); [todayDone] — a plan
- * day the server sealed today ([PlanDayLog]; it was the rhythm's `word`, so
- * reading one part ticked today beside "0-day streak"); [today] — the day
+ * day sealed today, seen by this phone ([PlanDayLog]) or by any other
+ * ([planDayFinishedToday]; it was the rhythm's `word`, so reading one part
+ * ticked today beside "0-day streak"); [today] — the day
  * under way in the plan being read, as parts (null with no plan in progress).
  *
  * A sealed day is a day of the streak, so beside the tick the count is at
