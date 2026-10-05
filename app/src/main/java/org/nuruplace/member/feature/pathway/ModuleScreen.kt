@@ -526,6 +526,7 @@ private fun KeyVerseCard(raw: String) {
     var words by remember(raw) { mutableStateOf((content as? KeyVerseContent.Words)?.text) }
     val reference = when (content) {
         is KeyVerseContent.Fetch -> content.reference
+        is KeyVerseContent.Passage -> content.reference
         is KeyVerseContent.Words -> content.reference
     }
     if (content is KeyVerseContent.Fetch) {

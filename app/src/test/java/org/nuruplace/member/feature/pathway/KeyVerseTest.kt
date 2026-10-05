@@ -11,6 +11,10 @@ class KeyVerseTest {
         assertEquals(KeyVerseContent.Fetch("Proverbs 3:5-6"), keyVerseContent(" Proverbs 3:5–6 "))
     }
 
+    @Test fun `a long passage stays its reference`() {
+        assertEquals(KeyVerseContent.Passage("John 1:1-18"), keyVerseContent("John 1:1-18"))
+    }
+
     @Test fun `words with a trailing reference split into the two`() {
         assertEquals(
             KeyVerseContent.Words("Trust in the Lord with all your heart", "Proverbs 3:5"),

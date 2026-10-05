@@ -11,6 +11,10 @@ sealed interface KeyVerseContent {
     /** Only a reference ("James 1:5"): its words are fetched (GET /scripture). */
     data class Fetch(val reference: String) : KeyVerseContent
 
+    /** A whole passage ("John 1:1-18", five verses or more): the reference
+     *  stands alone — the reader opens passages that long on a tap, too. */
+    data class Passage(val reference: String) : KeyVerseContent
+
     /** The words themselves, with their reference when the author gave one. */
     data class Words(val text: String, val reference: String?) : KeyVerseContent
 }
@@ -21,7 +25,10 @@ private val TRAILING_REF = Regex("""\s*[—–-]\s*([1-3]?\s?[A-Z][A-Za-z]+(?:\s
  *  "— Book C:V", or words alone. */
 fun keyVerseContent(raw: String): KeyVerseContent {
     val t = raw.trim()
-    if (ScriptureRefs.isReference(t)) return KeyVerseContent.Fetch(ScriptureRefs.normalize(t))
+    if (ScriptureRefs.isReference(t)) {
+        val ref = ScriptureRefs.normalize(t)
+        return if (ScriptureRefs.opensByDefault(ref)) KeyVerseContent.Fetch(ref) else KeyVerseContent.Passage(ref)
+    }
     val m = TRAILING_REF.find(t)
     if (m != null) {
         val words = t.substring(0, m.range.first).trim().trim('"', '“', '”').trim()
