@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -304,9 +305,9 @@ private fun QuizFlow(
             error?.let { Text(it, style = NuruType.caption, color = Nuru.danger) }
         }
 
-        // Nav bar
+        // Nav bar — clear of the system's gesture bar (§7.1 rule 3).
         Row(
-            Modifier.fillMaxWidth().background(Nuru.white).padding(Spacing.screen),
+            Modifier.fillMaxWidth().background(Nuru.white).navigationBarsPadding().padding(Spacing.screen),
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
             if (idx > 0) {

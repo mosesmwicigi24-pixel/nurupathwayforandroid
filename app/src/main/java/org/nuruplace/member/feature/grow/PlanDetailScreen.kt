@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -340,10 +341,11 @@ private fun PlanDetailContent(
                 onInvite = { startInvite() },
             )
         }
-        // Floats above the CTA bar (whose own foot already carries tabBarSpace).
+        // Floats above the CTA bar: ReadingToast lifts itself 108dp, from
+        // above the gesture bar — the bar is 73dp tall there.
         toast?.let {
             ReadingToast(
-                it, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp),
+                it, Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
                 actionLabel = toastAction?.first, onAction = toastAction?.second,
             )
         }
@@ -568,11 +570,13 @@ private fun CtaBar(
     // read; now "Begin Day 1" · "Continue · Day N" · "Read again".
     val label = planCtaLabel(begun = planBegun(d), allDone = allDone, day = targetDay)
 
-    Column(Modifier.fillMaxWidth().background(Color.White)) {
+    // Clear of the system's gesture bar, and no more (§7.1 rule 3): it
+    // reserved 96dp (Spacing.tabBarSpace) for a tab bar this page doesn't show.
+    Column(Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding()) {
         // Top hairline (iOS: 1px PL.border across the top of the white CTA bar).
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
         Row(
-            Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = Spacing.tabBarSpace),
+            Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

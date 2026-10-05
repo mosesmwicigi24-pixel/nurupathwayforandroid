@@ -91,7 +91,8 @@ fun PrayerRoomScreen(
         Box(Modifier.fillMaxSize()) {
             when (tab) {
                 PrayerRoomTab.Private -> PrayerJournalScreen(embedded = true)
-                PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, onOpenPost = onOpenPost)
+                // Off the tab (a pushed route), the wall's "+" clears the gesture bar itself.
+                PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, clearNavigationBar = !embedded, onOpenPost = onOpenPost)
                 PrayerRoomTab.Selah -> SelahScreen()
                 PrayerRoomTab.PrayerPoints -> PrayerPointsScreen()
             }

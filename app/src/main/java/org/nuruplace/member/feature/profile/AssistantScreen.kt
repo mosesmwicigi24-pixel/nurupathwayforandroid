@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -90,7 +91,8 @@ fun AssistantScreen(onBack: () -> Unit) {
                 items(messages.size) { i -> Bubble(messages[i]) }
             }
         }
-        Row(Modifier.fillMaxWidth().background(Nuru.white).padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+        // Clear of the gesture bar with the keyboard down (§7.1 rule 3).
+        Row(Modifier.fillMaxWidth().background(Nuru.white).navigationBarsPadding().padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(draft, { draft = it }, placeholder = { Text("Ask Nuru…") }, shape = RoundedCornerShape(Radii.pill), modifier = Modifier.weight(1f))
             Spacer(Modifier.width(Spacing.sm))
             PrimaryButton("Ask", loading = busy, enabled = draft.isNotBlank(), modifier = Modifier.width(84.dp), onClick = { send(draft) })

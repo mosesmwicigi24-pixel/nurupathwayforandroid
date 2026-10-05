@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -109,8 +110,10 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
     }
 
     Column(
+        // Clear of the navigation bar, gesture or 3-button (§7.1 rule 3); the
+        // keyboard's inset includes it, so the two never add up.
         Modifier.fillMaxSize().background(Nuru.navyCeremony)
-            .imePadding().padding(horizontal = Spacing.lg),
+            .navigationBarsPadding().imePadding().padding(horizontal = Spacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // ── Upper third — brand (Nuru Place · missionary caption) ──
@@ -298,7 +301,9 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(44.dp))
+        // 20dp above the navigation bar: the same 44dp from the bottom as
+        // before on a gesture-bar phone, and clear of a 3-button bar.
+        Spacer(Modifier.height(20.dp))
     }
 }
 

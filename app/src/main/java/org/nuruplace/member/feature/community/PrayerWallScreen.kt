@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -95,7 +96,15 @@ import java.util.UUID
 private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
-fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenPost: (String) -> Unit) {
+fun PrayerWallScreen(
+    embedded: Boolean = false,
+    onBack: () -> Unit = {},
+    /** Nothing below this screen clears the system's gesture bar — it is on a
+     *  pushed route (the Prayer Room reached from a shortcut or Home), not
+     *  above the tab bar — so the floating "+" clears it itself (§7.1 rule 3). */
+    clearNavigationBar: Boolean = false,
+    onOpenPost: (String) -> Unit,
+) {
     var sort by remember { mutableStateOf("latest") }
     var composing by remember { mutableStateOf(false) }
 
@@ -198,7 +207,9 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
         // action, so it floats one instead — same compose sheet.
         if (embedded) {
             Box(
-                Modifier.align(Alignment.BottomEnd).padding(20.dp)
+                Modifier.align(Alignment.BottomEnd)
+                    .then(if (clearNavigationBar) Modifier.navigationBarsPadding() else Modifier)
+                    .padding(20.dp)
                     .size(56.dp).clip(CircleShape).background(GrowPal.gold)
                     .clickable { composing = true },
                 contentAlignment = Alignment.Center,

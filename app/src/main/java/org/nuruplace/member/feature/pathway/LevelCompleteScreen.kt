@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -63,7 +64,8 @@ fun LevelCompleteScreen(levelNumber: Int, onContinue: () -> Unit) {
         val t = enter.value
 
         Column(
-            Modifier.fillMaxSize().background(Nuru.ceremonyGradient).padding(horizontal = Spacing.screen).padding(top = Spacing.xxl, bottom = Spacing.xl),
+            // Clear of the system's navigation bar, gesture or 3-button (§7.1 rule 3).
+            Modifier.fillMaxSize().background(Nuru.ceremonyGradient).navigationBarsPadding().padding(horizontal = Spacing.screen).padding(top = Spacing.xxl, bottom = Spacing.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(

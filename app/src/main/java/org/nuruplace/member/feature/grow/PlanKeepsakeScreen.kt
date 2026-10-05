@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -45,7 +46,8 @@ fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
     val gold = Color(0xFFC9A227)
 
     Column(
-        Modifier.fillMaxSize().background(navy).padding(horizontal = 24.dp).padding(top = 64.dp, bottom = 28.dp),
+        // Clear of the system's navigation bar, gesture or 3-button (§7.1 rule 3).
+        Modifier.fillMaxSize().background(navy).navigationBarsPadding().padding(horizontal = 24.dp).padding(top = 64.dp, bottom = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(Modifier.weight(1f).fillMaxWidth().alpha(t), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {

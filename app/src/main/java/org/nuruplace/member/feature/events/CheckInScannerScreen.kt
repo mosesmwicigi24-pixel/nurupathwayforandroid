@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlashOff
@@ -110,7 +111,8 @@ fun CheckInScannerScreen(eventId: String, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Nuru.navyDeep)) {
+    // The torch and Done clear the system's gesture bar (§7.1 rule 3).
+    Column(Modifier.fillMaxSize().background(Nuru.navyDeep).navigationBarsPadding()) {
         ScreenHeader("Check in", kicker = "Scan the QR code", onBack = onBack)
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             when {

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -213,9 +214,10 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                 }
             }
 
-            // Finished CTA.
+            // Finished CTA — clear of the system's gesture bar (§7.1 rule 3);
+            // the canvas runs under it.
             val fade = Brush.verticalGradient(listOf(pal.bg.copy(alpha = 0f), pal.bg))
-            Column(Modifier.fillMaxWidth().background(fade).padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 12.dp)) {
+            Column(Modifier.fillMaxWidth().background(fade).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 12.dp)) {
                 // Why the part was not saved (§4), right above the button that
                 // tries again — the state colour, readable in night mode too.
                 finishError?.let { err ->

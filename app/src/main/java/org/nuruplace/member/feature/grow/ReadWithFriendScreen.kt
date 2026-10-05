@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -741,7 +742,8 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                     }
                     error?.let { Text(it, style = plInter(12), color = Color.Red, textAlign = TextAlign.Center) }
                 }
-                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Clear of the system's gesture bar (§7.1 rule 3).
+                Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PL.goldCtaGrad)
                             .clickable(enabled = !busy) { Haptics.tap(view); accept() }

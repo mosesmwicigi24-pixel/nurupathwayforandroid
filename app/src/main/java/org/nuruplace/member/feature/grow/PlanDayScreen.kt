@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -573,17 +574,20 @@ private fun FooterBar(
     onComplete: () -> Unit,
     onBack: () -> Unit,
 ) {
+    // Clear of the system's gesture bar, and no more (§7.1 rule 3): it
+    // reserved 96dp (Spacing.tabBarSpace) for a tab bar this page doesn't show.
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.White),
+            .background(Color.White)
+            .navigationBarsPadding(),
     ) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(top = 12.dp, bottom = Spacing.tabBarSpace)
+                .padding(top = 12.dp, bottom = 12.dp)
                 .shadow(10.dp, RoundedCornerShape(16.dp), spotColor = PL.gold.copy(alpha = 0.45f), ambientColor = PL.gold.copy(alpha = 0.45f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(PL.goldCtaGrad)

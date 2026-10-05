@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -345,7 +346,10 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 style = NuruType.caption.copy(fontFamily = Fraunces, fontStyle = FontStyle.Italic),
                 color = ML.navy,
                 textAlign = TextAlign.Center,
+                // Floats above the gate, which now clears the gesture bar —
+                // lifted by the same inset so the two never overlap.
                 modifier = Modifier
+                    .navigationBarsPadding()
                     .padding(horizontal = 28.dp)
                     .padding(bottom = Spacing.tabBarSpace + 60.dp)
                     .clip(RoundedCornerShape(16.dp))
@@ -448,7 +452,8 @@ private fun BottomGate(
     requiresQuiz: Boolean, passMark: Int, busy: Boolean, error: String?,
     onStartQuiz: () -> Unit, onComplete: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().background(ML.cream).padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Clear of the system's gesture bar (§7.1 rule 3) — the cream runs under it.
+    Column(Modifier.fillMaxWidth().background(ML.cream).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
         Text(
             if (complete) "All steps done 🎉" else "$doneCount of 2 steps done",

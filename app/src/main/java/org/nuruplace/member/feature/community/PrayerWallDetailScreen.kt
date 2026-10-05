@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -181,10 +182,11 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                 }
             }
 
-            // Composer bar
+            // Composer bar — the screen's imePadding lifts it over the
+            // keyboard; with the keyboard down it clears the gesture bar.
             var text by remember { mutableStateOf("") }
             Row(
-                Modifier.fillMaxWidth().background(GrowPal.coolPaper)
+                Modifier.fillMaxWidth().background(GrowPal.coolPaper).navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

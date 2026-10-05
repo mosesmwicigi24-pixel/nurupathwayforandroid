@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -533,9 +534,12 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
             // Composer — swaps to the live recording strip while a voice note is
             // being captured (red pulsing dot + m:ss + live wave + cancel/send).
+            // Both clear the system's gesture bar (§7.1 rule 3): the screen's
+            // imePadding lifts them over the keyboard, but with the keyboard
+            // down they sat under the gesture handle.
             if (recorder.isRecording) {
                 Row(
-                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -558,7 +562,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 }
             } else {
                 Row(
-                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
