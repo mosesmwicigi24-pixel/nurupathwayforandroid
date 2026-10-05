@@ -284,16 +284,12 @@ fun CellPresenceLine() {
             val p = Net.client.api.communityPresence()
             if (p.count <= 0) return@runCatching null
             val who = if (p.scope == "cell") "your cell" else "your congregation"
-            val names = when {
-                p.names.size > 1 -> p.names.dropLast(1).joinToString(", ") + " and " + p.names.last()
-                else -> p.names.joinToString(", ")
-            }
-            val others = p.count - p.names.size
-            when {
-                others > 0 -> "$names and $others other${if (others == 1) "" else "s"} from $who opened a lesson this week."
-                p.count == 1 -> "$names from $who opened a lesson this week. You're not walking alone."
-                else -> "$names from $who opened a lesson this week."
-            }
+            // One "and" (Cycle 3's closing walk, B13): "Cara, Ben, Ada and 2
+            // others" — it read "Cara, Ben and Ada and 2 others".
+            val others = (p.count - p.names.size).coerceAtLeast(0)
+            val names = joinNames(p.names, others)
+            if (p.count == 1) "$names from $who opened a lesson this week. You're not walking alone."
+            else "$names from $who opened a lesson this week."
         }.getOrNull()
     }
     val text = line ?: return
