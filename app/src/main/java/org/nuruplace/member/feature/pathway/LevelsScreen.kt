@@ -85,7 +85,17 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                     Modifier.fillMaxWidth().background(Nuru.surface)
                         .padding(horizontal = Spacing.screen).padding(top = Spacing.xl, bottom = Spacing.lg),
                 ) {
-                    Text("‹  Pathway", style = NuruType.cardCta, color = Nuru.navy, modifier = Modifier.clickable { onBack() })
+                    // One back control on every pushed page: the arrow in its round
+                    // white button, as the Prayer Room and iOS's Map view — it was a
+                    // typed "‹  Pathway" (§8.1 rules 2 and 7; Cycle 4 walk 18).
+                    Box(
+                        Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Nuru.white)
+                            .border(1.dp, Nuru.border, androidx.compose.foundation.shape.CircleShape)
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Lucide.ArrowLeft, "Back to Pathway", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    }
                     Spacer(Modifier.height(Spacing.md))
                     // A pushed page: back · kicker · title (§8.1 rule 2) — the
                     // greeting ("WELCOME BACK, ADA") belongs to Home alone.
