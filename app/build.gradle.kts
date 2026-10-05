@@ -120,7 +120,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.material.icons.core)
-    implementation(libs.androidx.material.icons.extended)
+    // material-icons-extended left with the Lucide switch (EXPERIENCE.md
+    // §8.1 rule 7): no code draws a Material icon any more.
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
