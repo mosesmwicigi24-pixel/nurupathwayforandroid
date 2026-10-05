@@ -139,7 +139,11 @@ class GiveCeremonyCopyTest {
             "Still processing — it will show in Recent giving once it clears.",
             giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Processing, late = true),
         )
-        assertEquals("Gift confirmed — receipt on its way. 🎉", giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Succeeded, false))
+        // Confirmed: iOS's line (§8.2 #17) — never "Gift confirmed — receipt on its way. 🎉".
+        assertEquals(
+            "KSh 1,000 · toward your School fees pledge · Ref QFG7H2K9LM",
+            giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Succeeded, false, ref = "QFG7H2K9LM"),
+        )
         assertEquals("The payment didn't complete — no charge was made.", giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Failed, false))
         assertEquals("Thank you for your generosity", giveCeremonyTitle(GiftOutcome.Processing))
         assertEquals("Thank you for your generosity", giveCeremonyTitle(GiftOutcome.Succeeded))
@@ -158,5 +162,32 @@ class GiveCeremonyCopyTest {
         // A replay of a gift that already went through, or one that failed, is final at once.
         assertEquals(GiftOutcome.Succeeded, giftOutcome(replay.copy(status = "succeeded").status))
         assertEquals(GiftOutcome.Failed, giftOutcome(replay.copy(status = "failed").status))
+    }
+
+    // ── the confirmed gift (EXPERIENCE.md §8.2 #17) ──
+
+    @Test
+    fun `a confirmed gift says the amount, the fund and its reference — iOS's line`() {
+        assertEquals("KSh 1,000 · Tithe · Ref QFG7H2K9LM", giveSuccessLine(fundOnly, 100_000, "Offering", ref = "QFG7H2K9LM"))
+        // The chip only when the server named no fund; no reference yet → no "Ref".
+        assertEquals("KSh 1,000 · Offering", giveSuccessLine(bare, 100_000, "Offering"))
+        assertEquals("KSh 1,000", giveSuccessLine(bare, 100_000, null))
+        // A pledge is "toward your … pledge", never doubled.
+        assertEquals("KSh 5,000 · toward your School fees pledge · Ref AB12", giveSuccessLine(withPledge, 500_000, "Tithe", ref = "AB12"))
+        val named = withPledge.copy(pledge = IntentPledge("p2", "Building pledge"))
+        assertEquals("KSh 5,000 · toward your Building pledge", giveSuccessLine(named, 500_000, null))
+        assertEquals("KSh 5,000 · toward your pledge", giveSuccessLine(withPledge.copy(pledge = IntentPledge("p3", " ")), 500_000, null))
+        // The member's own gift name rides with where it went.
+        assertEquals("KSh 1,000 · Tithe — “For Mom” · Ref X1", giveSuccessLine(fundOnly, 100_000, null, giftName = " For Mom ", ref = "X1"))
+        // A dollar gift in its own money.
+        assertEquals("US$ 25.00 · Tithe", giveSuccessLine(fundOnly, 2_500, null, currency = "USD"))
+    }
+
+    @Test
+    fun `the reference is the receipt code, else the transaction's first eight — never ws_CO_`() {
+        assertEquals("QFG7H2K9LM", giveSuccessRef(" QFG7H2K9LM ", "8f2c1a9e-77aa-4c3b-9d10-1b2c3d4e5f60"))
+        assertEquals("8F2C1A9E", giveSuccessRef(null, "8f2c1a9e-77aa-4c3b-9d10-1b2c3d4e5f60"))
+        assertEquals("8F2C1A9E", giveSuccessRef("", "8f2c1a9e-77aa-4c3b-9d10-1b2c3d4e5f60"))
+        assertNull(giveSuccessRef(null, ""))
     }
 }

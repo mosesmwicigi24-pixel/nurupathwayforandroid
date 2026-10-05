@@ -169,11 +169,6 @@ fun scheduledFirstPromptLine(freq: Int, firstPromptDay: String): String =
 fun scheduledSetUpLine(freq: Int, firstPromptDay: String): String =
     "Your ${if (freq == FREQ_WEEKLY) "weekly" else "monthly"} gift is set up — the first prompt comes on $firstPromptDay."
 
-/** The celebration when a schedule is set up — said in its own rhythm: a
- *  weekly gift is faithfulness week after week, not month after month. */
-fun scheduleCelebrationLine(freq: Int): String =
-    "Faithfulness, ${if (freq == FREQ_WEEKLY) "week after week" else "month after month"}, carries the gospel further."
-
 /** Said over today's prompt when the schedule starts with a gift now. */
 fun firstChargeNote(freq: Int): String =
     "Your ${if (freq == FREQ_WEEKLY) "weekly" else "monthly"} gift is set up — this is the first."

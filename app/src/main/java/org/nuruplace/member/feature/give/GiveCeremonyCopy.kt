@@ -148,7 +148,44 @@ fun stkPinLine(
 fun giveCeremonyTitle(outcome: GiftOutcome): String =
     if (outcome == GiftOutcome.Failed) "Your gift didn't go through" else "Thank you for your generosity"
 
-/** The ceremony's one line for where the gift stands: confirmed, didn't
+/** The confirmed gift's one line under "Thank you for your generosity" —
+ *  iOS's words (SuccessStage, EXPERIENCE.md §8.2 #17): "KSh 1,000 · Tithe ·
+ *  Ref QFG7H2K9LM". The amount; where it went — "toward your Building
+ *  pledge" for a pledge, else the server's fund, else the chip — with the
+ *  member's own gift name; and the receipt's reference ([giveSuccessRef]). It
+ *  said "Gift confirmed — receipt on its way. 🎉". */
+fun giveSuccessLine(
+    r: GivingIntentResult,
+    amountMinor: Int,
+    chipFundLabel: String?,
+    giftName: String? = null,
+    ref: String? = null,
+    currency: String? = null,
+): String {
+    val where = when (val pledge = r.pledge) {
+        null -> r.fund?.name?.takeIf { it.isNotBlank() } ?: chipFundLabel?.takeIf { it.isNotBlank() }
+        else -> pledge.title.takeIf { it.isNotBlank() }?.let { "toward your ${pledgeTag(it)}" } ?: "toward your pledge"
+    }
+    val name = giftName?.trim()?.takeIf { it.isNotEmpty() }
+    val named = when {
+        name == null -> where
+        where == null -> "“$name”"
+        else -> "$where — “$name”"
+    }
+    val reference = ref?.trim()?.takeIf { it.isNotEmpty() }?.let { "Ref $it" }
+    return listOfNotNull(money(amountMinor, currency), named, reference).joinToString(" · ")
+}
+
+/** A confirmed gift's reference, as iOS shows it: the M-Pesa receipt code
+ *  once it has landed with the settlement, else the first eight characters
+ *  of the transaction id, upper-cased — never the provider's request id
+ *  (ws_CO_…). Null when there is neither. */
+fun giveSuccessRef(receiptCode: String?, transactionId: String): String? =
+    receiptCode?.trim()?.takeIf { it.isNotEmpty() }
+        ?: transactionId.trim().take(8).uppercase().takeIf { it.isNotEmpty() }
+
+/** The ceremony's one line for where the gift stands: confirmed — the
+ *  amount, where it went and its reference ([giveSuccessLine]) — didn't
  *  complete — in the server's words when it named why ([failure]'s reason)
  *  — past the watch's minute ([late]), or, while processing, the
  *  instruction line ([giveCeremonyLine]). */
@@ -160,8 +197,10 @@ fun giveCeremonyStatusLine(
     late: Boolean,
     failure: GiftFailure? = null,
     currency: String? = null,
+    giftName: String? = null,
+    ref: String? = null,
 ): String = when (outcome) {
-    GiftOutcome.Succeeded -> "Gift confirmed — receipt on its way. 🎉"
+    GiftOutcome.Succeeded -> giveSuccessLine(r, amountMinor, chipFundLabel, giftName, ref, currency)
     GiftOutcome.Failed -> failure?.reason?.trim()?.takeIf { it.isNotEmpty() }
         ?: "The payment didn't complete — no charge was made."
     GiftOutcome.Processing ->

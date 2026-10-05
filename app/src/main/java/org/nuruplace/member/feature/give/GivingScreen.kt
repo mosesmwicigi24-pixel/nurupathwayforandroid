@@ -127,9 +127,7 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PayPalCaptureBody
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.RetryGiftBody
-import org.nuruplace.member.ui.components.CelebrationCenter
 import org.nuruplace.member.ui.components.Haptics
-import org.nuruplace.member.ui.components.Moment
 import java.time.Instant
 import java.time.LocalDate
 
@@ -800,6 +798,10 @@ private fun GiveTab(
     // routed the gift to and the pledge it counts toward; the chip label is
     // only the fallback for a result that carries neither.
     result?.let { r ->
+        // Full screen, over the tab bar, as iOS's fullScreenCover (§8.2 #18):
+        // every stage — "Check your phone", confirmed, failed — closes by its
+        // own Close or Done, never by a tab.
+        org.nuruplace.member.ui.components.CoverTabBar()
         GiveResult(
             // A bound gift's fund is the server's to name (pays_to); the
             // chooser's tile was never shown, so it is never the fallback.
@@ -853,6 +855,7 @@ private fun GiveTab(
     }
     // …or once the server really created a schedule (never faked here).
     scheduled?.let { c ->
+        org.nuruplace.member.ui.components.CoverTabBar()
         ScheduledResult(
             c.created, c.body, c.phone,
             // Back to a One-time form: the next tap is never a second
@@ -1672,9 +1675,8 @@ private fun PromptNumberSheet(
  *  server's reason comes first, then that the gift is set up (Giving Cycle 4). */
 @Composable
 private fun ScheduledResult(created: CreatedScheduleRes, body: CreateScheduleBody, phone: String?, onDone: () -> Unit) {
-    LaunchedEffect(created.scheduleId) {
-        CelebrationCenter.fire(Moment("schedule-${created.scheduleId}", "Thank you for committing", scheduleCelebrationLine(freqOf(body.frequency))))
-    }
+    // One celebration — this stage itself (§8.2 #17): the "Thank you for
+    // committing" overlay that played over it is gone, as the gift's is.
     val freq = freqOf(body.frequency)
     val firstPrompt = created.nextRunAt.takeIf { it.isNotBlank() }?.let { prettyDate(it) } ?: firstPromptDay(freq)
     val todayFailed = created.firstChargeError?.takeIf { it.isNotBlank() }
@@ -1846,6 +1848,9 @@ private fun GiveResult(
     // Why it failed, as the watch read it off the transaction (Giving Cycle 1)
     // — or as the server already said when the gift was opened from its push.
     var failure by remember(r.transactionId) { mutableStateOf(initialFailure) }
+    // The M-Pesa receipt code, once it lands with the settlement — the
+    // confirmed line's "Ref …" (iOS SuccessStage, §8.2 #17).
+    var receiptCode by remember(r.transactionId) { mutableStateOf<String?>(null) }
     // Bumped to read the gift back after a PayPal capture settles it.
     var watchRun by remember(r.transactionId) { mutableIntStateOf(0) }
     // The member went to PayPal from here — coming back captures on its own.
@@ -1898,6 +1903,7 @@ private fun GiveResult(
             runCatching { Net.client.api.givingDetail(r.transactionId) }.getOrNull()?.let {
                 status = it.status
                 failure = it.failure
+                receiptCode = it.receiptCode
             }
         }
         if (giftOutcome(status) == GiftOutcome.Processing && GiftWatch.isLate(elapsed())) late = true
@@ -1905,15 +1911,17 @@ private fun GiveResult(
         if (giftOutcome(status) == GiftOutcome.Failed && failure == null) {
             runCatching { Net.client.api.givingDetail(r.transactionId) }.getOrNull()?.let { failure = it.failure }
         }
+        // Confirmed on its very first answer: one reading for its receipt code.
+        if (giftOutcome(status) == GiftOutcome.Succeeded && receiptCode == null) {
+            runCatching { Net.client.api.givingDetail(r.transactionId) }.getOrNull()?.let { receiptCode = it.receiptCode }
+        }
     }
-    // A final outcome, once each: the human moment only on the server's
-    // success — never on a pending intent — and the caller is told.
+    // A final outcome, once each: the caller is told. One celebration — the
+    // confirmed stage itself (§8.2 #17): the "Thank you for sowing" overlay
+    // that played over it first is gone.
     val onOutcomeNow by rememberUpdatedState(onOutcome)
     LaunchedEffect(outcome) {
         if (outcome == GiftOutcome.Processing) return@LaunchedEffect
-        if (outcome == GiftOutcome.Succeeded) {
-            CelebrationCenter.fire(Moment("gift-${r.transactionId.ifBlank { r.providerRef.orEmpty() }}", "Thank you for sowing", "Every gift carries the gospel further."))
-        }
         onOutcomeNow(outcome)
     }
     // Waiting on the phone's PIN prompt: "Check your phone" — never the
@@ -1959,10 +1967,14 @@ private fun GiveResult(
                 Text(note, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(10.dp))
+            // Confirmed: iOS's line — "KSh 1,000 · Tithe · Ref …" (§8.2 #17).
             Text(
-                giveCeremonyStatusLine(r, amountMinor, chipFundLabel, outcome, late, failure, currency),
+                giveCeremonyStatusLine(
+                    r, amountMinor, chipFundLabel, outcome, late, failure, currency,
+                    giftName = giftName, ref = giveSuccessRef(receiptCode, r.transactionId),
+                ),
                 style = giInter(13),
-                color = when (outcome) { GiftOutcome.Succeeded -> GIVE.successText; GiftOutcome.Failed -> GIVE.danger; else -> GIVE.sub },
+                color = if (outcome == GiftOutcome.Failed) GIVE.danger else GIVE.sub,
                 textAlign = TextAlign.Center,
             )
             // What to do next, and whether money moved — the server's hint.
@@ -1972,8 +1984,9 @@ private fun GiveResult(
             }
             // Where it went — the pledge by name and the fund the church
             // routed it to, else the fund — with the member's own gift name
-            // ("named giving") when they gave one. Stays through success.
-            giveDestinationLabel(r, chipFundLabel, giftName)?.let { label ->
+            // ("named giving") when they gave one. The confirmed line already
+            // says it, so it is not said twice there.
+            giveDestinationLabel(r, chipFundLabel, giftName)?.takeIf { outcome != GiftOutcome.Succeeded }?.let { label ->
                 Spacer(Modifier.height(4.dp))
                 Text(
                     label,

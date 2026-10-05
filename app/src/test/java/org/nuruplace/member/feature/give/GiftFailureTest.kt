@@ -117,8 +117,9 @@ class GiftFailureTest {
         // Anything but a failure never shows one.
         assertNull(giveCeremonyHint(GiftOutcome.Processing, cancelled))
         assertNull(giveCeremonyHint(GiftOutcome.Succeeded, cancelled))
+        // A confirmed gift never carries a failure's words — iOS's line (§8.2 #17).
         assertEquals(
-            "Gift confirmed — receipt on its way. 🎉",
+            "KSh 1,000 · Tithe",
             giveCeremonyStatusLine(r, 100_000, "Tithe", GiftOutcome.Succeeded, late = false, failure = cancelled),
         )
     }

@@ -80,12 +80,6 @@ class ScheduleCycle5Test {
         assertEquals("\"+254711222333\"", patch?.phoneNumber.toString())
     }
 
-    @Test
-    fun `a weekly gift is celebrated week after week`() {
-        assertEquals("Faithfulness, week after week, carries the gospel further.", scheduleCelebrationLine(FREQ_WEEKLY))
-        assertEquals("Faithfulness, month after month, carries the gospel further.", scheduleCelebrationLine(FREQ_MONTHLY))
-    }
-
     // ── the wire ──
 
     @Test
