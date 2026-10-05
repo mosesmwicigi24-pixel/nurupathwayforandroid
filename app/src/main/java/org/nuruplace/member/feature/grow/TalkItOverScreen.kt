@@ -97,7 +97,9 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
     // loads); the server's completion is the only thing that ticks them.
     var talkSegs by remember { mutableStateOf<List<PlanSegment>?>(null) }
     var finishing by remember { mutableStateOf(false) }
-    // Why "I've talked it over" did not land — said under the button (§4).
+    // Why "I've talked it over" did not land — said ABOVE the gold button,
+    // read before the retry and clear of the gesture bar (§4; the part
+    // readers and iOS place it the same way).
     var finishError by remember { mutableStateOf<String?>(null) }
 
     /** Load the day: its question and its Talk it Over part. Returns what went wrong, if anything. */
