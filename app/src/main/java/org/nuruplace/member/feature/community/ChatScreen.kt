@@ -558,8 +558,9 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                         Text("AI", style = cInter(8, FontWeight.Bold, 1.1f), color = CHAT.navy)
                     }
                 }
+                // No zero counts (§7.4 #9): "0 updates across 0 spaces" said nothing.
                 Text(
-                    "The AI assistant · $totalUnread updates across $spaceCount spaces",
+                    org.nuruplace.member.util.ZeroCounts.assistantLine(unread = totalUnread, spaces = spaceCount),
                     style = cInter(11),
                     color = Color.White.copy(alpha = 0.6f),
                     modifier = Modifier.padding(top = 2.dp),
