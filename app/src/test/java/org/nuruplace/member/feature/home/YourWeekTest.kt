@@ -95,6 +95,20 @@ class YourWeekTest {
     fun `Plans — none being read, or the read failed — Start a reading plan`() {
         val start = WeekRow(WeekForm.PLAN_START, "Start a reading plan", "A few minutes a day — with the whole family of God.", WeekDest.Tab("plans"))
         assertEquals(start, YourWeek.plans(listOf(ReadingPlanRow(planId = "x", title = "Joy", dayCount = 5))))
+        // One story about today (Cycle 3's closing walk, B6): once a day of the
+        // plan was finished today — on any phone, or sealed on this one — the
+        // row says so and opens the plan, as Plans' streak card does.
+        val now = java.time.Instant.parse("2026-10-05T12:00:00Z")
+        val readToday = listOf(
+            ReadingPlanRow(planId = "first", title = "First Steps", dayCount = 7, currentDay = 4, enrolled = true, lastDayFinishedAt = "2026-10-05T08:45:00Z"),
+        )
+        assertEquals(
+            WeekRow(WeekForm.PLAN_DAY, "First Steps", "Done for today · Day 4 is next", WeekDest.Screen("plan/first")),
+            YourWeek.plans(readToday, now = now),
+        )
+        val readYesterday = listOf(readToday[0].copy(lastDayFinishedAt = "2026-10-04T08:45:00Z"))
+        assertEquals("Day 4 of 7 · today's reading", YourWeek.plans(readYesterday, now = now).line)
+        assertEquals("Done for today · Day 4 is next", YourWeek.plans(readYesterday, sealedHere = true, now = now).line)
         assertEquals(start, YourWeek.plans(emptyList()))
         assertEquals(start, YourWeek.plans(null))
     }

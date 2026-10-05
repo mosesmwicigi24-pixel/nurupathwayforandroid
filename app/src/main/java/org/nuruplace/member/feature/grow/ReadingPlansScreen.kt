@@ -487,14 +487,17 @@ private fun WeekDot(label: String, done: Boolean, today: Boolean) {
 private fun ContinueSection(plans: List<ReadingPlanRow>, onOpenPlan: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PLOverline("CONTINUE READING")
-        for (plan in plans) ContinueRow(plan = plan, onOpenPlan = onOpenPlan)
+        val active = activePlan(plans)
+        for (plan in plans) {
+            ContinueRow(plan = plan, readToday = planReadToday(plan, sealedHere = plan == active && PlanDayLog.sealedToday()), onOpenPlan = onOpenPlan)
+        }
     }
 }
 
 @Composable
-private fun ContinueRow(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
+private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (String) -> Unit) {
     val total = plan.dayCount.coerceAtLeast(1)
-    val day = plan.currentDay ?: ((plan.completedDays?.size ?: 0) + 1)
+    val day = planDay(plan)
     val pct = (day.toFloat() / total).coerceIn(0f, 1f)
 
     val shape = RoundedCornerShape(20.dp)
@@ -520,8 +523,10 @@ private fun ContinueRow(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // "Today ·" only while today's reading is still to do — the same
+            // story as the streak card and Home (Cycle 3's closing walk, B6).
             Text(
-                "Today · ${plan.subtitle ?: "Day $day of $total"}",
+                if (readToday) "Done for today · Day $day is next" else "Today · ${plan.subtitle ?: "Day $day of $total"}",
                 style = plInter(12),
                 color = PL.ink2,
                 maxLines = 1,

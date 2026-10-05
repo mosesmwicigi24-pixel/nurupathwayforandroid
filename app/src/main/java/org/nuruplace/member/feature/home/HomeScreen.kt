@@ -385,7 +385,7 @@ fun HomeScreen(
     val week = remember(journey, plans, upcoming, homeEvents, rsvps, partnership, gifts, giveRails, cohort, me) {
         listOf(
             YourWeek.pathway(journey, me?.enrollment?.currentLevel),
-            YourWeek.plans(plans),
+            YourWeek.plans(plans, sealedHere = org.nuruplace.member.feature.grow.PlanDayLog.sealedToday()),
             YourWeek.events(upcoming, homeEvents, rsvps, ZonedDateTime.now(EV_ZONE)),
             YourWeek.giving(partnership, gifts, giveRailsLine(giveRails), LocalDate.now(EV_ZONE)),
             YourWeek.cell(cohort),

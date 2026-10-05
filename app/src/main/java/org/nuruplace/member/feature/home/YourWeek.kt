@@ -30,6 +30,8 @@ import org.nuruplace.member.feature.give.pledgeRoute
 import org.nuruplace.member.feature.give.scheduleRoute
 import org.nuruplace.member.feature.give.scheduleRunning
 import org.nuruplace.member.feature.grow.activePlan
+import org.nuruplace.member.feature.grow.planReadToday
+import org.nuruplace.member.feature.grow.planTodayLine
 import org.nuruplace.member.feature.grow.planDay
 import org.nuruplace.member.feature.pathway.Journey
 import java.time.LocalDate
@@ -103,14 +105,20 @@ object YourWeek {
         return WeekRow(WeekForm.JOURNEY, j.next.title, "Level ${j.levelNumber} · ${j.pill}", dest)
     }
 
-    /** Plans — an enrolled, unfinished plan: its title, "Day X of Y · today's
-     *  reading", that day; else "Start a reading plan" → the Plans tab. */
-    fun plans(plans: List<ReadingPlanRow>?): WeekRow {
+    /** Plans — an enrolled, unfinished plan: its title and today's word on it
+     *  (planTodayLine — "Day X of Y · today's reading", or "Done for today ·
+     *  Day X is next" once a day was finished today, as the Plans tab says),
+     *  opening that day — or the plan, once today's reading is done; else
+     *  "Start a reading plan" → the Plans tab. [sealedHere]: this phone sealed
+     *  a plan day today. */
+    fun plans(plans: List<ReadingPlanRow>?, sealedHere: Boolean = false, now: java.time.Instant = java.time.Instant.now()): WeekRow {
         val p = plans?.let(::activePlan) ?: return WeekRow(
             WeekForm.PLAN_START, "Start a reading plan", "A few minutes a day — with the whole family of God.", WeekDest.Tab("plans"),
         )
         val day = planDay(p)
-        return WeekRow(WeekForm.PLAN_DAY, p.title, "Day $day of ${p.dayCount} · today's reading", WeekDest.Screen("plan/${p.planId}/day/$day"))
+        val readToday = planReadToday(p, sealedHere, now)
+        val dest = if (readToday) WeekDest.Screen("plan/${p.planId}") else WeekDest.Screen("plan/${p.planId}/day/$day")
+        return WeekRow(WeekForm.PLAN_DAY, p.title, planTodayLine(p, readToday), dest)
     }
 
     /** One gathering, from whichever reads know it. */
