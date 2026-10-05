@@ -145,8 +145,14 @@ fun stkPinLine(
 /** The ceremony's title for where the gift stands — for every stage but
  *  "Check your phone" ([STK_TITLE]): the server's confirmed success, a gift
  *  that didn't go through, and a PayPal gift's own wait. */
-fun giveCeremonyTitle(outcome: GiftOutcome): String =
-    if (outcome == GiftOutcome.Failed) "Your gift didn't go through" else "Thank you for your generosity"
+fun giveCeremonyTitle(outcome: GiftOutcome, paypal: Boolean = false): String = when (outcome) {
+    GiftOutcome.Failed -> "Your gift didn't go through"
+    // Never a celebration before the server confirms (EXPERIENCE.md §7.3,
+    // §9.2 #14): PayPal's waiting stage said "Thank you for your generosity"
+    // under a gold check before the gift was approved, let alone settled.
+    GiftOutcome.Processing -> if (paypal) "Finish on PayPal" else "Waiting for confirmation"
+    GiftOutcome.Succeeded -> "Thank you for your generosity"
+}
 
 /** The confirmed gift's one line under "Thank you for your generosity" —
  *  iOS's words (SuccessStage, EXPERIENCE.md §8.2 #17): "KSh 1,000 · Tithe ·

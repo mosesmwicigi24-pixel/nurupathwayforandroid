@@ -1892,20 +1892,32 @@ private fun GiveResult(
             Modifier.fillMaxWidth().padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Badge — gold@0.18 halo + gold core + navy check; a muted cross
-            // when the payment didn't complete.
+            // Badge — gold@0.18 halo + gold core + navy check once the server
+            // confirms; a muted cross when the payment didn't complete; and
+            // while it waits (PayPal's approval, a late answer), a quiet clock
+            // on gold tint — never the check before the server says so
+            // (EXPERIENCE.md §7.3, §9.2 #14).
             val failed = outcome == GiftOutcome.Failed
+            val waiting = outcome == GiftOutcome.Processing
             Box(
-                Modifier.size(96.dp).clip(CircleShape).background(if (failed) GIVE.mutedBg else GIVE.gold.copy(alpha = 0.18f)),
+                Modifier.size(96.dp).clip(CircleShape).background(
+                    when { failed -> GIVE.mutedBg; waiting -> TILE_TINT.copy(alpha = 0.6f); else -> GIVE.gold.copy(alpha = 0.18f) },
+                ),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(80.dp).clip(CircleShape).background(if (failed) GIVE.ink300 else GIVE.gold), contentAlignment = Alignment.Center) {
-                    Icon(if (failed) Lucide.X else Lucide.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp))
+                Box(
+                    Modifier.size(80.dp).clip(CircleShape).background(when { failed -> GIVE.ink300; waiting -> TILE_TINT; else -> GIVE.gold }),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        when { failed -> Lucide.X; waiting -> Lucide.Clock4; else -> Lucide.Check },
+                        contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(34.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(20.dp))
             Text(
-                giveCeremonyTitle(outcome),
+                giveCeremonyTitle(outcome, paypal = r.approveUrl != null),
                 style = giSerif(26, FontWeight.Medium, -0.48f),
                 color = GIVE.navy,
                 textAlign = TextAlign.Center,

@@ -145,8 +145,12 @@ class GiveCeremonyCopyTest {
             giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Succeeded, false, ref = "QFG7H2K9LM"),
         )
         assertEquals("The payment didn't complete — no charge was made.", giveCeremonyStatusLine(withPledge, 100_000, "Tithe", GiftOutcome.Failed, false))
-        assertEquals("Thank you for your generosity", giveCeremonyTitle(GiftOutcome.Processing))
+        // Never a celebration before the server confirms (EXPERIENCE.md §9.2
+        // #14): PayPal's waiting stage thanked the member before approval.
+        assertEquals("Finish on PayPal", giveCeremonyTitle(GiftOutcome.Processing, paypal = true))
+        assertEquals("Waiting for confirmation", giveCeremonyTitle(GiftOutcome.Processing))
         assertEquals("Thank you for your generosity", giveCeremonyTitle(GiftOutcome.Succeeded))
+        assertEquals("Thank you for your generosity", giveCeremonyTitle(GiftOutcome.Succeeded, paypal = true))
         assertEquals("Your gift didn't go through", giveCeremonyTitle(GiftOutcome.Failed))
     }
 
