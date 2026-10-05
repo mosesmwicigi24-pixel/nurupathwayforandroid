@@ -95,8 +95,8 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
     // back locked (a completion still catching up through the sync path)
     // reads as "finishing sync" rather than "you're not there yet".
     var awaitingUnlock by remember { mutableStateOf<Int?>(null) }
-    // "Start plan" in flight, and why it did not land (§4) — it used to fail
-    // without a word, and leave the button saying Start.
+    // "Begin Day 1" in flight (it starts the plan), and why it did not land
+    // (§4) — it used to fail without a word, and leave the button as it was.
     var starting by remember { mutableStateOf(false) }
     var startError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -148,9 +148,9 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                             started.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
                             if (started.isSuccess) {
                                 reload()
-                                // Start lands where it points (§7.1 rule 1): the
-                                // day to read. Back from it, this page says
-                                // "Continue · Day 1" (EXPERIENCE.md §7.4 #2).
+                                // "Begin Day 1" lands where it points (§7.1
+                                // rule 1): one tap starts the plan and opens
+                                // Day 1 (EXPERIENCE.md §7.4 #2).
                                 onOpenDay(detail?.nextDay ?: 1)
                             } else {
                                 startError = ApiException.message(started.exceptionOrNull()!!, failContext)
@@ -563,8 +563,9 @@ private fun CtaBar(
     // The day to read: the server's next_day (the same day the list marks),
     // else the first unfinished one; Day 1 to review a finished plan.
     val targetDay = if (allDone) d.days.firstOrNull()?.dayNumber ?: 1 else d.nextDay ?: firstIncomplete?.dayNumber ?: 1
-    // The page follows progress (EXPERIENCE.md §7.4 #2): it said "Start plan"
-    // until a whole day was done, even with parts of Day 1 read.
+    // The page follows progress (EXPERIENCE.md §7.4 #2), in iOS's words: it
+    // said "Start plan" until a whole day was done, even with parts of Day 1
+    // read; now "Begin Day 1" · "Continue · Day N" · "Read again".
     val label = planCtaLabel(begun = planBegun(d), allDone = allDone, day = targetDay)
 
     Column(Modifier.fillMaxWidth().background(Color.White)) {

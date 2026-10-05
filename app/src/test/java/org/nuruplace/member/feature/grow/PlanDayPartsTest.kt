@@ -74,8 +74,9 @@ class PlanDayPartsTest {
         // Started (enrolled) but nothing read yet — still the invitation.
         val fresh = ada.copy(days = listOf(freshDay(1), freshDay(2)))
         assertFalse(planBegun(fresh))
-        assertEquals("Start plan", planCtaLabel(begun = planBegun(fresh), allDone = false, day = 1))
-        assertEquals("Review plan", planCtaLabel(begun = true, allDone = true, day = 1))
+        // iOS's words, one product: "Begin Day 1" before, "Read again" after.
+        assertEquals("Begin Day 1", planCtaLabel(begun = planBegun(fresh), allDone = false, day = 1))
+        assertEquals("Read again", planCtaLabel(begun = true, allDone = true, day = 1))
         // A whole day recorded (completed_days) counts as begun too.
         assertTrue(planBegun(fresh.copy(days = listOf(freshDay(1).copy(completed = true), freshDay(2)))))
     }

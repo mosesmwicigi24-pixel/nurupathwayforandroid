@@ -47,13 +47,13 @@ internal fun nextDayPill(day: ReadingPlanDay): String {
 internal fun planBegun(plan: ReadingPlanDetail): Boolean =
     plan.days.any { d -> d.completed == true || d.segments.orEmpty().any { it.completed } }
 
-/** The plan page's gold button: "Start plan" until anything of the plan is
- *  done ([planBegun]), then "Continue · Day N" on the day the member is on;
- *  "Review plan" once every day is finished. */
+/** The plan page's gold button, in iOS's words (one product): "Begin Day 1"
+ *  until anything of the plan is done ([planBegun]), then "Continue · Day N"
+ *  on the day the member is on; "Read again" once every day is finished. */
 internal fun planCtaLabel(begun: Boolean, allDone: Boolean, day: Int): String = when {
-    allDone -> "Review plan"
+    allDone -> "Read again"
     begun -> "Continue · Day $day"
-    else -> "Start plan"
+    else -> "Begin Day 1"
 }
 
 /** The Talk it Over part's segments for a day — what "I've talked it over"
