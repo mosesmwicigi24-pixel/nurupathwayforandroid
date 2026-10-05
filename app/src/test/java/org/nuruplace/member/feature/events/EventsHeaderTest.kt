@@ -43,4 +43,38 @@ class EventsHeaderTest {
         // A start that cannot be read is not something to filter.
         assertTrue(eventsQuiet(listOf(occ("x", "Mystery", "")), today))
     }
+
+    // EXPERIENCE.md §7.4 #6 — seen: Events opened on "Today (0)" while the
+    // gatherings sat under "Upcoming".
+    @Test
+    fun `Events opens on the first tab with something in it`() {
+        assertEquals(EVENTS_TAB_UPCOMING, firstEventsTab(todayCount = 0, upcomingCount = 4, rsvpCount = 1))
+        assertEquals(EVENTS_TAB_TODAY, firstEventsTab(todayCount = 2, upcomingCount = 4, rsvpCount = 1))
+        assertEquals(EVENTS_TAB_RSVPS, firstEventsTab(todayCount = 0, upcomingCount = 0, rsvpCount = 1))
+        assertEquals(EVENTS_TAB_TODAY, firstEventsTab(todayCount = 0, upcomingCount = 0, rsvpCount = 0))
+    }
+
+    // §7.4 #8 — seen: "Every Sunday · 9:00 AM · 9:00 AM".
+    @Test
+    fun `a series line says its time once`() {
+        assertEquals("Every Sunday · 9:00 AM", seriesLine("Every Sunday · 9:00 AM", "9:00 AM"))
+        assertEquals("Monthly · 3:00 PM", seriesLine("Monthly · 3:00 PM", "3:00 PM"))
+        assertEquals("One-off · 10:00 AM", seriesLine("One-off · 10:00 AM", null))
+        // An older server's cadence without a time still gets one.
+        assertEquals("Every Sunday · 9:00 AM", seriesLine("Every Sunday", "9:00 AM"))
+        assertEquals("9:00 AM", seriesLine("", "9:00 AM"))
+        assertEquals("Every Sunday", seriesLine("Every Sunday", null))
+    }
+
+    // §7.4 #7 — seen: "Series you follow" listed series the member does not
+    // follow, each with "+ Follow".
+    @Test
+    fun `series you follow holds only followed series — the rest are more series`() {
+        data class S(val title: String, val following: Boolean)
+        val (followed, more) = splitByFollowing(
+            listOf(S("Sunday Service", false), S("Ablaze", true), S("Pathway classes", false)),
+        ) { it.following }
+        assertEquals(listOf("Ablaze"), followed.map { it.title })
+        assertEquals(listOf("Sunday Service", "Pathway classes"), more.map { it.title })
+    }
 }

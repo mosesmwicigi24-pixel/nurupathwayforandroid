@@ -1,7 +1,8 @@
 // Events tab — the iOS "Gathered together" screen. Cream header + week strip + dark
 // calendar card + segmented control + search + category chips + gatherings list, then
-// "Series you follow" and "Announcements" rails. Shared chrome (palette, cream header,
-// event card, date fns) lives in EventsShared.kt (same package — no import needed).
+// "Series you follow" (followed only), "More series" and "Announcements" rails. It
+// opens on the first tab with something in it (§7.4 #6). Shared chrome (palette, cream
+// header, event card, date fns) lives in EventsShared.kt (same package — no import needed).
 //
 // One header (pathway docs/EXPERIENCE.md §6.2): "EVENTS", the title, and one line —
 // "Next: «title» · EEE d MMM" or "Nothing planned this week" (EventsHeader.kt). A
@@ -116,7 +117,6 @@ fun EventsScreen(
         val today = remember { LocalDate.now(EV_ZONE) }
         // What the member picked stays picked across Back (§7 rule 5).
         var selectedDay by rememberSaveable { mutableStateOf(today) }
-        var segment by rememberSaveable { mutableStateOf(0) } // 0=Today, 1=Upcoming, 2=My RSVPs
         var category by rememberSaveable { mutableStateOf("All") }
         var query by rememberSaveable { mutableStateOf("") }
 
@@ -126,6 +126,18 @@ fun EventsScreen(
         val rsvpMap = rsvps.associate { it.eventId to it.status }
         val going = rsvpMap.values.count { it == "going" }
         val upcoming = events.count { val d = occDate(it); d != null && !d.isBefore(today) }
+        // Opens on the first tab with something in it (EXPERIENCE.md §7.4 #6) —
+        // it opened on "Today (0)" with the gatherings under Upcoming. What the
+        // member then picks stays picked across Back (§7 rule 5).
+        var segment by rememberSaveable {
+            mutableStateOf(
+                firstEventsTab(
+                    todayCount = events.count { occDate(it) == today },
+                    upcomingCount = upcoming,
+                    rsvpCount = events.count { rsvpMap.containsKey(it.occurrenceId) },
+                ),
+            )
+        } // 0=Today, 1=Upcoming, 2=My RSVPs
         // A quiet week is quiet (EXPERIENCE.md §6.5): nothing in range → the
         // calm card, and no tabs, search or filters with nothing to filter.
         val quiet = eventsQuiet(events, today)
@@ -186,9 +198,12 @@ fun EventsScreen(
                             style = evInter(11, FontWeight.Bold, 1.4f), color = EV.overline,
                         )
                         Spacer(Modifier.weight(1f))
+                        // A date picked on the strip brings the Today tab
+                        // forward — the strip filters that tab; on Upcoming
+                        // a date tap would change nothing (§7.4 #6, as iOS).
                         Text(
                             "TODAY", style = evInter(10, FontWeight.Bold, 1f), color = EV.navy,
-                            modifier = Modifier.clickable { selectedDay = today },
+                            modifier = Modifier.clickable { selectedDay = today; segment = EVENTS_TAB_TODAY },
                         )
                     }
                     Row(
@@ -209,7 +224,7 @@ fun EventsScreen(
                                             else -> Color.Transparent
                                         },
                                     )
-                                    .clickable { selectedDay = date }
+                                    .clickable { selectedDay = date; segment = EVENTS_TAB_TODAY }
                                     .padding(vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
@@ -426,73 +441,24 @@ fun EventsScreen(
                     }
                 }
 
-                // ── SERIES YOU FOLLOW ─────────────────────────────────────────
-                if (series.isNotEmpty()) {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
-                            .border(1.dp, EV.border, RoundedCornerShape(22.dp)).padding(16.dp),
-                    ) {
-                        Row(
-                            Modifier.padding(bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Filled.AutoAwesome, null, tint = EV.overline, modifier = Modifier.size(13.dp))
-                            Spacer(Modifier.width(6.dp))
-                            EVOverline("SERIES YOU FOLLOW")
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                "See all", style = evInter(11, FontWeight.SemiBold), color = EV.navy,
-                                modifier = Modifier.clickable { onOpenCalendar() },
-                            )
-                        }
-                        series.forEachIndexed { i, s ->
-                            if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(EV.border))
-                            Row(
-                                Modifier.padding(vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Box(
-                                    Modifier.size(36.dp).clip(RoundedCornerShape(12.dp))
-                                        .background(evCategory(s.category).copy(alpha = 0.12f))
-                                        .border(1.dp, evCategory(s.category).copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                                )
-                                Column(Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Text(
-                                            s.title, style = evInter(13, FontWeight.Medium), color = EV.navy,
-                                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f, fill = false),
-                                        )
-                                        if (s.following && s.newCount > 0) {
-                                            Box(
-                                                Modifier.clip(Capsule).background(EV.gold.copy(alpha = 0.15f))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                                            ) {
-                                                Text("${s.newCount} new", style = evInter(8, FontWeight.Bold), color = EV.chipText)
-                                            }
-                                        }
-                                    }
-                                    Text(
-                                        cadenceLine(s), style = evInter(11), color = EV.secondary,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                FollowButton(s.following) {
-                                    scope.launch {
-                                        try {
-                                            Net.client.api.toggleSeriesFollow(s.seriesId)
-                                            reload()
-                                        } catch (_: Exception) {
-                                        }
-                                    }
-                                }
-                            }
+                // ── SERIES YOU FOLLOW · MORE SERIES ───────────────────────────
+                // "Series you follow" holds only what the member follows; the
+                // rest sit under "More series", each with + Follow (§7.4 #7).
+                val (followed, more) = splitByFollowing(series) { it.following }
+                val toggleFollow: (EventSeries) -> Unit = { s ->
+                    scope.launch {
+                        try {
+                            Net.client.api.toggleSeriesFollow(s.seriesId)
+                            reload()
+                        } catch (_: Exception) {
                         }
                     }
+                }
+                if (followed.isNotEmpty()) {
+                    SeriesRail("SERIES YOU FOLLOW", followed, onSeeAll = onOpenCalendar, onToggle = toggleFollow)
+                }
+                if (more.isNotEmpty()) {
+                    SeriesRail("MORE SERIES", more, onSeeAll = if (followed.isEmpty()) onOpenCalendar else null, onToggle = toggleFollow)
                 }
 
                 // ── ANNOUNCEMENTS ─────────────────────────────────────────────
@@ -671,5 +637,72 @@ private fun FollowButton(following: Boolean, onClick: () -> Unit) {
     }
 }
 
-private fun cadenceLine(s: EventSeries): String =
-    listOfNotNull(s.cadence.ifBlank { null }, s.nextAt?.let { evTime(it) }).joinToString(" · ")
+/** One rail of series — its overline, then each series with its line and the
+ *  follow toggle. [onSeeAll]: the "See all" link, on the first rail shown. */
+@Composable
+private fun SeriesRail(
+    overline: String,
+    series: List<EventSeries>,
+    onSeeAll: (() -> Unit)?,
+    onToggle: (EventSeries) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
+            .border(1.dp, EV.border, RoundedCornerShape(22.dp)).padding(16.dp),
+    ) {
+        Row(
+            Modifier.padding(bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.AutoAwesome, null, tint = EV.overline, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(6.dp))
+            EVOverline(overline)
+            Spacer(Modifier.weight(1f))
+            onSeeAll?.let { open ->
+                Text(
+                    "See all", style = evInter(11, FontWeight.SemiBold), color = EV.navy,
+                    modifier = Modifier.clickable { open() },
+                )
+            }
+        }
+        series.forEachIndexed { i, s ->
+            if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(EV.border))
+            Row(
+                Modifier.padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    Modifier.size(36.dp).clip(RoundedCornerShape(12.dp))
+                        .background(evCategory(s.category).copy(alpha = 0.12f))
+                        .border(1.dp, evCategory(s.category).copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                )
+                Column(Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            s.title, style = evInter(13, FontWeight.Medium), color = EV.navy,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (s.following && s.newCount > 0) {
+                            Box(
+                                Modifier.clip(Capsule).background(EV.gold.copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text("${s.newCount} new", style = evInter(8, FontWeight.Bold), color = EV.chipText)
+                            }
+                        }
+                    }
+                    Text(
+                        seriesLine(s.cadence, s.nextAt?.let { evTime(it) }), style = evInter(11), color = EV.secondary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                FollowButton(s.following) { onToggle(s) }
+            }
+        }
+    }
+}
