@@ -455,6 +455,7 @@ private fun HelpCard() {
 @Composable
 private fun ActionsRow() {
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
             Modifier
@@ -463,12 +464,9 @@ private fun ActionsRow() {
                 .clip(RoundedCornerShape(16.dp))
                 .background(PROF.white)
                 .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
-                .clickable {
-                    // Full sign-out: clear the token vault + drive AuthStore back to /login
-                    // via the wired onSessionExpired callback (identical to AuthStore.signOut()).
-                    Net.client.signOutLocally()
-                    Net.client.onSessionExpired?.invoke()
-                },
+                // Asked first, as on iOS: the answer that ends the session wears
+                // the destructive role (EXPERIENCE.md §8.1 rule 4, §8.2 #19).
+                .clickable { confirmSignOut = true },
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -491,6 +489,41 @@ private fun ActionsRow() {
                 Text("Delete account", style = pInter(14, FontWeight.SemiBold), color = PROF.danger)
             }
         }
+    }
+    if (confirmSignOut) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text("Sign out of Nuru Pathway?", style = pInter(16, FontWeight.SemiBold), color = PROF.navy) },
+            text = {
+                Text("Your progress is saved — you can pick up right where you left off.", style = pInter(13), color = PROF.sub)
+            },
+            confirmButton = {
+                Text(
+                    "Sign out",
+                    style = pInter(14, FontWeight.SemiBold),
+                    color = PROF.danger,
+                    modifier = Modifier.clickable {
+                        confirmSignOut = false
+                        // AuthStore.signOut() through the wired callback: it reads
+                        // the refresh token FIRST, revokes it on the server
+                        // (POST /auth/logout), then clears this phone. Clearing
+                        // the vault here first — as this button did — left
+                        // nothing to revoke, so the session lived on server-side.
+                        // (No AuthStore yet — never so in a signed-in shell — still
+                        // clears this phone.)
+                        Net.client.onSessionExpired?.invoke() ?: Net.client.signOutLocally()
+                    }.padding(12.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Stay signed in",
+                    style = pInter(14, FontWeight.SemiBold),
+                    color = PROF.navy,
+                    modifier = Modifier.clickable { confirmSignOut = false }.padding(12.dp),
+                )
+            },
+        )
     }
     if (confirmDelete) {
         androidx.compose.material3.AlertDialog(
