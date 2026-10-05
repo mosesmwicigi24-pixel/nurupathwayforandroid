@@ -54,9 +54,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -1100,24 +1102,52 @@ private fun RhythmCard(r: RhythmToday, streak: Int) {
         // encouraged, Scripture engaged, a reflection written) — the server ticks
         // them from interaction events; they are not tappable checkboxes.
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            RhythmTile("Prayer", r.prayer, Modifier.weight(1f))
-            RhythmTile("Word", r.word, Modifier.weight(1f))
-            RhythmTile("Reflection", r.reflection, Modifier.weight(1f))
+            RhythmTile(RhythmTileWords.PRAYER, r.prayer, Modifier.weight(1f))
+            RhythmTile(RhythmTileWords.WORD, r.word, Modifier.weight(1f))
+            RhythmTile(RhythmTileWords.REFLECTION, r.reflection, Modifier.weight(1f))
         }
     }
 }
 
+/** Each rhythm tile in plain words (EXPERIENCE.md §8.2 #20): what the day
+ *  holds — "Prayed", "Read", "Written" once it is done, "Not yet" until then.
+ *  Never "Pending". The server ticks them from real acts. */
+internal enum class RhythmTileWords(val label: String, val done: String) {
+    PRAYER("Prayer", "Prayed"),
+    WORD("Word", "Read"),
+    REFLECTION("Reflection", "Written"),
+    ;
+
+    fun status(isDone: Boolean): String = if (isDone) done else NOT_YET
+
+    companion object {
+        const val NOT_YET = "Not yet"
+    }
+}
+
+/** iOS's tile (HomeView rhythmTile): a check or a clock in a small circle,
+ *  the discipline, and where it stands today in plain words. */
 @Composable
-private fun RhythmTile(label: String, done: Boolean, modifier: Modifier) {
+private fun RhythmTile(words: RhythmTileWords, done: Boolean, modifier: Modifier) {
+    val ink = if (done) Nuru.successText else Nuru.goldChipText
     Column(
         modifier.clip(RoundedCornerShape(14.dp))
             .background(if (done) Nuru.successBg else Nuru.goldChipBg)
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(if (done) "✓" else "🕐", style = NuruType.body, color = if (done) Nuru.successText else Nuru.goldChipText)
+        Box(
+            Modifier.size(24.dp).clip(RoundedCornerShape(999.dp)).background(if (done) Nuru.successText else Nuru.white),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (done) Icons.Filled.Check else Icons.Filled.Schedule, contentDescription = null,
+                tint = if (done) Nuru.white else Nuru.goldLo, modifier = Modifier.size(12.dp),
+            )
+        }
         Spacer(Modifier.height(Spacing.xs))
-        Text(label, style = NuruType.micro, color = if (done) Nuru.successText else Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
+        Text(words.label, style = NuruType.label, color = ink, fontWeight = FontWeight.SemiBold)
+        Text(words.status(done), style = NuruType.micro, color = ink.copy(alpha = 0.8f))
     }
 }
 
@@ -1709,7 +1739,8 @@ private fun GrowTile(title: String, sub: String, glyph: String, bg: Color, fg: C
     ) {
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(bg), contentAlignment = Alignment.Center) { Text(glyph, color = fg, style = NuruType.body) }
         Spacer(Modifier.width(Spacing.sm))
-        Column {
+        // The words wrap inside the tile — never cut (§8.1 rule 9, §8.2 #20).
+        Column(Modifier.weight(1f)) {
             Text(title, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
             Text(sub, style = NuruType.micro, color = Nuru.ink600)
         }

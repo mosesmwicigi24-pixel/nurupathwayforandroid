@@ -728,29 +728,30 @@ private fun DueSection(
                     d.title.ifBlank { null } ?: pledge?.displayTitle ?: "Pledge"
                 }
                 // The due and what it is on the leading side, its button or
-                // chip on the trailing one, sharing the width (FairSplitRow):
-                // "Waiting for Airtel Money" wraps in its chip instead of
-                // squeezing the amount and title at a large font.
-                FairSplitRow(
+                // chip on the trailing one — while "KSh 5,000 · today" fits
+                // beside it on one line; otherwise the chip goes below,
+                // deliberately (LeadOrStackRow, §8.2 #20). The amount used to
+                // split ("KSh 5,000 / · today") beside "Collected on Mon 5 Oct".
+                LeadOrStackRow(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     spacing = 12.dp,
-                    centerVertically = true,
-                    first = {
-                        Column {
-                            // "KSh 3,000 left · in 3 days"; the whole line amber
-                            // when the server says it is overdue (iOS).
-                            Text(
-                                dueLeadLine(d, shown, dueWhen.text),
-                                style = giInter(15, FontWeight.SemiBold),
-                                color = if (dueWhen.overdue) GIVE.goldChipText else GIVE.ink,
-                            )
-                            Text(
-                                listOfNotNull(what, shown.processingNote).joinToString(" · "),
-                                style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
+                    lead = {
+                        // "KSh 3,000 left · in 3 days" — a content row's title
+                        // (§8.1 rule 3, Fraunces 15 semibold); the whole line
+                        // amber when the server says it is overdue (iOS).
+                        Text(
+                            dueLeadLine(d, shown, dueWhen.text),
+                            style = NuruType.rowTitle,
+                            color = if (dueWhen.overdue) GIVE.goldChipText else GIVE.ink,
+                        )
                     },
-                    second = {
+                    rest = {
+                        Text(
+                            listOfNotNull(what, shown.processingNote).joinToString(" · "),
+                            style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
+                        )
+                    },
+                    trailing = {
                         if (d.action == "resume") {
                             NavyPill("Resume", enabled = !vm.resuming && vm.busyPledgeId == null) {
                                 Haptics.tap(view)
@@ -926,7 +927,8 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
     Column(Modifier.partnerCard(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(pl.displayTitle, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // A pledge is a content row (§8.1 rule 3): Fraunces 15 semibold.
+                Text(pl.displayTitle, style = NuruType.rowTitle, color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // The promise as iOS says it — "KSh 20,000 · by 31 Dec", the
                 // date once (it read "KSh 20,000 by Dec · due 31 Dec").
                 Text(pledgeAmountLine(pl, today), style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))

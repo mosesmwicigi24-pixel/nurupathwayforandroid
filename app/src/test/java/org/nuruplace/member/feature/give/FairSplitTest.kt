@@ -91,4 +91,30 @@ class FairSplitTest {
         assertEquals(1f, fitScale(natural = 500, available = Int.MAX_VALUE, floor = 0.6f), 0f)
         assertEquals(0.6f, fitScale(natural = 50, available = 0, floor = 0.6f), 0f)
     }
+
+    // ── a DUE row: its amount line whole beside the chip, or the chip below (§8.2 #20) ──
+
+    @Test
+    fun `the amount line and its chip side by side while both fit on one line`() {
+        // A 411dp phone's DUE row: 379dp inside the card less 32dp of padding ≈ 347dp.
+        // "KSh 5,000 · today" ≈ 130dp beside "Collected on Mon 5 Oct" ≈ 165dp.
+        assertEquals(false, stacksBelow(leadWidth = 130, trailingWidth = 165, available = 347, gap = 12))
+        assertEquals(false, stacksBelow(leadWidth = 170, trailingWidth = 165, available = 347, gap = 12)) // exactly 347
+    }
+
+    @Test
+    fun `when they don't, the chip goes below — the amount never splits beside it`() {
+        // At 1.3× text the same pair needs ≈ 169 + 12 + 215 = 396dp > 347dp.
+        assertEquals(true, stacksBelow(leadWidth = 169, trailingWidth = 215, available = 347, gap = 12))
+        // "KSh 20,000 overdue since 10 Aug" beside "Waiting for Airtel Money".
+        assertEquals(true, stacksBelow(leadWidth = 230, trailingWidth = 180, available = 347, gap = 12))
+        // A short Pay pill always fits beside a short line.
+        assertEquals(false, stacksBelow(leadWidth = 150, trailingWidth = 60, available = 347, gap = 12))
+    }
+
+    @Test
+    fun `nonsense widths never crash the rule`() {
+        assertEquals(false, stacksBelow(leadWidth = -5, trailingWidth = 0, available = 0, gap = 0))
+        assertEquals(true, stacksBelow(leadWidth = 1, trailingWidth = 0, available = 0, gap = 0))
+    }
 }

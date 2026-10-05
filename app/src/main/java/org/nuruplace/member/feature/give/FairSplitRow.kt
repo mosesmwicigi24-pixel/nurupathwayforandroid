@@ -133,3 +133,71 @@ internal fun Modifier.shrinkToFit(floor: Float): Modifier = this
             }
         }
     }
+
+/**
+ * Whether a row's trailing chip or button goes BELOW its lead line rather
+ * than beside it: when the lead line ([leadWidth], its one-line width) and
+ * the trailing element ([trailingWidth]) don't fit side by side in
+ * [available] with [gap] between them. A DUE row's "KSh 5,000 · today" never
+ * splits beside "Collected on Mon 5 Oct" (EXPERIENCE.md §8.2 #20): on one
+ * line beside it, or stacked deliberately above it.
+ */
+internal fun stacksBelow(leadWidth: Int, trailingWidth: Int, available: Int, gap: Int): Boolean =
+    leadWidth.coerceAtLeast(0) + gap.coerceAtLeast(0) + trailingWidth.coerceAtLeast(0) > available.coerceAtLeast(0)
+
+/**
+ * A content row whose [lead] line (an amount and when) must stay whole: the
+ * [lead] with the [rest] under it on the leading side and [trailing] (a chip
+ * or a pill) centred on the trailing side while the lead fits beside it
+ * ([stacksBelow]); otherwise the trailing element moves below the text,
+ * start-aligned, [stackGap] under it. The [rest] may wrap either way.
+ */
+@Composable
+internal fun LeadOrStackRow(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 12.dp,
+    stackGap: Dp = 8.dp,
+    lead: @Composable () -> Unit,
+    rest: @Composable () -> Unit,
+    trailing: @Composable () -> Unit,
+) {
+    Layout(
+        content = {
+            Box { lead() }
+            Box { rest() }
+            Box { trailing() }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val (mLead, mRest, mTrail) = measurables
+        val gap = spacing.roundToPx()
+        val leadIdeal = mLead.maxIntrinsicWidth(Constraints.Infinity)
+        val trailIdeal = mTrail.maxIntrinsicWidth(Constraints.Infinity)
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else leadIdeal + gap + trailIdeal
+        if (!stacksBelow(leadIdeal, trailIdeal, width, gap)) {
+            val pTrail = mTrail.measure(Constraints(maxWidth = trailIdeal.coerceAtMost(width)))
+            val textWidth = (width - gap - pTrail.width).coerceAtLeast(0)
+            val pLead = mLead.measure(Constraints(maxWidth = textWidth))
+            val pRest = mRest.measure(Constraints(maxWidth = textWidth))
+            val textHeight = pLead.height + pRest.height
+            val height = maxOf(textHeight, pTrail.height).coerceAtLeast(constraints.minHeight)
+            layout(width, height) {
+                val top = (height - textHeight) / 2
+                pLead.placeRelative(0, top)
+                pRest.placeRelative(0, top + pLead.height)
+                pTrail.placeRelative(width - pTrail.width, (height - pTrail.height) / 2)
+            }
+        } else {
+            val pLead = mLead.measure(Constraints(maxWidth = width))
+            val pRest = mRest.measure(Constraints(maxWidth = width))
+            val pTrail = mTrail.measure(Constraints(maxWidth = width))
+            val below = pLead.height + pRest.height + stackGap.roundToPx()
+            val height = (below + pTrail.height).coerceAtLeast(constraints.minHeight)
+            layout(width, height) {
+                pLead.placeRelative(0, 0)
+                pRest.placeRelative(0, pLead.height)
+                pTrail.placeRelative(0, below)
+            }
+        }
+    }
+}
