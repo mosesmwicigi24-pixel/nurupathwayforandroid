@@ -70,6 +70,7 @@ import org.nuruplace.member.data.net.StateLanguage
 import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.icons.Lucide
 
@@ -94,10 +95,16 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
     // (§4) — it used to fail without a word, and leave the button as it was.
     var starting by remember { mutableStateOf(false) }
     var startError by remember { mutableStateOf<String?>(null) }
+    // A pause, named kindly once (EXPERIENCE.md §9.1 rule 5) — from the
+    // plan's row in GET /growth/plans (its `last_day_finished_at`; the
+    // detail doesn't carry it). Null while it's being read.
+    var pause by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
         loading = true
+        pause = runCatching { Net.client.api.plans().data.firstOrNull { it.planId == planId } }.getOrNull()
+            ?.let { row -> planPausedOn(row)?.let { pauseLine(it, planDay(row)) } }
         runCatching { Net.client.api.plan(planId) }
             .onSuccess {
                 detail = it; error = null
@@ -132,6 +139,7 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
         when {
             d != null -> PlanDetailContent(
                 d = d,
+                pause = pause,
                 awaitingUnlock = awaitingUnlock,
                 onBack = onBack,
                 onOpenDay = onOpenDay,
@@ -184,6 +192,7 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
 @Composable
 private fun PlanDetailContent(
     d: ReadingPlanDetail,
+    pause: String?,
     awaitingUnlock: Int?,
     onBack: () -> Unit,
     onOpenDay: (Int) -> Unit,
@@ -316,6 +325,7 @@ private fun PlanDetailContent(
                     AboutCard(d)
                     WhatYoullRead(
                         d = d, done = done, allDone = allDone, nextDay = nextDay,
+                        pause = pause,
                         awaitingUnlock = awaitingUnlock,
                         onOpenDay = onOpenDay,
                         onLockedDay = { lockedNudgeFor = it },
@@ -461,6 +471,7 @@ private fun WhatYoullRead(
     done: Int,
     allDone: Boolean,
     nextDay: Int?,
+    pause: String?,
     awaitingUnlock: Int?,
     onOpenDay: (Int) -> Unit,
     onLockedDay: (Int) -> Unit,
@@ -477,6 +488,14 @@ private fun WhatYoullRead(
                 val pct = Math.round(done.toDouble() / maxOf(d.days.size, 1) * 100).toInt()
                 Text("$pct% done", style = plInter(11, FontWeight.Bold), color = PL.catText)
             }
+        }
+        // The pause, once, kindly (§9.1 rule 5): when, and the day that waits.
+        pause?.let {
+            Text(
+                it, style = plInter(13, FontWeight.SemiBold), color = PL.navy,
+                modifier = Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(Nuru.goldTint).padding(horizontal = 12.dp, vertical = 10.dp),
+            )
         }
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             visible.forEach { day ->

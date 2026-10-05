@@ -541,9 +541,11 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
                     overflow = TextOverflow.Ellipsis,
                 )
                 // "Today ·" only while today's reading is still to do — the same
-                // story as the streak card and Home (Cycle 3's closing walk, B6).
+                // story as the streak card and Home (Cycle 3's closing walk, B6):
+                // "Day 3 done today · Day 4 next" once it's read (§9.2 #3), and
+                // a pause named kindly (§9.1 rule 5).
                 Text(
-                    if (readToday) "Done for today · Day $day is next" else "Today · ${plan.subtitle ?: "Day $day of $total"}",
+                    planCardLine(plan, readToday),
                     style = plInter(12),
                     color = PL.ink2,
                     // Wraps, never cut (rule 9).

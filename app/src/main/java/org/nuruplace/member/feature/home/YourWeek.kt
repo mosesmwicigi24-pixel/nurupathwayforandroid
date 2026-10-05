@@ -134,7 +134,7 @@ object YourWeek {
             p.completedDays.isNullOrEmpty() && day == 1 -> "Start"
             else -> "Continue"
         }
-        return WeekRow(WeekForm.PLAN_DAY, "$verb · ${p.title}", planTodayLine(p, readToday), dest)
+        return WeekRow(WeekForm.PLAN_DAY, "$verb · ${p.title}", planTodayLine(p, readToday, now), dest)
     }
 
     /** One gathering, from whichever reads know it. */

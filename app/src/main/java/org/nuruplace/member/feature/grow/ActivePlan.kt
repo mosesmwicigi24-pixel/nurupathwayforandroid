@@ -5,6 +5,10 @@ package org.nuruplace.member.feature.grow
 
 import org.nuruplace.member.data.net.ReadingPlanRow
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** The plan being read: the first enrolled, unfinished plan in the server's
  *  order (the Plans tab's first CONTINUE READING row). Null when none. */
@@ -37,13 +41,50 @@ fun planReadToday(p: ReadingPlanRow, sealedHere: Boolean = false, now: Instant =
  * for today and the next day waits — Home said "Day 4 of 7 · today's reading"
  * beside Plans' "Today's reading is done 🔥".
  */
-fun planTodayLine(p: ReadingPlanRow, readToday: Boolean): String {
+fun planTodayLine(p: ReadingPlanRow, readToday: Boolean, now: Instant = Instant.now()): String =
+    planDoneOrPausedLine(p, readToday, now) ?: "Day ${planDay(p)} of ${p.dayCount} · today's reading"
+
+/** The Plans tab's continue card: the same two stories as Home's row, else
+ *  "Today · " and the plan's own subtitle. */
+fun planCardLine(p: ReadingPlanRow, readToday: Boolean, now: Instant = Instant.now()): String =
+    planDoneOrPausedLine(p, readToday, now) ?: "Today · ${p.subtitle ?: "Day ${planDay(p)} of ${p.dayCount}"}"
+
+/** The two lines Home and Plans share: today's day read, or a pause named. */
+private fun planDoneOrPausedLine(p: ReadingPlanRow, readToday: Boolean, now: Instant): String? {
     val day = planDay(p)
     return when {
         // "Day 3 done today · Day 4 next" (EXPERIENCE.md §9.2 #3) — the day
         // read today and the one that waits, in one breath.
         readToday && day > 1 -> "Day ${day - 1} done today · Day $day next"
         readToday -> "Done today · Day $day next"
-        else -> "Day $day of ${p.dayCount} · today's reading"
+        else -> planPausedOn(p, now)?.let { pauseLine(it, day, now) }
     }
+}
+
+private val NAIROBI: ZoneId = ZoneId.of("Africa/Nairobi")
+private val WEEKDAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)
+private val DAY_MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+
+/**
+ * The church's (Nairobi) day the member paused [p]: the day its last day
+ * was finished, when that was two or more days ago — not yesterday's
+ * reading, not today's. Null while it's being read, once it's finished, and
+ * before any day is (the server says only when a day was finished).
+ */
+fun planPausedOn(p: ReadingPlanRow, now: Instant = Instant.now()): LocalDate? {
+    if (!p.enrolled || p.completedAt != null) return null
+    val last = p.lastDayFinishedAt?.let(::parseInstant)?.atZone(NAIROBI)?.toLocalDate() ?: return null
+    val today = now.atZone(NAIROBI).toLocalDate()
+    return last.takeIf { !it.isAfter(today.minusDays(2)) }
+}
+
+/**
+ * A pause named kindly, once (EXPERIENCE.md §9.1 rule 5): when, and the day
+ * that waits — "You paused on Thursday — Day 2 is waiting" — never a count
+ * of days missed. The weekday within the week; "Thu 24 Sep" further back.
+ */
+fun pauseLine(pausedOn: LocalDate, waitingDay: Int, now: Instant = Instant.now()): String {
+    val today = now.atZone(NAIROBI).toLocalDate()
+    val day = if (pausedOn.isAfter(today.minusDays(7))) pausedOn.format(WEEKDAY) else pausedOn.format(DAY_MONTH)
+    return "You paused on $day — Day $waitingDay is waiting"
 }
