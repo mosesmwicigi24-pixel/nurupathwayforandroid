@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -333,7 +334,10 @@ fun LevelDetailScreen(
             visible = showReminder,
             enter = if (reduceMotion) fadeIn(tween(220)) else slideInVertically(tween(320)) { it / 2 } + fadeIn(tween(320)),
             exit = fadeOut(tween(200)),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = Spacing.screen, vertical = Spacing.tabBarSpace),
+            // At the foot of the page, clear of the gesture bar: the level page
+            // has no tab bar, and a 96dp lift left the card in mid-air.
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                .padding(horizontal = Spacing.screen).padding(bottom = 16.dp),
         ) {
             DisciplerReminderCard(
                 mentor = bundle.mentor,

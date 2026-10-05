@@ -378,7 +378,14 @@ fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Un
                 Text(error ?: "Couldn't load this shared plan.", style = plInter(13), color = PL.ink2)
             }
         }
-        toast?.let { ReadingToast(it, Modifier.align(Alignment.BottomCenter), actionLabel = toastAction?.first, onAction = toastAction?.second) }
+        // At the foot of the page, just clear of the gesture bar — this page
+        // has no tab bar to float over (it sat 96dp up, in mid-air).
+        toast?.let {
+            ReadingToast(
+                it, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp),
+                actionLabel = toastAction?.first, onAction = toastAction?.second,
+            )
+        }
     }
 }
 
@@ -493,13 +500,13 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
 }
 
 /** Transient navy pill at the foot of a screen; [actionLabel] + [onAction]
- *  add a gold tappable verb ("Open chat") at its trailing edge. */
+ *  add a gold tappable verb ("Open chat") at its trailing edge. The caller
+ *  places it — over a CTA bar, or at the foot of a page with none. */
 @Composable
 internal fun ReadingToast(text: String, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     val view = LocalView.current
     Row(
         modifier
-            .padding(bottom = Spacing.tabBarSpace + 12.dp)
             .clip(RoundedCornerShape(999.dp)).background(PL.navy)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

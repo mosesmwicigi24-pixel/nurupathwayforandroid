@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
@@ -309,6 +312,17 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         nav.navigate(liveNowRoute(stream))
                     }
                 }
+                // On a page with no tab bar the bottom-most strip sat on the
+                // screen's edge — under the gesture handle, or behind the
+                // three buttons (§7.1 rule 3). Its colour runs on under the
+                // system bar, so its words sit clear of it.
+                if (!onTab && (showAppLiveBar || showBroadcastBar)) {
+                    Spacer(
+                        Modifier.fillMaxWidth()
+                            .background(if (showAppLiveBar) Nuru.navy else Nuru.danger.copy(alpha = 0.92f))
+                            .windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars),
+                    )
+                }
                 if (onTab) {
                     NavigationBar(containerColor = Nuru.white) {
                         tabs.forEach { tab ->
@@ -379,7 +393,13 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     .padding(bottom = maxOf(contentPadding.calculateBottomPadding(), navBottom) + 12.dp)
                     .zIndex(2f),
             )
-            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding)) {
+            // The bars below already take the system bar's room: a page that
+            // pads for the system bar itself (a composer, a reader's button)
+            // isn't lifted twice over a live strip, and a keyboard lifts a
+            // page only as far as the bars don't already (consumeWindowInsets,
+            // the bottom edge only — the top is the pages' own business).
+            val shellBottom = androidx.compose.foundation.layout.PaddingValues(bottom = contentPadding.calculateBottomPadding())
+            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding).consumeWindowInsets(shellBottom)) {
             composable("home") {
                 HomeScreen(
                     me,

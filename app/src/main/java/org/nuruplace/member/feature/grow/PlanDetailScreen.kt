@@ -346,11 +346,11 @@ private fun PlanDetailContent(
                 onInvite = { startInvite() },
             )
         }
-        // Floats above the CTA bar: ReadingToast lifts itself 108dp, from
-        // above the gesture bar — the bar is 73dp tall there.
+        // Floats above the CTA bar: 108dp up from the gesture bar — the bar
+        // is 73dp tall there.
         toast?.let {
             ReadingToast(
-                it, Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+                it, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 108.dp),
                 actionLabel = toastAction?.first, onAction = toastAction?.second,
             )
         }
