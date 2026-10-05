@@ -46,6 +46,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -125,6 +127,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/** A full pill (§8.1 rule 6) — Give's amount choices' shape. */
+private val PillShape = RoundedCornerShape(999.dp)
+
 /** The picked card's cream — warmer than the Give tab's fund-tile tint so a
  *  chosen promise reads as "held", not merely highlighted (design 2026-09-25;
  *  no theme token carries this value). */
@@ -153,7 +158,7 @@ private fun pledgeForLook(option: PledgeOption): PledgeForLook = when (option.ki
     else -> PledgeForLook(Icons.Filled.Flag, GIVE.mutedBg, Nuru.navy, "Another cause of the church")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewPledgeFlow(
     /** GET /giving/partnership `pledge_options`, handed down by GiveTabScreen
@@ -349,24 +354,27 @@ fun NewPledgeFlow(
                         }
                         Text(if (monthly) "each month" else "in total", style = giInter(11), color = GIVE.sub)
                     }
-                    // The suggested amounts, three to a row.
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NEW_PLEDGE_PRESETS.chunked(3).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                row.forEach { v ->
-                                    val on = amountMajor == v && customText.isEmpty()
-                                    Box(
-                                        Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp))
-                                            .background(if (on) GIVE.navy else GIVE.white)
-                                            .border(1.dp, if (on) Color.Transparent else GIVE.border, RoundedCornerShape(12.dp))
-                                            .clickable { Haptics.tick(view); customText = ""; amountMajor = v },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text("%,d".format(v), style = giInter(13, FontWeight.SemiBold), color = if (on) Color.White else GIVE.navy)
-                                    }
-                                }
-                                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                            }
+                    // The suggested amounts as pills, as Give draws them
+                    // (EXPERIENCE.md §8.1 rule 6, §8.2 #12) — they were square
+                    // tiles. Every one in sight: they wrap, centred, rather
+                    // than scroll a choice off the card.
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        NEW_PLEDGE_PRESETS.forEach { v ->
+                            val on = amountMajor == v && customText.isEmpty()
+                            Text(
+                                "%,d".format(v),
+                                style = giInter(13, FontWeight.SemiBold),
+                                color = if (on) Color.White else GIVE.navy,
+                                modifier = Modifier.clip(PillShape)
+                                    .background(if (on) GIVE.navy else GIVE.surface)
+                                    .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, PillShape))
+                                    .clickable { Haptics.tick(view); customText = ""; amountMajor = v }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
                         }
                     }
                     OutlinedTextField(
