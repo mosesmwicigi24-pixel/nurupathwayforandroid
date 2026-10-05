@@ -77,7 +77,6 @@ import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
-import org.nuruplace.member.ui.theme.nuruOrnament
 
 private val LitGold = Color(0xFFE8CA6C)
 // Paper-card palette (iOS parity): the card body sits on the app's PAPER
@@ -248,7 +247,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     // skips straight to the verse itself.
                     Text(
                         "“",
-                        style = nuruOrnament(44).copy(lineHeight = 44.sp),
+                        style = NuruType.display.copy(fontSize = 28.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
                         color = Nuru.gold,
                         modifier = Modifier.offset(y = 2.dp).clearAndSetSemantics { },
                     )

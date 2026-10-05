@@ -307,9 +307,9 @@ private fun DayHeader(
         )
         Text(
             title,
-            style = plSerif(26, SemiBold, -0.46f),
+            style = plSerif(22, SemiBold, -0.46f),
             color = Color.White,
-            maxLines = 2,
+            maxLines = 3,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp),
         )
@@ -358,7 +358,7 @@ private fun VerseBlock(reference: String, content: String?) {
         if (!content.isNullOrEmpty()) {
             Text(
                 content,
-                style = plSerif(18, Normal, -0.17f, italic = true)
+                style = plSerif(16, Normal, -0.17f, italic = true)
                     .copy(lineHeight = org.nuruplace.member.ui.theme.scaledLineHeight(25)),
                 color = PL.navy,
                 modifier = Modifier.padding(top = 8.dp),

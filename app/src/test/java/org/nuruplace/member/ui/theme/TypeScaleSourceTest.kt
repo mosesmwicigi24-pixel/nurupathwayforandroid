@@ -7,12 +7,12 @@
 //
 // Allowed, and listed (§8.3: "icons and home-screen widgets are allowed and
 // listed"):
-//   • Icons are Material vectors sized in dp — not text, so not scanned.
+//   • Icons are Material vectors sized in dp — not text, so not scanned. A
+//     glyph that is a picture (Live's double-tap heart, the keepsake's seal)
+//     is drawn as an icon; a glyph set in words' type (a quotation mark, an
+//     emoji in a badge) keeps to the scale like any text, as on iOS.
 //   • The home-screen widgets (widget/): Glance draws in the launcher's own
 //     face at its own sizes.
-//   • ORNAMENTS: a glyph drawn with a font that is an icon, not words — the
-//     large quotation marks, the keepsake's star, Live's floating heart. They
-//     go through `nuruOrnament(size)` and every use is counted below.
 //   • The Selah editor's member-chosen faces (SelahRichEditor.kt): a member's
 //     own writing in the face they picked — iOS offers Georgia and Noteworthy.
 //   • Bitmaps: the verse share card (VerseTableau.kt) paints Inter and Fraunces
@@ -29,19 +29,11 @@ class TypeScaleSourceTest {
 
     private companion object {
         /** Off-scale and computed text sizes today. May only fall; 0 is the goal (§8.3). */
-        const val OFF_SCALE_CEILING = 177
+        const val OFF_SCALE_CEILING = 175
 
         /** System or default faces used for text today. May only fall; 0 is the goal. */
         const val SYSTEM_FACE_CEILING = 1
 
-        /** Ornament uses per file — each one an icon drawn with a font, never words. */
-        val ORNAMENTS: Map<String, Int> = mapOf(
-            "org/nuruplace/member/feature/grow/PlanKeepsakeScreen.kt" to 1,
-            "org/nuruplace/member/feature/home/HomeScreen.kt" to 1,
-            "org/nuruplace/member/feature/home/LiturgyCards.kt" to 1,
-        )
-
-        const val ORNAMENT = "nuruOrnament"
         val WIDGETS = listOf("org/nuruplace/member/widget/")
         val MEMBER_CHOSEN_FACES = listOf("org/nuruplace/member/feature/community/SelahRichEditor.kt")
 
@@ -49,7 +41,7 @@ class TypeScaleSourceTest {
     }
 
     private fun offScale(): List<TypeSourceScan.Finding> {
-        val sites = TypeSourceScan.sizeSites(sources, excludedDirs = WIDGETS, excludedHelpers = setOf(ORNAMENT))
+        val sites = TypeSourceScan.sizeSites(sources, excludedDirs = WIDGETS, excludedHelpers = emptySet())
         return TypeSourceScan.offScale(sites)
     }
 
@@ -77,11 +69,6 @@ class TypeScaleSourceTest {
         )
     }
 
-    @Test
-    fun `ornaments are listed — an icon drawn with a font, never words`() {
-        val found = sources.associate { it.path to TypeSourceScan.calls(it, ORNAMENT).size }.filterValues { it > 0 }
-        assertEquals("nuruOrnament uses by file — add a new one here only if it is an icon, not words", ORNAMENTS, found)
-    }
 
     // ── The scanner itself: it must see what it claims to see ────────────────
 

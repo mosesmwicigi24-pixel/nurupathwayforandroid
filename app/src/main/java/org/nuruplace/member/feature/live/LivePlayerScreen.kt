@@ -83,6 +83,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -714,9 +715,10 @@ private fun BigHeartPop(at: Offset, reduceMotion: Boolean, onExpire: () -> Unit)
         alpha.animateTo(0f, tween(420))
         onExpire()
     }
-    Text(
-        "❤️", fontSize = 64.sp,
-        modifier = Modifier.graphicsLayer {
+    // A picture, not words: the heart is an icon (64 dp), never a 64 sp emoji.
+    Icon(
+        Icons.Filled.Favorite, contentDescription = null, tint = Color(0xFFE0245E),
+        modifier = Modifier.size(64.dp).graphicsLayer {
             translationX = at.x - 32.dp.toPx()
             translationY = at.y - 32.dp.toPx()
             scaleX = scale.value; scaleY = scale.value

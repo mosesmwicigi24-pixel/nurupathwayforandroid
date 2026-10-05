@@ -363,7 +363,7 @@ internal fun RDayOpening(title: String?, reference: String?, minutes: Int, pal: 
     val meta = listOfNotNull(reference?.takeIf { it.isNotEmpty() }, "about $minutes min").joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("TODAY'S READING", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(22, FontWeight.Medium), color = pal.ink) }
+        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(26, FontWeight.Medium), color = pal.ink) }
         Text(meta, style = rInter(12, FontWeight.Medium), color = pal.inkDim)
     }
 }

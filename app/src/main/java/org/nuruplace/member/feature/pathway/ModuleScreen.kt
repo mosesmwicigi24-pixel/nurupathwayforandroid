@@ -530,7 +530,7 @@ private fun KeyVerseCard(verse: String) {
         Column(Modifier.padding(16.dp)) {
             Text("KEY VERSE", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker)
             Spacer(Modifier.height(8.dp))
-            Text("“$verse”", style = mlSerif(18, FontWeight.Normal, italic = true), color = ML.navy)
+            Text("“$verse”", style = mlSerif(16, FontWeight.Normal, italic = true), color = ML.navy)
         }
     }
 }
@@ -626,7 +626,7 @@ private fun MarkdownView(md: String) {
                     } else {
                         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
                             Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
-                            Text("“${b.text}”", style = mlSerif(18, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
+                            Text("“${b.text}”", style = mlSerif(16, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
                         }
                     }
                 }

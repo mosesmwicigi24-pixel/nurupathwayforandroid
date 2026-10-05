@@ -148,7 +148,6 @@ import org.nuruplace.member.feature.events.EV_ZONE
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
-import org.nuruplace.member.ui.theme.nuruOrnament
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import org.nuruplace.member.ui.theme.scaledLineHeight
@@ -785,7 +784,7 @@ private fun HomeHeader(
             // out (not NuruType.title / NuruType.body) precisely because this
             // pair moves together and independently of those shared tokens.
             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Top) {
-                Text("“", style = nuruOrnament(21, FontWeight.Medium), color = Nuru.gold)
+                Text("“", style = nuruSerif(22, FontWeight.Medium), color = Nuru.gold)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     word,
