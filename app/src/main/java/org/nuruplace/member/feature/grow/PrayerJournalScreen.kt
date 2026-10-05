@@ -244,8 +244,9 @@ private fun AddPrayerPill(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.Add, null, tint = Color.White, modifier = Modifier.size(14.dp))
-        Text("Add Prayer", style = NuruType.actionLabel, color = Color.White)
+        // Navy words on gold (§8.1 rule 4) — they were white.
+        Icon(Icons.Filled.Add, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
+        Text("Add Prayer", style = NuruType.actionLabel, color = Nuru.navy)
     }
 }
 

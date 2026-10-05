@@ -312,7 +312,8 @@ private fun QuizFlow(
         ) {
             if (idx > 0) {
                 Box(Modifier.weight(1f)) {
-                    PrimaryButton("Back", onClick = { idx-- })
+                    // One primary per screen (§8.1 rule 4): Back is the secondary.
+                    org.nuruplace.member.ui.components.SecondaryButton("Back", onClick = { idx-- })
                 }
             }
             Box(Modifier.weight(1f)) {

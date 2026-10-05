@@ -335,7 +335,8 @@ private fun RegistrationPanel(
             loading = submitting,
         )
         Spacer(Modifier.height(Spacing.sm))
-        PrimaryButton("Scan a different code", onClick = onRescan, enabled = !submitting)
+        // One primary per screen (§8.1 rule 4), as iOS: the outline on navy.
+        org.nuruplace.member.ui.components.SecondaryButton("Scan a different code", onClick = onRescan, enabled = !submitting, onNavy = true)
     }
 }
 
@@ -387,7 +388,7 @@ private fun CheckedInPanel(result: ServiceCheckInResult, onSeeStreak: () -> Unit
         Spacer(Modifier.height(Spacing.xl))
         PrimaryButton("See my attendance", onClick = onSeeStreak)
         Spacer(Modifier.height(Spacing.sm))
-        PrimaryButton("Done", onClick = onDone)
+        org.nuruplace.member.ui.components.SecondaryButton("Done", onClick = onDone, onNavy = true)
     }
 }
 
