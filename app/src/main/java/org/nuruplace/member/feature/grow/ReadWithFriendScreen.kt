@@ -692,8 +692,8 @@ fun ReadingInvitePreviewScreen(token: String, onClose: () -> Unit, onOpenGroup: 
                     style = plInter(13), color = PL.ink2, textAlign = TextAlign.Center,
                 )
                 Text(
-                    "Go to shared plan", style = plInter(14, FontWeight.Bold), color = Color.White,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PL.navy)
+                    "Go to shared plan", style = plInter(14, FontWeight.Bold), color = PL.navy,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(PL.gold)
                         .clickable { onOpenGroup(r.groupId) }
                         .padding(vertical = 14.dp),
                     textAlign = TextAlign.Center,

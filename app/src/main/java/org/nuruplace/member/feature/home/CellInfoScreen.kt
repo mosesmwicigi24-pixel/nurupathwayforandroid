@@ -252,13 +252,15 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                     Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(22.dp))
                 }
             }
+            // The page's one primary (§8.1 rule 4, as iOS): gold, navy words —
+            // it was navy with white.
             Box(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radii.control))
-                    .background(Nuru.navyDeep)
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radii.button))
+                    .background(Nuru.gold)
                     .clickable { onNavigate(cellRoomId?.let { "chat/$it" } ?: "you") },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Open community ›", style = NuruType.cardCta, color = Nuru.white)
+                Text("Open community ›", style = NuruType.cardCta, color = Nuru.navy)
             }
         }
     }

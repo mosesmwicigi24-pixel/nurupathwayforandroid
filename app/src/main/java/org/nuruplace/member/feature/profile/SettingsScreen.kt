@@ -612,7 +612,8 @@ private fun TwoFactorRow() {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (code.length >= 6 && !busy) PROF.navy else PROF.surface)
+                    // The panel's one primary (§8.1 rule 4): gold, navy words.
+                    .background(if (code.length >= 6 && !busy) PROF.gold else PROF.surface)
                     .border(1.dp, PROF.border, RoundedCornerShape(14.dp))
                     .clickable(enabled = code.length >= 6 && !busy) {
                         busy = true
@@ -639,7 +640,7 @@ private fun TwoFactorRow() {
                 Text(
                     if (twoFAon) "Verify & disable" else "Verify & enable",
                     style = pInter(14, FontWeight.SemiBold),
-                    color = if (code.length >= 6 && !busy) Color.White else PROF.sub,
+                    color = if (code.length >= 6 && !busy) PROF.navy else PROF.sub,
                 )
             }
         }
@@ -730,7 +731,7 @@ private fun ChangePasswordSection() {
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (enabled) PROF.navy else PROF.surface)
+                .background(if (enabled) PROF.gold else PROF.surface)
                 .border(1.dp, PROF.border, RoundedCornerShape(14.dp))
                 .clickable(enabled = enabled) {
                     when {
@@ -758,12 +759,12 @@ private fun ChangePasswordSection() {
             contentAlignment = Alignment.Center,
         ) {
             if (busy) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                CircularProgressIndicator(color = PROF.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
             } else {
                 Text(
                     "Change password",
                     style = pInter(14, FontWeight.SemiBold),
-                    color = if (enabled) Color.White else PROF.sub,
+                    color = if (enabled) PROF.navy else PROF.sub,
                 )
             }
         }

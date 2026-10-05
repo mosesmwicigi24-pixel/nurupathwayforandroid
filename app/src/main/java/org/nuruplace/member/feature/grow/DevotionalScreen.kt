@@ -281,21 +281,22 @@ fun DevotionalScreen(onBack: () -> Unit) {
                             .fillMaxWidth()
                             .height(44.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (canSubmit) GrowPal.navy else GrowPal.navy.copy(alpha = 0.18f))
+                            // The page's one primary (§8.1 rule 4): gold, navy words.
+                            .background(if (canSubmit) GrowPal.gold else GrowPal.navy.copy(alpha = 0.18f))
                             .clickable(enabled = canSubmit) { submit() },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (busy) {
                             CircularProgressIndicator(
                                 Modifier.size(18.dp),
-                                color = Color.White,
+                                color = GrowPal.navy,
                                 strokeWidth = 2.dp,
                             )
                         } else {
                             Text(
                                 if (saved) "Update reflection" else "Submit reflection",
                                 style = gInter(14, FontWeight.SemiBold),
-                                color = if (canSubmit) Color.White else GrowPal.navy.copy(alpha = 0.55f),
+                                color = GrowPal.navy.copy(alpha = if (canSubmit) 1f else 0.55f),
                             )
                         }
                     }
