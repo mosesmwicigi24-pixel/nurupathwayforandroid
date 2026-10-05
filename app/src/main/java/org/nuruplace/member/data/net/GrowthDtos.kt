@@ -168,6 +168,13 @@ data class ScripturePassage(
 @Serializable
 data class SaveReflectionBody(val body: String, val clientMutationId: String)
 
+/** GET modules/{id}/reflection → `{ data: { body, created_at } | null }`. */
+@Serializable
+data class ModuleReflectionEnv(val data: SavedModuleReflection? = null)
+
+@Serializable
+data class SavedModuleReflection(val body: String = "", val createdAt: String? = null)
+
 /**
  * POST growth/segments/{id}/complete → tells us if finishing this segment
  * completed the day. Additive (backend fix/plan-day-unlock-race): dayComplete

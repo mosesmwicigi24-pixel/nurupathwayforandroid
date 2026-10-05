@@ -155,6 +155,24 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     // Why the reflection didn't save (§4), or null; the words stay in the box.
     var reflectError by remember { mutableStateOf<String?>(null) }
     val reflectContext = androidx.compose.ui.platform.LocalContext.current
+    // What the server holds for this module's reflection — a finished module's
+    // folded card says only that (Cycle 4 walk: it always drew "✓ Saved", over
+    // "—", because the words were never fetched).
+    var folded by remember(m.moduleId) { mutableStateOf<FoldedReflection>(FoldedReflection.Loading) }
+    LaunchedEffect(m.moduleId) {
+        runCatching { Net.client.api.moduleReflection(m.moduleId).data }
+            .onSuccess { saved ->
+                val state = foldedReflectionOf(saved)
+                folded = state
+                // Words already on the server fill the card and its Reflect step
+                // (iOS loadReflection) — nobody writes the same reflection twice.
+                if (state is FoldedReflection.Saved && reflection.isBlank()) {
+                    reflection = state.text
+                    reflectSaved = true
+                }
+            }
+            .onFailure { folded = FoldedReflection.Unavailable(ApiException.failureLine(RELOAD_FAILED, it, reflectContext)) }
+    }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // Living curriculum — "hear it another way": the same lesson re-rendered by
@@ -264,7 +282,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 }
                 Spacer(Modifier.height(8.dp))
                 if (m.completed && !editingReflection) {
-                    ReflectionFolded(text = reflection) { showRevisit = true }
+                    ReflectionFolded(state = folded) { showRevisit = true }
                 } else ReflectionCard(
                     value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false; if (reflectError != null) reflectError = null },
                     saved = reflectSaved,
@@ -272,8 +290,9 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                         scope.launch {
                             // "Saved" is a claim about the SERVER, not the tap:
                             // only say it when the write actually landed.
-                            runCatching { Net.client.api.submitModuleReflection(m.moduleId, SaveReflectionBody(reflection.trim().take(4000), UUID.randomUUID().toString())) }
-                                .onSuccess { reflectSaved = true }
+                            val words = reflection.trim().take(4000)
+                            runCatching { Net.client.api.submitModuleReflection(m.moduleId, SaveReflectionBody(words, UUID.randomUUID().toString())) }
+                                .onSuccess { reflectSaved = true; folded = FoldedReflection.Saved(words) }
                                 .onFailure { reflectError = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, reflectContext) }
                         }
                     },
@@ -739,8 +758,33 @@ private fun inline(text: String): androidx.compose.ui.text.AnnotatedString = bui
 
 // ─────────────────────────── Reflection card ───────────────────────────
 
+/** What a finished module's folded reflection can truthfully say. It used to
+ *  draw "✓ Saved" whatever the server held, over "—" when nothing came back
+ *  (Cycle 4 walk, ModuleScreen's ReflectionFolded). */
+internal sealed interface FoldedReflection {
+    /** Still asking the server — no claim either way. */
+    data object Loading : FoldedReflection
+
+    /** The server holds these words: "✓ Saved", and the words. */
+    data class Saved(val text: String) : FoldedReflection
+
+    /** The server holds no reflection for this module (legacy completion text
+     *  was backfilled into the same table — migration 022). */
+    data object NoneSaved : FoldedReflection
+
+    /** The server couldn't be asked; [line] says why in §4's words. */
+    data class Unavailable(val line: String) : FoldedReflection
+}
+
+/** The folded state from GET modules/{id}/reflection — blank words are none. */
+internal fun foldedReflectionOf(saved: org.nuruplace.member.data.net.SavedModuleReflection?): FoldedReflection =
+    saved?.body?.takeIf { it.isNotBlank() }?.let { FoldedReflection.Saved(it) } ?: FoldedReflection.NoneSaved
+
+internal const val NO_REFLECTION_SAVED = "No reflection saved for this module."
+internal const val RELOAD_FAILED = "Couldn't load your reflection."
+
 @Composable
-private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
+private fun ReflectionFolded(state: FoldedReflection, onRevisit: () -> Unit) {
     Column {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
@@ -748,12 +792,21 @@ private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("YOUR REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-                Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(3.dp))
-                Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D))
+                // "Saved" is a claim about the server: only when it holds the words.
+                if (state is FoldedReflection.Saved) {
+                    Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D))
+                }
             }
             Spacer(Modifier.height(10.dp))
-            Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = scaledLineHeight(22))
+            when (state) {
+                FoldedReflection.Loading -> org.nuruplace.member.ui.components.SkeletonBlock(height = 16.dp, corner = 6.dp)
+                is FoldedReflection.Saved ->
+                    Text(state.text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = scaledLineHeight(22))
+                FoldedReflection.NoneSaved -> Text(NO_REFLECTION_SAVED, style = ml(13), color = ML.secondary)
+                is FoldedReflection.Unavailable -> Text(state.line, style = ml(13), color = ML.secondary)
+            }
         }
         Spacer(Modifier.height(14.dp))
         // The module is sealed — changing anything is intentional, one quiet door.

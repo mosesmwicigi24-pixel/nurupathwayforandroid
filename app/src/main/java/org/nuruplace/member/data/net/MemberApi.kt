@@ -75,6 +75,11 @@ interface MemberApi {
     @POST("modules/{id}/reflection")
     suspend fun submitModuleReflection(@Path("id") moduleId: String, @Body body: SaveReflectionBody): Unit
 
+    // The member's saved reflection for a module — `data` is null when none is
+    // on the server (iOS MemberAPI.moduleReflection).
+    @GET("modules/{id}/reflection")
+    suspend fun moduleReflection(@Path("id") moduleId: String): ModuleReflectionEnv
+
     // --- Module engagement heartbeat (reading/audio/video seconds + resume page) ---
     @GET("modules/{id}/engagement")
     suspend fun moduleEngagement(@Path("id") moduleId: String): ModuleEngagement
