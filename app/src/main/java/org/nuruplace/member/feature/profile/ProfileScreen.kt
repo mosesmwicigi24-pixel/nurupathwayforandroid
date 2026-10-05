@@ -166,20 +166,28 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     var profile by remember(me) { mutableStateOf(me?.profile) }
     var editing by remember { mutableStateOf<EditField?>(null) }
 
+    // A new photo: made upright and small (≤ 512 px, as iOS) so it fits the
+    // server's 5 MB cap, then sent; a photo that didn't save says so — it
+    // failed in silence, and a full-size camera picture always did.
+    var avatarUploading by remember { mutableStateOf(false) }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch {
+        if (uri != null && !avatarUploading) scope.launch {
+            avatarUploading = true
             val part = withContext(Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let { bytes ->
-                    MultipartBody.Part.createFormData(
-                        "file",
-                        "avatar.jpg",
-                        bytes.toRequestBody("image/*".toMediaTypeOrNull()),
-                    )
-                }
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?.let { org.nuruplace.member.util.PhotoShrink.jpeg(it, maxDim = 512) }
+                    ?.let { jpeg ->
+                        MultipartBody.Part.createFormData("file", "avatar.jpg", jpeg.toRequestBody("image/jpeg".toMediaTypeOrNull()))
+                    }
             }
-            if (part != null) {
-                runCatching { Net.client.api.uploadAvatar(part).avatarUrl }.getOrNull()?.let { avatarUrl = it }
+            if (part == null) {
+                org.nuruplace.member.ui.components.QuickNotice.show("Couldn't change your photo. That file isn't a picture we can use.")
+            } else {
+                org.nuruplace.member.ui.components.noticeOnFailure(context, lead = "Couldn't change your photo.") {
+                    Net.client.api.uploadAvatar(part).avatarUrl
+                }?.let { avatarUrl = it }
             }
+            avatarUploading = false
         }
     }
     fun pickAvatar() =
@@ -236,6 +244,12 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                     textAlign = TextAlign.Center,
                                 )
                             }
+                            // The new photo on its way.
+                            if (avatarUploading) {
+                                Box(Modifier.matchParentSize().clip(CircleShape).background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
+                                    androidx.compose.material3.CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                                }
+                            }
                         }
                         Box(
                             Modifier
@@ -247,7 +261,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                 .clickable { pickAvatar() },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Change photo", tint = PROF.navy, modifier = Modifier.size(11.dp))
+                            Icon(Icons.Filled.Edit, contentDescription = "Change photo", tint = PROF.navy, modifier = Modifier.size(14.dp))
                         }
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {

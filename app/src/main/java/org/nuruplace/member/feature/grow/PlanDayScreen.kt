@@ -132,6 +132,8 @@ fun PlanDayScreen(
     var dayCompleted by remember { mutableStateOf(false) }
     var justDone by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var sealError by remember { mutableStateOf<String?>(null) }
+    val sealContext = androidx.compose.ui.platform.LocalContext.current
     // A day that did not load, in the state language (§4).
     var loadError by remember { mutableStateOf<StateMessage?>(null) }
     var attempt by remember { mutableStateOf(0) }
@@ -227,6 +229,7 @@ fun PlanDayScreen(
             if (day != null) FooterBar(
                 complete = dayCompleted || justDone,
                 busy = busy,
+                failure = sealError,
                 nextPartLabel = nextPart?.label,
                 onOpenNext = {
                     nextPart?.let { p -> if (p.tag == "talk") onTalkItOver() else onOpenPart(p.tag, p.firstIndex) }
@@ -234,10 +237,16 @@ fun PlanDayScreen(
                 onComplete = {
                     if (!busy) {
                         busy = true
+                        sealError = null
                         scope.launch {
-                            val ok = runCatching { Net.client.api.completePlanDay(planId, CompleteDayBody(dayNumber)) }.isSuccess
+                            val sealed = runCatching { Net.client.api.completePlanDay(planId, CompleteDayBody(dayNumber)) }
+                            val failure = sealed.exceptionOrNull()
+                            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
                             busy = false
-                            if (ok) {
+                            // A seal the server didn't take says so above the button
+                            // (§7.4, §4) — it used to just stop spinning.
+                            failure?.let { sealError = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, sealContext) }
+                            if (failure == null) {
                                 dayCompleted = true
                                 justDone = true
                                 // The server's 200 sealed it: today counts on
@@ -565,6 +574,8 @@ private fun ReflectionCard(
 private fun FooterBar(
     complete: Boolean,
     busy: Boolean,
+    /** Why the last "Seal the day" didn't save — above the button. */
+    failure: String? = null,
     /** The part still to do, if any — while one remains, the gold button is the
      *  way INTO it. A day is finished by DOING it, not by declaring it, so the
      *  button no longer offers to seal a day nobody has walked. (The server
@@ -583,6 +594,9 @@ private fun FooterBar(
             .navigationBarsPadding(),
     ) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
+        failure?.let {
+            Text(it, style = plInter(12), color = Color(0xFFB91C1C), modifier = Modifier.padding(horizontal = 20.dp).padding(top = 10.dp))
+        }
         Row(
             Modifier
                 .fillMaxWidth()

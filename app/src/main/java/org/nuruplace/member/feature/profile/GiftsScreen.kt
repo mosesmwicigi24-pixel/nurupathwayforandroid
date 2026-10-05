@@ -60,6 +60,7 @@ import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.theme.Nuru
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -113,6 +114,12 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
         val answers = remember { mutableStateMapOf<String, Int>().apply { draft?.chosen?.let { putAll(it) } } }
         var step by remember { mutableIntStateOf(draft?.chosen?.size?.coerceIn(0, set.data.lastIndex) ?: 0) }
         var busy by remember { mutableStateOf(false) }
+        // Why the answers didn't save — over the choices, the answers kept
+        // (§7.4, §4); one id for the submission, so a retry after an answer
+        // that did land can't score it twice.
+        var submitError by remember { mutableStateOf<String?>(null) }
+        val submissionId = remember { java.util.UUID.randomUUID().toString() }
+        val giftsContext = androidx.compose.ui.platform.LocalContext.current
         // Every answer, the moment it is given.
         val answersSnap = answers.toMap()
         LaunchedEffect(answersSnap) { if (answersSnap.isNotEmpty()) QuizDraftStore.saveGifts(set, answersSnap) }
@@ -120,11 +127,12 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
         val submit: () -> Unit = {
             if (!busy) {
                 busy = true
+                submitError = null
                 scope.launch {
                     try {
                         Net.client.api.submitGifts(
                             GiftSubmitBody(
-                                java.util.UUID.randomUUID().toString(),
+                                submissionId,
                                 set.setId,
                                 answers.map { GiftAnswerInput(it.key, it.value) },
                             ),
@@ -136,7 +144,10 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                                    subtitle = "You've finished the assessment."),
                         )
                         onDone()
-                    } catch (_: Exception) {
+                    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                        throw c
+                    } catch (e: Exception) {
+                        submitError = org.nuruplace.member.data.net.ApiException.saveFailureLine(e, giftsContext)
                     } finally {
                         busy = false
                     }
@@ -195,6 +206,7 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                             color = GrowPal.navy,
                         )
 
+                        submitError?.let { Text(it, style = gInter(12), color = Nuru.danger) }
                         // Likert options — strongest first
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(
