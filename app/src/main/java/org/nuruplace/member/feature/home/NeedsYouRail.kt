@@ -104,7 +104,7 @@ private fun NudgeCard(n: HomeNudge, modifier: Modifier, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
             NudgeIconTile(n)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(n.title, style = nuruSans(13, FontWeight.SemiBold), color = Nuru.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(n.title, style = nuruSans(13, FontWeight.SemiBold), color = Nuru.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // minLines keeps every card on the rail the same height whether
                 // its body runs one line or two (or, defensively, is blank).
                 Text(n.body, style = nuruSans(11), color = Nuru.metaGray, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)

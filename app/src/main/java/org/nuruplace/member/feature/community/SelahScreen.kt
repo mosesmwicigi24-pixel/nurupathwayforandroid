@@ -264,7 +264,7 @@ private fun ThoughtRowCard(thought: Thought, onOpen: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 thought.title?.takeIf { it.isNotBlank() } ?: "Untitled",
-                style = NuruType.rowTitle, color = Nuru.navy, maxLines = 1,
+                style = NuruType.rowTitle, color = Nuru.navy, maxLines = 2,
                 modifier = Modifier.weight(1f),
             )
             Text(relativeThoughtLabel(thought.updatedAt), style = NuruType.micro, color = Nuru.ink400)

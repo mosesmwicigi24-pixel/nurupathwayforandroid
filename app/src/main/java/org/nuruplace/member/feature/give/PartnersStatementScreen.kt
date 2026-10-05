@@ -704,7 +704,7 @@ private fun PledgeRow(e: StatementPledge, today: LocalDate, onOpen: (() -> Unit)
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(e.title.ifBlank { "Pledge" }, style = giInter(15, FontWeight.SemiBold), color = GIVE.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(e.title.ifBlank { "Pledge" }, style = giInter(15, FontWeight.SemiBold), color = GIVE.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(pledgeAmountLine(e, today), style = giInter(12), color = GIVE.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             StateChip(state, chipBg, chipFg)
@@ -786,7 +786,7 @@ private fun PaymentRow(pay: StatementPayment, title: String, onOpenReceipt: (Str
     ) {
         Text(statementPaymentDay(pay.occurredAt), style = giInter(12, FontWeight.SemiBold), color = GIVE.ink600, maxLines = 1, modifier = Modifier.width(54.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (meta.isNotBlank()) Text(meta, style = giInter(11), color = Nuru.ink400, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1)

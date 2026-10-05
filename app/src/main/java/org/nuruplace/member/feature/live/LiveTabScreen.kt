@@ -340,7 +340,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(displayTitle, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(displayTitle, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(replayDate(row.startedAt), style = NuruType.micro, color = Nuru.ink600)

@@ -145,7 +145,7 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
             }
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(d.name, style = nuruSerif(18, FontWeight.SemiBold), color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(d.name, style = nuruSerif(18, FontWeight.SemiBold), color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (d.purpose.isNotBlank()) {
                 Text(d.purpose, style = NuruType.body, color = Nuru.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

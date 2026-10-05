@@ -985,7 +985,7 @@ private fun OnAirCard(r: RadioProgram, onOpen: () -> Unit) {
         }
         Column(Modifier.weight(1f)) {
             Text("● ON AIR · NURU RADIO", style = NuruType.micro, color = Nuru.liveRed, fontWeight = FontWeight.Bold)
-            Text(r.title, style = NuruType.cardCta, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(r.title, style = NuruType.cardCta, color = Nuru.onNavy, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) {
             Text("▶", color = Nuru.homeNavy, style = NuruType.body)
@@ -1040,7 +1040,7 @@ private fun LiveNowCard(info: LiveNowInfo, onOpen: () -> Unit) {
                 color = if (info.startsInMin == null) Nuru.liveRed else Nuru.gold,
                 fontWeight = FontWeight.Bold,
             )
-            Text(info.occ.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(info.occ.title, style = NuruType.featureTitle, color = Nuru.onNavy, maxLines = 2, overflow = TextOverflow.Ellipsis)
             info.occ.location?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = NuruType.caption, color = Nuru.onNavyDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

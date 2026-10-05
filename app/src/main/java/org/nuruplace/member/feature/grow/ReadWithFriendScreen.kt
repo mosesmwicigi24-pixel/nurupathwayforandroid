@@ -204,7 +204,7 @@ private fun ReadingGroupCard(group: ReadingGroupRow, myUserId: String, onClick: 
             Box(Modifier.size(56.dp).clip(RoundedCornerShape(14.dp))) { PLCover(group.plan.imageUrl, modifier = Modifier.fillMaxSize()) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(group.plan.title, style = plSerif(15, FontWeight.SemiBold, -0.15f), color = PL.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(group.plan.title, style = plSerif(15, FontWeight.SemiBold, -0.15f), color = PL.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (others.isEmpty()) {
                     Text("Just you so far", style = plInter(11), color = PL.ink3, modifier = Modifier.padding(top = 4.dp))
                 } else {

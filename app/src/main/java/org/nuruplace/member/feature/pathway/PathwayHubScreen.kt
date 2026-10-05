@@ -696,7 +696,7 @@ private fun ExamPassedRow(step: JourneyStep) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
+                Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 2)
                 Text(step.line, style = PW.t(11, FontWeight.SemiBold), color = PW.goldDeep)
             }
         }
