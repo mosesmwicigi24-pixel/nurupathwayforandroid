@@ -774,10 +774,6 @@ private fun HomeHeader(
             // through tabs.
             ScanHeaderButton(onClick = onScan)
             Spacer(Modifier.width(Spacing.sm))
-            // The one bell (EXPERIENCE.md §7.2 #4, §8.1 rule 7): the inbox, a
-            // dot only while something is unread — the same bell on every tab.
-            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
-            Spacer(Modifier.width(Spacing.sm))
             // Nuru Live (L2) — a church stream is live right now. Same 40dp
             // circle language as the buttons either side of it, so the row reads
             // as one family; the pulsing red ring (not a static border) is what
@@ -789,19 +785,28 @@ private fun HomeHeader(
             }
             // The growth score — "45", never "45%" (§3) — once there is one:
             // not while it loads, and not a "0" ring on a first day (§9.2 #4;
-            // iOS HomeHeaderWords.showsScore).
-            if ((growthScore ?: 0) > 0) Box {
-                ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
-                    // One face for the score wherever it's a ring's figure —
-                    // Fraunces, as on the progress card below (§8.1 rule 3;
-                    // Cycle 4 walk 01/06) — in the gold chip ink iOS uses:
-                    // a score isn't a state, so not green (rule 1).
-                    growthScore?.let { Text("$it", style = nuruSerif(12, FontWeight.SemiBold), color = Nuru.goldChipText) }
+            // iOS HomeHeaderWords.showsScore). Left of the bell: the bell is
+            // the far right on every tab (§8.1 rule 2; Cycle 4 walk 01). The
+            // wider gap clears the trend badge that hangs off its corner.
+            if ((growthScore ?: 0) > 0) {
+                Box {
+                    ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
+                        // One face for the score wherever it's a ring's figure —
+                        // Fraunces, as on the progress card below (§8.1 rule 3;
+                        // Cycle 4 walk 01/06) — in the gold chip ink iOS uses:
+                        // a score isn't a state, so not green (rule 1).
+                        growthScore?.let { Text("$it", style = nuruSerif(12, FontWeight.SemiBold), color = Nuru.goldChipText) }
+                    }
+                    trend?.takeIf { it.delta != 0 }?.let { t ->
+                        TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
+                    }
                 }
-                trend?.takeIf { it.delta != 0 }?.let { t ->
-                    TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
-                }
+                Spacer(Modifier.width(Spacing.md))
             }
+            // The one bell (EXPERIENCE.md §7.2 #4, §8.1 rule 7): the inbox, a
+            // dot only while something is unread — the same bell, at the far
+            // right, on every tab (rule 2).
+            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
         }
         Spacer(Modifier.height(Spacing.md))
         Text(if (firstName != null) "$greeting, $firstName." else "$greeting.", style = NuruType.greeting, color = Nuru.navy)

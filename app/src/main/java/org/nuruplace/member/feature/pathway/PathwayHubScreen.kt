@@ -299,16 +299,19 @@ private fun HubHeader(
             // Plans card by one rule (EXPERIENCE.md §9.2 #3) — not a third time
             // here, by another.
             Spacer(Modifier.weight(1f))
-            // The one bell (EXPERIENCE.md §7.2 #4) — it used to open nothing,
-            // under a dot that was always there.
-            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
-            Spacer(Modifier.width(Spacing.sm))
             // Journey progress, counted in levels (§3) — not a share of
             // published modules, which read 100% at Level 1 of 6. Empty, with
             // no number, until the journey is known (§7 rule 5).
             // Shown once there is progress to show — never a "0%" ring on a
-            // first day (§9.2 #4).
-            journey?.percent?.takeIf { it > 0 }?.let { HubRing(it) }
+            // first day (§9.2 #4). Left of the bell: the bell is the far
+            // right on every tab (§8.1 rule 2; Cycle 4 walk 08).
+            journey?.percent?.takeIf { it > 0 }?.let {
+                HubRing(it)
+                Spacer(Modifier.width(Spacing.sm))
+            }
+            // The one bell (EXPERIENCE.md §7.2 #4) — it used to open nothing,
+            // under a dot that was always there.
+            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
         }
         Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
         // One Inter line: where the member is on the road, and how far through
