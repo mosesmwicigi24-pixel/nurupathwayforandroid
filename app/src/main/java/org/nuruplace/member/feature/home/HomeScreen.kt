@@ -53,13 +53,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -1697,14 +1700,17 @@ private fun GrowSection(onNavigate: (String) -> Unit) {
     Column {
         SectionLabel("Grow your faith")
         HomeCard(pad = Spacing.md) {
+            // iOS's glyphs (sun · quote · hand-heart · sparkles), each on the
+            // gold-tint tile (§8.1 rules 1 and 7): the tiles were amber, red
+            // and purple — hues that say state, or nothing.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                GrowTile("Devotional", "Today's devotional", "🌞", Nuru.goldChipBg, Nuru.eyebrow, Modifier.weight(1f)) { onNavigate("devotional") }
-                GrowTile("Hide His Word", "Memorize Scripture", "❝", Nuru.warningBg, Nuru.hideWordFg, Modifier.weight(1f)) { onNavigate("memory-verses") }
+                GrowTile("Devotional", "Today's devotional", Icons.Filled.WbSunny, Modifier.weight(1f)) { onNavigate("devotional") }
+                GrowTile("Hide His Word", "Memorize Scripture", Icons.Filled.FormatQuote, Modifier.weight(1f)) { onNavigate("memory-verses") }
             }
             Spacer(Modifier.height(Spacing.sm))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                GrowTile("My Prayer Room", "Pray with the family", "🤲", Nuru.dangerBg, Nuru.danger, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
-                GrowTile("Your Calling", "Discover your gifts", "✨", Nuru.callingBg, Nuru.callingFg, Modifier.weight(1f)) { onNavigate("gifts") }
+                GrowTile("My Prayer Room", "Pray with the family", Icons.Filled.VolunteerActivism, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
+                GrowTile("Your Calling", "Discover your gifts", Icons.Filled.AutoAwesome, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             Spacer(Modifier.height(Spacing.sm))
             DisciplerRow { onNavigate("mentor") }
@@ -1732,12 +1738,14 @@ private fun DisciplerRow(onClick: () -> Unit) {
 }
 
 @Composable
-private fun GrowTile(title: String, sub: String, glyph: String, bg: Color, fg: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun GrowTile(title: String, sub: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, onClick: () -> Unit) {
     Row(
         modifier.clip(RoundedCornerShape(16.dp)).background(Nuru.surface).border(1.dp, Nuru.border, RoundedCornerShape(16.dp)).clickable { onClick() }.padding(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(bg), contentAlignment = Alignment.Center) { Text(glyph, color = fg, style = NuruType.body) }
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp))
+        }
         Spacer(Modifier.width(Spacing.sm))
         // The words wrap inside the tile — never cut (§8.1 rule 9, §8.2 #20).
         Column(Modifier.weight(1f)) {

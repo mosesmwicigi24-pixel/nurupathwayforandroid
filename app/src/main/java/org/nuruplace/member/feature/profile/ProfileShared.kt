@@ -85,14 +85,19 @@ fun badgeStyle(category: String?): BadgeStyle = when (category?.lowercase()?.tri
 /** Settings row icon tile tint (bg, fg). */
 data class RowTint(val bg: Color, val fg: Color)
 
-val TINT_PASSWORD = RowTint(Color(0xFFEEF2FF), Color(0xFF6366F1))
+// Row icons sit on the gold-tint tile (EXPERIENCE.md §8.1 rules 1 and 7) —
+// they were indigo, pink, sky and green: hues that said nothing. Only the
+// two-factor tile keeps a state colour: amber while off ("recommended"),
+// green once on.
+private val TINT_GOLD = RowTint(PROF.goldChipBg, Color(0xFF7A5A14))
+val TINT_PASSWORD = TINT_GOLD
 val TINT_2FA_OFF = RowTint(Color(0xFFFEF3C7), Color(0xFFD97706))
 val TINT_2FA_ON = RowTint(Color(0x2216A34A), Color(0xFF16A34A))
-val TINT_SESSIONS = RowTint(Color(0xFFFCE7F3), Color(0xFFDB2777))
-val TINT_NOTIF = RowTint(PROF.gold.copy(alpha = 0.08f), Color(0xFFA8861C))
-val TINT_LANGUAGE = RowTint(Color(0xFFE0F2FE), Color(0xFF0EA5E9))
-val TINT_HELP = RowTint(Color(0xFFDCFCE7), Color(0xFF16A34A))
-val TINT_PRIVACY = RowTint(Color(0xFFEEF2FF), Color(0xFF6366F1))
+val TINT_SESSIONS = TINT_GOLD
+val TINT_NOTIF = TINT_GOLD
+val TINT_LANGUAGE = TINT_GOLD
+val TINT_HELP = TINT_GOLD
+val TINT_PRIVACY = TINT_GOLD
 
 // Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun pInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
