@@ -1464,17 +1464,19 @@ internal sealed interface FeaturedPage {
     data class Occ(val o: HomeEventRow) : FeaturedPage
 }
 
-/** The carousel's slides: the featured announcement, the featured
- *  gathering, then the next three events — never an event that has its own
- *  card on the same screen (EXPERIENCE.md §7.2 #9). [ownCardSeries]: the
- *  series of the gathering shown in its own card (Home's featured-gathering
- *  card) — neither it nor another occurrence of it slides here too; the
- *  featured gathering's other occurrences never repeat it either. */
 /** The featured gathering is still ahead — its start, the church's wall time
  *  (Nairobi), is not past. An unreadable start is not shown. */
 internal fun featuredIsUpcoming(ev: FeaturedEvent, now: java.time.LocalDateTime = java.time.LocalDateTime.now(EV_ZONE)): Boolean =
     runCatching { java.time.LocalDateTime.parse(ev.dtstartLocal.trim().take(19)) }.getOrNull()?.let { !it.isBefore(now) } == true
 
+/** The carousel's slides: the featured announcement, the featured
+ *  gathering, then the next three events — never an event that has its own
+ *  card on the same screen (EXPERIENCE.md §7.2 #9). [ownCardSeries]: the
+ *  series of the gathering shown in its own card (Home's featured-gathering
+ *  card) — neither it nor another occurrence of it slides here too; the
+ *  featured gathering's other occurrences never repeat it either. A series
+ *  slides once, at its next date (as iOS) — a weekly gathering filled the
+ *  three slides with itself. */
 internal fun featuredPages(
     announcement: FeaturedAnnouncement?,
     featuredEvent: FeaturedEvent?,
@@ -1486,6 +1488,7 @@ internal fun featuredPages(
         announcement?.let { add(FeaturedPage.Ann(it)) }
         featuredEvent?.takeIf { own == null || it.seriesId != own }?.let { add(FeaturedPage.Fev(it)) }
         events.filter { it.seriesId != featuredEvent?.seriesId && (own == null || it.seriesId != own) }
+            .distinctBy { it.seriesId.ifBlank { it.occurrenceId } }
             .take(3).forEach { add(FeaturedPage.Occ(it)) }
     }
 }
@@ -1603,7 +1606,8 @@ private fun FeaturedPageCard(
             )
         }
         Column(Modifier.padding(Spacing.base)) {
-            Text(title, style = NuruType.featureTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Wraps to two lines, never cut (§8.1 rule 9).
+            Text(title, style = NuruType.featureTitle, color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(Spacing.xs))
             Text(body, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(Spacing.sm))

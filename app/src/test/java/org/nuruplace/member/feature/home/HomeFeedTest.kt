@@ -76,6 +76,14 @@ class HomeFeedTest {
         val four = (1..4).map { occ("e$it", "s$it") }
         assertEquals(listOf(FeaturedPage.Ann(ann)) + four.take(3).map { FeaturedPage.Occ(it) }, featuredPages(ann, null, four, ownCardSeries = null))
     }
+
+    @Test fun `a series slides once, at its next date`() {
+        val weekly = listOf(occ("prayer-1", "s-prayer"), occ("prayer-2", "s-prayer"), occ("youth", "s-youth"), occ("one-off", ""), occ("other-one-off", ""))
+        assertEquals(
+            listOf(FeaturedPage.Occ(weekly[0]), FeaturedPage.Occ(weekly[2]), FeaturedPage.Occ(weekly[3])),
+            featuredPages(null, null, weekly, ownCardSeries = null),
+        )
+    }
 }
 
 class FeaturedUpcomingTest {
