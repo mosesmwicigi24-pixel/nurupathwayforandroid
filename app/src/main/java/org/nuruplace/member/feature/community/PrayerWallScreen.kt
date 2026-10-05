@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -175,13 +176,16 @@ fun PrayerWallScreen(
                     DisposableEffect(Unit) { onDispose { player.release() } }
                     Column(
                         Modifier.padding(horizontal = 20.dp)
-                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 96.dp)
-                            // The floating "+" rides above the gesture bar on the pushed
-                            // page; the list's end clears it too — a floating button
-                            // never hides content (§8.1 rule 9).
+                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 32.dp)
+                            // On the pushed page the list's end clears the gesture bar.
                             .then(if (clearNavigationBar) Modifier.navigationBarsPadding() else Modifier),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // Embedded (My Prayer Room) has no hero to carry "+": the
+                        // list opens with a gentle prompt on gold tint (§8.1 rule
+                        // 5), as on iOS. It floated over the cards instead (rule
+                        // 9). With no prayers yet, the state card offers it.
+                        if (embedded && posts.isNotEmpty()) SharePrayerPrompt { composing = true }
                         // Sort pills
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             SortPill("Latest", "latest", sort) { sort = it }
@@ -219,18 +223,32 @@ fun PrayerWallScreen(
                 }
             }
         }
-        // Embedded (My Prayer Room) has no hero to carry the "+" compose
-        // action, so it floats one instead — same compose sheet.
-        if (embedded) {
-            Box(
-                Modifier.align(Alignment.BottomEnd)
-                    .then(if (clearNavigationBar) Modifier.navigationBarsPadding() else Modifier)
-                    .padding(20.dp)
-                    .size(56.dp).clip(CircleShape).background(GrowPal.gold)
-                    .clickable { composing = true },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Add, "Share a prayer", tint = GrowPal.navyDeep, modifier = Modifier.size(22.dp)) }
+    }
+}
+
+/** "Share a prayer · Let the church carry it with you." — the embedded
+ *  wall's way to post, atop the list (iOS's sharePrompt). */
+@Composable
+private fun SharePrayerPrompt(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp)
+            .clip(shape)
+            .background(GrowPal.goldTint.copy(alpha = 0.55f))
+            .border(1.dp, GrowPal.gold.copy(alpha = 0.25f), shape)
+            .clickable(onClickLabel = "Share a prayer") { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(GrowPal.white), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(18.dp))
         }
+        Column(Modifier.weight(1f)) {
+            Text("Share a prayer", style = org.nuruplace.member.ui.theme.NuruType.rowTitle, color = GrowPal.navy)
+            Text("Let the church carry it with you.", style = org.nuruplace.member.ui.theme.NuruType.micro, color = GrowPal.ink600)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
     }
 }
 
