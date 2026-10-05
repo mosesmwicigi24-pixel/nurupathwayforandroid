@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,7 +76,9 @@ fun DevotionalScreen(onBack: () -> Unit) {
         var saved by remember(d.devotionalId) { mutableStateOf(d.myReflection != null) }
         var busy by remember(d.devotionalId) { mutableStateOf(false) }
         var error by remember(d.devotionalId) { mutableStateOf<String?>(null) }
-        var savedFav by remember(d.devotionalId) { mutableStateOf(false) }
+        // A quiet like (owner, 2026-10-05): this phone only, never "Saved" —
+        // nothing is saved anywhere until saving exists as its own feature.
+        var liked by remember(d.devotionalId) { mutableStateOf(false) }
 
         fun submit() {
             if (busy) return
@@ -315,21 +319,21 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     Column(
                         Modifier
                             .weight(1f)
-                            .clickable { savedFav = !savedFav }
+                            .toggleable(value = liked, role = Role.Switch) { liked = it }
                             .padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Icon(
-                            if (savedFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                             contentDescription = null,
-                            tint = if (savedFav) GrowPal.gold else GrowPal.navy,
+                            tint = if (liked) GrowPal.gold else GrowPal.navy,
                             modifier = Modifier.size(16.dp),
                         )
                         Text(
-                            if (savedFav) "Saved" else "Save",
+                            "Like",
                             style = gInter(11, FontWeight.Medium),
-                            color = if (savedFav) GrowPal.gold else GrowPal.navy,
+                            color = if (liked) GrowPal.gold else GrowPal.navy,
                         )
                     }
                     Column(

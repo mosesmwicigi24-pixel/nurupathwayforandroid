@@ -4,6 +4,8 @@
 // vertical scroll (hero + about + "what you'll read" + finish-&-earn + nudge) with a
 // pinned bottom CTA bar (gold "Start/Continue/Review" + a white "Invite" no-op).
 // Server owns enrolment + completion (§1.1); the heart + expand toggles are LOCAL.
+// The heart is a quiet like (owner, 2026-10-05) — it never says "Saved", since
+// nothing is saved anywhere until saving exists as its own feature.
 package org.nuruplace.member.feature.grow
 
 import androidx.compose.foundation.background
@@ -59,6 +61,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -356,7 +361,7 @@ private fun PlanDetailContent(
 
 @Composable
 private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
-    var saved by remember { mutableStateOf(false) }
+    var liked by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxWidth().height(256.dp)) {
         PLCover(d.imageUrl, modifier = Modifier.matchParentSize())
@@ -410,11 +415,17 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.weight(1f))
-            CircleBtn(onClick = { saved = !saved }) {
-                if (saved) {
-                    Icon(Icons.Filled.Favorite, "Saved", tint = PL.gold, modifier = Modifier.size(17.dp))
+            CircleBtn(
+                onClick = { liked = !liked },
+                modifier = Modifier.semantics {
+                    contentDescription = "Like"
+                    stateDescription = if (liked) "On" else "Off"
+                },
+            ) {
+                if (liked) {
+                    Icon(Icons.Filled.Favorite, null, tint = PL.gold, modifier = Modifier.size(18.dp))
                 } else {
-                    Icon(Icons.Filled.FavoriteBorder, "Save", tint = Color.White, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Filled.FavoriteBorder, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -430,9 +441,9 @@ private fun HeroMeta(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun CircleBtn(onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun CircleBtn(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(
-        Modifier.size(40.dp)
+        modifier.size(40.dp)
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.35f))
             .clickable(onClick = onClick),
