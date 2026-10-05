@@ -140,10 +140,11 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
                 MilestoneCard(verses)
                 if (verses.isNotEmpty()) ThisWeekCard(verses) { practicing = it }
                 if (verses.isNotEmpty()) {
+                    // A kicker is gold, Inter 11 bold (§8.1 rule 3; iOS cbc52c7 the same).
                     Text(
                         "YOUR VERSE LIBRARY",
-                        style = gInter(11, FontWeight.SemiBold, 1.8f),
-                        color = GrowPal.ink600,
+                        style = org.nuruplace.member.ui.theme.NuruType.kicker,
+                        color = org.nuruplace.member.ui.theme.Nuru.eyebrow,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                     )
                     verses.forEach { v -> LibraryVerse(v) { practicing = v } }
@@ -285,9 +286,10 @@ private fun MilestoneCard(verses: List<MemoryVerseRow>) {
             Icon(Lucide.Sparkles, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(18.dp))
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // A prompt's title is the card title, Fraunces 18 (§8.1 rule 3; iOS cbc52c7).
             Text(
                 if (left == 1) "1 verse to your next milestone" else "$left verses to your next milestone",
-                style = gInter(13, FontWeight.SemiBold),
+                style = org.nuruplace.member.ui.theme.NuruType.cardTitle,
                 color = GrowPal.ink,
             )
             Text(

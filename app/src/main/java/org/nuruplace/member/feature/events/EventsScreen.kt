@@ -681,9 +681,10 @@ private fun SeriesRail(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         // Wraps to two lines, never cut (§8.1 rule 9) — "Welcome to
-                        // Ablaze Worship E…".
+                        // Ablaze Worship E…". A series is a thing: the content row
+                        // title, Fraunces 15 (rule 3; iOS f09a46c the same).
                         Text(
-                            s.title, style = evInter(13, FontWeight.Medium), color = EV.navy,
+                            s.title, style = org.nuruplace.member.ui.theme.NuruType.rowTitle, color = EV.navy,
                             maxLines = 2, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
                         )

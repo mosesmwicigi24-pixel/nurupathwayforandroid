@@ -792,7 +792,11 @@ private fun HomeHeader(
             // iOS HomeHeaderWords.showsScore).
             if ((growthScore ?: 0) > 0) Box {
                 ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
-                    growthScore?.let { Text("$it", style = NuruType.micro, color = Nuru.successText, fontWeight = FontWeight.Bold) }
+                    // One face for the score wherever it's a ring's figure —
+                    // Fraunces, as on the progress card below (§8.1 rule 3;
+                    // Cycle 4 walk 01/06) — in the gold chip ink iOS uses:
+                    // a score isn't a state, so not green (rule 1).
+                    growthScore?.let { Text("$it", style = nuruSerif(12, FontWeight.SemiBold), color = Nuru.goldChipText) }
                 }
                 trend?.takeIf { it.delta != 0 }?.let { t ->
                     TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
@@ -1148,7 +1152,7 @@ private fun RhythmCard(r: RhythmToday, streak: Int) {
     val days = org.nuruplace.member.feature.grow.StreakWords.days(streak, r.doneCount > 0)
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (r.doneCount >= 3) "Today's rhythm complete 🎉" else "Today's rhythm", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
+            Text(if (r.doneCount >= 3) "Today's rhythm complete 🎉" else "Today's rhythm", style = NuruType.cardTitle, color = Nuru.ink, modifier = Modifier.weight(1f))
             if (days > 0) Row(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1678,7 +1682,7 @@ private fun FeaturedPageCard(
 private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: () -> Unit) {
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Your progress", style = NuruType.heading, color = Nuru.ink, modifier = Modifier.weight(1f))
+            Text("Your progress", style = NuruType.cardTitle, color = Nuru.ink, modifier = Modifier.weight(1f))
             RowScopeLink("View pathway", onView)
         }
         Spacer(Modifier.height(Spacing.md))
@@ -1739,12 +1743,15 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
                     Text("◎", style = NuruType.body, color = Nuru.goldChipText)
                 }
                 Spacer(Modifier.width(Spacing.sm))
+                // The next step is a thing: the content row title, Fraunces 15,
+                // and the rest of the line in body type, Inter 13 (§8.1 rule 3;
+                // iOS cbc52c7 the same).
                 Text(
                     buildAnnotatedString {
-                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Nuru.ink)) { append(line.bold) }
+                        withStyle(NuruType.rowTitle.toSpanStyle().copy(color = Nuru.ink)) { append(line.bold) }
                         withStyle(SpanStyle(color = Nuru.ink600)) { append(line.rest) }
                     },
-                    style = NuruType.caption,
+                    style = nuruSans(13),
                 )
             }
         }

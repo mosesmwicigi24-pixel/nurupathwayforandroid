@@ -363,7 +363,8 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(journey.kicker.uppercase(), style = PW.over(11), color = PW.goldLight, maxLines = 1)
-            Text(step.title, style = PW.t(14, FontWeight.SemiBold), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // The navy card's title is a card title — Fraunces 18 (§8.1 rule 3; Cycle 4 walk 08).
+            Text(step.title, style = NuruType.cardTitle, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
             if (action != null) {
                 Row(
@@ -390,7 +391,10 @@ private fun HubRing(pct: Int?) {
                 drawArc(PW.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = StrokeCap.Round))
             }
         }
-        pct?.let { Text("$it%", style = PW.over(11, 0f), color = PW.eyebrow) }
+        // A ring's figure is Fraunces, as on Home's progress card, Map view
+        // and the score page — one face for one kind of figure (§8.1 rule 3;
+        // Cycle 4 walk: "26" was Fraunces in one ring and Inter in another).
+        pct?.let { Text("$it%", style = PW.serif(12, FontWeight.SemiBold), color = PW.eyebrow) }
     }
 }
 
@@ -632,7 +636,9 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 // A module's title wraps to two lines — never cut (§8.1 rule 9).
                 // The exam's one name (§9.1 rule 1) — the server titles it "Level 1 Review".
-                Text(ExamWords.rowTitle(m), style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // A module is a thing: the content row title, Fraunces 15 — as on
+                // the level page and YOUR WEEK (§8.1 rule 3; Cycle 4 walk 11).
+                Text(ExamWords.rowTitle(m), style = NuruType.rowTitle, color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(caption, style = PW.t(11, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
@@ -698,7 +704,7 @@ private fun ExamPassedRow(step: JourneyStep) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 2)
+                Text(step.title, style = NuruType.rowTitle, color = PW.navy, maxLines = 2)
                 Text(step.line, style = PW.t(11, FontWeight.SemiBold), color = PW.goldDeep)
             }
         }

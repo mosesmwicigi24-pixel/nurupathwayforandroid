@@ -42,6 +42,7 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.icons.Lucide
 
@@ -94,7 +95,9 @@ private fun NudgeCard(n: HomeNudge, modifier: Modifier, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
             NudgeIconTile(n)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(n.title, style = nuruSans(13, FontWeight.SemiBold), color = Nuru.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // A prompt is a card: its title is the card title, Fraunces 18
+                // (§8.1 rule 3; Cycle 4 walk 02 — iOS cbc52c7 the same).
+                Text(n.title, style = NuruType.cardTitle, color = Nuru.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // minLines keeps every card on the rail the same height whether
                 // its body runs one line or two (or, defensively, is blank).
                 Text(n.body, style = nuruSans(11), color = Nuru.metaGray, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -130,7 +133,7 @@ fun NotificationsOffCard(onTurnOn: () -> Unit, onNotNow: () -> Unit) {
                 Icon(Lucide.BellRing, null, tint = Nuru.goldDeep, modifier = Modifier.size(18.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(NOTIFICATIONS_CARD_TITLE, style = nuruSans(13, FontWeight.SemiBold), color = Nuru.navy)
+                Text(NOTIFICATIONS_CARD_TITLE, style = NuruType.cardTitle, color = Nuru.navy)
                 Text(NOTIFICATIONS_CARD_LINE, style = nuruSans(11), color = Nuru.metaGray)
             }
         }
