@@ -54,7 +54,8 @@ private val LSNavyBottom = Color(0xFF081020)
 private val LSGold = Color(0xFFE8CA6C)
 private val LSPaper = Color(0xFFFFFDF6)
 private val LSInkOnPaper = Color(0xFF2A3441)
-private val LSBody = NuruType.rowTitle.copy(fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal)
+// Reading on paper — the one 16 sp reading body (§8.2 #21), in Fraunces.
+private val LSBody = NuruType.rowTitle.copy(fontSize = 16.sp, lineHeight = 26.sp, fontWeight = FontWeight.Normal)
 
 @Composable
 fun NuruCoachDialog(moduleId: String, onRetry: () -> Unit, onDismiss: () -> Unit) {

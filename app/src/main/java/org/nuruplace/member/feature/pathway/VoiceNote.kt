@@ -187,7 +187,7 @@ private fun VoiceRecordDialog(
                     recorder.isRecording -> {
                         Text(
                             "%d:%02d".format(recorder.elapsedSec / 60, recorder.elapsedSec % 60),
-                            style = NuruType.rowTitle.copy(fontSize = 34.sp), color = Nuru.navy,
+                            style = NuruType.rowTitle.copy(fontSize = 28.sp), color = Nuru.navy,
                         )
                         VnPill(Icons.Filled.Stop, "Stop", Color(0xFFB3261E)) { recordedFile = recorder.stop() }
                     }

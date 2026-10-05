@@ -225,10 +225,10 @@ private val NuruColorScheme = lightColorScheme(
 /**
  * Material's fifteen type slots, every one in an app face AND on the type
  * scale (EXPERIENCE.md §8.1 rule 3): a Material component that reads a slot
- * we never style ourselves — an AlertDialog's title (headlineSmall), the
- * date picker's headline (headlineLarge) — draws in Fraunces or Inter at a
- * size of the scale, never Material's 57/45/36/32/24. TypeFacesTest checks
- * all fifteen.
+ * we never style ourselves — an AlertDialog's title (headlineSmall, the
+ * card title every dialog of ours already uses), the date picker's headline
+ * (headlineLarge) — draws in Fraunces or Inter at a size of the scale, never
+ * Material's 57/45/36/32/24. TypeScaleTest checks all fifteen.
  */
 fun nuruTypography(): Typography = Typography(
     displayLarge = NuruType.display,
@@ -236,7 +236,7 @@ fun nuruTypography(): Typography = Typography(
     displaySmall = NuruType.display,
     headlineLarge = NuruType.display,
     headlineMedium = NuruType.display,
-    headlineSmall = NuruType.title,
+    headlineSmall = NuruType.cardTitle, // an AlertDialog's title — the app's dialogs title in the card title
     titleLarge = NuruType.title,
     titleMedium = NuruType.cardTitle,
     titleSmall = NuruType.rowTitle,

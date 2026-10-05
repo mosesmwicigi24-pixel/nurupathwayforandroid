@@ -183,7 +183,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showRevisit = false },
             containerColor = Color.White,
-            title = { Text("You've completed this module", style = mlSerif(19, FontWeight.SemiBold), color = ML.navy) },
+            title = { Text("You've completed this module", style = mlSerif(18, FontWeight.SemiBold), color = ML.navy) },
             text = { Text("It is sealed — but you can still revisit what you wrote or try the quiz again.", style = ml(13), color = ML.secondary) },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { showRevisit = false; editingReflection = true }) {
@@ -382,7 +382,7 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
                 SquareBtn(Icons.Filled.Share, "Share") {}
             }
         }
-        Text(m.title, style = mlSerif(24, FontWeight.Medium, -0.7f), color = ML.navy, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 14.dp))
+        Text(m.title, style = mlSerif(26, FontWeight.Medium, -0.7f), color = ML.navy, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 14.dp))
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {
             MetaPill(Icons.Filled.Schedule, "≈ $readMinutes min read")
             Spacer(Modifier.width(8.dp))
@@ -399,9 +399,9 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
             ) {
                 Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("COMPLETED", style = ml(10, FontWeight.Bold, 1.4f), color = ML.navy)
+                Text("COMPLETED", style = ml(11, FontWeight.Bold, 1.4f), color = ML.navy)
                 if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
-                m.finishedLine?.let { Spacer(Modifier.width(6.dp)); Text("· $it", style = ml(10), color = ML.secondary, maxLines = 1) }
+                m.finishedLine?.let { Spacer(Modifier.width(6.dp)); Text("· $it", style = ml(11), color = ML.secondary, maxLines = 1) }
                 Spacer(Modifier.weight(1f))
                 if (onRetake != null) {
                     Box(
@@ -528,9 +528,9 @@ private fun KeyVerseCard(verse: String) {
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
         Column(Modifier.padding(16.dp)) {
-            Text("KEY VERSE", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker)
+            Text("KEY VERSE", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker)
             Spacer(Modifier.height(8.dp))
-            Text("“$verse”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy)
+            Text("“$verse”", style = mlSerif(18, FontWeight.Normal, italic = true), color = ML.navy)
         }
     }
 }
@@ -538,9 +538,9 @@ private fun KeyVerseCard(verse: String) {
 @Composable
 private fun SectionHeader(index: Int, total: Int) {
     Column {
-        Text(if (total > 1) "SECTION · $index OF $total" else "SECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker)
+        Text(if (total > 1) "SECTION · $index OF $total" else "SECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker)
         Spacer(Modifier.height(6.dp))
-        Text("Section $index", style = mlSerif(23, FontWeight.SemiBold, -0.5f), color = ML.navy)
+        Text("Section $index", style = mlSerif(22, FontWeight.SemiBold, -0.5f), color = ML.navy)
     }
 }
 
@@ -553,17 +553,17 @@ private fun MarkdownView(md: String) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         blocks.forEach { b ->
             when (b) {
-                is Md.Heading -> Text(b.text, style = mlSerif(when (b.level) { 1 -> 22; 2 -> 19; 3 -> 17; else -> 16 }, FontWeight.SemiBold, -0.4f), color = ML.navy)
+                is Md.Heading -> Text(b.text, style = mlSerif(when (b.level) { 1 -> 22; 2 -> 18; else -> 16 }, FontWeight.SemiBold, -0.4f), color = ML.navy)
                 is Md.Para -> {
                     val lead = !firstParaSeen; firstParaSeen = true
-                    Text(inline(b.text), style = if (lead) ml(16, FontWeight.Medium) else ml(15), color = if (lead) ML.lead else ML.bodyInk, lineHeight = scaledLineHeight(if (lead) 23 else 21))
+                    Text(inline(b.text), style = if (lead) ml(16, FontWeight.Medium) else ml(16), color = if (lead) ML.lead else ML.bodyInk, lineHeight = scaledLineHeight(23))
                 }
                 is Md.Bullet -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     b.items.forEach { item ->
                         Row {
                             Box(Modifier.padding(top = 7.dp).size(5.dp).clip(RoundedCornerShape(999.dp)).background(ML.navy))
                             Spacer(Modifier.width(10.dp))
-                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = scaledLineHeight(21))
+                            Text(inline(item), style = ml(16), color = ML.bodyInk, lineHeight = scaledLineHeight(23))
                         }
                     }
                 }
@@ -572,7 +572,7 @@ private fun MarkdownView(md: String) {
                         Row {
                             Text("${i + 1}.", style = ml(14, FontWeight.Bold), color = ML.gold, modifier = Modifier.width(22.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = scaledLineHeight(21))
+                            Text(inline(item), style = ml(16), color = ML.bodyInk, lineHeight = scaledLineHeight(23))
                         }
                     }
                 }
@@ -626,7 +626,7 @@ private fun MarkdownView(md: String) {
                     } else {
                         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
                             Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
-                            Text("“${b.text}”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
+                            Text("“${b.text}”", style = mlSerif(18, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
                         }
                     }
                 }
@@ -733,10 +733,10 @@ private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
                 .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("YOUR REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
+                Text("YOUR REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
                 Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
                 Spacer(Modifier.width(3.dp))
-                Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D))
+                Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D))
             }
             Spacer(Modifier.height(10.dp))
             Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = scaledLineHeight(22))
@@ -763,8 +763,8 @@ private fun ReflectionCard(value: String, onValue: (String) -> Unit, saved: Bool
     val canSave = value.trim().length >= 20
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, if (saved) ML.gold.copy(alpha = 0.5f) else ML.border, RoundedCornerShape(16.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-            if (saved) { Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D)) }
+            Text("REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
+            if (saved) { Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D)) }
         }
         Spacer(Modifier.height(8.dp))
         Text("What is God showing you today?", style = mlSerif(16, FontWeight.Medium, italic = true), color = ML.navy)

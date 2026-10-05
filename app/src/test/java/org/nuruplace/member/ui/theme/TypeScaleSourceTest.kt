@@ -29,10 +29,10 @@ class TypeScaleSourceTest {
 
     private companion object {
         /** Off-scale and computed text sizes today. May only fall; 0 is the goal (§8.3). */
-        const val OFF_SCALE_CEILING = 305
+        const val OFF_SCALE_CEILING = 258
 
         /** System or default faces used for text today. May only fall; 0 is the goal. */
-        const val SYSTEM_FACE_CEILING = 3
+        const val SYSTEM_FACE_CEILING = 1
 
         /** Ornament uses per file — each one an icon drawn with a font, never words. */
         val ORNAMENTS: Map<String, Int> = mapOf(

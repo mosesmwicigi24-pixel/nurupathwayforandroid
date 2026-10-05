@@ -302,7 +302,7 @@ private fun HubHeader(
                 ) {
                     Icon(Icons.Filled.LocalFireDepartment, null, tint = PW.eyebrow, modifier = Modifier.size(9.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("$streak-day streak", style = PW.over(9, 0f), color = PW.eyebrow)
+                    Text("$streak-day streak", style = PW.over(11, 0f), color = PW.eyebrow)
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -328,13 +328,13 @@ private fun HubHeader(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
             Box(Modifier.weight(1f)) { PWBar(pct, PW.goldGrad, PW.navy.copy(alpha = 0.10f)) }
             Spacer(Modifier.width(Spacing.sm))
-            Text("${active?.lessonsDone ?: 0}/${active?.lessonCount ?: 0}", style = PW.t(10, FontWeight.SemiBold), color = PW.ink2)
+            Text("${active?.lessonsDone ?: 0}/${active?.lessonCount ?: 0}", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2)
         }
         if (remaining > 0) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Icon(Icons.Filled.AutoAwesome, null, tint = PW.eyebrow, modifier = Modifier.size(11.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (remaining == 1) "Just 1 module left to level up 🎉" else "Only $remaining modules to complete this level", style = PW.t(10, FontWeight.SemiBold), color = PW.eyebrow)
+                Text(if (remaining == 1) "Just 1 module left to level up 🎉" else "Only $remaining modules to complete this level", style = PW.t(11, FontWeight.SemiBold), color = PW.eyebrow)
             }
         }
         // The member's next step (§3) — the same words Home's continue card says.
@@ -368,7 +368,7 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(journey.kicker.uppercase(), style = PW.over(8, 1.28f), color = PW.goldLight, maxLines = 1)
+            Text(journey.kicker.uppercase(), style = PW.over(11), color = PW.goldLight, maxLines = 1)
             Text(step.title, style = PW.t(14, FontWeight.SemiBold), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
             if (action != null) {
@@ -396,7 +396,7 @@ private fun HubRing(pct: Int?) {
                 drawArc(PW.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = StrokeCap.Round))
             }
         }
-        pct?.let { Text("$it%", style = PW.over(10, 0f), color = PW.eyebrow) }
+        pct?.let { Text("$it%", style = PW.over(11, 0f), color = PW.eyebrow) }
     }
 }
 
@@ -413,9 +413,9 @@ private fun PWBar(pct: Int, fill: Brush, track: Color, height: androidx.compose.
 private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, current: Int?, onSelect: (Int) -> Unit, onMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(9, 1.62f), color = PW.goldDeep)
+            Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(11), color = PW.goldDeep)
             Spacer(Modifier.weight(1f))
-            Text("Map view", style = PW.over(9, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
+            Text("Map view", style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp)) {
             // "You" on the member's own level — the journey's, whatever its
@@ -429,7 +429,7 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, current: Int?
                 JourneyNode(lvl, i + 1, lvl.levelNumber == selected, isCurrent = i == marks.you, upNext = i == marks.next) { onSelect(lvl.levelNumber) }
                 if (i < levels.size - 1) {
                     // Uncompleted connectors at 28% navy — 12% vanished on cream.
-                    Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.walked) PW.gold else PW.navy.copy(alpha = 0.28f)))
+                    Box(Modifier.padding(top = 44.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.walked) PW.gold else PW.navy.copy(alpha = 0.28f)))
                 }
             }
         }
@@ -451,12 +451,12 @@ private fun JourneyNode(
     val done = level.walked
     val active = isCurrent
     val locked = !done && !active
-    Column(Modifier.width(68.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.width(76.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             when { active -> "▾ You"; upNext -> "▾ Next"; else -> " " },
-            style = PW.over(7, 0.7f),
+            style = PW.over(11, 0.7f),
             color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
-            modifier = Modifier.height(12.dp),
+            modifier = Modifier.height(16.dp),
         )
         // The level NUMBER never leaves the circle — completion becomes a corner
         // check-seal; locked levels keep their number with a lock-seal. Locked
@@ -499,7 +499,7 @@ private fun JourneyNode(
         }
         Text(
             pwShort(level.title),
-            style = PW.t(9, if (active) FontWeight.Bold else FontWeight.Medium),
+            style = PW.t(11, if (active) FontWeight.Bold else FontWeight.Medium),
             color = when { active -> PW.navy; upNext -> PW.goldDeep; else -> PW.ink2 },
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
         )
@@ -541,11 +541,11 @@ private fun SelectedModules(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(level.title.uppercase(), style = PW.over(9, 1.62f), color = PW.goldDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(level.title.uppercase(), style = PW.over(11), color = PW.goldDeep, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // Lessons, as the folded row and the header count them (§8.2 #4).
                 Text("${level.lessonsDone} of ${level.lessonCount} done", style = PW.t(11), color = PW.ink2)
             }
-            resume?.let { r -> Text("Continue →", style = PW.over(10, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
+            resume?.let { r -> Text("Continue →", style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(22.dp)),
@@ -637,11 +637,11 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 // A module's title wraps to two lines — never cut (§8.1 rule 9).
                 Text(m.title, style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(caption, style = PW.t(9, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
+                Text(caption, style = PW.t(11, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
-                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(if (exam) "Start exam" else "Resume", style = PW.over(9, 0f), color = PW.gold) }
-                soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(9, 0f), color = PW.goldDeep) }
+                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(if (exam) "Start exam" else "Resume", style = PW.over(11, 0f), color = PW.gold) }
+                soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(11, 0f), color = PW.goldDeep) }
                 done -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
             }
         }
@@ -703,7 +703,7 @@ private fun ExamPassedRow(step: JourneyStep) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(step.title, style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
-                Text(step.line, style = PW.t(9, FontWeight.SemiBold), color = PW.goldDeep)
+                Text(step.line, style = PW.t(11, FontWeight.SemiBold), color = PW.goldDeep)
             }
         }
     }
@@ -715,9 +715,9 @@ private fun SurrenderFigure() {
         FitImage("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x26081424), Color(0x8C081424), Color(0xE6081424)))))
         Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-            Text("PAUSE & SURRENDER", style = PW.over(7, 1.54f), color = PW.goldLight)
+            Text("PAUSE & SURRENDER", style = PW.over(11), color = PW.goldLight)
             Text("“Offer yourselves as a living sacrifice, holy and pleasing to God.”", style = PW.serif(12, FontWeight.Medium), color = Color.White)
-            Text("Romans 12:1 · Surrender to His Word", style = PW.t(8, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.65f), modifier = Modifier.padding(top = 2.dp))
+            Text("Romans 12:1 · Surrender to His Word", style = PW.t(11, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.65f), modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
@@ -735,7 +735,7 @@ private fun DisciplershipRow(onTap: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("WALK WITH YOUR DISCIPLER", style = PW.over(8, 1.28f), color = PW.goldDeep)
+            Text("WALK WITH YOUR DISCIPLER", style = PW.over(11), color = PW.goldDeep)
             Text("Your Discipleship Hub", style = PW.t(14, FontWeight.SemiBold), color = PW.navy, maxLines = 1)
             Text("Message, feedback & meeting notes", style = PW.t(11), color = PW.ink2, maxLines = 1)
         }
@@ -753,9 +753,9 @@ private fun Milestones(levels: List<PathwayLevel>) {
     val rewardPct = reward?.let { if (it.lessonCount > 0) it.lessonsDone * 100 / it.lessonCount else 0 } ?: 0
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text("MILESTONES", style = PW.over(9, 1.62f), color = PW.goldDeep)
+            Text("MILESTONES", style = PW.over(11), color = PW.goldDeep)
             Spacer(Modifier.weight(1f))
-            Text("$earned earned", style = PW.over(9, 0f), color = PW.ink3)
+            Text("$earned earned", style = PW.over(11, 0f), color = PW.ink3)
         }
         if (reward != null && remaining > 0) {
             Row(
@@ -763,16 +763,16 @@ private fun Milestones(levels: List<PathwayLevel>) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
-                    Text(PW.badge[rewardIdx % PW.badge.size], style = TextStyle(fontSize = 22.sp))
+                    Text(PW.badge[rewardIdx % PW.badge.size], style = nuruSans(22))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("NEXT REWARD", style = PW.over(8, 1.28f), color = PW.goldLight)
+                    Text("NEXT REWARD", style = PW.over(11), color = PW.goldLight)
                     Text("The “${pwShort(reward.title)}” badge", style = PW.t(13, FontWeight.Bold), color = Color.White, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                         Box(Modifier.weight(1f)) { PWBar(rewardPct, PW.goldGrad, Color.White.copy(alpha = 0.16f)) }
                         Spacer(Modifier.width(8.dp))
-                        Text("$remaining to go", style = PW.t(9, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.7f))
+                        Text("$remaining to go", style = PW.t(11, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.7f))
                     }
                 }
             }
@@ -793,10 +793,10 @@ private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(if (earned) Color.White else PW.mutedBg).border(1.dp, if (earned) PW.gold.copy(alpha = 0.33f) else PW.border, RoundedCornerShape(999.dp)).alpha(if (earned) 1f else 0.7f), contentAlignment = Alignment.Center) {
-            Text(emoji, style = TextStyle(fontSize = 20.sp))
+            Text(emoji, style = nuruSans(22))
         }
         Spacer(Modifier.height(6.dp))
-        Text(name, style = PW.t(9, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(name, style = PW.t(11, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(2.dp))
         if (earned) Row { repeat(3) { Icon(Icons.Filled.Star, null, tint = PW.gold, modifier = Modifier.size(8.dp)) } }
         else Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(9.dp))
@@ -823,7 +823,7 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("THE SUMMIT · WHERE THIS ROAD LEADS", style = PW.over(9, 1.62f), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("THE SUMMIT · WHERE THIS ROAD LEADS", style = PW.over(11), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
         Box(
             Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp))
                 // Reached earns a gold ceremonial ring; the road there stays quiet.
@@ -842,7 +842,7 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
             ) {
                 if (reached) Icon(Icons.Filled.Star, null, tint = PW.navy, modifier = Modifier.size(10.dp)) else Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(10.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(9, 1f), color = if (reached) PW.navy else Color.White)
+                Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(11, 1f), color = if (reached) PW.navy else Color.White)
             }
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // Ceremonial seal — double gold ring, medal, no emoji.
@@ -861,16 +861,16 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("COMMISSIONED", style = PW.over(10, 2.4f), color = PW.goldLight)
+                Text("COMMISSIONED", style = PW.over(11, 2.4f), color = PW.goldLight)
                 // The actual charge, not a caption — the words carry the weight.
                 Text(
                     "\u201CGo therefore and make disciples of all nations\u2026\u201D",
-                    style = PW.serif(19, FontWeight.SemiBold, -0.2f).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, lineHeight = 26.sp),
+                    style = PW.serif(18, FontWeight.SemiBold, -0.2f).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, lineHeight = 25.sp),
                     color = Color.White,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.padding(top = 6.dp),
                 )
-                Text("MATTHEW 28:19", style = PW.over(9, 1.8f), color = Color.White.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp))
+                Text("MATTHEW 28:19", style = PW.over(11, 1.8f), color = Color.White.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(14.dp))
                 // The road itself: one dot per level, gold when walked.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -916,7 +916,7 @@ private fun WalkRow(onTap: () -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("EVERY STEP, REMEMBERED", style = NuruType.micro.copy(fontSize = 8.sp), color = PW.goldDeep, fontWeight = FontWeight.Bold, letterSpacing = 1.28.sp)
+            Text("EVERY STEP, REMEMBERED", style = NuruType.kicker, color = PW.goldDeep)
             Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2, maxLines = 1)
         }
