@@ -143,8 +143,10 @@ class JourneyTest {
         assertEquals("Begin the exam", j.next.action?.label)
         assertEquals(JourneyDestination.Exam(1), j.next.action?.destination)
         assertEquals("exam/1", j.next.action?.destination?.route)
-        // Level 1 of 6 — not 100%, and not the summit.
-        assertEquals(17, j.percent)
+        // Level 1 of 6 — not 100%, and not the summit; the exam is the
+        // level's last step, so the exam-ready member reads less than the
+        // one who passed (17) (EXPERIENCE.md §9.2 #10).
+        assertEquals(16, j.percent)
         assertFalse(j.summitReached)
         // Home's progress line is the step — never "0 modules left before Level 2".
         assertEquals(JourneyLine("Take the Level 1 exam", ""), j.progressLine)
@@ -156,8 +158,9 @@ class JourneyTest {
         assertEquals(JourneyStage.EXAM_READY, j.stage)
         assertEquals("Exam ready", j.pill)
         assertEquals(JourneyDestination.Exam(1), j.next.action?.destination)
-        // Every module done: the level counts whole, exam row or not.
-        assertEquals(17, j.percent)
+        // Every lesson done, the exam still to sit: the exam is the level's
+        // last step (EXPERIENCE.md §9.2 #10) — 20 of 21 steps, exam row or not.
+        assertEquals(16, j.percent)
     }
 
     @Test fun `an exam row still locked is not ready`() {
@@ -200,7 +203,7 @@ class JourneyTest {
         // Nothing offers the exam: no action, so no route to it anywhere.
         assertNull(j.next.action)
         assertEquals(JourneyLine("Level 1 complete", ""), j.progressLine)
-        assertEquals(17, j.percent)
+        assertEquals(16, j.percent)
         assertFalse(j.summitReached)
     }
 
@@ -250,7 +253,7 @@ class JourneyTest {
         assertEquals("Take the Level 6 exam", j.next.title)
         assertEquals("Every module is done — the exam opens the way to being sent.", j.next.line)
         // Every module of every level done — still not 100 while the exam waits.
-        assertEquals(99, j.percent)
+        assertEquals(98, j.percent)
         assertFalse(j.summitReached)
     }
 
@@ -336,7 +339,7 @@ class JourneyTest {
     @Test fun `progress counts levels before the current plus the current fraction`() {
         // Level 3 of 6, half done: (2 + 0.5) / 6 = 41.67%.
         val j = JourneyState.derive(summary(current = 3, done = 5, total = 10))!!
-        assertEquals(42, j.percent)
+        assertEquals(41, j.percent)
         assertEquals(JourneyLine("5 of 10 modules", " in Level 3"), j.progressLine)
         // Level 1, 5 of 20: 0.25 / 6 = 4.17%.
         assertEquals(4, JourneyState.derive(summary(done = 5))!!.percent)
@@ -380,7 +383,7 @@ class JourneyTest {
         assertEquals("20 of 20 modules", j.modulesLine)
         // The Pathway header's one line (§8.2 #1).
         assertEquals("Level 1 of 6 · 20 of 20 modules", j.headerLine)
-        assertEquals(17, j.percent)
+        assertEquals(16, j.percent)
     }
 
     @Test fun `production's shape while learning — the step and the pill count lessons`() {
@@ -484,5 +487,21 @@ class JourneyTest {
             """{"module_id":"x","level_number":1,"module_sequence_number":900,"title":"Level 1 exam","evaluation_kind":"exit_exam","quiz_pass_mark":"70.00","completed":false,"status":"next","progress":0,"locked":false,"exam_available":false}""",
         )
         assertTrue(row.examOpensSoon)
+    }
+
+    // EXPERIENCE.md §9.2 #10: the exam is the level's last step.
+    @Test fun `the exam counts as the level's last step — passing it moves the ring`() {
+        assertEquals(10.0 / 11, levelFraction(10, 10, examPassed = false), 1e-9)
+        assertEquals(1.0, levelFraction(10, 10, examPassed = true), 1e-9)
+        assertEquals(0.0, levelFraction(0, 0, examPassed = false), 1e-9)
+        val ready = JourneyState.derive(summary(status = LevelStatus.ACTIVE, done = 10, total = 10, lessonsTotal = 10, lessonsCompleted = 10), trail(done = 10, total = 10) + examRow(status = ModuleStatus.NEXT))!!
+        val passed = JourneyState.derive(summary(status = LevelStatus.AWAITING_REVIEW, done = 10, total = 10, awaitingFlag = true, lessonsTotal = 10, lessonsCompleted = 10), trail(done = 10, total = 10) + examRow(status = ModuleStatus.COMPLETED, completed = true))!!
+        assertEquals(JourneyStage.EXAM_READY, ready.stage)
+        assertEquals(JourneyStage.AWAITING_USHER, passed.stage)
+        assertTrue("passing the exam moves the ring: ${ready.percent} → ${passed.percent}", passed.percent > ready.percent)
+        // The level page and Map: 91% at the exam, 100% once passed.
+        val level = PathwayLevel(1, "Foundations of Faith", totalModules = 11, completedModules = 10, lessonsTotal = 10, lessonsCompleted = 10, status = LevelStatus.ACTIVE)
+        assertEquals(91, levelPercent(level, ready))
+        assertEquals(100, levelPercent(level.copy(status = LevelStatus.AWAITING_REVIEW), passed))
     }
 }

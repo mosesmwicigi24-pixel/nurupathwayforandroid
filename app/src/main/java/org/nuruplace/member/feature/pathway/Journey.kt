@@ -120,6 +120,24 @@ data class Journey(
         else JourneyLine(next.title, "")
 }
 
+/** A level's fraction with its exam as the last step (EXPERIENCE.md §9.2
+ *  #10): the lessons done, and the exam once passed, of the lessons and the
+ *  exam. A level with no lessons yet has walked nothing. */
+fun levelFraction(lessonsDone: Int, lessonCount: Int, examPassed: Boolean): Double {
+    if (examPassed) return 1.0
+    if (lessonCount <= 0) return 0.0
+    return (lessonsDone.coerceIn(0, lessonCount).toDouble() / (lessonCount + 1)).coerceIn(0.0, 1.0)
+}
+
+/** [level]'s whole percent, the exam its last step: the member's own level
+ *  by the journey's stage, a level before it (walked: its exam passed) whole. */
+fun levelPercent(level: PathwayLevel, journey: Journey?): Int {
+    val passed = if (journey != null && journey.levelNumber == level.levelNumber)
+        journey.stage == JourneyStage.AWAITING_USHER || journey.stage == JourneyStage.FINISHED
+    else level.walked
+    return (levelFraction(level.lessonsDone, level.lessonCount, passed) * 100).roundToInt()
+}
+
 object JourneyState {
     /**
      * The journey from the pathway summary and the CURRENT level's module
@@ -242,11 +260,16 @@ object JourneyState {
         }
 
         // (levels before the current + the current level's fraction) / all
-        // levels — the fraction is whole once every module is done.
-        val fraction = when (stage) {
-            JourneyStage.LEARNING -> if (total > 0) (done.toDouble() / total).coerceIn(0.0, 1.0) else 0.0
-            else -> 1.0
-        }
+        // levels. The exam is the level's last step (EXPERIENCE.md §9.2 #10):
+        // a member at the exam and one who passed it both read 14% — the
+        // fraction is whole only once the exam is passed.
+        // An older server counts the exam container in total_modules (no
+        // lessons_total): there the exam is already one of the steps.
+        val examInTotal = current.lessonsTotal == null && exam != null
+        val fraction = levelFraction(
+            done, if (examInTotal) (total - 1).coerceAtLeast(0) else total,
+            examPassed = stage == JourneyStage.AWAITING_USHER || stage == JourneyStage.FINISHED,
+        )
         val progress = if (stage == JourneyStage.FINISHED) 1.0
         else ((position - 1 + fraction) / levels.size).coerceIn(0.0, 1.0)
 

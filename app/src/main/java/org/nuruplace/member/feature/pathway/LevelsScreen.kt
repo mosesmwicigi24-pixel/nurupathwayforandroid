@@ -116,7 +116,7 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
             // Continue-your-journey card for the active level.
             active?.let { lvl ->
                 item {
-                    ContinueCard(lvl, LevelsMapWords.continueCard(lvl, journey), Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.base)) { onOpenLevel(lvl.levelNumber) }
+                    ContinueCard(lvl, LevelsMapWords.continueCard(lvl, journey), levelPercent(lvl, journey) / 100f, Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.base)) { onOpenLevel(lvl.levelNumber) }
                 }
             }
 
@@ -178,9 +178,8 @@ private fun ProgressRing(pct: Int) {
 }
 
 @Composable
-private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    // The journey's next step fills the bar: its modules are all done.
-    val pct = if (words.line != null) 1f else if (level.lessonCount > 0) level.lessonsDone.toFloat() / level.lessonCount else 0f
+private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, pct: Float, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    // [pct]: the level with its exam as the last step (§9.2 #10).
     Row(
         modifier.fillMaxWidth()
             .clip(RoundedCornerShape(Radii.hero))
@@ -263,11 +262,13 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${level.lessonsDone}/${level.lessonCount} modules", style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
-                    val p = if (level.lessonCount > 0) level.lessonsDone * 100 / level.lessonCount else 0
+                    // The exam is the level's last step (§9.2 #10): Map gave
+                    // Level 1 "100%" before its exam was sat.
+                    val p = levelPercent(level, journey)
                     Text("$p%", style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.height(Spacing.xs))
-                ProgressBar(if (level.lessonCount > 0) level.lessonsDone.toFloat() / level.lessonCount else 0f)
+                ProgressBar(levelPercent(level, journey) / 100f)
             }
         }
     }
