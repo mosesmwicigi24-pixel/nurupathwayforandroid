@@ -198,7 +198,7 @@ private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, pct: F
         Column(Modifier.weight(1f)) {
             Kicker(words.kicker)
             Spacer(Modifier.height(Spacing.xs))
-            Text(words.title, style = NuruType.cardTitle, color = Nuru.ink, maxLines = 2)
+            Text(words.title, style = NuruType.cardTitle, color = Nuru.ink, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             words.line?.let {
                 Spacer(Modifier.height(Spacing.xs))
                 Text(it, style = NuruType.caption, color = Nuru.ink600)
@@ -254,7 +254,7 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
                 )
             }
             Spacer(Modifier.height(Spacing.xs))
-            Text(level.title, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Medium, maxLines = 2)
+            Text(level.title, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Medium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             level.theme?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
             Spacer(Modifier.height(Spacing.sm))
             if (locked) {

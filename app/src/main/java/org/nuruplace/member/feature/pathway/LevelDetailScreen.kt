@@ -235,7 +235,7 @@ fun LevelDetailScreen(
                         }
                     }
                     Spacer(Modifier.height(Spacing.sm))
-                    Text(level?.title ?: "Level $levelNumber", style = NuruType.display, color = Nuru.onNavy, maxLines = 2)
+                    Text(level?.title ?: "Level $levelNumber", style = NuruType.display, color = Nuru.onNavy, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     level?.theme?.let { Text(it, style = NuruType.body, color = Nuru.onNavyDim) }
                 }
             }
@@ -424,13 +424,13 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                 Column(Modifier.weight(1f)) {
                     Kicker(if (module.isExam) "Exam" else "Module ${module.moduleSequenceNumber}")
                     // The exam's one name (§9.1 rule 1) — the server titles it "Level 1 Review".
-                    Text(ExamWords.rowTitle(module), style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    Text(ExamWords.rowTitle(module), style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 ModuleStatusPill(done, isNext, soon, module.isExam)
             }
-            module.summary?.let {
+            module.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                 Spacer(Modifier.height(Spacing.xs))
-                Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2)
+                ModuleSummary(module.moduleId, summary)
             }
             if (done || isNext) {
                 Spacer(Modifier.height(Spacing.sm))
@@ -776,4 +776,24 @@ private fun ProgressBar(fraction: Float, navy: Boolean = false) {
                 .clip(RoundedCornerShape(Radii.pill)).background(if (navy) Nuru.navy else Nuru.gold),
         )
     }
+}
+
+/** A module's description: two lines, and "…" when there is more — a tap on
+ *  it shows the rest (and folds it again), on a locked module too. It used to
+ *  stop after two lines mid-sentence with no "…" ("…and with His", Cycle 4
+ *  walk 14; §8.1 rule 9). It takes the tap only when there is more to show,
+ *  so a short description never swallows the tap that opens the module. */
+@Composable
+private fun ModuleSummary(moduleId: String, summary: String) {
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(moduleId) { mutableStateOf(false) }
+    var overflows by remember(summary) { mutableStateOf(false) }
+    Text(
+        summary, style = NuruType.caption, color = Nuru.ink600,
+        maxLines = if (expanded) Int.MAX_VALUE else 2,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+        modifier = if (overflows || expanded) {
+            Modifier.clickable(onClickLabel = if (expanded) "Show less" else "Show more") { expanded = !expanded }
+        } else Modifier,
+    )
 }
