@@ -443,21 +443,18 @@ private fun FailResult(v: QuizVerdict, moduleId: String?, onDone: () -> Unit, on
     }
 }
 
+/** Nothing to ask yet — §4's one state card, as the exam's refusal is
+ *  (EXPERIENCE.md §8.1 rule 5, §8.2 #16): it was loose centred text. */
 @Composable
 private fun EmptyQuiz(title: String, onBack: () -> Unit, onDone: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Nuru.paper)) {
         QuizHeader(title, onBack)
-        Column(
-            Modifier.fillMaxWidth().weight(1f).padding(Spacing.screen),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("This assessment has no questions yet.", style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(Spacing.md))
-            Box(Modifier.clickable { onDone() }.padding(Spacing.md)) {
-                Text("Go back", style = NuruType.cardCta, color = Nuru.gold)
-            }
-        }
+        org.nuruplace.member.ui.components.StateCard(
+            title = "This assessment has no questions yet.",
+            modifier = Modifier.padding(Spacing.screen),
+            actionLabel = "Go back",
+            onAction = onDone,
+        )
     }
 }
 
