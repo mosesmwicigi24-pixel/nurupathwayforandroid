@@ -1165,8 +1165,10 @@ private fun PersonRowAffordance(state: ConnectionState) {
             Modifier.size(32.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CHAT.gold.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
         ) { Icon(Lucide.MessageCircle, contentDescription = "Message", tint = CHAT.gold, modifier = Modifier.size(14.dp)) }
+        // A compact in-row action is a navy pill (§8.1 rule 4) — a column of
+        // gold "Connect" pills read as a dozen primaries.
         is ConnectionState.NotConnected -> Row(
-            Modifier.clip(Capsule).background(CHAT.storyRing).padding(horizontal = 10.dp, vertical = 6.dp),
+            Modifier.clip(Capsule).background(CHAT.navy).padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
