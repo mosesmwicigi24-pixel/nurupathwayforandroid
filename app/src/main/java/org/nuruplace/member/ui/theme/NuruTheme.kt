@@ -176,7 +176,12 @@ object NuruType {
     val display get() = nuruSerif(28, FontWeight.Medium)
     val title get() = nuruSerif(22, FontWeight.Medium)
     val cardTitle get() = nuruSerif(18, FontWeight.SemiBold)
+    // The two row roles (EXPERIENCE.md §8.1 rule 3): a CONTENT row names a
+    // thing — a week row, a pledge, a plan, an event, a notice — in Fraunces
+    // 15 semibold; a CONTROL row names a setting, a profile field or a menu
+    // entry in Inter 14 medium.
     val rowTitle get() = nuruSerif(15, FontWeight.SemiBold)
+    val controlTitle get() = nuruSans(14, FontWeight.Medium)
     val heading get() = nuruSans(16, FontWeight.Medium)
     val body get() = nuruSans(14)
     val bodyLg get() = nuruSans(16)

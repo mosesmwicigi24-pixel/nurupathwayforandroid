@@ -1,8 +1,8 @@
 // Settings — iOS-parity layout (PREFERENCES header + carded sections). Preserves
 // all functional wiring: notification prefs (push/sound/email/sms), text-size via
 // AppPrefs, approximate-location sharing, change-password, two-factor enroll/
-// verify/disable, sign-out, and the Firebase account link. Port of the iOS
-// SettingsView. Shared palette + primitives live in ProfileShared.kt (same package).
+// verify/disable and sign-out. Port of the iOS SettingsView. Shared palette +
+// primitives live in ProfileShared.kt (same package).
 package org.nuruplace.member.feature.profile
 
 import android.content.Intent
@@ -84,12 +84,13 @@ import org.nuruplace.member.data.net.MfaCodeBody
 import org.nuruplace.member.data.net.MfaEnrollment
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationPreferences
+import org.nuruplace.member.ui.theme.NuruType
 
 /**
  * @param embedded true when hosted as the You tab's Settings segment
- *   (YouScreen, docs/PARTNERS_PROGRAMME.md §0) — the capsule above is the
- *   chrome, so the cream header with its back button is skipped. The pushed
- *   "settings" route (kept for links) still renders the full header.
+ *   (YouScreen, docs/PARTNERS_PROGRAMME.md §0) — the segment capsule sits
+ *   above the header, so the header has no back button. The pushed
+ *   "settings" route (kept for links) has its back button.
  */
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: Boolean = false) {
@@ -118,21 +119,27 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
             .verticalScroll(rememberScrollState()),
     ) {
         // ── Header ──────────────────────────────────────────────────────────
-        if (!embedded) ProfCreamHeaderBox {
+        // One header on every tab (EXPERIENCE.md §8.1 rule 2, §8.2 #1):
+        // "PREFERENCES · Settings", as iOS — the You tab's Settings segment
+        // had none. Embedded, the segment capsule sits above it, so no back.
+        ProfCreamHeaderBox {
             Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PROF.white)
-                        .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
-                        .clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, PROF.navy, 18.dp)
+                if (!embedded) {
+                    Box(
+                        Modifier
+                            .padding(bottom = 16.dp)
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(PROF.white)
+                            .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, PROF.navy, 18.dp)
+                    }
                 }
-                Text("PREFERENCES", style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.eyebrow, modifier = Modifier.padding(top = 16.dp))
-                Text("Settings", style = pSerif(26, FontWeight.SemiBold), color = PROF.navy)
+                Text("PREFERENCES", style = NuruType.kicker, color = PROF.eyebrow)
+                Text("Settings", style = pSerif(26, FontWeight.SemiBold), color = PROF.navy, modifier = Modifier.padding(top = 4.dp))
             }
         }
 
@@ -141,7 +148,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
             Modifier.padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SecurityCard(onOpenFirebase = { onOpen("firebase-account") })
+            SecurityCard()
             NotificationsCard(prefs = prefs, onSave = ::save)
         saveError?.let { err ->
             Text(
@@ -171,7 +178,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SecurityCard(onOpenFirebase: () -> Unit) {
+private fun SecurityCard() {
     var showPassword by remember { mutableStateOf(false) }
     SectionCard {
         SectionTitle(Icons.Filled.Lock, "SECURITY & LOGIN")
@@ -193,14 +200,10 @@ private fun SecurityCard(onOpenFirebase: () -> Unit) {
             subtitle = "This device",
             onClick = {},
         )
-        RowDivider()
-        // Firebase account (email/password add-alongside sign-in) — reachable via onOpen.
-        ActionRow(
-            tile = { IconTile(Icons.Filled.MailOutline, TINT_PASSWORD) },
-            title = "Firebase account",
-            subtitle = "Email / password sign-in (add-alongside)",
-            onClick = onOpenFirebase,
-        )
+        // No "Firebase account" row (EXPERIENCE.md §8.2 #9): it signed in to a
+        // second, Firebase-only email account that nothing reads — the app's
+        // session is the church's own sign-in, and Firebase carries push only.
+        // No internal name reaches a member (§8.1 rule 8).
     }
 }
 
@@ -295,7 +298,7 @@ private val LINE_SPACINGS = listOf("Compact" to 0.85f, "Default" to 1.0f, "Relax
 private fun DisplayCard() {
     SectionCard {
         SectionTitle(Icons.Filled.LightMode, "DISPLAY")
-        Text("Text size", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+        Text("Text size", style = NuruType.controlTitle, color = PROF.navy)
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -328,7 +331,7 @@ private fun DisplayCard() {
         Text("Adjusts text size across the whole app.", style = pInter(11), color = PROF.sub)
 
         Spacer(Modifier.height(16.dp))
-        Text("Line spacing", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+        Text("Line spacing", style = NuruType.controlTitle, color = PROF.navy)
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -839,7 +842,8 @@ private fun ActionRow(
     ) {
         tile()
         Column(Modifier.weight(1f)) {
-            Text(title, style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+            // A control row's title (§8.1 rule 3): Inter 14 medium.
+            Text(title, style = NuruType.controlTitle, color = PROF.navy)
             Text(subtitle, style = pInter(11), color = PROF.sub)
         }
         Icon(Icons.Filled.ChevronRight, PROF.rowLabel, 16.dp)
@@ -861,7 +865,8 @@ private fun ToggleRow(
     ) {
         tile()
         Column(Modifier.weight(1f)) {
-            Text(title, style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+            // A control row's title (§8.1 rule 3): Inter 14 medium.
+            Text(title, style = NuruType.controlTitle, color = PROF.navy)
             Text(subtitle, style = pInter(11), color = PROF.sub)
         }
         Switch(
