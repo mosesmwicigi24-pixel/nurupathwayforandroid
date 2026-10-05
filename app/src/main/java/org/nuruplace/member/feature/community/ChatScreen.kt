@@ -319,7 +319,7 @@ fun ChatInboxScreen(
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
                                 Text(
-                                    if (totalUnread > 0) "$totalUnread unread · ${spaces.size} spaces" else "You're all caught up",
+                                    communityHeaderLine(totalUnread),
                                     style = cInter(13),
                                     color = CHAT.ink600,
                                     modifier = Modifier.padding(top = 6.dp),
@@ -1866,4 +1866,13 @@ private fun previewText(c: ChatConversation): String {
     val body = c.lastBody.orEmpty()
     val author = c.lastAuthor
     return if (c.kind != "dm" && !author.isNullOrBlank()) "$author: $body" else body
+}
+
+/** The Community header's line (pathway docs/EXPERIENCE.md §7.4 #15): it
+ *  says what it counts — the member's unread messages. "You're all caught
+ *  up" sat beside a bell with unread notices, which it never counted. */
+internal fun communityHeaderLine(unreadMessages: Int): String = when {
+    unreadMessages <= 0 -> "No new messages"
+    unreadMessages == 1 -> "1 new message"
+    else -> "$unreadMessages new messages"
 }
