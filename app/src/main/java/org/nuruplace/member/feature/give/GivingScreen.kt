@@ -113,6 +113,7 @@ import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.RetryGiftBody
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.Radii
 import java.time.Instant
 import java.time.LocalDate
 import org.nuruplace.member.ui.theme.TypeScale
@@ -492,6 +493,45 @@ private data class CreatedSchedule(val created: CreatedScheduleRes, val body: Cr
 data class StartedSchedule(val created: CreatedScheduleRes, val body: CreateScheduleBody)
 
 @OptIn(ExperimentalMaterial3Api::class)
+/** One recurring gift, full width, leading the Give tab (§9.1 rule 6): its
+ *  rhythm and when it next prompts ("KSh 1,000 every Monday · next Mon 12
+ *  Oct"), its fund and the pledge it collects, a pause or a failing prompt
+ *  in words; a tap opens its sheet (change, pause, resume, cancel). */
+@Composable
+private fun RecurringGiftRow(s: GivingSchedule, onOpen: () -> Unit) {
+    val paused = s.status.trim().lowercase() == "paused"
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(GIVE.white)
+            .border(1.dp, GIVE.border, RoundedCornerShape(Radii.card))
+            .clickable { onOpen() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Repeat, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                if (paused) "${money(s.amountMinor, s.currency)} ${if (freqOf(s.frequency) == FREQ_WEEKLY) "weekly" else "monthly"} · Paused"
+                else rhythmText(s),
+                style = NuruType.rowTitle, color = GIVE.navy,
+            )
+            Text(
+                listOfNotNull(giveFund(s.fund).name, if (paused) pauseCardLine(s) else null).joinToString(" · "),
+                style = giInter(12), color = GIVE.sub,
+            )
+            // The pledge it collects (iOS): "Collects your pledge “Kenya trip”".
+            schedulePledgeLine(s)?.let { Text(it, style = giInter(12), color = GIVE.sub) }
+            // Why its last prompt failed, while it still fails — the server's words.
+            s.lastFailure?.reason?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText)
+            }
+        }
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
+    }
+}
+
 @Composable
 private fun GiveTab(
     history: List<GivingRecord>,
@@ -1030,6 +1070,20 @@ private fun GiveTab(
                 // Pledge-pay / need mode: ONE card says where the gift goes,
                 // in place of the chooser (the server picks a pledge's fund).
                 val targetCopy = giveTargetCopyFor(target, if (inDollars) usd(usdCents) else kshMajor(chargedAmountMajor(amountMajor, coverFee)))
+                // What is already in motion leads (EXPERIENCE.md §9.1 rule 6,
+                // §9.2 #6): the recurring gifts — running or paused — come
+                // first, each told once; a one-time gift is the choice below.
+                // A weekly tithe used to sit under the fold twice ("Your
+                // rhythm" and a RECURRING GIFTS rail) beneath a pre-filled
+                // one-time tithe.
+                if (targetCopy == null && liveSchedules.isNotEmpty()) {
+                    Text("RECURRING GIFTS", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    liveSchedules.forEach { sched -> RecurringGiftRow(sched) { sheetSchedule = sched } }
+                    Text(
+                        "GIVE ONCE", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 if (targetCopy != null) {
                     GiveTargetCard(targetCopy) { Haptics.tick(view); target = null; onUnbind() }
                 } else {
@@ -1134,37 +1188,6 @@ private fun GiveTab(
                         Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Enter a custom amount", style = giInter(13, FontWeight.Bold), color = GIVE.gold)
-                    }
-                }
-
-                // Your rhythm (docs/PARTNERS_PROGRAMME.md §3a, Giving Cycle 4):
-                // the soonest running schedule, one tap from its sheet —
-                // "KSh 500 every Sunday · next Sun 5 Oct".
-                if (targetCopy == null) {
-                    rhythmSchedule(schedules)?.let { rs ->
-                        // iOS rhythmRow: a gold tile, "Your rhythm" over the
-                        // rhythm itself, the pledge it collects, a chevron.
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.white)
-                                .border(1.dp, GIVE.border, RoundedCornerShape(18.dp))
-                                .clickable { sheetSchedule = rs }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
-                                Icon(Lucide.Repeat, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(14.dp))
-                            }
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text("Your rhythm", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-                                Text(rhythmText(rs), style = giInter(11), color = GIVE.sub, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                // Collecting a pledge: which, and what the next prompt asks.
-                                listOfNotNull(schedulePledgeLine(rs), scheduleNextAmountLine(rs)).forEach {
-                                    Text(it, style = giInter(11), color = GIVE.eyebrow, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                            Icon(Lucide.ChevronRight, contentDescription = null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
-                        }
                     }
                 }
 
@@ -1346,74 +1369,6 @@ private fun GiveTab(
                         onCheckedChange = { coverFee = it },
                         colors = SwitchDefaults.colors(checkedTrackColor = GIVE.gold, checkedThumbColor = Color.White),
                     )
-                }
-
-                // Recurring gifts rail — running or paused (a paused one still
-                // stands until it is resumed or cancelled).
-                if (liveSchedules.isNotEmpty()) {
-                    Text("RECURRING GIFTS", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                    val today = nairobiToday(Instant.now())
-                    // Two cards to the width, as on iOS; more scroll sideways.
-                    BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val cardWidth = (maxWidth - 10.dp) / 2
-                        Row(
-                            Modifier.horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            liveSchedules.forEach { s ->
-                                val paused = s.status.trim().lowercase() == "paused"
-                                Column(
-                                    Modifier.width(cardWidth).clip(RoundedCornerShape(16.dp)).background(GIVE.white)
-                                        .border(1.dp, GIVE.border, RoundedCornerShape(16.dp))
-                                        .clickable { sheetSchedule = s }
-                                        .padding(12.dp),
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
-                                        Text(
-                                            if (freqOf(s.frequency) == FREQ_WEEKLY) "WEEKLY" else "MONTHLY",
-                                            style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.overline,
-                                        )
-                                        // A paused gift says so at a glance (iOS).
-                                        if (paused) {
-                                            Spacer(Modifier.weight(1f))
-                                            Text(
-                                                "Paused", style = giInter(11, FontWeight.Medium), color = GIVE.ink600,
-                                                modifier = Modifier.clip(Capsule).background(GIVE.mutedBg).padding(horizontal = 8.dp, vertical = 3.dp),
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        money(s.amountMinor, s.currency), style = giInter(15, FontWeight.Bold, -0.15f), color = GIVE.navy,
-                                        maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 5.dp).shrinkToFit(0.8f),
-                                    )
-                                    Text(giveFund(s.fund).name, style = giInter(13), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    // The pledge it collects, in gold (iOS): "Collects your pledge “Kenya trip”".
-                                    schedulePledgeLine(s)?.let {
-                                        Text(
-                                            it, style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow,
-                                            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
-                                        )
-                                    }
-                                    // A paused gift charges nothing — its old next date is not
-                                    // a promise: when it comes back, else that nothing is owed.
-                                    // Running: "Next 5 Oct", the year only when it isn't this one.
-                                    Text(
-                                        if (paused) pauseCardLine(s) else scheduleCardNextLine(s.nextRunAt, today),
-                                        style = giInter(11), color = GIVE.tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 5.dp),
-                                    )
-                                    // Why its last prompt failed, while it still fails — the server's words.
-                                    s.lastFailure?.reason?.takeIf { it.isNotBlank() }?.let {
-                                        Text(
-                                            it, style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText,
-                                            maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
 
                 // No separate "Manage schedules" row (iOS parity): each card
