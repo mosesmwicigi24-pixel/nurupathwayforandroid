@@ -143,7 +143,7 @@ fun ReadingPlansScreen(
             (q.isEmpty() || p.title.lowercase().contains(q) || (p.category ?: "").lowercase().contains(q))
     }
     val continueReading = plans.filter { it.enrolled && it.completedAt == null }
-    val planOfDay = plans.firstOrNull { !it.enrolled } ?: plans.firstOrNull()
+    val planOfDay = planOfTheDay(plans)
     val categories = buildList {
         val seen = HashSet<String>()
         for (p in plans) {
@@ -171,11 +171,14 @@ fun ReadingPlansScreen(
     // nothing (or failed), `resolved` is empty and the page keeps its exact local
     // behaviour: plan-of-the-day at the top, one promo woven in mid-page.
     val resolved = remember(promos, plans) { resolvePromos(promos, plans) }
-    val heroPromo = resolved.firstOrNull()
-    val restPromos = if (resolved.isEmpty()) emptyList() else resolved.drop(1)
+    // The featured plan — the same pick on both apps for the same member and
+    // day (EXPERIENCE.md §8.2 #6, featuredPlan). The other promos are woven
+    // into the browse below, never the featured plan twice.
+    val featured = featuredPlan(plans, resolved)
+    val restPromos = resolved.filter { it.plan.planId != featured?.plan?.planId }
     // A second plan to promote further down the page — never the one already at
-    // the top, and never one already being read.
-    val midPromo = midPromoPlan(plans, planOfDay?.planId, System.currentTimeMillis() / 86_400_000L)
+    // the top, and never one already being read — turning every second Nairobi day.
+    val midPromo = midPromoPlan(plans, planOfDay?.planId, nairobiEpochDay())
 
     Column(
         Modifier
@@ -219,18 +222,11 @@ fun ReadingPlansScreen(
                 // subtitle + a reason + a CTA. The most personal promo the server
                 // could earn takes this slot; without one it is the plan of the day.
                 if (!searching) {
-                    if (heroPromo != null) {
+                    featured?.let { f ->
                         PlanPromo(
-                            plan = heroPromo.plan,
-                            kicker = heroPromo.kicker,
-                            reason = heroPromo.reason,
-                            shimmer = true,
-                            onOpenPlan = onOpenPlan,
-                        )
-                    } else if (planOfDay != null) {
-                        PlanPromo(
-                            plan = planOfDay,
-                            kicker = "PLAN OF THE DAY",
+                            plan = f.plan,
+                            kicker = f.kicker,
+                            reason = f.reason,
                             shimmer = true,
                             onOpenPlan = onOpenPlan,
                         )
@@ -381,19 +377,17 @@ private fun StreakStrip(count: Int, todayDone: Boolean) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
+                // Never cut (EXPERIENCE.md §8.2 #5, §8.1 rule 9): both lines wrap
+                // at any text size — iOS adopts these words ("0 days wi…" was cut).
                 Text(
                     "$count-day streak",
                     style = plInter(14, FontWeight.Bold, -0.14f),
                     color = PL.navy,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     if (count > 0) "Read today to keep it alive 🔥" else "Read today to start your streak 🔥",
                     style = plInter(12),
                     color = PL.ink2,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -586,11 +580,46 @@ internal fun planPromoHook(description: String?): String? {
     return if (d.length > 170) d.take(167).trimEnd() + "…" else d
 }
 
+/** The plan of the day: the first plan in the server's own order (never
+ *  re-sorted here) the member has not started — else the first plan. */
+internal fun planOfTheDay(plans: List<ReadingPlanRow>): ReadingPlanRow? =
+    plans.firstOrNull { !it.enrolled } ?: plans.firstOrNull()
+
+/** The calendar day in Nairobi, counted from 1970-01-01 — the day the
+ *  rotation turns on, the same on both apps. (It was UTC millis / 86 400 000,
+ *  a different day from midnight to 3 a.m. in Nairobi.) */
+internal fun nairobiEpochDay(now: java.time.Instant = java.time.Instant.now()): Long =
+    now.atZone(java.time.ZoneId.of("Africa/Nairobi")).toLocalDate().toEpochDay()
+
+/** The plan featured at the top of Plans: which plan, its pill and its line. */
+internal data class FeaturedPlan(val plan: ReadingPlanRow, val kicker: String, val reason: String?)
+
+/**
+ * The featured plan — the same pick on both apps for the same member and day
+ * (EXPERIENCE.md §8.2 #6). It is the plan the member is walking, when the
+ * server says so (its "continue" promo — the one promo that answers the same
+ * every time it is asked); otherwise the plan of the day ([planOfTheDay]).
+ *
+ * Not the server's first promo whatever it is: /growth/plans/promos records
+ * every promo it hands out and rests each for ten days, so each request —
+ * the other app, a refresh, a return to the tab — gets the next plans on the
+ * shelf. iOS showed "Rooted: 10 Days in the Psalms" and Android "Who Am I?",
+ * both "FROM THE LIBRARY", for the same member a minute apart. Those promos
+ * still show, woven into the browse.
+ */
+internal fun featuredPlan(plans: List<ReadingPlanRow>, promos: List<ResolvedPromo>): FeaturedPlan? {
+    promos.firstOrNull { it.slot == PROMO_SLOT_CONTINUE }?.let { return FeaturedPlan(it.plan, it.kicker, it.reason) }
+    return planOfTheDay(plans)?.let { FeaturedPlan(it, "PLAN OF THE DAY", null) }
+}
+
+/** The server's slot for a plan the member is already walking (promos.ts). */
+internal const val PROMO_SLOT_CONTINUE = "continue"
+
 /**
  * The second plan promoted further down the browse: never the one already
  * featured at the top, never one already being read, and only plans whose own
- * words can carry a promo. Rotates with `epochDay` so browsing feels edited
- * rather than random (iOS: `(epochDay / 2) % pool.count`).
+ * words can carry a promo — in the server's order, turning every second day:
+ * `pool[(epochDay / 2) % pool.size]` with [nairobiEpochDay] (iOS the same).
  */
 internal fun midPromoPlan(
     plans: List<ReadingPlanRow>,
@@ -616,6 +645,8 @@ internal data class ResolvedPromo(
     val plan: ReadingPlanRow,
     val kicker: String,
     val reason: String?,
+    /** The server's slot: continue · next_step · carrying · cell · fresh. */
+    val slot: String = "",
 )
 
 /** Join the server's promos to the loaded plans, in the server's order. */
@@ -634,6 +665,7 @@ internal fun resolvePromos(
             // The kicker is the pill's whole content — never leave it blank.
             kicker = p.kicker.trim().ifEmpty { "FOR YOU" },
             reason = p.reason.trim().ifEmpty { null },
+            slot = p.slot.trim().lowercase(),
         )
     }
 }
