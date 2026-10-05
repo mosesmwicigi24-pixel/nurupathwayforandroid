@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Call
@@ -335,6 +337,12 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     }
                 },
             )
+            // The member's ID, at the page's foot as an action (as iOS): it
+            // still copies whole, for the office or support, but is never shown
+            // as a fact to read (§8.1 rule 8 — it was a raw 36-character row).
+            p?.userId?.takeIf { it.isNotBlank() }?.let { uid ->
+                MemberIdFoot(onCopy = { clipboard.setText(AnnotatedString(uid)) })
+            }
         }
     }
 
@@ -1341,5 +1349,28 @@ private fun AiConsentCard() {
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
+    }
+}
+
+/** "Copy member ID" — a quiet text action; "Member ID copied" for a moment. */
+@Composable
+private fun MemberIdFoot(onCopy: () -> Unit) {
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) { kotlinx.coroutines.delay(1_600); copied = false }
+    }
+    val label = if (copied) "Member ID copied" else "Copy member ID"
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 44.dp)
+            .clickable(onClickLabel = label) { onCopy(); copied = true },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (copied) Icons.Filled.Check else Icons.Filled.Fingerprint, contentDescription = null,
+            tint = org.nuruplace.member.ui.theme.Nuru.goldChipText, modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = pInter(13, FontWeight.SemiBold), color = org.nuruplace.member.ui.theme.Nuru.goldChipText)
     }
 }

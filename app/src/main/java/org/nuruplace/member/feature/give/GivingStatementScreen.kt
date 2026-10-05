@@ -410,7 +410,9 @@ fun GivingStatementScreen(
 
                 // The footer, always (iOS).
                 Text(
-                    "Statement reflects records held under Finance · receipts emailed per gift.",
+                    // What a member can do here (as iOS) — not where the office
+                    // files its records ("held under Finance", §8.1 rule 8).
+                    "Tap a gift to open its receipt.",
                     style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 )
