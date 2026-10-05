@@ -46,6 +46,7 @@ import org.nuruplace.member.data.net.MyAnnouncement
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.FitImage
+import org.nuruplace.member.ui.components.InboxUnread
 import org.nuruplace.member.util.relTime
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,13 +116,22 @@ fun AnnouncementsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Announcement detail — cream sub-page header + hero + body + optional video and
-// horizontal image gallery. Marks the announcement opened on enter.
+// horizontal image gallery (the cover once). Marks the announcement opened, and
+// its notices read, once it has loaded.
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
-    LaunchedEffect(announcementId) { runCatching { Net.client.api.openAnnouncement(announcementId) } }
     AsyncContent(key = announcementId, load = { Net.client.api.announcement(announcementId) }) { a: AnnouncementDetail, _ ->
+        // Read once it has loaded, on every path here — Home's card, Events,
+        // the inbox, a tapped push (EXPERIENCE.md §7.4 #11–12): the server
+        // marks the announcement opened AND its notices read, so every bell
+        // asks again at once and its dot clears (§7.2 #4). A failed open
+        // leaves the notice unread and the dot on — still the truth.
+        LaunchedEffect(a.announcementId) {
+            runCatching { Net.client.api.openAnnouncement(a.announcementId) }
+                .onSuccess { InboxUnread.refresh() }
+        }
         val whenString = evZdt(a.sentAt)
             ?.format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH))
             ?: ""
@@ -161,8 +171,10 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
                         Icon(Icons.Filled.PlayCircle, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(48.dp))
                     }
                 }
-                // Gallery rail
-                val gallery = a.images.ifEmpty { a.galleryImageUrls ?: emptyList() }
+                // Gallery rail — the rest of the pictures. The server's
+                // `images` leads with the cover, already shown above; it used
+                // to repeat at the foot of the page (§7.4 #12).
+                val gallery = announcementGallery(a)
                 if (gallery.isNotEmpty()) {
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -183,4 +195,13 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
             }
         }
     }
+}
+
+/** The pictures under an announcement's body: the server's `images` (the
+ *  cover first, then the gallery) — or, from an older server, the gallery
+ *  alone — less the cover, which the page already shows at its top. */
+internal fun announcementGallery(a: AnnouncementDetail): List<String> {
+    val all = a.images.ifEmpty { a.galleryImageUrls ?: emptyList() }
+    val cover = a.primaryImageUrl?.takeIf { it.isNotBlank() } ?: return all
+    return all.filter { it != cover }
 }
