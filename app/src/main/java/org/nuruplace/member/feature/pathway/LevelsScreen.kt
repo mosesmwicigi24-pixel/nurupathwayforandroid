@@ -1,4 +1,4 @@
-// Pathway hub — the member's six-level journey (GET /me/pathway). Ported to the
+// Pathway hub — the member's journey, level by level (GET /me/pathway). Ported to the
 // Figma LevelsOverview: a calm cream header with an overall progress ring + stat
 // cards, a gold-ringed "continue your journey" card for the active level, then
 // the level cards (icon chip · status pill · progress or locked label). Locked
@@ -111,7 +111,9 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
 
             item {
                 Column(Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.lg, bottom = Spacing.sm)) {
-                    Kicker("Six-level pathway")
+                    // The road's real length (Cycle 3's closing walk, B4): "SIX"
+                    // was written in, beside a "LEVELS 0/7" tile on the same screen.
+                    Kicker("${countWord(levels.size)}-level pathway")
                     Spacer(Modifier.height(Spacing.xs))
                     Text("Choose your level", style = NuruType.title, color = Nuru.ink)
                 }
@@ -268,4 +270,12 @@ private fun ProgressBar(fraction: Float) {
                 .clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold),
         )
     }
+}
+
+/** A small count in words, as a heading says it ("Six-level pathway");
+ *  past ten, the number. */
+internal fun countWord(n: Int): String = when (n) {
+    1 -> "One"; 2 -> "Two"; 3 -> "Three"; 4 -> "Four"; 5 -> "Five"
+    6 -> "Six"; 7 -> "Seven"; 8 -> "Eight"; 9 -> "Nine"; 10 -> "Ten"
+    else -> n.toString()
 }

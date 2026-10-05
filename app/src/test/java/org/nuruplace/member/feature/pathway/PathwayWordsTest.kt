@@ -64,3 +64,11 @@ class PathwayWordsTest {
         assertEquals("EXAM PASSED", levelBadge(1, PathwayLevel(levelNumber = 1, title = "Foundations of Faith", status = LevelStatus.AWAITING_REVIEW), j).text)
     }
 }
+
+class LevelCountWordTest {
+    @org.junit.Test fun `the map's heading counts the levels it shows`() {
+        org.junit.Assert.assertEquals("Six", countWord(6))
+        org.junit.Assert.assertEquals("Seven", countWord(7))
+        org.junit.Assert.assertEquals("12", countWord(12))
+    }
+}
