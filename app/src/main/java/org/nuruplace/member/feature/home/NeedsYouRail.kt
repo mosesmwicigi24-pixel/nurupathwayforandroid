@@ -66,11 +66,11 @@ fun NeedsYouRail(nudges: List<HomeNudge>, lead: (@Composable () -> Unit)? = null
     val count = nudges.size + if (lead != null) 1 else 0
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("WHAT NEEDS YOU TODAY", style = nuruSans(9, FontWeight.Bold, tracking = 1.6f), color = Nuru.eyebrow)
+            Text("WHAT NEEDS YOU TODAY", style = nuruSans(11, FontWeight.Bold, tracking = 1.4f), color = Nuru.eyebrow)
             if (count > 1) {
                 Box(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.homeNavy).padding(horizontal = 7.dp, vertical = 2.dp),
-                ) { Text("$count", style = nuruSans(9, FontWeight.Bold), color = Nuru.goldSoft) }
+                ) { Text("$count", style = nuruSans(11, FontWeight.Bold), color = Nuru.goldSoft) }
             }
         }
         lead?.invoke()
@@ -178,7 +178,7 @@ private fun NudgeIconTile(n: HomeNudge) {
 @Composable
 private fun DueChip(label: String) {
     Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 8.dp, vertical = 3.dp)) {
-        Text(label, style = nuruSans(9, FontWeight.Bold), color = Nuru.goldChipText)
+        Text(label, style = nuruSans(11, FontWeight.Bold), color = Nuru.goldChipText)
     }
 }
 

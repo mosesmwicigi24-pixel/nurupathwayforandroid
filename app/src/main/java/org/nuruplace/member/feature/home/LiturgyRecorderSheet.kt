@@ -119,7 +119,7 @@ fun LiturgyRecorderSheet(onDismiss: () -> Unit) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
         ) {
-            Text("His Voice — the daily liturgy", style = NuruType.rowTitle.copy(fontSize = 17.sp), color = Nuru.navy)
+            Text("His Voice — the daily liturgy", style = NuruType.cardTitle, color = Nuru.navy)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Record any hour in your own voice. Every other hour keeps reading in Nuru's voice — that's expected, not a gap to fill.",

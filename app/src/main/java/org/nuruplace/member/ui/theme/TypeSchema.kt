@@ -56,7 +56,7 @@ fun nuruSerif(size: Int, weight: FontWeight = FontWeight.Normal, tracking: Float
  *  type scale (EXPERIENCE.md §8.3 lists icons as allowed). Never use it for
  *  words; TypeScaleSourceTest counts every use by file. */
 fun nuruOrnament(size: Int, weight: FontWeight = FontWeight.SemiBold): TextStyle =
-    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, lineHeight = size.sp)
+    TextStyle(fontFamily = Fraunces, fontWeight = weight, fontSize = size.sp, lineHeight = (size * 1.25f * AppPrefs.lineSpacing).sp)
 
 /** For the handful of reading-surface call sites that hardcode an explicit
  *  `.copy(lineHeight = N.sp)` instead of taking a factory's schema default —

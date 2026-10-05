@@ -93,13 +93,13 @@ fun LetterAwaitingCard(onClick: () -> Unit = {}) {
             Icon(Icons.Filled.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text("THE SUNDAY LETTER", style = nuruSans(9, FontWeight.Bold, tracking = 1.6f), color = Color(0xFFE8CA6C))
+            Text("THE SUNDAY LETTER", style = nuruSans(11, FontWeight.Bold, tracking = 1.4f), color = Color(0xFFE8CA6C))
             Text("Your letter arrives Sunday evening", style = nuruSerif(15, FontWeight.SemiBold), color = Color.White)
             Text("Written for your week", style = nuruSans(12), color = Color(0xFFC7D0DC))
         }
         Box(
             Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFC9A227)).padding(horizontal = 10.dp, vertical = 6.dp),
-        ) { Text(countdown, style = nuruSans(10, FontWeight.Bold), color = Color(0xFF0A1628)) }
+        ) { Text(countdown, style = nuruSans(11, FontWeight.Bold), color = Color(0xFF0A1628)) }
     }
 }
 

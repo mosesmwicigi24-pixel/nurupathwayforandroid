@@ -467,6 +467,7 @@ internal object TypeSourceScan {
             // 2. helper calls
             for ((name, hs) in helpers) {
                 for (c in calls(src, name)) {
+                    if (enclosing(fns, c.offset)?.name in excludedHelpers) continue
                     for (h in hs.distinctBy { it.param.name to it.param.index }) {
                         val (expr, at) = argumentFor(c, h.param) ?: continue
                         sites += SizeSite(src, c.offset, "$name(${h.param.name} = $expr)", evaluate(expr, at, src, fns, forwardedAt(src, at)))

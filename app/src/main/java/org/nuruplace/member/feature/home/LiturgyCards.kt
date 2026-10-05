@@ -77,6 +77,7 @@ import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.nuruOrnament
 
 private val LitGold = Color(0xFFE8CA6C)
 // Paper-card palette (iOS parity): the card body sits on the app's PAPER
@@ -236,7 +237,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
             // The lead: the composed statement, small and golden — it frames the verse.
             Text(
                 l.line,
-                style = NuruType.micro.copy(fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
+                style = NuruType.label.copy(lineHeight = 17.sp, fontWeight = FontWeight.SemiBold),
                 color = LitDeepGold,
             )
             val vl = l.verseLine?.takeIf { it.text.isNotBlank() }
@@ -247,14 +248,14 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     // skips straight to the verse itself.
                     Text(
                         "“",
-                        style = NuruType.display.copy(fontSize = 44.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
+                        style = nuruOrnament(44).copy(lineHeight = 44.sp),
                         color = Nuru.gold,
                         modifier = Modifier.offset(y = 2.dp).clearAndSetSemantics { },
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         vl.text,
-                        style = NuruType.display.copy(fontSize = 19.5.sp, lineHeight = 26.5.sp),
+                        style = NuruType.display.copy(fontSize = 18.sp, lineHeight = 25.sp),
                         color = Nuru.navyDeep,
                         modifier = Modifier.padding(top = 7.dp),
                     )
@@ -262,7 +263,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 Spacer(Modifier.height(10.dp))
                 Text(
                     vl.reference.uppercase(),
-                    style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                    style = NuruType.kicker,
                     color = LitDeepGold,
                 )
             } else {
@@ -270,7 +271,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     Spacer(Modifier.height(10.dp))
                     Text(
                         ref.uppercase(),
-                        style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                        style = NuruType.kicker,
                         color = LitDeepGold,
                     )
                 }
@@ -282,7 +283,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 Text(
                     charge,
                     style = NuruType.body.copy(
-                        fontSize = 12.5.sp, lineHeight = 17.5.sp, fontWeight = FontWeight.Normal,
+                        fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal,
                     ),
                     color = Nuru.ink600,
                 )
