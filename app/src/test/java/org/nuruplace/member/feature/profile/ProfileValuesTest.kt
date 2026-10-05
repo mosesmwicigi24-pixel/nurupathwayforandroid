@@ -61,3 +61,10 @@ class ProfileValuesTest {
         assertEquals("Non binary", profileGenderLabel("non_binary"))
     }
 }
+
+class AppVersionLineTest {
+    @org.junit.Test fun `Settings says the build this phone runs (B12)`() {
+        org.junit.Assert.assertEquals("Nuru Pathway · version 2.59.0 (84)", appVersionLine("2.59.0", 84))
+        org.junit.Assert.assertEquals(org.nuruplace.member.BuildConfig.VERSION_NAME.isNotBlank(), true)
+    }
+}

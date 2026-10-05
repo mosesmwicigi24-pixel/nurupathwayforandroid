@@ -162,8 +162,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
             PrivacyCard()
             HelpCard()
             ActionsRow()
+            // The build this phone runs (Cycle 3's closing walk, B12) — "v1.0"
+            // was written in while the build was 2.59.0 (84), so support heard
+            // the wrong version.
             Text(
-                "Nuru Pathway · v1.0",
+                appVersionLine(org.nuruplace.member.BuildConfig.VERSION_NAME, org.nuruplace.member.BuildConfig.VERSION_CODE),
                 style = pInter(11),
                 color = PROF.rowLabel,
                 modifier = Modifier.fillMaxWidth(),
@@ -904,3 +907,6 @@ private fun Icon(icon: ImageVector, tint: Color, size: androidx.compose.ui.unit.
         modifier = Modifier.size(size),
     )
 }
+
+/** "Nuru Pathway · version 2.59.0 (84)" — the name and build this phone runs. */
+internal fun appVersionLine(versionName: String, versionCode: Int): String = "Nuru Pathway · version $versionName ($versionCode)"
