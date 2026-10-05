@@ -29,10 +29,10 @@ class TypeScaleSourceTest {
 
     private companion object {
         /** Off-scale and computed text sizes today. May only fall; 0 is the goal (§8.3). */
-        const val OFF_SCALE_CEILING = 175
+        const val OFF_SCALE_CEILING = 113
 
         /** System or default faces used for text today. May only fall; 0 is the goal. */
-        const val SYSTEM_FACE_CEILING = 1
+        const val SYSTEM_FACE_CEILING = 0
 
         val WIDGETS = listOf("org/nuruplace/member/widget/")
         val MEMBER_CHOSEN_FACES = listOf("org/nuruplace/member/feature/community/SelahRichEditor.kt")

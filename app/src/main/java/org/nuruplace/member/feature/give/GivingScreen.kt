@@ -131,6 +131,7 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.NuruType
 import java.time.Instant
 import java.time.LocalDate
+import org.nuruplace.member.ui.theme.TypeScale
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -358,9 +359,9 @@ private fun GiveTargetCard(copy: GiveTargetCopy, onGiveToFund: () -> Unit) {
             .border(1.dp, GIVE.gold.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
             .padding(16.dp),
     ) {
-        Text(copy.kicker, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+        Text(copy.kicker, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
         Text(
-            copy.title, style = giSerif(20, FontWeight.SemiBold, -0.4f), color = GIVE.navy,
+            copy.title, style = giSerif(18, FontWeight.SemiBold, -0.4f), color = GIVE.navy,
             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
         )
         copy.terms?.let { Text(it, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp)) }
@@ -416,7 +417,7 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("RECENT GIVING", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.weight(1f))
+            Text("RECENT GIVING", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.weight(1f))
             Row(
                 Modifier.clip(Capsule).clickable { onOpenStatement() }.padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1054,7 +1055,7 @@ private fun GiveTab(
                     // went through — never a failed one, a pledge's or a need's.
                     lastRepeatableGift(history)?.let { g -> RepeatGiftCard(g) { Haptics.tap(view); applyRepeat(g) } }
                     // Funds row
-                    Text("CHOOSE A FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Text("CHOOSE A FUND", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     Row(
                         Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1072,7 +1073,7 @@ private fun GiveTab(
                                     Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(17.dp))
                                 }
                                 Text(f.name, style = giInter(13, FontWeight.SemiBold, -0.13f), color = GIVE.navy, modifier = Modifier.padding(top = 8.dp))
-                                Text(f.tagline, style = giInter(10), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
+                                Text(f.tagline, style = giInter(11), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
                             }
                         }
                     }
@@ -1084,7 +1085,7 @@ private fun GiveTab(
                         .border(1.dp, GIVE.border, RoundedCornerShape(22.dp)).padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("AMOUNT", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
+                    Text("AMOUNT", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
                     Row(
                         Modifier.padding(top = 8.dp),
                         verticalAlignment = Alignment.Bottom,
@@ -1096,7 +1097,7 @@ private fun GiveTab(
                         // Steps down for long amounts (iOS shrinks to fit), never mid-number.
                         Text(
                             shownAmount,
-                            style = giSerif(amountDisplaySize(shownAmount), FontWeight.SemiBold, -1.2f), color = GIVE.navy,
+                            style = giSerif(TypeScale.amount(shownAmount), FontWeight.SemiBold, -1.2f), color = GIVE.navy,
                         )
                     }
                     Text(
@@ -1228,7 +1229,7 @@ private fun GiveTab(
 
                 // Pay methods — the server's word on which can take a gift.
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("CHOOSE HOW TO PAY", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Text("CHOOSE HOW TO PAY", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     Spacer(Modifier.weight(1f))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(11.dp))
@@ -1264,13 +1265,17 @@ private fun GiveTab(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             // badge
-                            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(m.badgeBg), contentAlignment = Alignment.Center) {
+                            // The rail's short name whole, at the 11 sp floor, in a badge wide
+                            // enough that it never shrinks under it (§8.1 rule 3; iOS's 52 × 40).
+                            Box(Modifier.size(width = 52.dp, height = 40.dp).clip(RoundedCornerShape(12.dp)).background(m.badgeBg), contentAlignment = Alignment.Center) {
                                 if (m.badgeText != null) {
                                     Text(
                                         m.badgeText,
-                                        style = giInter(if (m.badgeText.length > 3) 8 else 11, FontWeight.Bold, -0.2f),
+                                        style = giInter(11, FontWeight.Bold, -0.2f),
                                         color = m.badgeFg,
                                         textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        softWrap = false,
                                     )
                                 } else {
                                     Icon(m.badgeIcon!!, contentDescription = null, tint = m.badgeFg, modifier = Modifier.size(18.dp))
@@ -1283,7 +1288,7 @@ private fun GiveTab(
                             }
                             if (soon) {
                                 Box(Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 9.dp, vertical = 4.dp)) {
-                                    Text(methodChipLabel(option), style = giInter(10, FontWeight.Bold, 0.5f), color = GIVE.goldChipText)
+                                    Text(methodChipLabel(option), style = giInter(11, FontWeight.Bold, 0.5f), color = GIVE.goldChipText)
                                 }
                             }
                             if (on) {
@@ -1328,7 +1333,7 @@ private fun GiveTab(
                             Icon(Icons.Filled.Smartphone, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
                         }
                         Column(Modifier.weight(1f)) {
-                            Text("${method.label.uppercase()} PROMPT GOES TO", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                            Text("${method.label.uppercase()} PROMPT GOES TO", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                             Text(
                                 promptPhone?.let { kenyanMobileDisplay(it) } ?: "Add the number to prompt",
                                 style = giInter(14, FontWeight.SemiBold),
@@ -1361,7 +1366,7 @@ private fun GiveTab(
                 // Recurring gifts rail — running or paused (a paused one still
                 // stands until it is resumed or cancelled).
                 if (liveSchedules.isNotEmpty()) {
-                    Text("RECURRING GIFTS", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Text("RECURRING GIFTS", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     val today = nairobiToday(Instant.now())
                     // Two cards to the width, as on iOS; more scroll sideways.
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -1401,7 +1406,7 @@ private fun GiveTab(
                                     // The pledge it collects, in gold (iOS): "Collects your pledge “Kenya trip”".
                                     schedulePledgeLine(s)?.let {
                                         Text(
-                                            it, style = giInter(10, FontWeight.SemiBold), color = GIVE.eyebrow,
+                                            it, style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow,
                                             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
                                         )
                                     }
@@ -1416,7 +1421,7 @@ private fun GiveTab(
                                     // Why its last prompt failed, while it still fails — the server's words.
                                     s.lastFailure?.reason?.takeIf { it.isNotBlank() }?.let {
                                         Text(
-                                            it, style = giInter(10, FontWeight.SemiBold), color = GIVE.goldChipText,
+                                            it, style = giInter(11, FontWeight.SemiBold), color = GIVE.goldChipText,
                                             maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp),
                                         )
                                     }
@@ -1502,7 +1507,7 @@ private fun GiveTab(
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { confirmSchedule = null },
                 containerColor = GIVE.white,
-                title = { Text(scheduleConfirmTitle(cFreq), style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
+                title = { Text(scheduleConfirmTitle(cFreq), style = giSerif(18, FontWeight.SemiBold), color = GIVE.navy) },
                 text = {
                     Column {
                         Row(
@@ -1698,7 +1703,7 @@ private fun ScheduledResult(created: CreatedScheduleRes, body: CreateScheduleBod
                 }
             }
             Spacer(Modifier.height(20.dp))
-            Text("Scheduled", style = giSerif(24, FontWeight.Medium, -0.48f), color = GIVE.navy, textAlign = TextAlign.Center)
+            Text("Scheduled", style = giSerif(26, FontWeight.Medium, -0.48f), color = GIVE.navy, textAlign = TextAlign.Center)
             Spacer(Modifier.height(10.dp))
             Text(
                 "${ksh(body.amountMinor)} every ${cadenceWord(freq)} to ${giveFund(body.fund).name}.",
@@ -1961,7 +1966,7 @@ private fun GiveResult(
             Spacer(Modifier.height(20.dp))
             Text(
                 giveCeremonyTitle(outcome),
-                style = giSerif(24, FontWeight.Medium, -0.48f),
+                style = giSerif(26, FontWeight.Medium, -0.48f),
                 color = GIVE.navy,
                 textAlign = TextAlign.Center,
             )
@@ -2110,7 +2115,7 @@ private fun CustomAmountDialog(
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = GIVE.white,
-        title = { Text("Enter amount", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy) },
+        title = { Text("Enter amount", style = giSerif(18, FontWeight.SemiBold), color = GIVE.navy) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 androidx.compose.material3.OutlinedTextField(
@@ -2118,7 +2123,7 @@ private fun CustomAmountDialog(
                     onValueChange = { v -> text = if (dollars != null) usdTyping(v) else v.filter { it.isDigit() }.take(7) },
                     singleLine = true,
                     prefix = { Text(if (dollars != null) "US$ " else "KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
-                    textStyle = giSerif(24, FontWeight.SemiBold).copy(color = GIVE.navy),
+                    textStyle = giSerif(26, FontWeight.SemiBold).copy(color = GIVE.navy),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = if (dollars != null) {
                             androidx.compose.ui.text.input.KeyboardType.Decimal
@@ -2138,7 +2143,7 @@ private fun CustomAmountDialog(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("NAME YOUR GIFT (OPTIONAL)", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                Text("NAME YOUR GIFT (OPTIONAL)", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                 Spacer(Modifier.height(8.dp))
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2171,7 +2176,7 @@ private fun CustomAmountDialog(
                 Text(
                     if (dollars != null) "Shows on your receipt and giving statement."
                     else "Shows on the church's M-Pesa statement — like a Paybill account name.",
-                    style = giInter(10),
+                    style = giInter(11),
                     color = GIVE.tertiary,
                 )
             }

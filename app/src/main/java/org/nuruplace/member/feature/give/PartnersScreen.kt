@@ -167,6 +167,7 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import java.text.NumberFormat
@@ -566,7 +567,7 @@ private fun PartnersHeaderBand(segmentControl: @Composable () -> Unit) {
 
 @Composable
 internal fun Eyebrow(text: String) {
-    Text(text, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.goldLo)
+    Text(text, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.goldLo)
 }
 
 /** A white card: theme border, 16dp radius, 16dp padding. Clickable when asked. */
@@ -670,7 +671,7 @@ private fun TierChip(name: String, spoken: String) {
 private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Eyebrow("JOIN THE PARTNERS PROGRAMME")
-        Text("Become a partner", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy)
+        Text("Become a partner", style = giSerif(18, FontWeight.SemiBold), color = GIVE.navy)
         Text("Joining costs nothing today. A pledge can come later.", style = giInter(13), color = GIVE.sub)
         Row(
             Modifier.fillMaxWidth().height(44.dp).clip(Capsule).background(GIVE.gold)
@@ -1006,7 +1007,7 @@ private fun EditPledgeSheet(
     val nameValid = name.isBlank() || pledgeTitleValid(name)
     val patch = pledgeEditPatch(pl, amountMinor.takeIf { it > 0 }, if (monthly) dueDay else null, pledgeEditTitlePatch(pl, name))
     val canSave = patch != null && amountMinor > 0 && nameValid && !busy
-    val label = giInter(9, FontWeight.SemiBold, 1.6f)
+    val label = giInter(11, FontWeight.SemiBold, 1.6f)
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
@@ -1041,7 +1042,7 @@ private fun EditPledgeSheet(
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(if (dollars) "US$" else "KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
                     val shown = pledgeEditAmountText(amountMinor, pl.currency)
-                    Text(shown, style = giSerif(amountDisplaySize(shown, 38), FontWeight.SemiBold, -1.1f), color = GIVE.navy)
+                    Text(shown, style = giSerif(TypeScale.amount(shown), FontWeight.SemiBold, -1.1f), color = GIVE.navy)
                 }
             }
             // The suggested amounts, three to a row.
@@ -1516,7 +1517,7 @@ private fun SmallAction(label: String, icon: ImageVector, tint: Color, enabled: 
 private fun PledgePaymentsCard(payments: List<PledgePayment>, onOpenReceipt: (String) -> Unit) {
     val shape = RoundedCornerShape(22.dp)
     Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape).padding(16.dp)) {
-        Text("PAYMENTS", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+        Text("PAYMENTS", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
         if (payments.isEmpty()) {
             Text(
                 "No payments yet — the first one will appear here the moment it settles.",
@@ -1557,7 +1558,7 @@ private fun PledgeClaimsCard(claims: List<PledgeClaim>?, failed: Boolean, today:
     if (told.isNotEmpty()) {
         val shape = RoundedCornerShape(22.dp)
         Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape).padding(16.dp)) {
-            Text("PAID ANOTHER WAY", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(bottom = 4.dp))
+            Text("PAID ANOTHER WAY", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(bottom = 4.dp))
             told.forEach { ClaimRow(it, today) }
         }
     } else if (failed) {
@@ -1617,7 +1618,7 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val problem = claimProblem(amountText, pl.currency, paidOn, note, today)
-    val label = giInter(9, FontWeight.SemiBold, 1.6f)
+    val label = giInter(11, FontWeight.SemiBold, 1.6f)
 
     fun send() {
         if (!online || sending) return
@@ -1861,7 +1862,7 @@ internal fun SummaryColumn(label: String, value: String, color: Color, modifier:
 @Composable
 internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(label, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
+        Text(label, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
         // One line each, shrunk to the column (iOS minimumScaleFactor 0.7) —
         // "KSh 1,250,000" never splits mid-figure in a third of the card.
         values.forEachIndexed { i, v ->
@@ -1918,7 +1919,7 @@ internal fun PendingPledgePaymentRow(pay: StatementPendingPayment, title: String
             Text(title, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    pendingChipText(pay.method), style = giInter(10, FontWeight.Bold), color = Nuru.answeredText,
+                    pendingChipText(pay.method), style = giInter(11, FontWeight.Bold), color = Nuru.answeredText,
                     modifier = Modifier.clip(Capsule).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp),
                 )
                 day?.let { Text(it, style = giInter(11), color = Nuru.ink400) }
@@ -1938,7 +1939,7 @@ private fun PartnerNotice(title: String, message: String, action: Pair<String, (
             .clip(RoundedCornerShape(14.dp)).background(Nuru.white).padding(22.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(title, style = nuruSerif(24, FontWeight.Medium), color = Nuru.ink)
+        Text(title, style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
         Text(message, style = NuruType.bodyLg, color = Nuru.ink600)
         action?.let { (label, onClick) ->
             Button(

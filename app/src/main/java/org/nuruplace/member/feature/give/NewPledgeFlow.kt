@@ -126,6 +126,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.theme.TypeScale
 
 /** A full pill (§8.1 rule 6) — Give's amount choices' shape. */
 private val PillShape = RoundedCornerShape(999.dp)
@@ -312,7 +313,7 @@ fun NewPledgeFlow(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("NEW PLEDGE", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.eyebrow)
-                    Text("A promise, in your words", style = giSerif(24, FontWeight.SemiBold), color = GIVE.navy)
+                    Text("A promise, in your words", style = giSerif(26, FontWeight.SemiBold), color = GIVE.navy)
                 }
             }
         }
@@ -343,12 +344,12 @@ fun NewPledgeFlow(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("AMOUNT", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
+                        Text("AMOUNT", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary, modifier = Modifier.alignByBaseline())
                             val shown = "%,d".format(amountMajor)
                             Text(
-                                shown, style = giSerif(amountDisplaySize(shown), FontWeight.SemiBold, -1.2f), color = GIVE.navy,
+                                shown, style = giSerif(TypeScale.amount(shown), FontWeight.SemiBold, -1.2f), color = GIVE.navy,
                                 modifier = Modifier.alignByBaseline(),
                             )
                         }
@@ -529,7 +530,7 @@ fun NewPledgeFlow(
                                 Icon(Icons.Filled.EventRepeat, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
                                 Text(firstCollectionLine(today, dueDay), style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
                             }
-                            Text("BY", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                            Text("BY", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 autoRails.forEach { rail ->
                                     RailChip(rail.key, rail.label, on = autoMethod == rail.key, modifier = Modifier.weight(1f)) {
@@ -637,7 +638,7 @@ fun NewPledgeFlow(
  *  Give tab's "CHOOSE A FUND" eyebrow, so the two screens read as one. */
 @Composable
 private fun PledgeForEyebrow(label: String) {
-    Text(label.uppercase(), style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+    Text(label.uppercase(), style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
 }
 
 /** One selectable card on the "what is this pledge for?" step: icon tile,

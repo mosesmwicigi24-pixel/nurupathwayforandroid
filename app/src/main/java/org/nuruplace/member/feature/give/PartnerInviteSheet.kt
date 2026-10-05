@@ -80,7 +80,7 @@ fun PartnerInviteSheet(
                 Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Text(campaign.title, style = nuruSerif(27, FontWeight.Medium), color = Nuru.ink)
+                Text(campaign.title, style = nuruSerif(26, FontWeight.Medium), color = Nuru.ink)
                 Text(campaign.blurb, style = NuruType.bodyLg, color = Nuru.ink600)
 
                 InviteProgress(campaign)
@@ -163,7 +163,7 @@ private fun InviteTiers(c: InviteCampaign) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("${t.currency} ${grouped(t.amountMinor / 100)}",
-                    style = nuruSerif(19, FontWeight.Medium), color = Nuru.ink,
+                    style = nuruSerif(18, FontWeight.Medium), color = Nuru.ink,
                     modifier = Modifier.widthIn(min = 96.dp))
                 // The meaning comes from the server, derived from one costing.
                 // Never invented here.

@@ -67,7 +67,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +85,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.theme.TypeScale
 
 private val NAIROBI: ZoneId = ZoneId.of("Africa/Nairobi")
 private val Capsule = RoundedCornerShape(999.dp)
@@ -205,7 +205,7 @@ fun GivingStatementScreen(
                         Spacer(Modifier.weight(1f))
                         Text(
                             "GIVING STATEMENT",
-                            style = giInter(10, FontWeight.Bold, 2.2f),
+                            style = giInter(11, FontWeight.Bold, 2.2f),
                             color = GIVE.gold,
                         )
                         Spacer(Modifier.weight(1f))
@@ -247,7 +247,7 @@ fun GivingStatementScreen(
                     )
                     Text(
                         hero.primary,
-                        style = giSerif(34, FontWeight.SemiBold, -1f),
+                        style = giSerif(28, FontWeight.SemiBold, -1f),
                         color = Color.White,
                         modifier = Modifier.padding(top = 2.dp),
                     )
@@ -327,7 +327,7 @@ fun GivingStatementScreen(
                         .border(1.dp, GIVE.border, RoundedCornerShape(22.dp))
                         .padding(16.dp),
                 ) {
-                    Text("BY FUND", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Text("BY FUND", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     // One row per fund per currency — never one sum across them.
                     val entries = fundLines(split.gifts)
                     if (entries.isEmpty()) {
@@ -539,7 +539,7 @@ private fun PartnerPledgesGroup(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("PARTNER PLEDGES", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                Text("PARTNER PLEDGES", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                 Text(
                     g.summary,
                     style = giInter(14, FontWeight.SemiBold),
@@ -678,7 +678,7 @@ fun GivingReceiptScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     ReceiptHeaderButton(Icons.AutoMirrored.Filled.ArrowBack, "Back") { onBack() }
-                    Text("Receipt", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy)
+                    Text("Receipt", style = giSerif(22, FontWeight.SemiBold), color = GIVE.navy)
                     Spacer(Modifier.weight(1f))
                     // Same action as "Share receipt" below; spins while it fetches.
                     ReceiptHeaderButton(Icons.Filled.Share, "Share receipt", busy = sharing) { share() }
@@ -706,7 +706,7 @@ fun GivingReceiptScreen(
                     }
                     Text(
                         receiptEyebrow(chip),
-                        style = giInter(10, FontWeight.SemiBold, 1.6f),
+                        style = giInter(11, FontWeight.SemiBold, 1.6f),
                         color = if (chip == null) RECEIPT_GREEN_TEXT else badgeFg,
                         modifier = Modifier.padding(top = 16.dp),
                     )
@@ -729,7 +729,7 @@ fun GivingReceiptScreen(
                             color = GIVE.tertiary,
                             modifier = Modifier.alignByBaseline().padding(end = 6.dp),
                         )
-                        Text(number, style = giSerif(amountDisplaySize(number, base = 40), FontWeight.SemiBold, -1f), color = GIVE.navy, modifier = Modifier.alignByBaseline())
+                        Text(number, style = giSerif(TypeScale.amount(number), FontWeight.SemiBold, -1f), color = GIVE.navy, modifier = Modifier.alignByBaseline())
                     }
                     Text(
                         receiptDestinationLine(d),
@@ -877,7 +877,7 @@ internal fun PledgeTag(title: String) {
     Text(
         // "Building pledge" — a name that already ends in the word is not doubled.
         pledgeTag(title),
-        style = giInter(10, FontWeight.SemiBold),
+        style = giInter(11, FontWeight.SemiBold),
         color = GIVE.goldChipText,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -958,7 +958,7 @@ private fun ReceiptRow(
             Text(
                 value,
                 style = giInter(14, FontWeight.SemiBold).let {
-                    if (mono) it.copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp) else it
+                    if (mono) it.copy(fontFeatureSettings = "tnum", letterSpacing = 0.4.sp) else it
                 },
                 color = GIVE.ink,
                 textAlign = TextAlign.End,

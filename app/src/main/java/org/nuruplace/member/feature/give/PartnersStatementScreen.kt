@@ -446,8 +446,8 @@ private fun PartnersHero(year: Int, thankYou: String, standing: String?, tiles: 
             .padding(horizontal = 20.dp)
             .padding(top = 6.dp, bottom = 20.dp),
     ) {
-        Text("PARTNERS STATEMENT · $year", style = giInter(10, FontWeight.Bold, 1.8f), color = HERO_GOLD)
-        Text(thankYou, style = giSerif(24, FontWeight.SemiBold, -0.48f), color = Color.White, modifier = Modifier.padding(top = 6.dp))
+        Text("PARTNERS STATEMENT · $year", style = giInter(11, FontWeight.Bold, 1.8f), color = HERO_GOLD)
+        Text(thankYou, style = giSerif(26, FontWeight.SemiBold, -0.48f), color = Color.White, modifier = Modifier.padding(top = 6.dp))
         standing?.let {
             Text(it, style = giInter(12), color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
         }
@@ -529,7 +529,7 @@ private fun RowScope.KeptAndGiven(t: HeroTiles) {
         // The currency small, the amount large, one line shrunk to the tile.
         Row(Modifier.shrinkToFit(0.6f)) {
             Text(
-                tileCurrency(g.first.currency), style = giInter(10, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
+                tileCurrency(g.first.currency), style = giInter(11, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.75f),
                 maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline(),
             )
             Text(
@@ -561,7 +561,7 @@ private fun HeroTile(label: String, spoken: String, modifier: Modifier, content:
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
-            label, style = giInter(9, FontWeight.SemiBold, 0.8f), color = Color.White.copy(alpha = 0.6f),
+            label, style = giInter(11, FontWeight.SemiBold, 0.8f), color = Color.White.copy(alpha = 0.6f),
             maxLines = 1, softWrap = false, modifier = Modifier.padding(bottom = 2.dp).shrinkToFit(0.65f),
         )
         content()
@@ -570,7 +570,7 @@ private fun HeroTile(label: String, spoken: String, modifier: Modifier, content:
 
 @Composable
 private fun TileCaption(text: String) {
-    Text(text, style = giInter(10), color = Color.White.copy(alpha = 0.7f))
+    Text(text, style = giInter(11), color = Color.White.copy(alpha = 0.7f))
 }
 
 /** FAITHFULNESS: twelve squares Jan→Dec, read aloud as one sentence;
@@ -587,9 +587,9 @@ private fun FaithfulnessCard(marks: List<MonthMark>, line: String?) {
                 marks.forEach { MonthSquare(it) }
             }
             Row(Modifier.fillMaxWidth().clearAndSetSemantics { }) {
-                Text("Jan", style = giInter(9, FontWeight.Medium), color = Nuru.ink400)
+                Text("Jan", style = giInter(11, FontWeight.Medium), color = Nuru.ink400)
                 Spacer(Modifier.weight(1f))
-                Text("Dec", style = giInter(9, FontWeight.Medium), color = Nuru.ink400)
+                Text("Dec", style = giInter(11, FontWeight.Medium), color = Nuru.ink400)
             }
             line?.let { Text(it, style = giInter(11), color = GIVE.ink600, modifier = Modifier.padding(top = 4.dp)) }
         }
@@ -629,8 +629,8 @@ private fun SeasonCard(line: String) {
             .semantics(mergeDescendants = true) {}.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("SINCE YOU BEGAN", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.gold)
-        Text(line, style = giSerif(17, FontWeight.Medium), color = Color.White)
+        Text("SINCE YOU BEGAN", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.gold)
+        Text(line, style = giSerif(18, FontWeight.Medium), color = Color.White)
     }
 }
 
@@ -711,7 +711,7 @@ private fun PledgeRow(e: StatementPledge, today: LocalDate, onOpen: (() -> Unit)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(pledgeProgressLine(e), style = giInter(11), color = GIVE.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            churchRaisedLine(e)?.let { Text(it, style = giInter(10, FontWeight.SemiBold), color = GIVE.goldLo, maxLines = 1) }
+            churchRaisedLine(e)?.let { Text(it, style = giInter(11, FontWeight.SemiBold), color = GIVE.goldLo, maxLines = 1) }
         }
     }
 }
@@ -735,7 +735,7 @@ private fun PaymentsSection(
             Column(Modifier.partnerCard()) {
                 if (pending.isNotEmpty()) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("PROCESSING", style = giInter(10, FontWeight.Bold, 1.1f), color = Nuru.answeredText)
+                        Text("PROCESSING", style = giInter(11, FontWeight.Bold, 1.1f), color = Nuru.answeredText)
                         Spacer(Modifier.weight(1f))
                         Text("not yet counted", style = giInter(11), color = Nuru.ink400)
                     }
@@ -749,7 +749,7 @@ private fun PaymentsSection(
                         Modifier.fillMaxWidth().padding(top = if (gi == 0 && pending.isEmpty()) 0.dp else 16.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(statementMonthLabel(m), style = giInter(10, FontWeight.Bold, 1.1f), color = GIVE.goldChipText)
+                        Text(statementMonthLabel(m), style = giInter(11, FontWeight.Bold, 1.1f), color = GIVE.goldChipText)
                         Spacer(Modifier.weight(1f))
                         Text(moneyTotals(m.subtotals), style = giInter(11, FontWeight.SemiBold), color = GIVE.ink600, maxLines = 1)
                     }
@@ -760,7 +760,7 @@ private fun PaymentsSection(
                 }
                 Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(1.dp).background(GIVE.navy.copy(alpha = 0.35f)))
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("TOTAL PAID $year", style = giInter(10, FontWeight.Bold, 1.2f), color = GIVE.navy)
+                    Text("TOTAL PAID $year", style = giInter(11, FontWeight.Bold, 1.2f), color = GIVE.navy)
                     Spacer(Modifier.weight(1f))
                     Text(
                         moneyTotals(statementYearTotals(months)), style = giSerif(18, FontWeight.Bold), color = GIVE.gold,

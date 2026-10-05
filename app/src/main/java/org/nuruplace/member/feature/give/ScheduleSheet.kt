@@ -202,7 +202,7 @@ internal fun ScheduleSheet(
                     Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(19.dp))
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(money(s.amountMinor, s.currency), style = giInter(17, FontWeight.Bold), color = GIVE.navy)
+                    Text(money(s.amountMinor, s.currency), style = giInter(18, FontWeight.Bold), color = GIVE.navy)
                     Text("${scheduleDayLine(s)} · ${giveFund(s.fund).name}", style = giInter(12), color = GIVE.sub)
                     listOfNotNull(schedulePledgeLine(s), scheduleNextAmountLine(s)).forEach {
                         Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.eyebrow)
@@ -303,7 +303,7 @@ internal fun ScheduleSheet(
                     }
                 }
                 SheetMode.Change -> Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("CHANGE THIS GIFT", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Text("CHANGE THIS GIFT", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     if (followsPledge != null) {
                         // Its amount and day are the pledge's (Giving Cycle 5).
                         Text(
@@ -380,7 +380,7 @@ internal fun ScheduleSheet(
                     }
                 }
                 SheetMode.Pause -> Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("PAUSE THIS GIFT", style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                    Text("PAUSE THIS GIFT", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     Text("Nothing is prompted while it's paused, and nothing is owed.", style = giInter(12), color = GIVE.sub)
                     ChoiceLine("Until I resume", selected = !pauseUntilDate) { pauseUntilDate = false }
                     ChoiceLine("Until a date", selected = pauseUntilDate) { pauseUntilDate = true }
