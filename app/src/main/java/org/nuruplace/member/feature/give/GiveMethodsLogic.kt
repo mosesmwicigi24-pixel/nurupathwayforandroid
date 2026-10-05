@@ -131,6 +131,16 @@ fun effectiveGiveMethod(
 fun shownGiveMethods(rows: List<GiveMethod>, options: List<GiveMethodOption>, boundCurrency: String?): List<GiveMethod> =
     rows.filter { row -> options.any { it.key == row.id && it.shownFor(boundCurrency) } }
 
+/**
+ * The rails Give lists: only those that can take this gift now (§2: promise
+ * only what works). Cycle 3's closing walk found Airtel Money, Card and
+ * PayPal listed as "SOON" — with reorder arrows and drag handles — beside the
+ * one rail that worked.
+ */
+fun workingGiveMethods(rows: List<GiveMethod>, options: List<GiveMethodOption>, boundCurrency: String?): List<GiveMethod> =
+    shownGiveMethods(rows, options, boundCurrency)
+        .filter { row -> options.firstOrNull { it.key == row.id }?.selectableFor(boundCurrency) == true }
+
 /** The chip on a method the form cannot take (iOS unavailableBadge): SOON
  *  for one that is coming — the server's `coming_soon`, or one the server
  *  has live that this app cannot carry yet (a card) — UNAVAILABLE for one

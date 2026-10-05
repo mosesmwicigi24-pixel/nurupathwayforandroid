@@ -131,6 +131,20 @@ class GiveMethodsLogicTest {
     }
 
     @Test
+    fun `Give lists only the rails that can take this gift — no SOON rows (Cycle 3 closing walk)`() {
+        val res = json.decodeFromString<GivingMethodsRes>(live)
+        val options = giveMethodOptions(res)
+        val working = workingGiveMethods(GIVE_METHODS, options, null).map { it.id }
+        // Every rail listed works; none of them is one the form can't take.
+        for (id in working) assertTrue(id, options.first { it.key == id }.selectableFor(null))
+        val notWorking = options.filter { !it.selectableFor(null) }.map { it.key }
+        assertTrue(working.none { it in notWorking })
+        // A PayPal-only server leaves a shilling-bound form with no rail to list.
+        val paypalOnly = res.copy(methods = res.methods.map { if (it.key == "mpesa") it.copy(enabled = false, unavailableReason = "unavailable") else it })
+        assertTrue(workingGiveMethods(GIVE_METHODS, giveMethodOptions(paypalOnly), "KES").none { it.id == "mpesa" })
+    }
+
+    @Test
     fun `the rows shown are the listed rails, bound to a currency only its own`() {
         val res = json.decodeFromString<GivingMethodsRes>(live)
         val options = giveMethodOptions(res)

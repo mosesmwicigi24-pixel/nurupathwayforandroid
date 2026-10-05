@@ -1227,22 +1227,26 @@ private fun GiveTab(
                     }
                 }
 
-                // Pay methods — the server's word on which can take a gift.
+                // Pay methods — the server's word on which can take a gift; only
+                // those that can (§2), and Reorder only once there are two.
+                val shownMethods = workingGiveMethods(methods, options, boundCurrency)
+                val canReorder = shownMethods.size >= 2
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("CHOOSE HOW TO PAY", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     Spacer(Modifier.weight(1f))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(11.dp))
-                        Text("Reorder", style = giInter(11), color = GIVE.tertiary)
+                    if (canReorder) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = GIVE.tertiary, modifier = Modifier.size(14.dp))
+                            Text("Reorder", style = giInter(11), color = GIVE.tertiary)
+                        }
                     }
                 }
                 // Bound in a currency no rail can take here: say so up front.
                 boundCurrency?.let { noRailForCurrencyMessage(it, options) }?.let {
                     Text(it, style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(horizontal = 4.dp))
                 }
-                // Only the rails the server lists; bound, only those in the
-                // pledge's or need's currency (GiveMethodsLogic.shownGiveMethods).
-                val shownMethods = shownGiveMethods(methods, options, boundCurrency)
+                // Only the rails that can take this gift; bound, only those in
+                // the pledge's or need's currency (GiveMethodsLogic.workingGiveMethods).
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     shownMethods.forEachIndexed { i, m ->
                         // Not selectable here (switched off, a card) → the
@@ -1296,8 +1300,8 @@ private fun GiveTab(
                                     Icon(Icons.Filled.Check, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(13.dp))
                                 }
                             }
-                            // reorder arrows
-                            Column {
+                            // reorder arrows — only with something to reorder
+                            if (canReorder) Column {
                                 Icon(
                                     Icons.Filled.KeyboardArrowUp, contentDescription = "Move up", tint = GIVE.ink300,
                                     modifier = Modifier.size(14.dp).clickable {
@@ -1311,7 +1315,7 @@ private fun GiveTab(
                                     },
                                 )
                             }
-                            Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = Color(0xFFC4C9D0), modifier = Modifier.size(16.dp))
+                            if (canReorder) Icon(Icons.Filled.DragIndicator, contentDescription = null, tint = Color(0xFFC4C9D0), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -2086,7 +2090,6 @@ private fun GiveResult(
 
 /** Preset gift-name chips on the custom-amount sheet — like an M-Pesa Paybill
  *  account name, shown on the church's M-Pesa statement (sanitized server-side). */
-private val GIVE_NAME_PRESETS = listOf("Tithe", "Offering", "Building", "Missions", "Thanksgiving", "First Fruits")
 
 /** The dollar entry's starting amount and PayPal's own range (cents). */
 private data class DollarEntry(val cents: Int, val minMinor: Long, val maxMinor: Long)
@@ -2142,27 +2145,12 @@ private fun CustomAmountDialog(
                     )
                 }
 
+                // One list of purposes on Give (Cycle 3's closing walk): the fund
+                // cards say what a gift is for. A second row of chips here —
+                // Tithe, Offering, Building, Missions… — gave two answers to one
+                // question; the name stays, in the member's own words.
                 Spacer(Modifier.height(16.dp))
                 Text("NAME YOUR GIFT (OPTIONAL)", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
-                Spacer(Modifier.height(8.dp))
-                androidx.compose.foundation.layout.FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    GIVE_NAME_PRESETS.forEach { p ->
-                        val on = name == p
-                        Text(
-                            p,
-                            style = giInter(12, FontWeight.SemiBold),
-                            color = if (on) Color.White else GIVE.navy,
-                            modifier = Modifier.clip(Capsule)
-                                .background(if (on) GIVE.navy else GIVE.surface)
-                                .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, Capsule))
-                                .clickable { name = if (on) "" else p }
-                                .padding(horizontal = 11.dp, vertical = 6.dp),
-                        )
-                    }
-                }
                 Spacer(Modifier.height(8.dp))
                 androidx.compose.material3.OutlinedTextField(
                     value = name,
