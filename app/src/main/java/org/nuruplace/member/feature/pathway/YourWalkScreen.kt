@@ -178,23 +178,14 @@ private fun WalkNode(e: WalkEvent, isFirst: Boolean, isLast: Boolean) {
 // ─────────────────────────── Footprints strip ───────────────────────────
 
 @Composable
-fun FootprintsStrip(moduleId: String) {
+fun FootprintsStrip(moduleId: String, youFinished: Boolean = false) {
     var res by remember { mutableStateOf<FootprintsRes?>(null) }
     LaunchedEffect(moduleId) {
         res = runCatching { Net.client.api.moduleFootprints(moduleId) }.getOrNull()
     }
     val r = res ?: return
     if (r.count <= 0 || r.footprints.isEmpty()) return
-    val names = r.footprints.map { it.firstName }
-    val shown = when (names.size) {
-        1 -> names[0]
-        2 -> "${names[0]} and ${names[1]}"
-        else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
-    }
-    val others = r.count - names.size
-    val line = if (others > 0) {
-        "$shown and $others other${if (others == 1) "" else "s"} walked here before you."
-    } else "$shown walked here before you."
+    val line = footprintsLine(r.footprints.map { it.firstName }, r.count, youFinished)
 
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
@@ -212,5 +203,29 @@ fun FootprintsStrip(moduleId: String) {
         }
         Spacer(Modifier.width(10.dp))
         Text(line, style = NuruType.caption, color = Nuru.ink.copy(alpha = 0.75f), modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * The footprints line under a lesson. The server lists cell-mates who
+ * finished it — at any time — so "before you" is true only while the member
+ * hasn't finished it yet. Once they have, "walked here too" (Cycle 3's closing
+ * walk, B10: "Eli walked here before you" read on Ada's page though Eli
+ * finished two seconds after her). Names are joined with commas and one
+ * "and": "Cara, Ben and 2 others", never "Cara and Ben and 2 others".
+ */
+internal fun footprintsLine(names: List<String>, count: Int, youFinished: Boolean): String {
+    val others = (count - names.size).coerceAtLeast(0)
+    val who = joinNames(names, others)
+    return if (youFinished) "$who walked here too." else "$who walked here before you."
+}
+
+/** "Ada", "Ada and Ben", "Ada, Ben and Cara", "Ada, Ben and 2 others". */
+internal fun joinNames(names: List<String>, others: Int = 0): String {
+    val parts = names + if (others > 0) listOf("$others other${if (others == 1) "" else "s"}") else emptyList()
+    return when (parts.size) {
+        0 -> ""
+        1 -> parts[0]
+        else -> parts.dropLast(1).joinToString(", ") + " and " + parts.last()
     }
 }

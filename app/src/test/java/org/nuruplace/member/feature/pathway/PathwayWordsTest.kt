@@ -72,3 +72,18 @@ class LevelCountWordTest {
         org.junit.Assert.assertEquals("12", countWord(12))
     }
 }
+
+class FootprintsWordsTest {
+    @org.junit.Test fun `before you only while you haven't finished — then too (B10)`() {
+        org.junit.Assert.assertEquals("Eli walked here before you.", footprintsLine(listOf("Eli"), 1, youFinished = false))
+        org.junit.Assert.assertEquals("Eli walked here too.", footprintsLine(listOf("Eli"), 1, youFinished = true))
+        org.junit.Assert.assertEquals("Eli, Cara and 3 others walked here too.", footprintsLine(listOf("Eli", "Cara"), 5, youFinished = true))
+    }
+
+    @org.junit.Test fun `names take one and (B13)`() {
+        org.junit.Assert.assertEquals("Cara, Builder, Ada and 2 others", joinNames(listOf("Cara", "Builder", "Ada"), 2))
+        org.junit.Assert.assertEquals("Cara and Ada", joinNames(listOf("Cara", "Ada")))
+        org.junit.Assert.assertEquals("Cara and 1 other", joinNames(listOf("Cara"), 1))
+        org.junit.Assert.assertEquals("Cara", joinNames(listOf("Cara")))
+    }
+}

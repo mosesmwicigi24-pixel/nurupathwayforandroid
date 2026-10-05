@@ -257,7 +257,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
             ) {
                 // Footprints (Wave 3): cell-mates who already walked this
                 // module — quiet proof nobody reads alone. Absent when fresh.
-                FootprintsStrip(m.moduleId)
+                FootprintsStrip(m.moduleId, youFinished = m.completed)
                 // A word from the member's own discipler — the human voice
                 // before any produced media (Wave 2). Leaders can record.
                 (localVoiceNote ?: m.voiceNote)?.let { VoiceNoteCard(it) }
