@@ -12,8 +12,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
@@ -367,6 +369,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // While the server is away and screens show their last good copies, say so once, here.
             org.nuruplace.member.ui.components.ServerReachBanner(
                 Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding()).zIndex(1f),
+            )
+            // A quick action the server didn't record says so here, once
+            // (EXPERIENCE.md §7.4) — above the bars, clear of the gesture bar.
+            val navBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
+                .asPaddingValues().calculateBottomPadding()
+            org.nuruplace.member.ui.components.QuickNoticeHost(
+                Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = maxOf(contentPadding.calculateBottomPadding(), navBottom) + 12.dp)
+                    .zIndex(2f),
             )
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding)) {
             composable("home") {

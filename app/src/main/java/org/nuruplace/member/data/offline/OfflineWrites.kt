@@ -45,3 +45,27 @@ suspend fun <T> OfflineQueue.runOrQueue(
     enqueue(domain, op, payload)
     null
 }
+
+/** What a member's write came to (EXPERIENCE.md §4, §1.7): the server has it,
+ *  it waits in the offline queue, or it was refused — never an exception out
+ *  of a tap. */
+sealed interface WriteOutcome {
+    object Sent : WriteOutcome
+    object Queued : WriteOutcome
+    data class Failed(val line: String) : WriteOutcome
+}
+
+/**
+ * Run a write that may go to the offline queue: [send] returns null when it
+ * was queued ([runOrQueue]'s contract). A refusal or a failure becomes
+ * [WriteOutcome.Failed] in [failureLine]'s words; a cancel (the member left)
+ * is let through, never shown.
+ */
+suspend fun queuedWrite(send: suspend () -> Any?, failureLine: (Throwable) -> String): WriteOutcome =
+    try {
+        if (send() == null) WriteOutcome.Queued else WriteOutcome.Sent
+    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+        throw c
+    } catch (e: Exception) {
+        WriteOutcome.Failed(failureLine(e))
+    }
