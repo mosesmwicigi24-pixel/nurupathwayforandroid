@@ -1146,10 +1146,10 @@ private fun InvitationCard(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(PL.gold.copy(alpha = 0.12f)),
+            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Groups, null, tint = PL.gold, modifier = Modifier.size(19.dp))
+            Icon(Icons.Filled.Groups, null, tint = PL.navy, modifier = Modifier.size(19.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text("Read with a friend", style = plInter(13, FontWeight.Bold), color = PL.navy)

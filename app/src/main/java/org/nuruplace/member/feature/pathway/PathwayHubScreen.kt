@@ -665,8 +665,8 @@ private fun FoldedTrailRow(line: String, expanded: Boolean, onToggle: () -> Unit
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.gold.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Check, null, tint = PW.goldDeep, modifier = Modifier.size(16.dp))
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Check, null, tint = PW.navy, modifier = Modifier.size(16.dp))
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -691,8 +691,8 @@ private fun ExamPassedRow(step: JourneyStep) {
             Modifier.fillMaxWidth().background(PW.gold.copy(alpha = 0.06f)).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.gold.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Check, null, tint = PW.goldDeep, modifier = Modifier.size(16.dp))
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Check, null, tint = PW.navy, modifier = Modifier.size(16.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {

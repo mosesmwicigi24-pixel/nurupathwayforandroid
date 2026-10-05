@@ -1786,8 +1786,9 @@ private fun GrowTile(title: String, sub: String, icon: androidx.compose.ui.graph
         modifier.clip(RoundedCornerShape(16.dp)).background(Nuru.surface).border(1.dp, Nuru.border, RoundedCornerShape(16.dp)).clickable { onClick() }.padding(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp))
+        // A row icon: navy on a gold-tint tile (§8.1 rule 7).
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(Spacing.sm))
         // The words wrap inside the tile — never cut (§8.1 rule 9, §8.2 #20).

@@ -63,7 +63,7 @@ fun GrowHubScreen(onOpen: (String) -> Unit) {
                         Box(
                             Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.goldTint),
                             contentAlignment = Alignment.Center,
-                        ) { Icon(e.icon, null, tint = Nuru.goldLo, modifier = Modifier.size(22.dp)) }
+                        ) { Icon(e.icon, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
                         Spacer(Modifier.size(Spacing.base))
                         Column(Modifier.weight(1f)) {
                             Text(e.title, style = NuruType.cardTitle, color = Nuru.ink)

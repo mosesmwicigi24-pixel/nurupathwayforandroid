@@ -74,12 +74,14 @@ object PROF {
 /** Per-category badge visuals (iOS `PBadgeItem.style`). */
 data class BadgeStyle(val icon: ImageVector, val color: Color, val tint: Color)
 
+// One badge look (§8.1 rules 1 and 7): the category's icon, navy on gold tint
+// — they wore green, sky and purple by category, hues that say nothing.
 fun badgeStyle(category: String?): BadgeStyle = when (category?.lowercase()?.trim()) {
-    "journey" -> BadgeStyle(Icons.Filled.AutoAwesome, Color(0xFFC89B3C), Color(0xFFFFF4DA))
-    "consistency" -> BadgeStyle(Icons.Filled.LocalFireDepartment, Color(0xFF16A34A), Color(0xFFDCFCE7))
-    "community" -> BadgeStyle(Icons.Filled.Group, Color(0xFF0EA5E9), Color(0xFFE0F2FE))
-    "service" -> BadgeStyle(Icons.Filled.VolunteerActivism, Color(0xFFA855F7), Color(0xFFF3E8FF))
-    else -> BadgeStyle(Icons.Filled.Verified, Color(0xFFC89B3C), Color(0xFFFFF4C7))
+    "journey" -> BadgeStyle(Icons.Filled.AutoAwesome, PROF.navy, PROF.goldTint)
+    "consistency" -> BadgeStyle(Icons.Filled.LocalFireDepartment, PROF.navy, PROF.goldTint)
+    "community" -> BadgeStyle(Icons.Filled.Group, PROF.navy, PROF.goldTint)
+    "service" -> BadgeStyle(Icons.Filled.VolunteerActivism, PROF.navy, PROF.goldTint)
+    else -> BadgeStyle(Icons.Filled.Verified, PROF.navy, PROF.goldTint)
 }
 
 /** Settings row icon tile tint (bg, fg). */
@@ -89,7 +91,7 @@ data class RowTint(val bg: Color, val fg: Color)
 // they were indigo, pink, sky and green: hues that said nothing. Only the
 // two-factor tile keeps a state colour: amber while off ("recommended"),
 // green once on.
-private val TINT_GOLD = RowTint(PROF.goldChipBg, Color(0xFF7A5A14))
+private val TINT_GOLD = RowTint(PROF.goldTint, PROF.navy)
 val TINT_PASSWORD = TINT_GOLD
 val TINT_2FA_OFF = RowTint(Color(0xFFFEF3C7), Color(0xFFD97706))
 val TINT_2FA_ON = RowTint(Color(0x2216A34A), Color(0xFF16A34A))

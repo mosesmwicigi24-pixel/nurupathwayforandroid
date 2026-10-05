@@ -622,10 +622,10 @@ private fun VerseCard(verse: TailoredVerse?) {
             Modifier
                 .size(32.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(CHAT.gold.copy(alpha = 0.12f)),
+                .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.FormatQuote, contentDescription = null, tint = CHAT.gold, modifier = Modifier.size(15.dp))
+            Icon(Icons.Filled.FormatQuote, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(15.dp))
         }
         Column {
             Text("VERSE FOR TODAY", style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.eyebrow)

@@ -1545,8 +1545,8 @@ private fun PledgePaymentRow(pay: PledgePayment, onOpenReceipt: (String) -> Unit
         Modifier.fillMaxWidth().clickable(enabled = opens) { onOpenReceipt(pay.transactionId) }.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.size(32.dp).clip(CircleShape).background(GIVE.goldChipBg), Alignment.Center) {
-            Icon(Icons.Filled.VolunteerActivism, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+        Box(Modifier.size(32.dp).clip(CircleShape).background(TILE_TINT), Alignment.Center) {
+            Icon(Icons.Filled.VolunteerActivism, null, tint = TILE_ICON, modifier = Modifier.size(14.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)

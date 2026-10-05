@@ -85,16 +85,22 @@ object GIVE {
 /** A fund designation with its icon + tints (iOS `Fund`). */
 data class GiveFund(val id: String, val name: String, val tagline: String, val icon: ImageVector, val tint: Color, val fg: Color)
 
+/** Every tile is the same: a gold-tint tile with a navy icon (EXPERIENCE.md
+ *  §8.1 rules 1 and 7). The funds wore red, purple, sky and green — hues that
+ *  say state elsewhere, or nothing at all. */
+internal val TILE_TINT = org.nuruplace.member.ui.theme.Nuru.goldTint
+internal val TILE_ICON = org.nuruplace.member.ui.theme.Nuru.navy
+
 val GIVE_FUNDS = listOf(
-    GiveFund("tithe", "Tithe", "A faithful portion", Icons.Filled.Percent, Color(0xFFFFF4DA), Color(0xFFC89B3C)),
-    GiveFund("offering", "Offering", "Freewill worship", Icons.Filled.VolunteerActivism, Color(0xFFFEE2E2), Color(0xFFDC2626)),
-    GiveFund("gift", "Gift", "A special gift", Icons.Filled.CardGiftcard, Color(0xFFF3E8FF), Color(0xFFA855F7)),
-    GiveFund("mission", "Mission", "Beyond our walls", Icons.Filled.Public, Color(0xFFE0F2FE), Color(0xFF0EA5E9)),
-    GiveFund("discipleship", "Discipleship", "Growing the Pathway", Icons.Filled.MenuBook, Color(0xFFDCFCE7), Color(0xFF16A34A)),
+    GiveFund("tithe", "Tithe", "A faithful portion", Icons.Filled.Percent, TILE_TINT, TILE_ICON),
+    GiveFund("offering", "Offering", "Freewill worship", Icons.Filled.VolunteerActivism, TILE_TINT, TILE_ICON),
+    GiveFund("gift", "Gift", "A special gift", Icons.Filled.CardGiftcard, TILE_TINT, TILE_ICON),
+    GiveFund("mission", "Mission", "Beyond our walls", Icons.Filled.Public, TILE_TINT, TILE_ICON),
+    GiveFund("discipleship", "Discipleship", "Growing the Pathway", Icons.Filled.MenuBook, TILE_TINT, TILE_ICON),
 )
 
 fun giveFund(id: String?): GiveFund = GIVE_FUNDS.firstOrNull { it.id.equals(id?.trim(), true) }
-    ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Icons.Filled.CardGiftcard, Color(0xFFF3E8FF), Color(0xFFA855F7))
+    ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Icons.Filled.CardGiftcard, TILE_TINT, TILE_ICON)
 
 /** A payment method (iOS `PayMethod`). `provider == null` → "SOON" (disabled).
  *  Only rails GET /giving/methods can list have a row (Giving Cycle 5): the
@@ -109,10 +115,12 @@ data class GiveMethod(
 val GIVE_METHODS = listOf(
     // "STK push" is the provider's word, not the member's (§8.1 rule 8;
     // Cycle 3 close walk E7) — the card below already says "prompt".
-    GiveMethod("mpesa", "Pay with M-Pesa", "A prompt on your phone", Color(0xFF16A34A), Color.White, "M-PESA", null, "mpesa"),
-    GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", Color(0xFFDC2626), Color.White, "AIRTEL", null, "airtel"),
-    GiveMethod("card", "Pay with Card", "Visa · Mastercard", Color(0xFFEEF2FF), Color(0xFF6366F1), null, Icons.Filled.CreditCard, "card"),
-    GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", Color(0xFFE8F1FB), Color(0xFF0070BA), "PP", null, "paypal"),
+    // The rails' badges are tiles too (rule 7): their names in navy on gold
+    // tint — M-Pesa green and Airtel red read as "on track" and "failed".
+    GiveMethod("mpesa", "Pay with M-Pesa", "A prompt on your phone", TILE_TINT, TILE_ICON, "M-PESA", null, "mpesa"),
+    GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", TILE_TINT, TILE_ICON, "AIRTEL", null, "airtel"),
+    GiveMethod("card", "Pay with Card", "Visa · Mastercard", TILE_TINT, TILE_ICON, null, Icons.Filled.CreditCard, "card"),
+    GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", TILE_TINT, TILE_ICON, "PP", null, "paypal"),
 )
 
 val GIVE_PRESETS = listOf(200, 500, 1000, 2500, 5000)

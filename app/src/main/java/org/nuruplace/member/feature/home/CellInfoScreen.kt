@@ -248,7 +248,7 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                         Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldTint),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.VideoLibrary, null, tint = Nuru.goldLo, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.VideoLibrary, null, tint = Nuru.navy, modifier = Modifier.size(16.dp))
                     }
                     Spacer(Modifier.size(Spacing.md))
                     Text("Watch replays", style = NuruType.controlTitle, color = Nuru.ink, modifier = Modifier.weight(1f))

@@ -44,12 +44,14 @@ fun CommunityHubScreen(onOpen: (String) -> Unit) {
             Spacer(Modifier.size(Spacing.sm))
             Text("Pray & connect", style = NuruType.display, color = Nuru.onNavy)
         }
+        // Every tile navy on gold tint (§8.1 rules 1 and 7) — they were red,
+        // sky, green and purple.
         Column(Modifier.padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            HubCard("prayer-room?tab=corporate", "My Prayer Room", "Share & carry each other's requests", Icons.Filled.Favorite, Nuru.danger, Nuru.dangerBg, onOpen)
-            HubCard("chat", "Messages", "Spaces, groups and direct messages", Icons.Filled.Email, Nuru.info, Nuru.infoBg, onOpen)
-            HubCard("events", "Events", "What's on — RSVP and see who's going", Icons.Filled.DateRange, Nuru.goldLo, Nuru.goldTint, onOpen)
-            HubCard("announcements", "Announcements", "News from your church", Icons.Filled.Notifications, Nuru.success, Nuru.successBg, onOpen)
-            HubCard("radio", "Live radio", "Tune in to Nuru Place on air", Icons.Filled.PlayArrow, androidx.compose.ui.graphics.Color(0xFFA855F7), androidx.compose.ui.graphics.Color(0xFFF3E8FF), onOpen)
+            HubCard("prayer-room?tab=corporate", "My Prayer Room", "Share & carry each other's requests", Icons.Filled.Favorite, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("chat", "Messages", "Spaces, groups and direct messages", Icons.Filled.Email, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("events", "Events", "What's on — RSVP and see who's going", Icons.Filled.DateRange, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("announcements", "Announcements", "News from your church", Icons.Filled.Notifications, Nuru.navy, Nuru.goldTint, onOpen)
+            HubCard("radio", "Live radio", "Tune in to Nuru Place on air", Icons.Filled.PlayArrow, Nuru.navy, Nuru.goldTint, onOpen)
         }
     }
 }

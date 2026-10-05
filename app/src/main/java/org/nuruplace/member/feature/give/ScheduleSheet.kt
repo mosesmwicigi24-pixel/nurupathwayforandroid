@@ -199,8 +199,8 @@ internal fun ScheduleSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(GIVE.gold.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(19.dp))
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Autorenew, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(19.dp))
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(money(s.amountMinor, s.currency), style = giInter(18, FontWeight.Bold), color = GIVE.navy)

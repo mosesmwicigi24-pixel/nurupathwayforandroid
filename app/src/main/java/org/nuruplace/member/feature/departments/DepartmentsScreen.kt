@@ -113,10 +113,10 @@ private fun DepartmentsEmpty() {
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Box(
-                    Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldChipBg),
+                    Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldTint),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Diversity3, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(26.dp))
+                    Icon(Icons.Filled.Diversity3, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(26.dp))
                 }
                 Spacer(Modifier.height(Spacing.xs))
                 Text("No departments yet", style = NuruType.cardTitle, color = Nuru.ink, textAlign = TextAlign.Center)

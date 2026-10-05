@@ -913,8 +913,8 @@ private fun TalkItOverEntry(onClick: () -> Unit) {
             .clickable { onClick() }.padding(16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(PL.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.ChatBubbleOutline, null, tint = PL.goldDeep, modifier = Modifier.size(18.dp))
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.ChatBubbleOutline, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Talk it Over", style = plSerif(16, Medium), color = PL.navy)

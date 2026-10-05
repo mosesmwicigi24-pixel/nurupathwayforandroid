@@ -1167,8 +1167,8 @@ private fun GiveTab(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Autorenew, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(15.dp))
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Autorenew, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(15.dp))
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text("Your rhythm", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
@@ -1321,7 +1321,6 @@ private fun GiveTab(
                 // to change it (the iOS MobileMoneySheet's job). No number
                 // yet: Add, and the gift waits for one.
                 if (method?.needsPhone == true) {
-                    val tint = GIVE_METHODS.firstOrNull { it.id == method.key }?.badgeBg ?: GIVE.gold
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(GIVE.white)
                             .border(1.dp, if (promptPhone == null) GIVE.danger.copy(alpha = 0.4f) else GIVE.border, RoundedCornerShape(18.dp))
@@ -1330,8 +1329,8 @@ private fun GiveTab(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Smartphone, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(TILE_TINT), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.Smartphone, contentDescription = null, tint = TILE_ICON, modifier = Modifier.size(18.dp))
                         }
                         Column(Modifier.weight(1f)) {
                             Text("${method.label.uppercase()} PROMPT GOES TO", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
