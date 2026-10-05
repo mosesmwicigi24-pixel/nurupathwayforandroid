@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import java.time.Instant
@@ -97,14 +98,11 @@ object CHAT {
     val bubbleInk = Brush.linearGradient(listOf(navyInk, navyInk2))
     val threadBg = Brush.linearGradient(listOf(Color(0xFFF6F4EE), Color(0xFFF1ECE1)))
 
-    // AI "Quick help from Nuru" card
-    val aiCard = Brush.linearGradient(listOf(Color(0xFF2A1259), Color(0xFF0A1628), Color(0xFF053F30)))
-    val aiBadge = Brush.linearGradient(listOf(Color(0xFFA78BFA), Color(0xFF34D399)))
-    val aiOrb = Brush.radialGradient(listOf(Color(0xFFC4B5FD), Color(0xFF7C3AED), Color(0xFF2A1259)))
-    val aiBorderRing = Brush.linearGradient(listOf(Color(0xFFA78BFA), Color(0xFFC89B3C), Color(0xFF34D399)))
-    val aiDot = Color(0xFF34D399)
-    val aiPurpleGlow = Color(0xFF7C3AED)
-    val aiGreenGlow = Color(0xFF10B981)
+    // AI "Quick help from Nuru" card — navy with gold accents, the brand's
+    // one dark card (EXPERIENCE.md §8.1 rule 1, §8.2 #3). It was a purple and
+    // green gradient: hues the visual language does not have.
+    val aiCard = Brush.linearGradient(listOf(Nuru.navy700, Nuru.navyCeremony))
+    val aiOrb = Nuru.goldGradient
 
     // Per-space / per-person tile palette (index-cycled)
     val rowTints = listOf(

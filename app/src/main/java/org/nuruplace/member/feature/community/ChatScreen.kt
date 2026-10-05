@@ -92,7 +92,7 @@ import org.nuruplace.member.data.net.RequestJoinSpaceBody
 import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.ListSkeleton
-import java.time.LocalTime
+import org.nuruplace.member.ui.theme.NuruType
 import java.util.UUID
 
 private val Capsule = RoundedCornerShape(999.dp)
@@ -306,28 +306,17 @@ fun ChatInboxScreen(
                 ChatCreamHeaderBox {
                     Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // One header (EXPERIENCE.md §8.1 rule 2, §8.2 #1): the
+                            // kicker names the tab — the greeting ("GOOD MORNING ·
+                            // ADA") belongs to Home alone — the Fraunces title,
+                            // one Inter line, the bell at the right.
                             Column(Modifier.weight(1f)) {
-                                val greeting = when (LocalTime.now().hour) {
-                                    in 0..11 -> "GOOD MORNING"
-                                    in 12..16 -> "GOOD AFTERNOON"
-                                    else -> "GOOD EVENING"
-                                }
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                ) {
-                                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = CHAT.eyebrow, modifier = Modifier.size(12.dp))
-                                    Text(
-                                        greeting + " · " + name.substringBefore(' ').uppercase(),
-                                        style = cInter(11, FontWeight.SemiBold, 2.4f),
-                                        color = CHAT.eyebrow,
-                                    )
-                                }
+                                Text("COMMUNITY", style = NuruType.kicker, color = CHAT.eyebrow)
                                 Text(
                                     "Nuru Connect",
-                                    style = cSerif(30, FontWeight.SemiBold, -0.6f),
+                                    style = cSerif(28, FontWeight.SemiBold, -0.56f),
                                     color = CHAT.navy,
-                                    modifier = Modifier.padding(top = 12.dp),
+                                    modifier = Modifier.padding(top = 4.dp),
                                 )
                                 Text(
                                     if (totalUnread > 0) "$totalUnread unread · ${spaces.size} spaces" else "You're all caught up",
@@ -519,6 +508,9 @@ fun ChatInboxScreen(
 }
 
 // ── AI "Quick help from Nuru" card ──
+// Navy with gold accents (EXPERIENCE.md §8.1 rule 1, §8.2 #3): the gold orb,
+// a gold hairline, one soft gold glow and a gold "AI" chip. It was a purple
+// and green gradient with a tri-colour ring — hues the brand does not have.
 @Composable
 private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Unit) {
     Box(
@@ -526,25 +518,17 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(CHAT.aiCard)
-            .border(1.5.dp, CHAT.aiBorderRing, RoundedCornerShape(24.dp))
+            .border(1.dp, CHAT.gold.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
             .clickable { onOpenAssistant() },
     ) {
-        // Subtle corner glows — matchParentSize so they don't inflate the card height
+        // One soft gold glow at the orb's corner — matchParentSize so it
+        // doesn't inflate the card's height.
         Box(
             Modifier.matchParentSize().background(
                 Brush.radialGradient(
-                    colors = listOf(CHAT.aiPurpleGlow.copy(alpha = 0.38f), Color.Transparent),
+                    colors = listOf(CHAT.gold.copy(alpha = 0.22f), Color.Transparent),
                     center = Offset(150f, 40f),
-                    radius = 300f,
-                ),
-            ),
-        )
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.radialGradient(
-                    colors = listOf(CHAT.aiGreenGlow.copy(alpha = 0.30f), Color.Transparent),
-                    center = Offset(920f, 150f),
-                    radius = 300f,
+                    radius = 320f,
                 ),
             ),
         )
@@ -560,15 +544,7 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                     .background(CHAT.aiOrb),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .size(12.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(CHAT.aiDot)
-                        .border(2.dp, CHAT.navyInk, androidx.compose.foundation.shape.CircleShape),
-                )
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -576,10 +552,10 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                     Box(
                         Modifier
                             .clip(Capsule)
-                            .background(CHAT.aiBadge)
+                            .background(CHAT.goldLight)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
-                        Text("AI", style = cInter(8, FontWeight.Bold, 1.1f), color = CHAT.navyInk)
+                        Text("AI", style = cInter(8, FontWeight.Bold, 1.1f), color = CHAT.navy)
                     }
                 }
                 Text(
@@ -596,7 +572,7 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
                     .background(Color.White.copy(alpha = 0.10f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(18.dp))
             }
         }
     }
