@@ -339,9 +339,9 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         Box(
                             Modifier
                                 .clip(Capsule)
-                                .background(evCategory(c).copy(alpha = 0.9f))
+                                .background(EV.white)
                                 .padding(horizontal = 8.dp, vertical = 2.dp),
-                        ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1.4f), color = Color.White) }
+                        ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1.4f), color = EV.navy) }
                     }
                     if (isEventLive(e.occursAt)) {
                         Box(
@@ -432,9 +432,11 @@ private fun MetaTile(modifier: Modifier, icon: ImageVector, label: String, value
             Modifier
                 .size(32.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(accent.copy(alpha = 0.12f)),
+                // A row icon: navy on gold tint (rule 7) — it took the
+                // category's hue.
+                .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp)) }
+        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(15.dp)) }
         Column {
             Text(label, style = evInter(11, FontWeight.Bold, 1.3f), color = EV.tertiary)
             // Wraps rather than cuts (§8.1 rule 9): "The Good News Mi…" was the

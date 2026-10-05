@@ -124,15 +124,11 @@ object EV {
         avatarPalette[(seed.hashCode().let { if (it < 0) -it else it }) % avatarPalette.size]
 }
 
-/** Category → accent color, ported from iOS `Ev.categoryColor`. */
-fun evCategory(cat: String?): Color = when (cat?.lowercase()?.trim()) {
-    "worship" -> Color(0xFFC89B3C)
-    "cell" -> Color(0xFF6366F1)
-    "leaders" -> Color(0xFF0EA5E9)
-    "youth" -> Color(0xFF16A34A)
-    "marketplace" -> Color(0xFFE07B39)
-    else -> Color(0xFF59667C)
-}
+/** An event's accent — gold for every category. A category is its word, on
+ *  rule 6's pills (EXPERIENCE.md §8.1 rules 1 and 6); it was a hue each
+ *  (indigo cells, sky leaders, green youth, orange marketplace). */
+@Suppress("UNUSED_PARAMETER")
+fun evCategory(cat: String?): Color = EV.gold
 
 /** Inter text style — delegates to the canonical schema (ui/theme/TypeSchema.kt). */
 fun evInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
@@ -265,9 +261,11 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
             occ.category?.takeIf { it.isNotBlank() }?.let { c ->
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp)
-                        .clip(RoundedCornerShape(999.dp)).background(accent.copy(alpha = 0.9f))
+                        // The word on a white pill (rule 6) — no category hue.
+                        .clip(RoundedCornerShape(999.dp)).background(EV.white)
+                        .border(1.dp, EV.border, RoundedCornerShape(999.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1f), color = EV.white) }
+                ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1f), color = EV.navy) }
             }
         }
         // Body

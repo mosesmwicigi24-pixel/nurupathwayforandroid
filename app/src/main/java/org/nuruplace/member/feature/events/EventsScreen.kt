@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Verified
@@ -360,7 +361,8 @@ fun EventsScreen(
                     ) {
                         listOf("All", "Worship", "Cell", "Leaders", "Youth").forEach { c ->
                             val on = category == c
-                            val color = if (c == "All") EV.navy else evCategory(c)
+                            // Rule 6: navy when selected, for every category.
+                            val color = EV.navy
                             Text(
                                 c,
                                 style = evInter(12, if (on) FontWeight.SemiBold else FontWeight.Medium),
@@ -682,9 +684,9 @@ private fun SeriesRail(
             ) {
                 Box(
                     Modifier.size(36.dp).clip(RoundedCornerShape(12.dp))
-                        .background(evCategory(s.category).copy(alpha = 0.12f))
-                        .border(1.dp, evCategory(s.category).copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                )
+                        .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.EventRepeat, contentDescription = null, tint = EV.navy, modifier = Modifier.size(18.dp)) }
                 Column(Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
