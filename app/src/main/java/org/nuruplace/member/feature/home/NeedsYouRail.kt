@@ -160,8 +160,11 @@ private fun NudgeIconTile(n: HomeNudge) {
         }
         return
     }
+    // A row icon is navy (§8.1 rule 7) — here on white, since the card itself
+    // is the gentle prompt on gold tint (rule 5). It took the nudge's accent:
+    // gold, green or sky.
     Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.white), contentAlignment = Alignment.Center) {
-        Icon(nudgeIcon(n.kind), null, tint = accentColor(n.accent), modifier = Modifier.size(18.dp))
+        Icon(nudgeIcon(n.kind), null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -190,9 +193,3 @@ private fun nudgeIcon(kind: String): ImageVector = when (kind) {
     else -> Lucide.Sparkles
 }
 
-private fun accentColor(accent: String): Color = when (accent.lowercase()) {
-    "gold" -> Nuru.goldDeep
-    "success" -> Nuru.success
-    "steady" -> Nuru.navy
-    else -> Nuru.navy
-}
