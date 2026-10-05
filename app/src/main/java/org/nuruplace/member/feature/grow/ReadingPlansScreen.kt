@@ -155,7 +155,9 @@ fun ReadingPlansScreen(
         (category == "all" || p.category == category) &&
             (q.isEmpty() || p.title.lowercase().contains(q) || (p.category ?: "").lowercase().contains(q))
     }
-    val continueReading = plans.filter { it.enrolled && it.completedAt == null }
+    // The plans being read — their one card each (§7.4 #3); the same predicate
+    // keeps them out of the promos ([resolvePromos]).
+    val continueReading = plans.filter(::isBeingRead)
     val planOfDay = planOfTheDay(plans)
     val categories = buildList {
         val seen = HashSet<String>()
@@ -180,19 +182,20 @@ fun ReadingPlansScreen(
         val long = plans.filter { it.dayCount >= 14 }
         if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
     }
-    // The server's promos, joined to the plans we actually hold. When it returns
-    // nothing (or failed), `resolved` is empty and the page keeps its exact local
-    // behaviour: plan-of-the-day at the top, one promo woven in mid-page.
+    // The server's promos, joined to the plans we actually hold — never a plan
+    // being read. When it returns nothing (or failed), `resolved` is empty and
+    // the page keeps its exact local behaviour: plan-of-the-day at the top, one
+    // promo woven in mid-page.
     val resolved = remember(promos, plans) { resolvePromos(promos, plans) }
-    // The featured plan — the same pick on both apps for the same member and
-    // day (EXPERIENCE.md §8.2 #6, featuredPlan). The other promos are woven
-    // into the browse below, never the featured plan twice — and never a plan
-    // in progress, which has its one card under CONTINUE READING (§7.4 #3).
+    // The featured plan: the server's first promo, with its kicker — the same
+    // pick on both apps, since the server's page stands all day (EXPERIENCE.md
+    // §7.4; featuredPlan). The rest are woven into the browse in its order.
     val featured = featuredPlan(plans, resolved)
-    val restPromos = browsePromos(resolved, featured, plans)
-    // A second plan to promote further down the page — never the one already at
-    // the top, and never one already being read — turning every second Nairobi day.
-    val midPromo = midPromoPlan(plans, planOfDay?.planId, nairobiEpochDay())
+    val restPromos = resolved.drop(1)
+    // A second plan to promote further down the page — only when the server
+    // had no promo to give (iOS the same): never the one already at the top,
+    // never one already being read, turning every second Nairobi day.
+    val midPromo = if (resolved.isEmpty()) midPromoPlan(plans, planOfDay?.planId, nairobiEpochDay()) else null
 
     Column(
         Modifier
@@ -617,42 +620,26 @@ internal fun nairobiEpochDay(now: java.time.Instant = java.time.Instant.now()): 
 internal data class FeaturedPlan(val plan: ReadingPlanRow, val kicker: String, val reason: String?)
 
 /**
- * The featured plan — the same pick on both apps for the same member and day
- * (EXPERIENCE.md §8.2 #6) — and never a plan in progress: that plan has one
- * card, under CONTINUE READING (§7.4 #3; "Continue reading" and "Pick up
- * where you left off" showed the same plan, one above the other). So the
- * server's "continue" promo leads only for a plan the page does not already
- * hold as in progress; otherwise the plan of the day ([planOfTheDay]) leads,
- * unless it is itself in progress (every plan started).
+ * The featured plan — the server's first promo, with its own kicker and
+ * reason: the same pick on both apps, because the server is the source of
+ * truth and its promo page now stands all day, fillers included (EXPERIENCE.md
+ * §7.4 #5). A plan being read is never promoted ([resolvePromos]) — CONTINUE
+ * READING is its one card (§7.4 #3). Only when the server has no promo to
+ * show (none, or the call failed) does the page pick for itself: the plan of
+ * the day ([planOfTheDay]) — the first plan not started, else the first plan.
  *
- * Not the server's first promo whatever it is: /growth/plans/promos rests
- * every promo it hands out, and its "FROM THE LIBRARY" fillers still turn
- * from one request to the next — the other app, a refresh, a return to the
- * tab. iOS showed "Rooted: 10 Days in the Psalms" and Android "Who Am I?",
- * both "FROM THE LIBRARY", for the same member a minute apart. Those promos
- * still show, woven into the browse.
+ * (Android used to feature its own pick — the server's "continue" promo, else
+ * the plan of the day — while the server's page still turned from one request
+ * to the next: iOS showed "Rooted: 10 Days in the Psalms" and Android "Who Am
+ * I?", both "FROM THE LIBRARY", for the same member a minute apart.)
  */
 internal fun featuredPlan(plans: List<ReadingPlanRow>, promos: List<ResolvedPromo>): FeaturedPlan? {
-    val inProgress = plans.filter { it.enrolled && it.completedAt == null }.mapTo(HashSet()) { it.planId }
-    promos.firstOrNull { it.slot == PROMO_SLOT_CONTINUE && it.plan.planId !in inProgress }
-        ?.let { return FeaturedPlan(it.plan, it.kicker, it.reason) }
-    return planOfTheDay(plans)?.takeIf { it.planId !in inProgress }?.let { FeaturedPlan(it, "PLAN OF THE DAY", null) }
+    promos.firstOrNull()?.let { return FeaturedPlan(it.plan, it.kicker, it.reason) }
+    return planOfTheDay(plans)?.let { FeaturedPlan(it, "PLAN OF THE DAY", null) }
 }
 
-/** The server's slot for a plan the member is already walking (promos.ts). */
-internal const val PROMO_SLOT_CONTINUE = "continue"
-
-/** The promos woven into the browse, in the server's order: never the
- *  featured plan, and never a plan in progress — its one card is under
- *  CONTINUE READING (EXPERIENCE.md §7.4 #3). */
-internal fun browsePromos(
-    resolved: List<ResolvedPromo>,
-    featured: FeaturedPlan?,
-    plans: List<ReadingPlanRow>,
-): List<ResolvedPromo> {
-    val inProgress = plans.filter { it.enrolled && it.completedAt == null }.mapTo(HashSet()) { it.planId }
-    return resolved.filter { it.plan.planId != featured?.plan?.planId && it.plan.planId !in inProgress }
-}
+/** Being read: started and not finished — CONTINUE READING's plans (§7.4 #3). */
+internal fun isBeingRead(plan: ReadingPlanRow): Boolean = plan.enrolled && plan.completedAt == null
 
 /**
  * The second plan promoted further down the browse: never the one already
@@ -677,8 +664,9 @@ internal fun midPromoPlan(
  * The server chooses the plan, the kicker and the reason; the client only has to
  * find the plan in the list it already holds. A promo naming a plan this member
  * cannot see (gated, retired, or simply not in this page's payload) is dropped
- * rather than rendered half-empty, and a plan is promoted at most once so one
- * plan cannot own the shelf.
+ * rather than rendered half-empty, a plan being read is dropped (its card is
+ * CONTINUE READING, §7.4 #3), and a plan is promoted at most once so one plan
+ * cannot own the shelf. iOS's PlanPicks.resolve is the same rule.
  */
 internal data class ResolvedPromo(
     val plan: ReadingPlanRow,
@@ -698,6 +686,7 @@ internal fun resolvePromos(
     val seen = HashSet<String>()
     return promos.mapNotNull { p ->
         val plan = byId[p.planId] ?: return@mapNotNull null
+        if (isBeingRead(plan)) return@mapNotNull null
         if (!seen.add(plan.planId)) return@mapNotNull null
         ResolvedPromo(
             plan = plan,
