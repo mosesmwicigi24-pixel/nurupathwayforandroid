@@ -108,6 +108,7 @@ import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.ui.components.AsyncContent
 import java.time.Instant
 import java.util.UUID
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.theme.Nuru
 
 /** Pill / capsule corner. */
@@ -659,12 +660,19 @@ private fun BuzzCard(eventId: String) {
             var pickedBytes by remember { mutableStateOf<ByteArray?>(null) }
             var pickedPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
             var attachMenu by remember { mutableStateOf(false) }
+            // A post that didn't reach the wall keeps its words and photo and
+            // says why (§7.4); its ids and an uploaded photo's address stay
+            // with it, so posting again can't post it twice or upload twice.
+            var postError by remember { mutableStateOf<String?>(null) }
+            var postIds by remember { mutableStateOf<Pair<String, String>?>(null) }
+            var uploadedUrl by remember { mutableStateOf<String?>(null) }
 
             fun setPicked(raw: ByteArray?) {
                 if (raw == null) return
                 downscaleJpeg(raw, 1600)?.let { (jpeg, bmp) ->
                     pickedBytes = jpeg
                     pickedPreview = bmp.asImageBitmap()
+                    uploadedUrl = null
                 }
             }
             val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
@@ -691,31 +699,45 @@ private fun BuzzCard(eventId: String) {
             val post: () -> Unit = {
                 if ((draft.isNotBlank() || pickedBytes != null) && !busy) {
                     busy = true
+                    postError = null
                     val bodyText = draft.trim()
                     val bytes = pickedBytes
+                    val ids = postIds ?: (UUID.randomUUID().toString() to UUID.randomUUID().toString()).also { postIds = it }
                     scope.launch {
-                        runCatching {
-                            var imageUrl: String? = null
-                            if (bytes != null) {
+                        try {
+                            var imageUrl: String? = uploadedUrl
+                            if (bytes != null && imageUrl == null) {
                                 val part = MultipartBody.Part.createFormData(
                                     "file", "post.jpg", bytes.toRequestBody("image/jpeg".toMediaTypeOrNull()),
                                 )
                                 imageUrl = Net.client.api.uploadPostImage(part).url.ifBlank { null }
+                                uploadedUrl = imageUrl
                             }
-                            Net.client.api.createEventPost(
+                            // This call answers with a Response, so a refusal
+                            // never throws — it read as posted and the words
+                            // were wiped. Its status decides now.
+                            val res = Net.client.api.createEventPost(
                                 eventId,
-                                EventPostBody(UUID.randomUUID().toString(), bodyText.ifBlank { null }, imageUrl, UUID.randomUUID().toString()),
+                                EventPostBody(ids.first, bodyText.ifBlank { null }, imageUrl, ids.second),
                             )
+                            if (!res.isSuccessful) throw retrofit2.HttpException(res)
+                            if (draft.trim() == bodyText) draft = ""
+                            pickedBytes = null; pickedPreview = null; uploadedUrl = null; postIds = null
+                            reloadBuzz()
+                        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                            throw c
+                        } catch (e: Exception) {
+                            postError = ApiException.failureLine("Couldn't post that.", e, context)
+                        } finally {
+                            busy = false
                         }
-                        draft = ""; pickedBytes = null; pickedPreview = null; busy = false
-                        reloadBuzz()
                     }
                 }
             }
             val react: (String, String) -> Unit = { postId, kind ->
                 scope.launch {
-                    runCatching { Net.client.api.reactToEventPost(eventId, postId, EventReactBody(kind)) }
-                    reloadBuzz()
+                    noticeOnFailure(context) { Net.client.api.reactToEventPost(eventId, postId, EventReactBody(kind)) }
+                        ?.let { reloadBuzz() }
                 }
             }
 
@@ -787,6 +809,7 @@ private fun BuzzCard(eventId: String) {
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                postError?.let { Text(it, style = evInter(12), color = Nuru.danger) }
                 pickedPreview?.let { bmp ->
                     Box(Modifier.fillMaxWidth()) {
                         Image(
@@ -796,7 +819,7 @@ private fun BuzzCard(eventId: String) {
                         Box(
                             Modifier.align(Alignment.TopEnd).padding(8.dp).size(28.dp).clip(RoundedCornerShape(999.dp))
                                 .background(Color.Black.copy(alpha = 0.55f))
-                                .clickable { pickedBytes = null; pickedPreview = null },
+                                .clickable { pickedBytes = null; pickedPreview = null; uploadedUrl = null },
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Filled.Close, "Remove photo", tint = Color.White, modifier = Modifier.size(15.dp)) }
                     }
