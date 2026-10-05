@@ -114,11 +114,9 @@ object EV {
     val buzzing = Brush.linearGradient(listOf(going, goingDeep))
     val selectedDay = Brush.linearGradient(listOf(navy, navyDeep))       // month-grid selected cell
 
-    // Deterministic roster/buzz avatar accents (hash % 7)
-    val avatarPalette = listOf(
-        Color(0xFF0A1628), Color(0xFFC9A227), Color(0xFF16A34A), Color(0xFF0EA5E9),
-        Color(0xFFA855F7), Color(0xFFDC2626), Color(0xFFD97706),
-    )
+    // Deterministic roster/buzz avatar accents: navy or gold only (§8.1
+    // rule 1) — seven hues before, red and amber among them.
+    val avatarPalette = listOf(Color(0xFF0A1628), Color(0xFFA87F2E))
 
     fun avatarAccent(seed: String): Color =
         avatarPalette[(seed.hashCode().let { if (it < 0) -it else it }) % avatarPalette.size]

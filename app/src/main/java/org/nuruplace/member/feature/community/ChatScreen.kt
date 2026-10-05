@@ -1751,7 +1751,7 @@ private fun BroadcastSentRow(b: org.nuruplace.member.data.net.BroadcastSummary, 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Filled.People, contentDescription = null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
             Text("${b.recipientCount}", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
-            Icon(Icons.Filled.DoneAll, contentDescription = null, tint = Color(0xFF2F80ED), modifier = Modifier.size(13.dp))
+            Icon(Icons.Filled.DoneAll, contentDescription = null, tint = CHAT.tickBlue, modifier = Modifier.size(13.dp))
             Text("${b.seenCount} seen", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
             Text("${b.repliedCount} replied", style = cInter(11, FontWeight.SemiBold), color = CHAT.ink600)
             Spacer(Modifier.weight(1f))

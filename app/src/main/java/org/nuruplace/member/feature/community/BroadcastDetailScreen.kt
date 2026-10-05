@@ -63,7 +63,7 @@ private val Capsule = RoundedCornerShape(999.dp)
 /** WhatsApp's own blue — one tick "delivered" (a server-side fact: a
  *  broadcast is written into every recipient's thread in one transaction), two
  *  ticks "seen" (they opened it). */
-private val TickBlue = Color(0xFF2F80ED)
+private val TickBlue = CHAT.tickBlue   // the ticks are gold (§8.1 rule 1)
 
 @Composable
 fun BroadcastDetailScreen(broadcastId: String, onBack: () -> Unit, onOpenThread: (String) -> Unit) {

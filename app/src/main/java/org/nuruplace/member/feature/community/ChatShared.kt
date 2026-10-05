@@ -76,10 +76,10 @@ object CHAT {
     val activeBg = Color(0x1716A34A)    // #16A34A @ 9%
     val online = Color(0xFF25D366)
     val doubleCheck = Color(0xFFBCC4CE)
-    // The broadcast tick rule, everywhere (iOS build 84 parity): ONE blue tick
-    // = delivered, TWO blue ticks = seen. WhatsApp-blue on every surface — no
-    // gold, no gray states — DM, discipler, and pastoral bubbles alike.
-    val tickBlue = Color(0xFF2F80ED)
+    // The broadcast tick rule, everywhere (iOS build 84 parity): ONE tick =
+    // delivered, TWO ticks = seen — in gold, the accent (EXPERIENCE.md §8.1
+    // rule 1: no other hues; they were WhatsApp blue).
+    val tickBlue = Color(0xFFC89B3C)
     val tintBlue = Color(0xFFE8EEF7)
     val navyMid = Color(0xFF315F8C)
 
@@ -104,30 +104,28 @@ object CHAT {
     val aiCard = Brush.linearGradient(listOf(Nuru.navy700, Nuru.navyCeremony))
     val aiOrb = Nuru.goldGradient
 
-    // Per-space / per-person tile palette (index-cycled)
-    val rowTints = listOf(
-        Color(0xFFC89B3C), Color(0xFF6366F1), Color(0xFF0EA5E9),
-        Color(0xFF16A34A), Color(0xFFDB2777), Color(0xFF0D9488),
-    )
-    // Colored sender-name accents inside incoming space bubbles (hash % 8)
-    val senderPalette = listOf(
-        Color(0xFF4F46E5), Color(0xFF0284C7), Color(0xFF0D9488), Color(0xFF059669),
-        Color(0xFFDB2777), Color(0xFFC2410C), Color(0xFF7C3AED), Color(0xFFB45309),
-    )
+    // Per-space / per-person tile palette (index-cycled): navy or gold only
+    // (§8.1 rule 1) — six hues before (indigo, sky, green, pink, teal). The
+    // gold is the deep one, so the white initials on it stay legible.
+    val rowTints = listOf(Nuru.navy, Color(0xFFA87F2E))
+    // Sender names inside incoming space bubbles (hash % 2): navy tones — they
+    // were eight hues.
+    val senderPalette = listOf(Nuru.navy, navyMid)
 }
 
 /** Tile gradient for a "#"/initials squircle (tint → tint@71%). */
 fun chatTileBrush(tint: Color): Brush = Brush.linearGradient(listOf(tint, tint.copy(alpha = 0.71f)))
 
 /** Row tint cycled by index (space/dm/group/person offsets applied by caller). */
-fun chatRowTint(index: Int): Color = CHAT.rowTints[((index % 6) + 6) % 6]
+fun chatRowTint(index: Int): Color = CHAT.rowTints[((index % CHAT.rowTints.size) + CHAT.rowTints.size) % CHAT.rowTints.size]
 
 /** Colored sender accent — self is always gold; others hashed into senderPalette. */
 fun chatSenderAccent(name: String, mine: Boolean): Color {
     if (mine) return CHAT.gold
     var h = 0
     for (c in name) h = h * 31 + c.code
-    return CHAT.senderPalette[((h % 8) + 8) % 8]
+    val n = CHAT.senderPalette.size
+    return CHAT.senderPalette[((h % n) + n) % n]
 }
 
 // Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.

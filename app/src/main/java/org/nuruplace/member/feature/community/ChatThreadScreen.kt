@@ -983,7 +983,7 @@ private fun ThreadHeader(
                         ChatCircleAvatar(thread.title ?: "", size = 34.dp)
                     }
                 } else {
-                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF2E7D6B)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.navy), contentAlignment = Alignment.Center) {
                         Text("#", style = cInter(18, FontWeight.Bold), color = Color.White)
                     }
                 }
