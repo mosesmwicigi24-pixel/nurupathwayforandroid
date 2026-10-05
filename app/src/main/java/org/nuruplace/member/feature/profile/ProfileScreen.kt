@@ -682,11 +682,10 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
                 Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(PROF.surface)
-                    .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+                    .background(PROF.goldTint),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
+                Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(18.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text(label, style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
@@ -719,11 +718,10 @@ private fun LanguagesRow() {
             Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(PROF.surface)
-                .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+                .background(PROF.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Lucide.Languages, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Languages, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("LANGUAGES SPOKEN", style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
@@ -957,11 +955,10 @@ private fun ScoreRow(name: String, value: Int?, pillar: String, icon: ImageVecto
             Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(PROF.surface)
-                .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+                .background(PROF.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
+            Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

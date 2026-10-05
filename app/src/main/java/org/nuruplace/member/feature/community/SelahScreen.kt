@@ -211,9 +211,9 @@ private fun ExplainerCard(onDismiss: () -> Unit) {
         verticalAlignment = Alignment.Top,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(Nuru.surface),
+            Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(Nuru.goldTint),
             contentAlignment = Alignment.Center,
-        ) { Icon(Lucide.NotebookPen, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
+        ) { Icon(Lucide.NotebookPen, null, tint = Nuru.navy, modifier = Modifier.size(18.dp)) }
         Spacer(Modifier.width(12.dp))
         Text(
             "Selah — a word from the Psalms meaning pause and reflect. This is your quiet page: write what's on your heart. Only you can see it.",
