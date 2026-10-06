@@ -204,7 +204,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 .imePadding()
                 .verticalScroll(rememberScrollState()).imePadding(),
         ) {
-            EventHero(e, onBack, shareIntent)
+            EventHero(e, onBack)
 
             Column(
                 Modifier
@@ -238,7 +238,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
 // ── Hero ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
+private fun EventHero(e: EventDetail, onBack: () -> Unit) {
     // Natural aspect (w/h) of the loaded hero image — null until Coil reports it.
     // Once known, the hero grows to show the FULL image un-cropped: height follows
     // the intrinsic aspect, capped at 60% of the screen for very tall posters
@@ -294,6 +294,7 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // One back control on every pushed page: the arrow (Cycle 4 walk 36).
                 Box(
                     Modifier
                         .size(40.dp)
@@ -301,16 +302,10 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         .background(Color.White.copy(alpha = 0.15f))
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                // One back control on every pushed page: the arrow (Cycle 4 walk 36).
                 ) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .clickable { onShare() },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.Share2, "Share", tint = Color.White, modifier = Modifier.size(18.dp)) }
+                // One way to share: the "Share" button under the details, as on
+                // iOS — the photo's share icon said it a second time (§9.6 #3;
+                // Cycle 4 walk 36).
             }
             // Bottom overlay
             Column(
