@@ -597,13 +597,19 @@ fun HomeScreen(
                 letter?.takeIf { !it.isUnread }?.let { lt ->
                     LetterReadRow(lt) { showLetter = true }
                     if (showLetter) {
-                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = {})
+                        LetterDialog(
+                            lt, onDismiss = { showLetter = false }, onRead = {},
+                            onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
+                        )
                     }
                 }
                 letter?.takeIf { it.isUnread }?.let { lt ->
                     LetterKnockCard(lt) { showLetter = true }
                     if (showLetter) {
-                        LetterDialog(lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") })
+                        LetterDialog(
+                            lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") },
+                            onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
+                        )
                     }
                 }
                 // "What needs you today" — the server-ranked rail (GET /me/home/
@@ -1881,6 +1887,13 @@ private fun DisciplerRow(mentor: org.nuruplace.member.data.net.MentorInfo.Mentor
         if (mentor != null) Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
     }
 }
+
+/** Where the Sunday Letter's one next step goes — the server sends "module"
+ *  with a moduleId (that lesson) or "pathway" (letters.ts); anything else
+ *  lands on Pathway, as iOS LetterView.navigate. It went nowhere: Home
+ *  never wired the dialog's onNextStep (§9.1 rule 7, no dead ends). */
+internal fun letterStepDest(route: String, moduleId: String?): WeekDest =
+    if (route == "module" && !moduleId.isNullOrBlank()) WeekDest.Screen("module/$moduleId") else WeekDest.Tab("pathway")
 
 /** Said once, on Home, to a member with no discipler (EXPERIENCE.md §9.2 #8). */
 internal const val DISCIPLER_NONE = "No discipler yet — your leader will pair you"
