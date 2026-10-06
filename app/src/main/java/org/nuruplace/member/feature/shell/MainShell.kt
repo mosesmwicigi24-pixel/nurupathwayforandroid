@@ -61,7 +61,6 @@ import org.nuruplace.member.feature.grow.PlanDetailScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
 import org.nuruplace.member.feature.community.ChatThreadScreen
-import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
 import org.nuruplace.member.feature.events.AllEventsCalendarScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
@@ -94,8 +93,8 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
  *  each pre-selecting its segment in the SAME [YouScreen]; "Give" is "give"
  *  (opens on Give) plus "partners" (opens on Partners) in the SAME
  *  [GiveTabScreen]. Every nav call site that targets one of these by name —
- *  FCM pushes, NotificationsScreen.routeFor, Home's onSelectTab/onOpenGive,
- *  CommunityHubScreen — keeps landing correctly with zero edits, and the
+ *  FCM pushes, NotificationsScreen.routeFor, Home's onSelectTab/onOpenGive —
+ *  keeps landing correctly with zero edits, and the
  *  bottom bar must recognize every alias as "that tab is active". */
 private const val YOU_TAB_ROUTE = "you"
 private const val GIVE_TAB_ROUTE = "give"
@@ -584,7 +583,6 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 )
             }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
-            composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
             // My Prayer Room — the single destination that replaced the separate
             // "prayers" (journal) and "prayer-wall" (wall) routes; ?tab picks
             // which of its two tabs opens first. A specific post still opens
@@ -618,7 +616,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // default) plus the old standalone "chat"/"profile" routes, each
             // pre-selecting its own segment so every existing
             // nav.navigate("chat"/"profile") call site (FCM pushes,
-            // NotificationsScreen, Home's onSelectTab, CommunityHubScreen)
+            // NotificationsScreen, Home's onSelectTab)
             // keeps landing correctly. isStaff/pastoralEligible mirror the
             // OLD "chat" composable's gating exactly (product decision,
             // 2026-07 / Chat Redesign C4).

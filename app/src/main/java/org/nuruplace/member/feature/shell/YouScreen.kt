@@ -13,8 +13,8 @@
 // The "chat", "departments" and "profile" routes stay registered in
 // MainShell's NavHost and render THIS screen pre-selecting the matching
 // segment — every existing nav.navigate("chat"/"profile") call site (FCM
-// pushes, NotificationsScreen.routeFor, HomeScreen.onSelectTab,
-// CommunityHubScreen) keeps working.
+// pushes, NotificationsScreen.routeFor, HomeScreen.onSelectTab) keeps
+// working.
 package org.nuruplace.member.feature.shell
 
 import androidx.compose.foundation.background
