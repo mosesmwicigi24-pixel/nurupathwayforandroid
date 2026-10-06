@@ -221,11 +221,26 @@ internal fun thankYouLine(memberName: String?): String =
  *  downloadMessage): a 404 is a member with no partners statement, a
  *  transport failure is the connection; anything else leaves the page as
  *  the record. */
-internal fun partnersPdfErrorLine(status: Int?, network: Boolean): String = when {
+internal fun partnersPdfErrorLine(status: Int?, offline: Boolean): String = when {
     status == 404 -> "There's no partners statement for you yet."
-    network -> "You appear to be offline — the PDF needs a connection."
+    offline -> PDF_OFFLINE
     else -> "The PDF isn't available right now. The statement above is still complete."
 }
+
+/** The giving statement's line under its PDF button (iOS GivingStatementView
+ *  downloadMessage) — it said nothing when the PDF failed. */
+internal fun givingPdfErrorLine(offline: Boolean): String =
+    if (offline) PDF_OFFLINE else "The PDF isn't available right now. The statement below is still complete."
+
+/** §4's "You're offline", said only when the phone IS offline — a timeout
+ *  with a network is not the connection (it read "You appear to be offline"
+ *  on any dropped answer). */
+internal const val PDF_OFFLINE = "You're offline — the PDF needs a connection."
+
+/** Whether a failure is the phone being offline, by §4's one rule
+ *  (ApiException.state asks the phone). */
+internal fun isOffline(e: Throwable, context: android.content.Context?): Boolean =
+    org.nuruplace.member.data.net.ApiException.state(e, context).cause == org.nuruplace.member.data.net.StateCause.OFFLINE
 
 /** Pledge-tied payments by month, newest month first and newest row first
  *  within it, each month subtotalled; undated rows trail in one group. */

@@ -267,7 +267,7 @@ class PartnersStatementViewModel : ViewModel() {
             }
             if (!ok) {
                 val f = failure
-                pdfError = partnersPdfErrorLine(status = (f as? HttpException)?.code(), network = f is IOException)
+                pdfError = partnersPdfErrorLine(status = (f as? HttpException)?.code(), offline = f != null && isOffline(f, app))
             }
             pdfBusy = false
         }

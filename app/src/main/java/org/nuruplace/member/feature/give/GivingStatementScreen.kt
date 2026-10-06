@@ -171,6 +171,8 @@ fun GivingStatementScreen(
                         .padding(horizontal = 20.dp)
                         .padding(top = 12.dp, bottom = 20.dp),
                 ) {
+                    // Why the statement's PDF couldn't be had, or null (§4).
+                    var pdfError by remember(targetYear) { mutableStateOf<String?>(null) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier
@@ -208,9 +210,10 @@ fun GivingStatementScreen(
                                     // The year on screen (Giving Cycle 2) — the
                                     // PDF used to be every year whatever the chip said.
                                     pdfScope.launch {
-                                        openPdfAuthed(pdfCtx, "nuru-giving-statement-$targetYear.pdf") {
+                                        pdfError = null
+                                        pdfError = openPdfAuthed(pdfCtx, "nuru-giving-statement-$targetYear.pdf") {
                                             Net.client.api.givingStatementPdf(targetYear)
-                                        }
+                                        }?.let { givingPdfErrorLine(offline = isOffline(it, pdfCtx)) }
                                     }
                                 },
                             contentAlignment = Alignment.Center,
@@ -222,6 +225,10 @@ fun GivingStatementScreen(
                                 modifier = Modifier.size(18.dp),
                             )
                         }
+                    }
+                    // A PDF that couldn't be had says so, in iOS's words (§4).
+                    pdfError?.let {
+                        Text(it, style = giInter(11), color = Color.White.copy(alpha = 0.75f), modifier = Modifier.padding(top = 8.dp))
                     }
                     // "Total given" with no pledge money; else "Gifts" over
                     // the gifts, and one muted line that foots to the Total.
@@ -975,11 +982,13 @@ private fun ReceiptRow(
 // Authed PDF fetch → cache/shared → content:// viewer chooser (FileProvider is
 // declared in the manifest; same plumbing as certificate downloads). Shared
 // with the Partners statements section (same package).
+/** Null once the PDF is open; else why it couldn't be — the caller says so
+ *  in one line (it failed in silence before). */
 internal suspend fun openPdfAuthed(
     context: android.content.Context,
     fileName: String,
     fetch: suspend () -> okhttp3.ResponseBody,
-) {
+): Throwable? =
     runCatching {
         val f = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
@@ -995,8 +1004,7 @@ internal suspend fun openPdfAuthed(
             android.content.Intent.createChooser(view, "Open PDF")
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
         )
-    }
-}
+    }.exceptionOrNull()
 
 // Share this gift's receipt: the PDF is fetched through the authed client
 // (never a ?token= URL), written to cache/shared, and handed out as a

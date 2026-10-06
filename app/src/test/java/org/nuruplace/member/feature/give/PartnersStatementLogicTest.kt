@@ -313,10 +313,18 @@ class PartnersStatementLogicTest {
 
     @Test
     fun `a PDF that can't be had says why in iOS's words`() {
-        assertEquals("There's no partners statement for you yet.", partnersPdfErrorLine(status = 404, network = false))
-        assertEquals("You appear to be offline — the PDF needs a connection.", partnersPdfErrorLine(status = null, network = true))
-        assertEquals("The PDF isn't available right now. The statement above is still complete.", partnersPdfErrorLine(status = 500, network = false))
-        assertEquals("The PDF isn't available right now. The statement above is still complete.", partnersPdfErrorLine(status = null, network = false))
+        assertEquals("There's no partners statement for you yet.", partnersPdfErrorLine(status = 404, offline = false))
+        // §4: "You're offline" only when the phone is — never "You appear to be offline".
+        assertEquals("You're offline — the PDF needs a connection.", partnersPdfErrorLine(status = null, offline = true))
+        assertEquals("The PDF isn't available right now. The statement above is still complete.", partnersPdfErrorLine(status = 500, offline = false))
+        // A dropped answer with a network is not the connection (§4).
+        assertEquals("The PDF isn't available right now. The statement above is still complete.", partnersPdfErrorLine(status = null, offline = false))
+    }
+
+    @Test
+    fun `the giving statement's PDF says why too — it said nothing`() {
+        assertEquals("You're offline — the PDF needs a connection.", givingPdfErrorLine(offline = true))
+        assertEquals("The PDF isn't available right now. The statement below is still complete.", givingPdfErrorLine(offline = false))
     }
 
     @Test
