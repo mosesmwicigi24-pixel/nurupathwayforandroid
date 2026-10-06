@@ -112,7 +112,16 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     // "Serving in" card below; requests-in-waiting live on the Departments
     // segment, not here.
     var serving by rememberHeld("Profile.serving") { mutableStateOf<List<Department>>(emptyList()) }
+    // The member's journey (§3), derived as Home and Map view derive it (the
+    // summary, then the current level's trail): the milestones speak its words.
+    var journey by rememberHeld("Profile.journey") { mutableStateOf<org.nuruplace.member.feature.pathway.Journey?>(null) }
     LaunchedEffect(Unit) {
+        journey = runCatching {
+            val summary = Net.client.api.pathway()
+            val trail = org.nuruplace.member.feature.pathway.JourneyState.derive(summary)?.levelNumber
+                ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
+            org.nuruplace.member.feature.pathway.JourneyState.derive(summary, trail)
+        }.getOrElse { journey }
         scores = runCatching { Net.client.api.scores() }.getOrElse { scores }
         achievements = runCatching { Net.client.api.achievements() }.getOrElse { achievements }
         certs = runCatching { Net.client.api.certificates().data }.getOrElse { certs }
@@ -274,7 +283,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
             AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             AiConsentCard()
-            MilestonesCard(me)
+            MilestonesCard(me, journey)
             CertificatesCard(
                 certs = certs,
                 copiedCode = copiedCode,
@@ -990,11 +999,18 @@ private fun ScoreRow(name: String, value: Int?, pillar: String, icon: ImageVecto
 }
 
 // ── Milestones ──────────────────────────────────────────────────────────────
+/** The member's own level on Profile's milestones, in the journey's words (§3)
+ *  — the pill Home and Pathway show, over the next step: ("Level 1 · Exam
+ *  ready", "Take the Level 1 exam"). Null until the journey is known, or when
+ *  it is about another level: the row waits rather than tell a second story
+ *  (iOS ProfileMilestoneWords, 3137194). */
+internal fun profileMilestoneWords(level: Int, journey: org.nuruplace.member.feature.pathway.Journey?): Pair<String, String>? =
+    journey?.takeIf { it.levelNumber == level }?.let { "Level $level · ${it.pill}" to it.next.title }
 private enum class MilestoneState { DONE, ACTIVE, FUTURE }
 private data class MilestoneItem(val title: String, val subtitle: String, val state: MilestoneState)
 
 @Composable
-private fun MilestonesCard(me: MeResponse?) {
+private fun MilestonesCard(me: MeResponse?, journey: org.nuruplace.member.feature.pathway.Journey?) {
     val isBaptized = me?.profile?.isBaptized == true
     val level = me?.enrollment?.currentLevel
     val items = listOf(
@@ -1007,13 +1023,17 @@ private fun MilestonesCard(me: MeResponse?) {
         // printed "Level 1 · in progress · Keep going" to members who had never
         // been placed on the pathway — encouragement to keep doing something
         // they had never been able to start.
+        // The member's own level in the journey's words — "Level 1 · Exam
+        // ready · Take the Level 1 exam" — never "in progress · Keep going"
+        // beside every other screen's "Exam ready" (Cycle 3 E13, Cycle 4).
+        // Until the journey is known the row waits: no second story.
         if (level != null) {
-            MilestoneItem("Level $level · in progress", "Keep going", MilestoneState.ACTIVE)
+            profileMilestoneWords(level, journey)?.let { (label, meta) -> MilestoneItem(label, meta, MilestoneState.ACTIVE) }
         } else {
             MilestoneItem("Your pathway", "Starting soon — your leader is setting you up", MilestoneState.FUTURE)
         },
         MilestoneItem("Pathway completion", "Your journey continues", MilestoneState.FUTURE),
-    )
+    ).filterNotNull()
     SectionCard {
         SectionTitle(Lucide.Target, "MILESTONES")
         Column(Modifier.padding(top = 8.dp)) {
