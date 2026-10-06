@@ -235,7 +235,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     // Consumed once per value so recompositions don't re-navigate.
     LaunchedEffect(org.nuruplace.member.PendingDest.route) {
         org.nuruplace.member.PendingDest.consume()?.let { dest ->
-            nav.navigate(dest) { launchSingleTop = true }
+            // A destination this build doesn't have — a stale pinned shortcut,
+            // another app's intent naming a route that's gone — is logged and
+            // dropped, and the member stays where they are. It crashed the app
+            // ("Navigation destination that matches route … cannot be found").
+            try {
+                nav.navigate(dest) { launchSingleTop = true }
+            } catch (e: IllegalArgumentException) {
+                android.util.Log.w("MainShell", "No destination \"$dest\" in this build — ignored", e)
+            }
         }
     }
 
