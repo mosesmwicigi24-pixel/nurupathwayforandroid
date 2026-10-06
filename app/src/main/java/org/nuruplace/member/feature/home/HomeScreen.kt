@@ -117,7 +117,6 @@ import org.nuruplace.member.data.net.VerseReactions
 import org.nuruplace.member.data.net.VerseUpsertBody
 import org.nuruplace.member.data.net.WelcomeVideo
 import org.nuruplace.member.feature.give.giveRailsLine
-import org.nuruplace.member.feature.pathway.JourneyLine
 import org.nuruplace.member.feature.pathway.JourneyState
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.InlineVideoPlayer
@@ -676,7 +675,7 @@ fun HomeScreen(
                 featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
                 // 6 · Growing — the scores (with the journey's one-line step),
                 // grow your faith, and the encouragement.
-                scores?.let { ProgressCard(it, journey?.progressLine) { onNavigate("pathway") } }
+                scores?.let { ProgressCard(it) { onNavigate("pathway") } }
                 if (scores != null) SelahDivider()   // — selah: a rest before Grow
                 GrowSection(onNavigate, discipler)
                 EncouragementCard(prayers.size)
@@ -1698,7 +1697,7 @@ private fun FeaturedPageCard(
 }
 
 @Composable
-private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: () -> Unit) {
+private fun ProgressCard(s: ScoresSummary, onView: () -> Unit) {
     HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Your progress", style = NuruType.cardTitle, color = Nuru.ink, modifier = Modifier.weight(1f))
@@ -1750,31 +1749,9 @@ private fun ProgressCard(s: ScoresSummary, journeyLine: JourneyLine?, onView: ()
         val deltaWidth = widest(bars.mapNotNull { scoreDelta(it.delta) }, SCORE_DELTA_STYLE, 28.dp)
         val valueWidth = widest(bars.map { "${it.value}" }, SCORE_VALUE_STYLE, 32.dp)
         bars.forEach { ScoreBar(it, deltaWidth, valueWidth) }
-        // The journey's next step in one line (§3) — "3 of 10 modules in
-        // Level 2", "Take the Level 1 exam" — never "0 modules left".
-        journeyLine?.let { line ->
-            Spacer(Modifier.height(Spacing.md))
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.surface).padding(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
-                    // Lucide's target, not a "◎" typed in a text face (§8.1 rule 7; iOS the same).
-                    Icon(Lucide.Target, null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(Spacing.sm))
-                // The next step is a thing: the content row title, Fraunces 15,
-                // and the rest of the line in body type, Inter 13 (§8.1 rule 3;
-                // iOS cbc52c7 the same).
-                Text(
-                    buildAnnotatedString {
-                        withStyle(NuruType.rowTitle.toSpanStyle().copy(color = Nuru.ink)) { append(line.bold) }
-                        withStyle(SpanStyle(color = Nuru.ink600)) { append(line.rest) }
-                    },
-                    style = nuruSans(13),
-                )
-            }
-        }
+        // No next-step line here: YOUR WEEK's Pathway row says it, and
+        // "View pathway" is this card's way there — Home points to each
+        // pillar once (§6, §9.6 #1; iOS 3137194 the same).
     }
 }
 
