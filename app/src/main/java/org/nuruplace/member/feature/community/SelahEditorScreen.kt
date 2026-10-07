@@ -261,7 +261,7 @@ fun SelahEditorScreen(
     }
 
     if (showDrawing) {
-        androidx.compose.ui.window.Dialog(
+        org.nuruplace.member.ui.components.NuruDialog(
             onDismissRequest = { showDrawing = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         ) {

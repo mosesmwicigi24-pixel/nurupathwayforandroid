@@ -161,7 +161,7 @@ private fun VoiceRecordDialog(
         if (recorder.isRecording && recorder.elapsedSec >= 300) recordedFile = recorder.stop()
     }
 
-    AlertDialog(
+    org.nuruplace.member.ui.components.NuruAlertDialog(
         onDismissRequest = { if (!uploading) { recorder.stop(); preview.stop(); onDismiss() } },
         containerColor = Color.White,
         title = {

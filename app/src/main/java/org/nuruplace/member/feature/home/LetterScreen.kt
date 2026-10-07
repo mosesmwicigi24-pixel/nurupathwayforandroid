@@ -43,7 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import org.nuruplace.member.ui.components.NuruDialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -279,13 +279,9 @@ fun LetterDialog(
         }
     }
 
-    // A Dialog is its own window, and its root provides the platform's own
-    // density — without the member's text size in the app's settings
-    // (AppPrefs.textScale, which NuruTheme folds into the font scale). The
-    // letter keeps the app's density, so it reads at the size every page does.
-    val appDensity = androidx.compose.ui.platform.LocalDensity.current
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides appDensity) {
+    // NuruDialog: the letter reads at the member's own text size (a plain
+    // Dialog's window dropped it — NuruDialog.kt).
+    NuruDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize()) {
             EditorialLetterPage(
                 letter = letter,
@@ -315,7 +311,6 @@ fun LetterDialog(
                     .clickable(onClickLabel = "Close") { onDismiss() },
                 contentAlignment = Alignment.Center,
             ) { Icon(Lucide.X, "Close", tint = Color(0xFF0B1F33), modifier = Modifier.size(18.dp)) }
-        }
         }
     }
 }

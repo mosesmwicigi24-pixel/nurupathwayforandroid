@@ -39,7 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import org.nuruplace.member.ui.components.NuruDialog
 import androidx.compose.ui.window.DialogProperties
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
@@ -64,7 +64,7 @@ fun NuruCoachDialog(moduleId: String, onRetry: () -> Unit, onDismiss: () -> Unit
             .onSuccess { text = it.body }
             .onFailure { error = "Couldn't prepare your review — the lesson itself is still the best coach." }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    NuruDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(LSNavyTop, LSNavyBottom)))) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
                 Spacer(Modifier.height(28.dp))
@@ -123,7 +123,7 @@ fun ExplainDialog(moduleId: String, initialStyle: String, onDismiss: () -> Unit)
             .onSuccess { text = it.body }
             .onFailure { failed = true; ApiException.message(it) }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    NuruDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(LSNavyTop, LSNavyBottom)))) {
             Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
                 Spacer(Modifier.height(24.dp))

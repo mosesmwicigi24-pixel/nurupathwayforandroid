@@ -119,7 +119,7 @@ fun SelahScreen() {
         val selahMutationId = remember(editing?.thoughtId) { UUID.randomUUID().toString() }
         val selahContext = androidx.compose.ui.platform.LocalContext.current
         editing?.let { draft ->
-            androidx.compose.ui.window.Dialog(
+            org.nuruplace.member.ui.components.NuruDialog(
                 onDismissRequest = { editing = null },
                 properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
             ) {

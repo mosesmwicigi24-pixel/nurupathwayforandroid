@@ -406,7 +406,7 @@ private fun PrayerComposerDialog(
     var answered by remember { mutableStateOf(draft?.isAnswered ?: false) }
     val bodyEmpty = body.isBlank()
 
-    AlertDialog(
+    org.nuruplace.member.ui.components.NuruAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (draft == null) "New prayer" else "Edit prayer", style = NuruType.cardTitle, color = Nuru.navy) },
         text = {
