@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -436,17 +438,22 @@ private fun HelpCard() {
 private fun ActionsRow() {
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    // At least 56 dp, and as tall as a wrapped label needs — at the largest
+    // text size "Delete account" takes two lines and was cut at 56 (§9.6 #4);
+    // the two stay one height.
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
             Modifier
                 .weight(1f)
-                .height(56.dp)
+                .fillMaxHeight()
+                .heightIn(min = 56.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(PROF.white)
                 .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
                 // Asked first, as on iOS: the answer that ends the session wears
                 // the destructive role (EXPERIENCE.md §8.1 rule 4, §8.2 #19).
-                .clickable { confirmSignOut = true },
+                .clickable { confirmSignOut = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -457,11 +464,13 @@ private fun ActionsRow() {
         Box(
             Modifier
                 .weight(1f)
-                .height(56.dp)
+                .fillMaxHeight()
+                .heightIn(min = 56.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFFEF2F2))
                 .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(16.dp))
-                .clickable { confirmDelete = true },
+                .clickable { confirmDelete = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
