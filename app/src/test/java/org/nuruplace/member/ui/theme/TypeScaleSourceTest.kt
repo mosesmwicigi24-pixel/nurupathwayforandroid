@@ -20,6 +20,12 @@
 //   • Bitmaps: the verse share card (VerseTableau.kt) paints Inter and Fraunces
 //     in pixels onto a 1080-wide image; the radio's emoji particles are painted
 //     glyphs. Neither is laid-out text, so `Paint.textSize` is not scanned.
+//   • The editorial Sunday Letter (EditorialLetter.kt; owner, 2026-10-07: the
+//     editorial Sunday Letter, board A): a designed page with its own display
+//     type — the nameplate 34, the title 30, the salutation 21, the body 17,
+//     the pull quote 23, the figures 34, the quote mark 44, the signature 52,
+//     the drop cap 58. Those sizes, in that file only; every other size there
+//     keeps to the scale, and the list must match what the file uses.
 package org.nuruplace.member.ui.theme
 
 import org.junit.Assert.assertEquals
@@ -37,15 +43,25 @@ class TypeScaleSourceTest {
         const val SYSTEM_FACE_CEILING = 0
 
         val WIDGETS = listOf("org/nuruplace/member/widget/")
+
+        const val EDITORIAL_LETTER = "org/nuruplace/member/feature/home/EditorialLetter.kt"
+        val EDITORIAL_SIZES = setOf(17.0, 21.0, 23.0, 30.0, 34.0, 44.0, 52.0, 58.0)
+
+        /** The size an off-scale finding names ("17 sp is off the scale — …"). */
+        fun sizeOf(f: TypeSourceScan.Finding): Double? = f.detail.substringBefore(" sp is off the scale", "").toDoubleOrNull()
         val MEMBER_CHOSEN_FACES = listOf("org/nuruplace/member/feature/community/SelahRichEditor.kt")
 
         val sources by lazy { TypeSourceScan.load() }
     }
 
-    private fun offScale(): List<TypeSourceScan.Finding> {
+    private fun allOffScale(): List<TypeSourceScan.Finding> {
         val sites = TypeSourceScan.sizeSites(sources, excludedDirs = WIDGETS, excludedHelpers = emptySet())
         return TypeSourceScan.offScale(sites)
     }
+
+    /** Off the scale, less the editorial letter's own listed sizes. */
+    private fun offScale(): List<TypeSourceScan.Finding> =
+        allOffScale().filterNot { it.file == EDITORIAL_LETTER && sizeOf(it) in EDITORIAL_SIZES }
 
     private fun ratchet(what: String, findings: List<TypeSourceScan.Finding>, ceiling: Int) {
         val listing = findings.joinToString("\n") { "  $it" }
@@ -60,6 +76,12 @@ class TypeScaleSourceTest {
     @Test
     fun `every text size is on the scale`() {
         ratchet("Off-scale text sizes", offScale(), OFF_SCALE_CEILING)
+    }
+
+    @Test
+    fun `the editorial letter's own sizes are exactly the listed ones`() {
+        val used = allOffScale().filter { it.file == EDITORIAL_LETTER }.mapNotNull { sizeOf(it) }.toSet()
+        assertEquals("the editorial letter's sizes off the scale", EDITORIAL_SIZES, used)
     }
 
     @Test

@@ -775,6 +775,13 @@ interface MemberApi {
     @POST("me/letters/{id}/read")
     suspend fun markLetterRead(@Path("id") letterId: String): LetterReadRes
 
+    // "Keep this letter" (v3): the letter's own `pdf_url`, a path on the API's
+    // host (/v1/me/letters/{id}/pdf), resolved by EditorialLetter.pdfUrl — which
+    // refuses any other host, because this client signs every request.
+    @retrofit2.http.Streaming
+    @GET
+    suspend fun letterPdf(@retrofit2.http.Url url: String): okhttp3.ResponseBody
+
     @GET("me/ai")
     suspend fun aiConsent(): AiConsentRes
 

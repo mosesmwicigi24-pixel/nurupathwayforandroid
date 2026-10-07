@@ -616,8 +616,8 @@ fun HomeScreen(
                     }
                 }
                 // The Sunday Letter knock — three states (knock / quiet row / awaiting).
-                // Awaiting opens the You tab: there is no letters-archive route
-                // (GET /me/letters has no screen), and You is where "yours" lives.
+                // Awaiting opens the You tab: with no letter yet the letters
+                // archive would be empty, and You is where "yours" lives.
                 if (HomeEdge.LETTER in quietBefore) SelahDivider()
                 if (letter == null) Entrance(entrance, 2) { LetterAwaitingCard(onClick = { onSelectTab("profile") }) }
                 letter?.takeIf { !it.isUnread }?.let { lt ->
@@ -626,6 +626,8 @@ fun HomeScreen(
                         LetterDialog(
                             lt, onDismiss = { showLetter = false }, onRead = {},
                             onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
+                            onWriteBack = { id -> showLetter = false; onNavigate("chat/$id?ctx=pastoral") },
+                            onOpenLetters = { id -> showLetter = false; onNavigate(lettersRoute(id)) },
                         )
                     }
                 }
@@ -635,6 +637,8 @@ fun HomeScreen(
                         LetterDialog(
                             lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") },
                             onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
+                            onWriteBack = { id -> showLetter = false; onNavigate("chat/$id?ctx=pastoral") },
+                            onOpenLetters = { id -> showLetter = false; onNavigate(lettersRoute(id)) },
                         )
                     }
                 }
@@ -1169,49 +1173,75 @@ private fun weekIcon(pillar: WeekPillar) = when (pillar) {
  *  primary pill with the row's verb. Past the everyday sizes the pill takes a
  *  line of its own, so no word is squeezed (§9.6 #4). As iOS's band. */
 @Composable
-private fun NextStepBand(row: WeekRow, ask: WeekAsk, modifier: Modifier, onClick: () -> Unit) {
+private fun NextStepBand(row: WeekRow, ask: WeekAsk, modifier: Modifier, onClick: () -> Unit) =
+    NavyStepBand(
+        kicker = "YOUR NEXT STEP · ${row.form.pillar.name}",
+        title = ask.subject,
+        line = row.line,
+        verb = ask.verb,
+        icon = weekIcon(row.form.pillar),
+        modifier = modifier,
+        onClick = onClick,
+    )
+
+/** The navy "next step" band — YOUR WEEK's lead, and the Sunday Letter's
+ *  "ONE STEP FOR THIS WEEK" (owner, 2026-10-07: the editorial Sunday Letter —
+ *  "the same navy band as Home's next step"): a gold-tint tile with a gold
+ *  icon, the [kicker] in gold, [title] in white Fraunces, the [line] in
+ *  #B9C4D4, and the one gold primary pill with the [verb]. Past the everyday
+ *  sizes the pill takes a line of its own, so no word is squeezed (§9.6 #4). */
+@Composable
+internal fun NavyStepBand(
+    kicker: String,
+    title: String,
+    line: String,
+    verb: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     val gold = Color(0xFFE8CA6C)
     val meta = Color(0xFFB9C4D4)
     val shape = RoundedCornerShape(18.dp)
     val large = org.nuruplace.member.ui.components.largeText()
     val tile: @Composable () -> Unit = {
         Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(gold.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-            Icon(weekIcon(row.form.pillar), contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
         }
     }
-    val kicker: @Composable () -> Unit = { Text("YOUR NEXT STEP · ${row.form.pillar.name}", style = NuruType.kicker, color = gold) }
-    val title: @Composable () -> Unit = {
+    val kickerText: @Composable () -> Unit = { Text(kicker, style = NuruType.kicker, color = gold) }
+    val titleText: @Composable () -> Unit = {
         org.nuruplace.member.ui.components.WholeWordsText(
-            ask.subject, style = NuruType.cardTitle, color = Color.White,
+            title, style = NuruType.cardTitle, color = Color.White,
             maxLines = if (large) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
         )
     }
     val pill: @Composable () -> Unit = {
         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldGradient).padding(horizontal = 16.dp, vertical = 9.dp)) {
-            Text(ask.verb, style = nuruSans(13, FontWeight.Bold), color = Nuru.navy, maxLines = 1, softWrap = false)
+            Text(verb, style = nuruSans(13, FontWeight.Bold), color = Nuru.navy, maxLines = 1, softWrap = false)
         }
     }
     Box(
         modifier.fillMaxWidth().clip(shape)
             .background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
-            .clickable(onClickLabel = ask.verb) { onClick() }
+            .clickable(onClickLabel = verb) { onClick() }
             .padding(16.dp),
     ) {
         if (large) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                tile(); kicker(); title()
-                if (row.line.isNotBlank()) Text(row.line, style = nuruSans(12), color = meta)
+                tile(); kickerText(); titleText()
+                if (line.isNotBlank()) Text(line, style = nuruSans(12), color = meta)
                 pill()
             }
         } else {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 tile()
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    kicker(); title()
+                    kickerText(); titleText()
                     // The kicker and title take the band's width; the pill sits at
                     // the right of the line below.
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(row.line, style = nuruSans(12), color = meta, modifier = Modifier.weight(1f))
+                        Text(line, style = nuruSans(12), color = meta, modifier = Modifier.weight(1f))
                         pill()
                     }
                 }

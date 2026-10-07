@@ -1016,6 +1016,19 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(it) }) }
             composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
+            // The letters archive (the editorial Sunday Letter's "Last week: …",
+            // owner 2026-10-07) — opened on one letter when `open` names it.
+            composable(
+                org.nuruplace.member.feature.home.LETTERS_ROUTE,
+                arguments = listOf(navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                org.nuruplace.member.feature.home.LettersArchiveScreen(
+                    openLetterId = entry.arguments?.getString("open"),
+                    onBack = { nav.popBackStack() },
+                    onNavigate = { nav.navigate(it) },
+                    onSelectTab = { r -> nav.navigate(r) { popUpTo("home"); launchSingleTop = true } },
+                )
+            }
             // "Ask to be connected" (EXPERIENCE.md §9.2 #12) — YOUR WEEK's
             // Cell row for a member with no cell. Already in one: the cell page.
             composable("cell-connect") {

@@ -1,7 +1,8 @@
-// The Sunday Letter — weekly pastoral letter from the intelligence layer,
-// presented as warm stationery over a navy backdrop (parity with iOS
-// LetterView): gold wax seal, serif voice, scripture pill, share. The Home
-// "knock" card appears while the latest letter is unread.
+// The Sunday Letter — weekly pastoral letter from the intelligence layer. Home
+// shows it in navy in every state (the knock while unread, a quiet card once
+// read, and before one exists); it opens as the editorial page
+// (EditorialLetter.kt, owner 2026-10-07), and past letters live in the
+// letters archive (LettersArchiveScreen).
 package org.nuruplace.member.feature.home
 
 import android.content.Intent
@@ -28,7 +29,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,24 +63,14 @@ import org.nuruplace.member.ui.icons.Lucide
 
 private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
-/** Letter body voice — the serif family at reading size. lineHeight is left
- *  UNSET on purpose: NuruTheme rebuilds typography from AppPrefs.lineSpacing,
- *  and hard-coding it here would silently ignore the member's own spacing
- *  choice on the one screen most worth reading comfortably. Font size rides
- *  AppPrefs.textScale through the theme's Density the same way. */
-// The letter is long reading: the one 16 sp reading body (§8.2 #21), in the
-// letter's Fraunces, with a reader's leading. A getter, so the member's
-// line-spacing choice is read each time it draws.
-private val LetterBody get() = NuruType.rowTitle.copy(fontSize = 16.sp, lineHeight = scaledLineHeight(25), fontWeight = FontWeight.Normal)
-
 /** Home, when no letter has arrived yet. The ritual IS the pull: telling a
  *  member when their letter comes is honest anticipation, and it beats showing
  *  nothing at all — which is what Home did before. The read card's quiet navy
  *  with its own words (owner, 2026-10-07: colour option A), the countdown to
  *  Sunday 6 pm East Africa Time folded into its line — a gold badge beside it
- *  was a second gold pill on Home (the next step's is the one). Tap opens the
- *  You tab — no letters-archive screen exists yet (GET /me/letters has no
- *  route), so the caller decides where "your letters" lives. */
+ *  was a second gold pill on Home (the next step's is the one). The caller
+ *  decides where the tap goes (Home: the You tab — with no letter yet, the
+ *  letters archive would be empty). */
 @Composable
 fun LetterAwaitingCard(onClick: () -> Unit = {}) {
     val countdown = remember { letterCountdownLabel() }
@@ -202,13 +196,25 @@ fun LetterKnockCard(letter: PastoralLetter, onOpen: () -> Unit) {
     }
 }
 
-/** Full-screen stationery reader; marks the letter read on open. */
+/**
+ * The letter, full screen — the editorial page (owner, 2026-10-07: the
+ * editorial Sunday Letter; EditorialLetter.kt). Marks the letter read on open.
+ *
+ * [onNextStep]: the letter's one next step (letterStepDest). [onWriteBack]:
+ * the member's own pastoral conversation, opened (POST /chat/pastoral, which
+ * makes it the first time) — its id. [onOpenLetters]: the letters archive,
+ * with the letter to open there. [archive]: the member's letters when the
+ * caller already has them; otherwise they're fetched for "Last week".
+ */
 @Composable
 fun LetterDialog(
     letter: PastoralLetter,
     onDismiss: () -> Unit,
     onRead: () -> Unit,
     onNextStep: (route: String, moduleId: String?) -> Unit = { _, _ -> },
+    onWriteBack: (conversationId: String) -> Unit = {},
+    onOpenLetters: (letterId: String?) -> Unit = {},
+    archive: List<PastoralLetter>? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -218,146 +224,94 @@ fun LetterDialog(
             onRead()
         }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0A1628), Color(0xFF081020)))),
-        ) {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                // v2 hero — the themed illustration with the letter's own title
-                // overlaid. Pre-v2 letters have no theme; resolve() falls back
-                // rather than blanking, so this is safe for every row.
-                Box(Modifier.fillMaxWidth().padding(top = 44.dp)) {
-                    Box(Modifier.clip(RoundedCornerShape(22.dp))) {
-                        LetterHero(letter.artKey, height = 190.dp)
-                    }
-                    letter.displayTitle?.let { t ->
-                        Text(
-                            t,
-                            style = NuruType.cardTitle,
-                            color = Color(0xFFFFFDF6),
-                            modifier = Modifier.align(Alignment.BottomStart).padding(18.dp),
-                            maxLines = 3,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                // Gold wax seal, overlapping the paper.
-                Box(
-                    Modifier.size(68.dp).clip(CircleShape).background(SealGrad).offset(y = 0.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(Modifier.size(54.dp).clip(CircleShape).border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape))
-                    Text("N", style = NuruType.display, color = Color(0xFF1E2A1F))
-                }
-                Column(
-                    Modifier.offset(y = (-34).dp).fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Brush.verticalGradient(listOf(Color(0xFFFFFDF6), Color(0xFFF8F3E6))))
-                        .border(1.dp, Color(0xFFC9A227).copy(alpha = 0.35f), RoundedCornerShape(22.dp))
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 44.dp, bottom = 22.dp),
-                ) {
-                    Text("THE SUNDAY LETTER", style = NuruType.micro, color = Color(0xFFA8861C), fontWeight = FontWeight.Bold)
-                    // "Week of Sun 4 Oct" — it read the server's raw "2026-10-04" (§8.1 rule 8).
-                    org.nuruplace.member.util.NuruDates.day(letter.weekOf)?.let { Text("Week of $it", style = NuruType.caption, color = Color(0xFF74808F)) }
-                    letter.scriptureRef?.let { ref ->
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFFDF5E5))
-                                .border(1.dp, Color(0xFFF2E2BD), RoundedCornerShape(999.dp))
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        ) {
-                            Icon(Lucide.BookOpen, null, tint = Color(0xFFA8861C), modifier = Modifier.size(14.dp))
-                            Text(ref, style = NuruType.caption, color = Color(0xFF8A6B1F), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    // Their actual name. Omitted entirely when absent — a
-                    // generic "Dear member" is worse than no salutation.
-                    letter.displaySalutation?.let { sal ->
-                        Text(sal, style = LetterBody, color = Color(0xFF2A3441), fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    Text(letter.body, style = LetterBody, color = Color(0xFF2A3441))
+    // The letter before this one, for "Last week" — none shown until known.
+    var letters by remember(letter.letterId) { mutableStateOf(archive) }
+    LaunchedEffect(letter.letterId, archive) {
+        if (archive == null) letters = runCatching { Net.client.api.letters().data }.getOrNull()
+    }
+    val previous = letters?.let { EditorialLetter.previousOf(it, letter) }
+    val pdfUrl = remember(letter.pdfUrl) { EditorialLetter.pdfUrl(org.nuruplace.member.BuildConfig.API_BASE_URL, letter.pdfUrl) }
+    var writeBack by remember(letter.letterId) { mutableStateOf(LetterRowState()) }
+    var pdf by remember(letter.letterId) { mutableStateOf(LetterRowState()) }
 
-                    // "This week" — the true, concrete moments. This is the
-                    // part that makes the letter feel known rather than
-                    // written-at, so it is prominent but quiet. Omitted whole
-                    // when the model had nothing true to say.
-                    if (letter.moments.isNotEmpty()) {
-                        Spacer(Modifier.height(20.dp))
-                        Text("THIS WEEK", style = NuruType.micro, color = Color(0xFFA8861C), fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        letter.moments.forEach { m ->
-                            Row(
-                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(9.dp),
-                            ) {
-                                Box(
-                                    Modifier.padding(top = 7.dp).size(5.dp)
-                                        .clip(CircleShape).background(Color(0xFFC9A227)),
-                                )
-                                Text(m, style = NuruType.body, color = Color(0xFF4A5563))
-                            }
-                        }
-                    }
-
-                    // ONE next step, never a menu. Server-computed, so it can
-                    // only point at something that actually exists.
-                    letter.nextStep?.let { step ->
-                        Spacer(Modifier.height(20.dp))
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF11253F))
-                                .clickable { onNextStep(step.route, step.params?.moduleId) }
-                                .padding(horizontal = 16.dp, vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(step.label, style = NuruType.cardCta, color = Color(0xFFF3E6C8), fontWeight = FontWeight.SemiBold)
-                            Icon(Lucide.ArrowRight, null, tint = Color(0xFFC9A227), modifier = Modifier.size(18.dp))
-                        }
-                    }
-                    Spacer(Modifier.height(18.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Row(
-                            Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFFDF5E5))
-                                .clickable {
-                                    scope.launch {
-                                        // v2: share the ONE line the letter
-                                        // offers, not the whole private
-                                        // letter. Falls back to the old
-                                        // behaviour for pre-v2 letters, which
-                                        // carry no share_line.
-                                        val text = letter.shareLine
-                                            ?: ((letter.displayScripture?.let { "📖 $it\n\n" } ?: "") + letter.body)
-                                        val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
-                                        runCatching { context.startActivity(Intent.createChooser(send, "Share your letter")) }
-                                    }
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(Lucide.Share2, null, tint = Color(0xFF8A6B1F), modifier = Modifier.size(14.dp))
-                            Text("Share", style = NuruType.caption, color = Color(0xFF8A6B1F), fontWeight = FontWeight.Bold)
-                        }
+    fun openPastoral() {
+        if (writeBack.busy) return
+        writeBack = LetterRowState(busy = true)
+        scope.launch {
+            runCatching { Net.client.api.openPastoralThread() }
+                .onSuccess { res ->
+                    if (res.conversationId.isBlank()) {
+                        writeBack = LetterRowState(error = "Couldn't open this conversation.")
+                    } else {
+                        writeBack = LetterRowState()
+                        // As the Talk with My Pastor tab: this phone learns the
+                        // thread, and an archived thread is reopened.
+                        org.nuruplace.member.data.AppPrefs.pastoralConversationId = res.conversationId
+                        org.nuruplace.member.data.AppPrefs.pastoralArchived = false
+                        onWriteBack(res.conversationId)
                     }
                 }
-                Spacer(Modifier.height(24.dp))
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    // The Talk with My Pastor tab's own words.
+                    writeBack = LetterRowState(
+                        error = when {
+                            org.nuruplace.member.feature.community.isNoPastor(e) -> "No pastor is available for your congregation right now — please check back later."
+                            org.nuruplace.member.feature.community.isMinorBlocked(e) -> "Direct messages aren't available yet for your account."
+                            else -> org.nuruplace.member.data.net.ApiException.failureLine("Couldn't open this conversation.", e, context)
+                        },
+                    )
+                }
+        }
+    }
+
+    fun keepPdf() {
+        val url = pdfUrl ?: return
+        if (pdf.busy) return
+        pdf = LetterRowState(busy = true)
+        scope.launch {
+            // Fetched through the authed client into cache/shared and opened
+            // through the FileProvider — never a ?token= address.
+            val failure = org.nuruplace.member.feature.give.openPdfAuthed(context, EditorialLetter.pdfFileName(letter.weekOf)) {
+                Net.client.api.letterPdf(url)
             }
+            pdf = LetterRowState(error = failure?.let { EditorialLetter.pdfErrorLine(org.nuruplace.member.feature.give.isOffline(it, context)) })
+        }
+    }
+
+    // A Dialog is its own window, and its root provides the platform's own
+    // density — without the member's text size in the app's settings
+    // (AppPrefs.textScale, which NuruTheme folds into the font scale). The
+    // letter keeps the app's density, so it reads at the size every page does.
+    val appDensity = androidx.compose.ui.platform.LocalDensity.current
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides appDensity) {
+        Box(Modifier.fillMaxSize()) {
+            EditorialLetterPage(
+                letter = letter,
+                previous = previous,
+                writeBack = writeBack,
+                pdf = if (pdfUrl != null) pdf else null,
+                onWriteBack = ::openPastoral,
+                onKeepPdf = ::keepPdf,
+                onOpenPrevious = { previous?.let { onOpenLetters(it.letterId) } },
+                onShareLine = { line ->
+                    // The ONE line the letter offers — never the private letter.
+                    val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, line) }
+                    runCatching { context.startActivity(Intent.createChooser(send, "Share this line")) }
+                },
+                onNextStep = { step -> onNextStep(step.route, step.params?.moduleId) },
+            )
+            // Over the page as it scrolls: the paper's own colour, so the words
+            // passing under it don't show through.
             Box(
-                Modifier.align(Alignment.TopEnd).padding(top = 18.dp, end = 18.dp)
-                    .size(34.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.14f))
-                    .clickable { onDismiss() },
+                Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 14.dp)
+                    .size(36.dp).clip(CircleShape).background(Color(0xF2FBF6EC))
+                    .border(1.dp, Color(0x1A0B1F33), CircleShape)
+                    .clickable(onClickLabel = "Close") { onDismiss() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Lucide.X, "Close", tint = Color.White, modifier = Modifier.size(18.dp)) }
+            ) { Icon(Lucide.X, "Close", tint = Color(0xFF0B1F33), modifier = Modifier.size(18.dp)) }
+        }
         }
     }
 }
