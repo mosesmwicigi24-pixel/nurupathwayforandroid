@@ -353,16 +353,19 @@ fun ChatInboxScreen(
                             // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
                             org.nuruplace.member.ui.components.InboxBell(onClick = onOpenNotifications)
                         }
-                        // Search field
+                        // Search field — it grows with its words: at the
+                        // largest text the placeholder wrapped inside a fixed
+                        // 46dp and read "Search spaces," (final walk C3,
+                        // Android #17).
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(top = 24.dp)
-                                .height(46.dp)
+                                .heightIn(min = 46.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(CHAT.white)
                                 .border(1.dp, CHAT.border, RoundedCornerShape(14.dp))
-                                .padding(horizontal = 16.dp),
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -688,7 +691,9 @@ private fun MySpaceTab(
     val filteredSpaces = spaces.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
     val filteredGroups = groups.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
 
-    Section("# YOUR SPACES")
+    // A Lucide icon, as every other section label — not a typed "#" (§8.1
+    // rule 7; final walk C4, Android #24), the same glyph as iOS.
+    Section("YOUR SPACES", Lucide.MessageSquareText)
     if (filteredSpaces.isEmpty()) {
         EmptyState("No spaces yet.")
     } else {
@@ -716,7 +721,7 @@ private fun MySpaceTab(
 
     val filteredDiscover = discover.filter { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
     if (filteredDiscover.isNotEmpty()) {
-        Section("# DISCOVER SPACES")
+        Section("DISCOVER SPACES", Lucide.MessageSquareText)
         GroupedCard {
             filteredDiscover.forEachIndexed { idx, d ->
                 if (idx > 0) Divider()
@@ -1773,14 +1778,7 @@ private fun Section(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         icon?.let { Icon(it, contentDescription = null, tint = CHAT.overline, modifier = Modifier.size(14.dp)) }
-        if (label.startsWith("#")) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("#", style = cInter(12, FontWeight.Bold), color = CHAT.overline)
-                Text(label.removePrefix("#").trim(), style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.overline)
-            }
-        } else {
-            Text(label, style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.overline)
-        }
+        Text(label, style = cInter(11, FontWeight.Bold, 1.4f), color = CHAT.overline)
     }
 }
 

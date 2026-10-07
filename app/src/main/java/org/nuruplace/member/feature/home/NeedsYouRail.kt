@@ -39,6 +39,7 @@ import org.nuruplace.member.data.firebase.NOTIFICATIONS_CARD_LINE
 import org.nuruplace.member.data.firebase.NOTIFICATIONS_CARD_TITLE
 import org.nuruplace.member.data.net.HomeNudge
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.largeText
 import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.Spacing
@@ -97,10 +98,14 @@ private fun NudgeCard(n: HomeNudge, modifier: Modifier, onClick: () -> Unit) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 // A prompt is a card: its title is the card title, Fraunces 18
                 // (§8.1 rule 3; Cycle 4 walk 02 — iOS cbc52c7 the same).
-                Text(n.title, style = NuruType.cardTitle, color = Nuru.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Past the everyday sizes nothing is cut (§8.1 rule 9; final
+                // walk C3, Android #17: "…a few hon…" at the largest text) —
+                // the card grows with its words.
+                val large = largeText()
+                Text(n.title, style = NuruType.cardTitle, color = Nuru.navy, maxLines = if (large) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
                 // minLines keeps every card on the rail the same height whether
                 // its body runs one line or two (or, defensively, is blank).
-                Text(n.body, style = nuruSans(11), color = Nuru.metaGray, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(n.body, style = nuruSans(11), color = Nuru.metaGray, minLines = 2, maxLines = if (large) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

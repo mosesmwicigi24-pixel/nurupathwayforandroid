@@ -60,6 +60,21 @@ class ProfileValuesTest {
         assertEquals("Not set", profileGenderLabel(null))
         assertEquals("Non binary", profileGenderLabel("non_binary"))
     }
+
+    // ── Whole at the largest text (final walk C3, Android #10) ──
+
+    @org.junit.Test fun `an email address breaks only after its @, never mid-address`() {
+        org.junit.Assert.assertEquals("student1@\u200Bdev.local", emailBreaks("student1@dev.local"))
+        // Nothing else in it becomes a break, and an address without one is left alone.
+        org.junit.Assert.assertEquals("a.b@\u200Bc.d.e", emailBreaks("a.b@c.d.e"))
+        org.junit.Assert.assertEquals("not-an-address", emailBreaks("not-an-address"))
+    }
+
+    @org.junit.Test fun `a badge's name never breaks at its hyphen — "Seven-Day" holds together`() {
+        org.junit.Assert.assertEquals("Seven\u2011Day Faithful", badgeLabel("Seven-Day Faithful"))
+        org.junit.Assert.assertEquals("Thirty\u2011Day Faithful", badgeLabel("Thirty-Day Faithful"))
+        org.junit.Assert.assertEquals("First Step", badgeLabel("First Step"))
+    }
 }
 
 class AppVersionLineTest {

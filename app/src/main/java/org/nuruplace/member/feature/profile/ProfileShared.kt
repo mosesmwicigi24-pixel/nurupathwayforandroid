@@ -129,6 +129,15 @@ fun ProfCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
 
 val FingerprintIcon: ImageVector = Lucide.FingerprintPattern
 
+/** An email address that wraps only after its "@" — a zero-width space
+ *  there gives the line its one break (final walk C3, Android #10: it wrapped
+ *  "student1@dev / .local"). Nothing else in it is a break. */
+internal fun emailBreaks(email: String): String = email.replaceFirst("@", "@\u200B")
+
+/** A badge's name with its hyphens held — "Seven‑Day Faithful" breaks
+ *  between its words, never at "Seven-" (final walk C3; the iOS rule). */
+internal fun badgeLabel(name: String): String = name.replace('-', '\u2011')
+
 // ── Values that look like data never leak (EXPERIENCE.md §8.1 rule 8) ──────
 
 /** An empty profile value, said plainly — never "—" or a blank row. */

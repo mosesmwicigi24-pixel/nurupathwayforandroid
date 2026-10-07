@@ -38,6 +38,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import org.nuruplace.member.ui.components.NuruModalBottomSheet
+import org.nuruplace.member.ui.components.largeText
+import org.nuruplace.member.ui.components.WholeWordsText
+import org.nuruplace.member.ui.components.CappedFontScale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -219,12 +222,18 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                     modifier = Modifier.matchParentSize().clip(CircleShape),
                                 )
                             } else {
-                                Text(
-                                    initials(fullName),
-                                    style = pInter(28, FontWeight.SemiBold),
-                                    color = PROF.navyMid,
-                                    textAlign = TextAlign.Center,
-                                )
+                                // Letters inside a fixed circle keep the everyday
+                                // size (§9.6 #4, as iOS): at the largest text
+                                // "AT" showed only "A". The name beside it grows.
+                                CappedFontScale(1f) {
+                                    Text(
+                                        initials(fullName),
+                                        style = pInter(28, FontWeight.SemiBold),
+                                        color = PROF.navyMid,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1, softWrap = false,
+                                    )
+                                }
                             }
                             // The new photo on its way.
                             if (avatarUploading) {
@@ -248,7 +257,9 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(fullName, style = pSerif(22, FontWeight.Medium, -0.44f), color = PROF.navy)
-                        Text(email, style = pInter(13), color = PROF.ink600)
+                        // An address breaks only after its "@" (final walk C3,
+                        // Android #10: "student1@dev / .local" at the largest).
+                        Text(emailBreaks(email), style = pInter(13), color = PROF.ink600)
                         if (level != null) {
                             Row(
                                 Modifier
@@ -848,6 +859,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                 }
             }
         } else {
+            val large = largeText()
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -856,7 +868,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                     val st = badgeStyle(b.category)
                     val earned = b.awardedAt != null
                     Column(
-                        Modifier.width(66.dp).clickable { onBadge(b) },
+                        Modifier.width(if (large) 104.dp else 66.dp).clickable { onBadge(b) },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
@@ -872,11 +884,15 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                         ) {
                             Icon(st.icon, contentDescription = null, tint = if (earned) st.color else PROF.rowLabel, modifier = Modifier.size(22.dp))
                         }
-                        Text(
-                            b.name,
+                        // Whole words, never cut (final walk C3, Android #10:
+                        // "Thirt / y-Da", "Sever / y Fait"): the name never
+                        // breaks at its hyphen, steps its size down only until
+                        // its longest word fits, and the tile widens at the
+                        // largest text.
+                        WholeWordsText(
+                            badgeLabel(b.name),
                             style = pInter(11, if (earned) FontWeight.SemiBold else FontWeight.Medium),
                             color = if (earned) PROF.navy else PROF.rowLabel,
-                            maxLines = 2,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp),
                         )
