@@ -54,14 +54,22 @@ enum class WeekForm(val pillar: WeekPillar) {
     PLAN_DAY(WeekPillar.PLANS),
     /** No plan being read. */
     PLAN_START(WeekPillar.PLANS),
+    /** The plans didn't load — said as that, never as "none" (§9.7 M4). */
+    PLAN_UNKNOWN(WeekPillar.PLANS),
     /** A gathering this week the member is going to. */
     EVENT_GOING(WeekPillar.EVENTS),
     /** A gathering this week, not RSVP'd. */
     EVENT_NEXT(WeekPillar.EVENTS),
     /** Nothing this week. */
     EVENT_NONE(WeekPillar.EVENTS),
+    /** The calendar didn't load — never "No gatherings this week" (§9.7 M4). */
+    EVENT_UNKNOWN(WeekPillar.EVENTS),
     /** A recurring gift — or a pledge's collector — prompts this week. */
     GIFT_COLLECTED(WeekPillar.GIVING),
+    /** A running gift whose last prompt failed — Give's words (§9.7 M2). */
+    GIFT_FAILING(WeekPillar.GIVING),
+    /** A paused gift — Give's words, never a new "Give" (§9.7 M2). */
+    GIFT_PAUSED(WeekPillar.GIVING),
     /** A pledge instalment due that no collector takes. */
     PLEDGE_DUE(WeekPillar.GIVING),
     /** Otherwise — the giving banner shows only with this form. */
@@ -70,6 +78,8 @@ enum class WeekForm(val pillar: WeekPillar) {
     CELL(WeekPillar.CELL),
     /** No cell. */
     CELL_FIND(WeekPillar.CELL),
+    /** The cell didn't load — never "Find your cell" (§9.7 M4). */
+    CELL_UNKNOWN(WeekPillar.CELL),
 }
 
 /** Where a row's tap goes. */
@@ -111,6 +121,12 @@ object YourWeek {
      *  server's own DUE window (PartnersService.DUE_WINDOW_DAYS). */
     const val WEEK_DAYS = 7L
 
+    /** A row whose read failed says so (EXPERIENCE.md §9.7 M4, §9.4 "loading
+     *  never shows a fake fact"): it is never the "none" form — "Start a
+     *  reading plan", "Find your cell · Ask", "No gatherings this week" — for
+     *  a member who may well have a plan, a cell, a Sunday. */
+    const val DIDNT_LOAD = "Didn't load — pull down to try again"
+
     private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
     private val DAY_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.ENGLISH)
 
@@ -149,7 +165,9 @@ object YourWeek {
      *  "Start a reading plan" → the Plans tab. [sealedHere]: this phone sealed
      *  a plan day today. */
     fun plans(plans: List<ReadingPlanRow>?, sealedHere: Boolean = false, now: java.time.Instant = java.time.Instant.now()): WeekRow {
-        val p = plans?.let(::activePlan) ?: return WeekRow(
+        // [plans] null: the read never answered — said as that (§9.7 M4).
+        if (plans == null) return WeekRow(WeekForm.PLAN_UNKNOWN, "Your reading plan", DIDNT_LOAD, WeekDest.Tab("plans"))
+        val p = activePlan(plans) ?: return WeekRow(
             WeekForm.PLAN_START, "Start a reading plan", "A few minutes a day — with the whole family of God.", WeekDest.Tab("plans"),
         )
         val day = planDay(p)
@@ -219,6 +237,9 @@ object YourWeek {
             val ask = if (g.rsvp == "declined") null else WeekAsk("Join", g.title)
             return WeekRow(WeekForm.EVENT_NEXT, "Join · ${g.title}", g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end), ask)
         }
+        // [calendar] null: the church calendar never answered — "No gatherings
+        // this week" would be a guess (§9.7 M4).
+        if (calendar == null) return WeekRow(WeekForm.EVENT_UNKNOWN, "The church calendar", DIDNT_LOAD, WeekDest.Tab("events"))
         return WeekRow(WeekForm.EVENT_NONE, "See the church calendar", "No gatherings this week", WeekDest.Tab("events"))
     }
 
@@ -247,8 +268,14 @@ object YourWeek {
      */
     fun giving(partnership: Partnership?, schedules: List<GivingSchedule>?, railsLine: String, today: LocalDate): WeekRow {
         val give = WeekRow(WeekForm.GIVE, "Give", railsLine, WeekDest.Tab("give"))
-        val p = partnership ?: return give
         val gifts = schedules ?: return give
+        // 0. A running gift whose last prompt failed (EXPERIENCE.md §9.7 M2):
+        //    Give's own words — "There wasn't enough in the M-Pesa account." —
+        //    never "Collected on …" over a prompt that didn't go through.
+        gifts.firstOrNull { scheduleRunning(it.status) && giftFailureLine(it) != null }?.let { f ->
+            return giftRow(WeekForm.GIFT_FAILING, f, partnership, giftFailureLine(f)!!)
+        }
+        val p = partnership ?: return pausedGiftRow(gifts, null, today) ?: give
         val pledgeOf = p.pledges.associateBy { it.pledgeId }
         // The instalments Partners lists as due, less those already fully on
         // their way, less those a collector takes.
@@ -294,7 +321,38 @@ object YourWeek {
             }
             return WeekRow(WeekForm.PLEDGE_DUE, "Pay · $title", line, WeekDest.Tab("partners"), WeekAsk("Pay", title))
         }
-        return give
+        // 4. A paused gift is told as Give tells it — never offered as a new
+        //    "Give" (§9.7 M2): "Paused · The M-Pesa prompt couldn't reach the
+        //    phone.", "Paused · Resumes Mon 12 Oct", "Paused · Nothing is owed".
+        return pausedGiftRow(gifts, p, today) ?: give
+    }
+
+    /** Why a running gift's last prompt failed, as Give's card says it — the
+     *  server's reason; null while it isn't failing. */
+    fun giftFailureLine(s: GivingSchedule): String? = s.lastFailure?.reason?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** A gift's row: the pledge it collects (its title, the pledge's page), or
+     *  "Your weekly gift" / "Your monthly gift" (the gift's sheet). */
+    private fun giftRow(form: WeekForm, g: GivingSchedule, partnership: Partnership?, line: String): WeekRow {
+        val pledgeId = g.pledge?.pledgeId?.takeIf { it.isNotBlank() }
+            ?: partnership?.pledges?.firstOrNull { !it.scheduleId.isNullOrBlank() && it.scheduleId == g.scheduleId }?.pledgeId
+        return if (pledgeId != null) {
+            val title = partnership?.pledges?.firstOrNull { it.pledgeId == pledgeId }?.displayTitle
+                ?: g.pledge?.title?.takeIf { it.isNotBlank() } ?: "Your pledge"
+            WeekRow(form, "Giving · $title", line, WeekDest.Screen(pledgeRoute(pledgeId)))
+        } else {
+            val title = if (g.frequency.equals("weekly", ignoreCase = true)) "Your weekly gift" else "Your monthly gift"
+            WeekRow(form, "Giving · $title", line, WeekDest.Screen(scheduleRoute(g.scheduleId)))
+        }
+    }
+
+    /** The first paused gift, in Give's words: why it stopped (its last
+     *  failure), else when it comes back ("Resumes Mon 12 Oct") or "Nothing
+     *  is owed" (org.nuruplace.member.feature.give.pauseCardLine). */
+    private fun pausedGiftRow(gifts: List<GivingSchedule>, partnership: Partnership?, today: LocalDate): WeekRow? {
+        val g = gifts.firstOrNull { it.status.trim().equals("paused", ignoreCase = true) } ?: return null
+        val why = giftFailureLine(g) ?: org.nuruplace.member.feature.give.pauseCardLine(g, today)
+        return giftRow(WeekForm.GIFT_PAUSED, g, partnership, "Paused · $why")
     }
 
     /** A first day on the path: Level 1, nothing done yet (Ben). It leads
@@ -317,11 +375,15 @@ object YourWeek {
      * exam the Pathway row offers, the plan day the Plans row opens, the cell
      * the Cell row opens, the test in the module the Pathway row continues —
      * is the same ask twice on one page ("Take the Level 1 exam" over "Take
-     * the Level 1 exam"). The row keeps it; the rail drops it.
+     * the Level 1 exam"). The row keeps it; the rail drops it. So with the
+     * letter: while Home draws the Sunday Letter's card ([letterCard]), the
+     * server's "Your Sunday letter is waiting" (route `letter`, kind
+     * `letter_unread`) is the card said twice (EXPERIENCE.md §9.7 C1).
      */
-    fun repeats(n: org.nuruplace.member.data.net.HomeNudge, week: List<WeekRow>): Boolean {
+    fun repeats(n: org.nuruplace.member.data.net.HomeNudge, week: List<WeekRow>, letterCard: Boolean = false): Boolean {
         val routes = week.mapNotNull { (it.dest as? WeekDest.Screen)?.route }
         return when (n.route.ifBlank { n.kind }) {
+            "letter", "letter_unread" -> letterCard
             "level_exam", "level_review" -> n.levelNumber?.let { "exam/$it" in routes } ?: false
             "plan", "plan_day_due" -> n.planId?.let { id -> routes.any { it == "plan/$id" || it.startsWith("plan/$id/") } } ?: false
             "cell", "cell_gathering" -> week.any { it.form == WeekForm.CELL }
@@ -332,12 +394,14 @@ object YourWeek {
 
     /** Cell — the member's own cell (GET /me/cell-summary): its name, "Next
      *  gathering EEE d MMM" or "Next gathering not set · N members", the cell
-     *  page; no cell (or the read failed): "Find your cell" → "Ask to be
+     *  page; no cell: "Find your cell" → "Ask to be
      *  connected" (EXPERIENCE.md §9.2 #12) — it opened Community, which has
      *  no way to find one. Once asked ([askedAt], GET /me/cell-connection,
      *  on any phone), the line says when it went to the pastor. */
     fun cell(summary: CellSummary?, askedAt: String? = null, today: LocalDate = LocalDate.now(EV_ZONE)): WeekRow {
-        val c = summary?.cell ?: return WeekRow(
+        // [summary] null: the read never answered — not "no cell" (§9.7 M4).
+        if (summary == null) return WeekRow(WeekForm.CELL_UNKNOWN, "Your cell", DIDNT_LOAD, WeekDest.Screen("cell-info"))
+        val c = summary.cell ?: return WeekRow(
             WeekForm.CELL_FIND, "Find your cell",
             askedAt?.let { CellConnectWords.sent(it, EV_ZONE, today) } ?: "Ask to be connected — tell the church where you live.",
             WeekDest.Screen("cell-connect"),

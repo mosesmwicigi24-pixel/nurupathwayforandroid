@@ -171,6 +171,10 @@ fun HomeScreen(
     var announcement by rememberHeld("Home.announcement") { mutableStateOf<FeaturedAnnouncement?>(null) }
     var scores by rememberHeld("Home.scores") { mutableStateOf<ScoresSummary?>(null) }
     var upcoming by rememberHeld("Home.upcoming") { mutableStateOf<List<CalendarOccurrence>>(emptyList()) }
+    // Whether the church calendar has ever answered — until it has, YOUR
+    // WEEK's Events row says it didn't load, never "No gatherings this week"
+    // (EXPERIENCE.md §9.7 M4).
+    var upcomingAnswered by rememberHeld("Home.upcomingAnswered") { mutableStateOf(false) }
     var homeEvents by rememberHeld("Home.homeEvents") { mutableStateOf<List<HomeEventRow>>(emptyList()) }
     var cohort by rememberHeld("Home.cohort") { mutableStateOf<CellSummary?>(null) }
     // A member with no cell who asked to be connected — when (§9.2 #12).
@@ -324,7 +328,8 @@ fun HomeScreen(
         val today = LocalDate.now()
         val from = today.toString()
         val to = today.plusDays(45).toString()
-        upcoming = runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }.getOrElse { upcoming }
+        runCatching { Net.client.api.calendar(from, to).data.sortedBy { it.startAt } }
+            .onSuccess { upcoming = it; upcomingAnswered = true }
         giveRails = runCatching { Net.client.api.givingMethods() }.getOrNull() ?: giveRails
         // Curated Home rows — server-capped at 5, soonest-first; never re-sort/cap client-side.
         homeEvents = runCatching { Net.client.api.homeEvents().data }.getOrElse { homeEvents }
@@ -396,11 +401,11 @@ fun HomeScreen(
     val level = me?.enrollment?.currentLevel
     val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
     // YOUR WEEK (§6.1): the five rows, in the journey's order.
-    val week = remember(journey, plans, upcoming, homeEvents, rsvps, partnership, gifts, giveRails, cohort, cellAskedAt, me) {
+    val week = remember(journey, plans, upcoming, upcomingAnswered, homeEvents, rsvps, partnership, gifts, giveRails, cohort, cellAskedAt, me) {
         listOf(
             YourWeek.pathway(journey, me?.enrollment?.currentLevel),
             YourWeek.plans(plans, sealedHere = org.nuruplace.member.feature.grow.PlanDayLog.sealedToday()),
-            YourWeek.events(upcoming, homeEvents, rsvps, ZonedDateTime.now(EV_ZONE)),
+            YourWeek.events(upcoming.takeIf { upcomingAnswered }, homeEvents, rsvps, ZonedDateTime.now(EV_ZONE)),
             YourWeek.giving(partnership, gifts, giveRailsLine(giveRails), LocalDate.now(EV_ZONE)),
             YourWeek.cell(cohort, cellAskedAt),
         )
@@ -579,7 +584,7 @@ fun HomeScreen(
                 // first day's side task held back (§9.1 rule 4) — or the
                 // reflection strip; and the Live-now card.
                 val shownNudges = nudges.filter {
-                    nudgeOffered(it, pathway) && !YourWeek.repeats(it, week) && !YourWeek.heldOnFirstDay(it, journey)
+                    nudgeOffered(it, pathway) && !YourWeek.repeats(it, week, letterCard = letter != null) && !YourWeek.heldOnFirstDay(it, journey)
                 }
                 // Android only (§7.3): while the phone has notifications off,
                 // "Turn on notifications" goes first.
@@ -1709,9 +1714,22 @@ private fun FeaturedCarousel(
             RowScopeLink("View all", onAll)
         }
         val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pages.size })
-        // Gentle auto-advance every 6s; pauses whenever a finger is on the rail.
-        LaunchedEffect(pages.size) {
-            if (pages.size < 2) return@LaunchedEffect
+        // Gentle auto-advance every 6s; pauses whenever a finger is on the rail
+        // — and runs only while Home is the screen in front (EXPERIENCE.md
+        // §9.7 M7): resumed, and its window holding the focus. The letter, a
+        // sheet or a dialog over Home, a page pushed over it, the app in the
+        // background — each stops it. It animated on behind the open letter
+        // and was the main thread in three ANRs on the final walk.
+        val lifecycleState by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+            .currentStateFlow.collectAsState()
+        val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+        val advances = carouselAdvances(
+            pages.size,
+            resumed = lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED),
+            windowFocused = windowFocused,
+        )
+        LaunchedEffect(pages.size, advances) {
+            if (!advances) return@LaunchedEffect
             while (true) {
                 kotlinx.coroutines.delay(6_000)
                 if (!pagerState.isScrollInProgress) {
@@ -2157,3 +2175,9 @@ private fun parseZdt(s: String?): ZonedDateTime? {
 
 private fun fmtDate(s: String?): String =
     parseZdt(s)?.let { org.nuruplace.member.util.NuruDates.day(it.toInstant(), it.zone) } ?: ""
+
+/** Whether Home's featured carousel turns by itself (EXPERIENCE.md §9.7 M7):
+ *  two pages or more, Home resumed, and its window holding the focus — never
+ *  behind the letter, a sheet, a dialog or another screen. */
+internal fun carouselAdvances(pageCount: Int, resumed: Boolean, windowFocused: Boolean): Boolean =
+    pageCount >= 2 && resumed && windowFocused
