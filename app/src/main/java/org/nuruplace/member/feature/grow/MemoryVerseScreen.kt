@@ -77,25 +77,24 @@ private fun matchPct(target: String, attempt: String): Int {
     return (hit * 100 / want.size).coerceIn(0, 100)
 }
 
-/** Growth band label for a 0..100 word score (matches iOS). */
-private fun bandName(score: Int): String = when {
-    score < 25 -> "Seedling"
-    score < 50 -> "Sprouting"
-    score < 75 -> "Growing"
-    else -> "Flourishing"
-}
 
-/**
- * Read a component value as a 0..1 fraction. The backend emits these as 0..100
- * integers (see scores/service.ts), so anything > 1 is treated as a percentage.
- * Tries lowercase then capitalized keys, then a local fallback (0..1).
- */
-private fun ScoreBreakdown.frac(key: String, fallback: Double): Double {
-    val raw = components[key]
-        ?: components[key.replaceFirstChar { it.uppercase() }]
-        ?: return fallback.coerceIn(0.0, 1.0)
-    val v = if (raw > 1.0) raw / 100.0 else raw
-    return v.coerceIn(0.0, 1.0)
+/** The Word score card's words — the server's own score (GET /me/scores/word,
+ *  the one Home's "Your progress" shows; scoring is the server's, §1.1): its
+ *  0–100 score, its band in the app's one score vocabulary ("Just beginning",
+ *  "Growing", …) and its three parts, 0–100 on the wire, as 0..1 bars. The
+ *  page named its own band ("Seedling") and, with no answer, drew a 0 and
+ *  bars worked out from the verse list (Cycle 4 walk; iOS e950cbd). */
+internal data class WordScoreWords(val score: Int, val band: String?, val consistency: Double, val memorization: Double, val breadth: Double)
+
+internal fun wordScoreWords(b: ScoreBreakdown): WordScoreWords {
+    fun part(key: String) = ((b.components[key] ?: 0.0) / 100.0).coerceIn(0.0, 1.0)
+    return WordScoreWords(
+        score = b.score.coerceIn(0, 100),
+        band = b.band.trim().takeIf { it.isNotEmpty() },
+        consistency = part("consistency"),
+        memorization = part("memorization"),
+        breadth = part("breadth"),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,7 +135,8 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
                     .padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                WordScoreCard(word, verses)
+                // The server's Word score, or no card until it answers — never a guess.
+                word?.let { WordScoreCard(wordScoreWords(it)) }
                 MilestoneCard(verses)
                 if (verses.isNotEmpty()) ThisWeekCard(verses) { practicing = it }
                 if (verses.isNotEmpty()) {
@@ -199,19 +199,8 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun WordScoreCard(word: ScoreBreakdown?, verses: List<MemoryVerseRow>) {
-    val score = (word?.score ?: 0).coerceIn(0, 100)
-
-    // Local iOS-style fallbacks (0..1) when the endpoint is unavailable.
-    val total = verses.size
-    val mastered = verses.count { it.isMastered }
-    val localConsistency = if (total == 0) 0.0 else mastered.toDouble() / total
-    val localMemorization = if (total == 0) 0.0 else verses.sumOf { it.bestMatchPct }.toDouble() / total / 100.0
-    val localBreadth = if (total == 0) 0.0 else (total / 10.0).coerceAtMost(1.0)
-
-    val cons = word?.frac("consistency", localConsistency) ?: localConsistency
-    val mem = word?.frac("memorization", localMemorization) ?: localMemorization
-    val breadth = word?.frac("breadth", localBreadth) ?: localBreadth
+private fun WordScoreCard(w: WordScoreWords) {
+    val score = w.score
 
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(GrowPal.white)
@@ -223,10 +212,10 @@ private fun WordScoreCard(word: ScoreBreakdown?, verses: List<MemoryVerseRow>) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("WORD SCORE", style = gInter(11, FontWeight.Bold, 1.4f), color = GrowPal.gold)
                 }
-                Text(bandName(score), style = gSerif(18, FontWeight.SemiBold), color = GrowPal.ink)
-                Bar("Consistency", cons)
-                Bar("Memorization", mem)
-                Bar("Breadth", breadth)
+                w.band?.let { Text(it, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.ink) }
+                Bar("Consistency", w.consistency)
+                Bar("Memorization", w.memorization)
+                Bar("Breadth", w.breadth)
             }
         }
     }
