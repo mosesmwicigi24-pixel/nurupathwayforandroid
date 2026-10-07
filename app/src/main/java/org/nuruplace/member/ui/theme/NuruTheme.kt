@@ -205,7 +205,16 @@ object NuruType {
     val actionLabel get() = nuruSans(13, FontWeight.Bold)
 }
 
-private val NuruColorScheme = lightColorScheme(
+/**
+ * Material's roles, each on the brand palette (EXPERIENCE.md §8.1 rule 1).
+ * The ones left unset fell back to Material's lavender baseline: every sheet
+ * drew on #F7F2FA (surfaceContainerLow), every switch's off track was
+ * lavender-grey (surfaceContainerHighest and outline), and menus, dialogs and
+ * the date picker took the same tints (final walk C16, Android #29). A
+ * component that doesn't choose its own colour now draws white surfaces, the
+ * palette's own track (progressTrack) and the app's own greys.
+ */
+internal val NuruColorScheme = lightColorScheme(
     primary = Nuru.navyDeep,
     onPrimary = Nuru.onNavy,
     secondary = Nuru.gold,
@@ -213,6 +222,18 @@ private val NuruColorScheme = lightColorScheme(
     onBackground = Nuru.ink,
     surface = Nuru.white,
     onSurface = Nuru.ink,
+    onSurfaceVariant = Nuru.ink600,
+    surfaceVariant = Nuru.surface,
+    surfaceTint = Nuru.white,
+    surfaceContainerLowest = Nuru.white,
+    surfaceContainerLow = Nuru.white,
+    surfaceContainer = Nuru.white,
+    surfaceContainerHigh = Nuru.white,
+    surfaceContainerHighest = Nuru.progressTrack,
+    secondaryContainer = Nuru.goldTint,
+    onSecondaryContainer = Nuru.navy,
+    outline = Nuru.ink400,
+    outlineVariant = Nuru.ink300,
     error = Nuru.danger,
 )
 

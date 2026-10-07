@@ -250,7 +250,8 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                     Text("Notifications", style = NuruType.cardTitle, color = Nuru.ink)
                     // Animates with the OPTIMISTIC count — mark-all lands here immediately.
                     AnimatedContent(targetState = unreadCount, label = "notifUnreadCount") { u ->
-                        Text(if (u > 0) "$u unread" else "All caught up ✨", style = NuruType.caption, color = Nuru.ink600)
+                        // Words, no emoji (§8.1 rule 7; final walk C16) — as iOS.
+                        Text(if (u > 0) "$u unread" else "All caught up", style = NuruType.caption, color = Nuru.ink600)
                     }
                 }
                 AnimatedVisibility(visible = unreadCount > 0, enter = fadeIn(), exit = fadeOut()) {

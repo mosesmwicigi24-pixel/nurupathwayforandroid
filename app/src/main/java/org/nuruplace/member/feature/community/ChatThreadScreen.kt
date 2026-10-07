@@ -967,7 +967,8 @@ private fun ThreadHeader(
                     Text(thread.title ?: "Conversation", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (thread.kind == "dm") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("🕊️", fontSize = 11.sp)
+                            // A Lucide glyph, not an emoji (§8.1 rule 7; final walk C16).
+                            Icon(Lucide.HeartHandshake, contentDescription = null, tint = CHAT.ink600, modifier = Modifier.size(14.dp))
                             Text(
                                 when {
                                     threadContext == "discipler" -> "My Discipler"
