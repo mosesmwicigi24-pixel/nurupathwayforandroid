@@ -405,18 +405,21 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
         Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(ML.headerGrad)
             .padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 20.dp),
     ) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text("LEVEL ${m.levelNumber} · MODULE ${m.moduleSequenceNumber}", style = ml(11, FontWeight.Bold, 2f), color = ML.overline)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SquareBtn(Lucide.ArrowLeft, "Back", onBack)
-                Spacer(Modifier.weight(1f))
-                // "Hear it another way" — Nuru re-renders this lesson.
-                SquareBtn(Lucide.Sparkles, "Hear it another way", onExplain)
-                Spacer(Modifier.width(8.dp))
-                SquareBtn(Lucide.Maximize2, "Reading mode", onExpand)
-                Spacer(Modifier.width(8.dp))
-                SquareBtn(Lucide.Share2, "Share") {}
-            }
+        // The kicker takes the room between the buttons — centred over the
+        // whole width it ran under them and read "LEVEL 1 · MODULE" (§8.1
+        // rule 9; seen on the final walk's lesson).
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SquareBtn(Lucide.ArrowLeft, "Back", onBack)
+            org.nuruplace.member.ui.components.WholeWordsText(
+                "LEVEL ${m.levelNumber} · MODULE ${m.moduleSequenceNumber}", style = ml(11, FontWeight.Bold, 2f), color = ML.overline,
+                textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            // "Hear it another way" — Nuru re-renders this lesson.
+            SquareBtn(Lucide.Sparkles, "Hear it another way", onExplain)
+            Spacer(Modifier.width(8.dp))
+            SquareBtn(Lucide.Maximize2, "Reading mode", onExpand)
+            Spacer(Modifier.width(8.dp))
+            SquareBtn(Lucide.Share2, "Share") {}
         }
         Text(m.title, style = mlSerif(26, FontWeight.Medium, -0.7f), color = ML.navy, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 14.dp))
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {

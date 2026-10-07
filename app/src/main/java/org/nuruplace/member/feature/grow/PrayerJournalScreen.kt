@@ -246,7 +246,10 @@ private fun AddPrayerPill(onClick: () -> Unit) {
 @Composable
 private fun EmptyPrayers(tab: PrayerTab) {
     Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(if (tab == PrayerTab.Active) "🤍" else "🙏", style = NuruType.display)
+        // A Lucide glyph on a gold-tint tile, not an emoji (§8.1 rule 7; final walk C16).
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(if (tab == PrayerTab.Active) Lucide.Heart else Lucide.CheckCircle, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(22.dp))
+        }
         Spacer(Modifier.height(Spacing.sm))
         Text(
             if (tab == PrayerTab.Active) "No active prayers yet" else "No answered prayers yet",

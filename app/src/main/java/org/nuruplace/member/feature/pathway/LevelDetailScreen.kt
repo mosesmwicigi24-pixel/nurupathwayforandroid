@@ -262,12 +262,11 @@ fun LevelDetailScreen(
                         Spacer(Modifier.height(Spacing.sm))
                         ProgressBar(pct / 100f)
                     }
-                    if (total > 0) {
+                    // One word for one count (§8.1 rule 8): "10 lessons" beside
+                    // "10 of 10 modules" said it twice — the time alone, as iOS.
+                    if (total > 0) level?.minutes?.takeIf { it > 0 }?.let {
                         Spacer(Modifier.height(Spacing.sm))
-                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                            level?.minutes?.takeIf { it > 0 }?.let { MetaChip("≈ $it min") }
-                            MetaChip("$total lessons")
-                        }
+                        MetaChip("≈ $it min")
                     }
                 }
 
