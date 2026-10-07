@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.nuruplace.member.data.net.NetworkStatus
 import org.nuruplace.member.data.net.ServerReach
-import org.nuruplace.member.data.net.StateLanguage
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 
@@ -30,10 +29,13 @@ fun ServerReachBanner(modifier: Modifier = Modifier) {
     AnimatedVisibility(visible = ServerReach.staleSince != null, enter = expandVertically(), exit = shrinkVertically(), modifier = modifier) {
         // The phone itself offline: the state language's own words (§4,
         // "You're offline · Showing what you last saw…"). Online: the server
-        // is the one away, and the line says so.
+        // is the one away, and the line says so. "Showing what you last saw"
+        // only once the page in front was given a saved copy (§9.7 M3).
         Text(
-            if (!NetworkStatus.isOnline(context)) StateLanguage.offline(hasSavedCopy = true).sentence
-            else "Nuru Place can't be reached right now — showing what you last saw. We'll keep trying.",
+            org.nuruplace.member.data.net.staleBannerLine(
+                phoneOffline = !NetworkStatus.isOnline(context),
+                savedOnPage = ServerReach.savedOnThisPage,
+            ),
             style = NuruType.micro, fontWeight = FontWeight.SemiBold, color = Nuru.navyDeep, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().background(Color(0xFFFFF4DA)).padding(horizontal = 16.dp, vertical = 6.dp),
         )

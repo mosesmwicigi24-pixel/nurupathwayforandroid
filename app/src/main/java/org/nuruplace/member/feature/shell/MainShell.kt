@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Badge
@@ -37,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -400,10 +402,22 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // LiveHudOverlay) rather than being pre-inset by Scaffold's padding
             // the way every other destination is.
             val contentPadding = if (onLiveBroadcast) androidx.compose.foundation.layout.PaddingValues(0.dp) else pad
-            // While the server is away and screens show their last good copies, say so once, here.
+            // While the server is away and screens show their last good copies,
+            // say so once, here — ABOVE the page, never over its header: the
+            // page is inset by the banner's height (EXPERIENCE.md §9.7 M3; on
+            // the final walk it hid Home's date, scan and bell, every tab's
+            // kicker and bell, and pushed pages' back buttons).
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            var bannerHeight by remember { mutableStateOf(0.dp) }
             org.nuruplace.member.ui.components.ServerReachBanner(
-                Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding()).zIndex(1f),
+                Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding()).zIndex(1f)
+                    .onSizeChanged { bannerHeight = with(density) { it.height.toDp() } },
             )
+            // A new page in front: nothing it shows is a saved copy until a
+            // read is served from one.
+            LaunchedEffect(backStack?.destination?.route, backStack?.arguments?.toString()) {
+                org.nuruplace.member.data.net.ServerReach.newPage()
+            }
             // A quick action the server didn't record says so here, once
             // (EXPERIENCE.md §7.4) — above the bars, clear of the gesture bar.
             val navBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
@@ -419,7 +433,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // page only as far as the bars don't already (consumeWindowInsets,
             // the bottom edge only — the top is the pages' own business).
             val shellBottom = androidx.compose.foundation.layout.PaddingValues(bottom = contentPadding.calculateBottomPadding())
-            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding).consumeWindowInsets(shellBottom)) {
+            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding).padding(top = bannerHeight).consumeWindowInsets(shellBottom)) {
             composable("home") {
                 HomeScreen(
                     me,
