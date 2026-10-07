@@ -246,16 +246,23 @@ fun LevelDetailScreen(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.white)
                         .border(1.dp, Nuru.border, RoundedCornerShape(Radii.card)).padding(Spacing.base),
                 ) {
+                    // No zero counts (Cycle 4 walk): "Level 2 is being prepared",
+                    // "10 modules", "3 of 10 modules" — the percent, bar and
+                    // lesson chip only once there is something to show.
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$done of $total modules", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text("$pct%", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.Bold)
+                        Text(levelPageCountLine(levelNumber, done, total), style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (pct > 0) Text("$pct%", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(Modifier.height(Spacing.sm))
-                    ProgressBar(pct / 100f)
-                    Spacer(Modifier.height(Spacing.sm))
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                        level?.minutes?.takeIf { it > 0 }?.let { MetaChip("≈ $it min") }
-                        MetaChip("$total lessons")
+                    if (pct > 0) {
+                        Spacer(Modifier.height(Spacing.sm))
+                        ProgressBar(pct / 100f)
+                    }
+                    if (total > 0) {
+                        Spacer(Modifier.height(Spacing.sm))
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            level?.minutes?.takeIf { it > 0 }?.let { MetaChip("≈ $it min") }
+                            MetaChip("$total lessons")
+                        }
                     }
                 }
 
@@ -270,6 +277,8 @@ fun LevelDetailScreen(
                     Text("Learn step by step", style = NuruType.title, color = Nuru.ink)
                     Spacer(Modifier.height(Spacing.md))
                     val trail = remember(modules, bundle.encouragements) { weaveTrail(modules, bundle.encouragements) }
+                    // An empty trail says why (§4) — it was a heading over nothing.
+                    if (trail.isEmpty()) Text(emptyListLine(total), style = NuruType.body, color = Nuru.ink600)
                     trail.forEachIndexed { idx, item ->
                         val isLastRow = idx == trail.lastIndex
                         when (item) {
@@ -612,7 +621,7 @@ private fun StatsStation(
                 StatsRing(pct)
                 Spacer(Modifier.size(Spacing.base))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatLine("$done of $total", "modules complete")
+                    if (total > 0) StatLine("$done of $total", "modules complete")
                     if (!band.isNullOrBlank()) StatLine(band, "your mastery so far")
                     if (streak > 0) StatLine("$streak-day", "streak")
                 }

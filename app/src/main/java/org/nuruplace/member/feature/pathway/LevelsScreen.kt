@@ -274,15 +274,19 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?,
                     Text(LevelsMapWords.lockLine(level.levelNumber, journey, preparing = level.lessonCount <= 0), style = NuruType.caption, color = Nuru.ink400)
                 }
             } else {
+                // The exam is the level's last step (§9.2 #10): Map gave
+                // Level 1 "100%" before its exam was sat. No zero counts (Cycle
+                // 4 walk): "Level 2 is being prepared", "10 modules", "3/10
+                // modules" — the percent and the bar once there is progress.
+                val p = levelPercent(level, journey)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${level.lessonsDone}/${level.lessonCount} modules", style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
-                    // The exam is the level's last step (§9.2 #10): Map gave
-                    // Level 1 "100%" before its exam was sat.
-                    val p = levelPercent(level, journey)
-                    Text("$p%", style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.Medium)
+                    Text(cardCountLine(level), style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
+                    if (p > 0) Text("$p%", style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.Medium)
                 }
-                Spacer(Modifier.height(Spacing.xs))
-                ProgressBar(levelPercent(level, journey) / 100f)
+                if (p > 0) {
+                    Spacer(Modifier.height(Spacing.xs))
+                    ProgressBar(p / 100f)
+                }
             }
         }
     }

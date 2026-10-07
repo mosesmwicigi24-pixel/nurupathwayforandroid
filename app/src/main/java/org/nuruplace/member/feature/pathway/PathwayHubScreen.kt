@@ -555,7 +555,8 @@ private fun SelectedModules(
             Column(Modifier.weight(1f)) {
                 Text(level.title.uppercase(), style = PW.over(11), color = PW.goldDeep, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // Lessons, as the folded row and the header count them (§8.2 #4).
-                Text("${level.lessonsDone} of ${level.lessonCount} done", style = PW.t(11), color = PW.ink2)
+                // Never a count of nothing: "Level 3 is being prepared", "10 modules", "3 of 10 done".
+                Text(sectionCountLine(level), style = PW.t(11), color = PW.ink2)
             }
             resume?.let { r -> Text(ModuleWords.trailLink(level.lessonsDone), style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
@@ -564,7 +565,7 @@ private fun SelectedModules(
         ) {
             when {
                 loading -> repeat(3) { ModuleSkeletonRow() }
-                ordered.isEmpty() -> Text("Modules open as you progress.", style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                ordered.isEmpty() -> Text(emptyListLine(level.lessonCount), style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 else -> {
                     if (folds) FoldedTrailRow(foldedTrailLine(ordered), expanded) { expanded = !expanded }
                     if (!folds || expanded) {

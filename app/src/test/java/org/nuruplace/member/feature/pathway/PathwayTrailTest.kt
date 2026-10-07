@@ -111,3 +111,33 @@ class PathwayTrailTest {
         assertFalse(examRowHidden(null, 1))
     }
 }
+
+/** No count of nothing (Cycle 4 walk: "0 of 0 done" over a level with nothing
+ *  published) — §3's "Level N is being prepared"; a level not begun says what
+ *  lies ahead; then the count. The same words as iOS (8bbcf82). */
+class LevelCountLineTest {
+    private fun level(n: Int, done: Int, total: Int) = org.nuruplace.member.data.net.PathwayLevel(
+        n, "Level $n", totalModules = total, completedModules = done,
+        status = org.nuruplace.member.data.net.LevelStatus.ACTIVE, lessonsTotal = total, lessonsCompleted = done,
+    )
+
+    @org.junit.Test fun `a level with nothing published is being prepared, on every screen`() {
+        org.junit.Assert.assertEquals("Level 3 is being prepared", sectionCountLine(level(3, 0, 0)))
+        org.junit.Assert.assertEquals("Level 2 is being prepared", cardCountLine(level(2, 0, 0)))
+        org.junit.Assert.assertEquals("Level 2 is being prepared", levelPageCountLine(2, 0, 0))
+        org.junit.Assert.assertEquals("Its modules open soon — we'll let you know.", emptyListLine(0))
+        org.junit.Assert.assertEquals("Modules open as you progress.", emptyListLine(10))
+    }
+
+    @org.junit.Test fun `a level not begun says what lies ahead, never zero of ten`() {
+        org.junit.Assert.assertEquals("10 modules", sectionCountLine(level(1, 0, 10)))
+        org.junit.Assert.assertEquals("10 modules", cardCountLine(level(1, 0, 10)))
+        org.junit.Assert.assertEquals("1 module", levelPageCountLine(1, 0, 1))
+    }
+
+    @org.junit.Test fun `then the count, in each screen's shape`() {
+        org.junit.Assert.assertEquals("3 of 10 done", sectionCountLine(level(1, 3, 10)))
+        org.junit.Assert.assertEquals("3/10 modules", cardCountLine(level(1, 3, 10)))
+        org.junit.Assert.assertEquals("10 of 10 modules", levelPageCountLine(1, 10, 10))
+    }
+}

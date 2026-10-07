@@ -47,3 +47,32 @@ internal fun foldedTrailLine(modules: List<LevelModule>): String {
  *  so the trail's own exam row, at its foot, is not shown again. */
 internal fun examRowHidden(journey: Journey?, levelNumber: Int): Boolean =
     journey != null && journey.stage == JourneyStage.EXAM_READY && journey.levelNumber == levelNumber
+
+// ── Counts with nothing to count (§8.1 rule 8, §3; Cycle 4 walk) ──
+// A level with nothing published read "0 of 0 done" over "Modules open as you
+// progress." — a count of nothing. It is §3's "Level N is being prepared"; a
+// level not begun says what lies ahead ("10 modules", §9.2 #4); then the count.
+// The same words as iOS PathwayTrail (8bbcf82), each in its own screen's shape.
+
+private fun levelCountLine(levelNumber: Int, done: Int, total: Int, counted: (done: Int, total: Int) -> String): String = when {
+    total <= 0 -> "Level $levelNumber is being prepared"
+    done <= 0 -> "$total module${if (total == 1) "" else "s"}"
+    else -> counted(minOf(done, total), total)
+}
+
+/** The count under a level's name over its list on Pathway: "10 of 10 done". */
+internal fun sectionCountLine(level: PathwayLevel): String =
+    levelCountLine(level.levelNumber, level.lessonsDone, level.lessonCount) { d, t -> "$d of $t done" }
+
+/** Map view's level card: "3/10 modules". */
+internal fun cardCountLine(level: PathwayLevel): String =
+    levelCountLine(level.levelNumber, level.lessonsDone, level.lessonCount) { d, t -> "$d/$t modules" }
+
+/** The level page's progress line: "3 of 10 modules". */
+internal fun levelPageCountLine(levelNumber: Int, done: Int, total: Int): String =
+    levelCountLine(levelNumber, done, total) { d, t -> "$d of $t modules" }
+
+/** An empty list's line: a level with nothing published keeps §3's promise;
+ *  a level whose lessons exist but aren't open to the member opens as they go. */
+internal fun emptyListLine(lessonCount: Int): String =
+    if (lessonCount > 0) "Modules open as you progress." else "Its modules open soon — we'll let you know."
