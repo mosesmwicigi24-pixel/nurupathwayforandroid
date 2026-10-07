@@ -70,4 +70,24 @@ class ActivePlanTest {
         val fresh = cara.copy(lastDayFinishedAt = "2026-10-04T18:00:00Z", subtitle = "Seven days for the new believer")
         assertEquals("Today · Seven days for the new believer", planCardLine(fresh, readToday = false, now = monday))
     }
+
+    // ── "Today" means today (EXPERIENCE.md §9.7 M6) ──
+
+    @Test fun `a day is today's only when it is the day the member is on, and the plan isn't paused`() {
+        val wed = java.time.Instant.parse("2026-10-07T09:00:00Z")
+        // Ada: Day 4 waiting since Monday (last day finished Mon 5 Oct).
+        val ada = ReadingPlanRow(planId = "fs", title = "First Steps", dayCount = 7, currentDay = 4, completedDays = listOf(1, 2, 3), enrolled = true, lastDayFinishedAt = "2026-10-05T08:45:00Z")
+        assertEquals(false, planDayIsToday(ada, 4, wed))
+        assertEquals("THE JOURNEY · 3 PARTS", dayJourneyKicker(planDayIsToday(ada, 4, wed), 3))
+        assertEquals("THE READING", dayReadingKicker(planDayIsToday(ada, 4, wed)))
+        // Read yesterday: today's day is today's.
+        val onTrack = ada.copy(lastDayFinishedAt = "2026-10-06T08:45:00Z")
+        assertEquals(true, planDayIsToday(onTrack, 4, wed))
+        assertEquals("TODAY'S JOURNEY · 3 PARTS", dayJourneyKicker(true, 3))
+        assertEquals("TODAY'S JOURNEY · 1 PART", dayJourneyKicker(true, 1))
+        assertEquals("TODAY'S READING", dayReadingKicker(true))
+        // Another day than the one the member is on, or nothing known: not today's.
+        assertEquals(false, planDayIsToday(onTrack, 2, wed))
+        assertEquals(false, planDayIsToday(null, 4, wed))
+    }
 }

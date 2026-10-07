@@ -14,8 +14,9 @@ import org.nuruplace.member.data.net.ReadingPlanRow
 import java.time.Instant
 import java.time.OffsetDateTime
 
-/** How many of a day's parts are done, of how many. */
-internal data class DayParts(val done: Int, val total: Int) {
+/** How many of a day's parts are done, of how many — [day] the day's number
+ *  (0 when unknown). */
+internal data class DayParts(val done: Int, val total: Int, val day: Int = 0) {
     val left: Int get() = (total - done).coerceAtLeast(0)
 
     /** Begun and not yet finished. */
@@ -68,7 +69,7 @@ internal fun todayParts(plan: ReadingPlanDetail?): DayParts? {
     val p = plan ?: return null
     val n = p.nextDay ?: return null
     val day = p.days.firstOrNull { it.dayNumber == n } ?: return null
-    return dayParts(day).takeIf { it.total > 0 }
+    return dayParts(day).copy(day = n).takeIf { it.total > 0 }
 }
 
 /**
@@ -139,7 +140,7 @@ internal data class StreakView(val count: Int, val todayMarked: Boolean, val lin
  *
  * A sealed day is a day of the streak, so beside the tick the count is at
  * least 1. The line: "Today's reading is done 🔥" once a day is sealed today;
- * else today's progress while the day is under way ("Today: 2 of 3 parts");
+ * else the day's progress while it is under way ("Day 4: 2 of 3 parts");
  * else the invitation.
  */
 internal fun streakView(count: Int, todayDone: Boolean, today: DayParts?, activeToday: Boolean = todayDone): StreakView {
@@ -149,7 +150,10 @@ internal fun streakView(count: Int, todayDone: Boolean, today: DayParts?, active
     // No emoji (§8.1 rule 7): the card's flame is the Lucide tile beside it.
     val line = when {
         todayDone -> "Today's reading is done"
-        today != null && today.partway -> "Today: ${today.done} of ${today.total} parts"
+        // "Today" means today (§9.7 M6): the server says which parts of the
+        // day are done, not when — Ada's one part, done Monday, read "Today:
+        // 1 of 3 parts" on Wednesday. So the day is named, never "today".
+        today != null && today.partway -> "${if (today.day > 0) "Day ${today.day}" else "This day"}: ${today.done} of ${today.total} parts"
         shown > 0 -> "Read today to keep it alive"
         else -> "Read today to start your streak"
     }

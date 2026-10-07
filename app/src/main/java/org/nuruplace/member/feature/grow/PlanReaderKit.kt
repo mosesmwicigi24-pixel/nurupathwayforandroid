@@ -357,10 +357,10 @@ internal fun RScripturePassageText(text: String, pal: ReaderPalette, size: Int =
 
 /** Kicker · the day's title in serif · the reference and an honest read time. */
 @Composable
-internal fun RDayOpening(title: String?, reference: String?, minutes: Int, pal: ReaderPalette) {
+internal fun RDayOpening(title: String?, reference: String?, minutes: Int, pal: ReaderPalette, today: Boolean = false) {
     val meta = listOfNotNull(reference?.takeIf { it.isNotEmpty() }, "about $minutes min").joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TODAY'S READING", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+        Text(dayReadingKicker(today), style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
         title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(26, FontWeight.Medium), color = pal.ink) }
         Text(meta, style = rInter(12, FontWeight.Medium), color = pal.inkDim)
     }

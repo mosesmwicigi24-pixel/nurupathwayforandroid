@@ -94,6 +94,13 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
     var attempt by remember { mutableStateOf(0) }
     val loadContext = androidx.compose.ui.platform.LocalContext.current
 
+    // Whether this is today's day (§9.7 M6): "TODAY'S READING" only then.
+    var isToday by remember { mutableStateOf(false) }
+    LaunchedEffect(planId, dayNumber) {
+        isToday = runCatching { Net.client.api.plans().data.firstOrNull { it.planId == planId } }.getOrNull()
+            .let { planDayIsToday(it, dayNumber) }
+    }
+
     LaunchedEffect(planId, attempt) {
         loading = true
         runCatching { Net.client.api.plan(planId) }
@@ -198,7 +205,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                             Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 28.dp),
                             verticalArrangement = Arrangement.spacedBy(18.dp),
                         ) {
-                            PartContent(part = part, group = group, pal = pal, dayTitle = day?.title, reference = group.firstOrNull { it.kind.lowercase() == "scripture" }?.reference)
+                            PartContent(part = part, group = group, pal = pal, dayTitle = day?.title, reference = group.firstOrNull { it.kind.lowercase() == "scripture" }?.reference, isToday = isToday)
                             if (part == "respond") ReflectionBox(planId, dayNumber, pal)
                             EncouragementLine(pal)
                         }
@@ -247,12 +254,12 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
 }
 
 @Composable
-private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalette, dayTitle: String? = null, reference: String? = null) {
+private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalette, dayTitle: String? = null, reference: String? = null, isToday: Boolean = false) {
     when (part) {
         "word" -> {
             // The opening: kicker, the day's title, the reference and an honest
             // read time — a front door before the Word.
-            RDayOpening(title = dayTitle, reference = reference, minutes = ReadTime.minutes(group), pal = pal)
+            RDayOpening(title = dayTitle, reference = reference, minutes = ReadTime.minutes(group), pal = pal, today = isToday)
             val hasTeaching = group.any { rankOf(it) == 2 && !it.content.isNullOrEmpty() }
             group.forEach { seg ->
             when (seg.kind.lowercase()) {

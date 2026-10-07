@@ -93,8 +93,8 @@ class PlanDayPartsTest {
     @Test fun `today's parts are the server's next day`() {
         val plan = ReadingPlanDetail(planId = "21c7", title = "First Steps", dayCount = 7, enrolled = true,
             days = listOf(firstStepsDay1(), freshDay(2)), nextDay = 1)
-        assertEquals(DayParts(2, 3), todayParts(plan))
-        assertEquals(DayParts(0, 3), todayParts(plan.copy(nextDay = 2)))
+        assertEquals(DayParts(2, 3, day = 1), todayParts(plan))
+        assertEquals(DayParts(0, 3, day = 2), todayParts(plan.copy(nextDay = 2)))
         assertNull(todayParts(plan.copy(nextDay = null)))   // the whole plan is done
         assertNull(todayParts(null))
     }
@@ -102,9 +102,11 @@ class PlanDayPartsTest {
     @Test fun `today is ticked only once the server has sealed a day today`() {
         // Ada now: two of Day 1's three parts read, nothing sealed today. It
         // used to tick today (the rhythm's `word`) beside "0-day streak".
-        val partway = streakView(count = 0, todayDone = false, today = DayParts(2, 3))
+        val partway = streakView(count = 0, todayDone = false, today = DayParts(2, 3, day = 1))
         assertFalse(partway.todayMarked)
-        assertEquals("Today: 2 of 3 parts", partway.line)
+        // "Today" means today (§9.7 M6): the parts' day is named — the server
+        // says which are done, not when.
+        assertEquals("Day 1: 2 of 3 parts", partway.line)
         assertEquals(0, partway.count)
 
         // "I've talked it over" seals Day 1: ticked, and never "0-day streak".
@@ -113,7 +115,9 @@ class PlanDayPartsTest {
         assertEquals(StreakView(1, true, "Today's reading is done"), streakView(count = 0, todayDone = true, today = DayParts(1, 3)))
 
         // A longer walk keeps its count while today is under way.
-        assertEquals(StreakView(4, false, "Today: 1 of 3 parts"), streakView(count = 4, todayDone = false, today = DayParts(1, 3)))
+        assertEquals(StreakView(4, false, "Day 4: 1 of 3 parts"), streakView(count = 4, todayDone = false, today = DayParts(1, 3, day = 4)))
+        // Never "Today:", even when the day isn't known.
+        assertEquals("This day: 1 of 3 parts", streakView(count = 4, todayDone = false, today = DayParts(1, 3)).line)
         assertEquals(StreakView(4, true, "Today's reading is done"), streakView(count = 4, todayDone = true, today = null))
     }
 
