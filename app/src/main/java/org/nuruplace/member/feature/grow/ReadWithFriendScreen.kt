@@ -27,10 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -308,7 +308,7 @@ fun ReadingGroupDetailScreen(groupId: String, myUserId: String, onBack: () -> Un
         )
     }
     if (showLeaveConfirm) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { showLeaveConfirm = false },
             title = { Text("Leave this shared plan?", style = plSerif(18, FontWeight.SemiBold), color = PL.navy) },
             text = { Text("You can rejoin later with a fresh invite.", style = plInter(13), color = PL.ink2) },
@@ -540,7 +540,7 @@ internal fun FriendPickerSheet(
     val filtered = connections.filter { it.status == "accepted" && it.userId !in alreadyIn }
         .let { list -> if (query.isBlank()) list else list.filter { it.fullName.contains(query, ignoreCase = true) } }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text("Invite a friend", style = plSerif(18, FontWeight.SemiBold), color = PL.navy)
             BasicTextField(

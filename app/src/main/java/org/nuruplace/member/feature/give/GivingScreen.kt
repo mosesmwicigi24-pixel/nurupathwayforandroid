@@ -60,7 +60,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -1473,7 +1473,7 @@ private fun GiveTab(
             val cFreq = freqOf(c.plan.body.frequency)
             val now = remember(c) { Instant.now() }
             var giveNow by remember(c) { mutableStateOf(true) }
-            androidx.compose.material3.AlertDialog(
+            org.nuruplace.member.ui.components.NuruAlertDialog(
                 onDismissRequest = { confirmSchedule = null },
                 containerColor = GIVE.white,
                 title = { Text(scheduleConfirmTitle(cFreq), style = giSerif(18, FontWeight.SemiBold), color = GIVE.navy) },
@@ -1584,7 +1584,7 @@ private fun PromptNumberSheet(
     val onFile = kenyanMobileE164(phoneOnFile)
     // Called wrong only once a whole number's worth is typed, not mid-way.
     val wrong = number == null && text.count { it.isDigit() } >= 9
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("$methodLabel number", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy)
@@ -2092,7 +2092,7 @@ private fun CustomAmountDialog(
     } else {
         parsed in 1..2_000_000
     }
-    androidx.compose.material3.AlertDialog(
+    org.nuruplace.member.ui.components.NuruAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = GIVE.white,
         title = { Text("Enter amount", style = giSerif(18, FontWeight.SemiBold), color = GIVE.navy) },

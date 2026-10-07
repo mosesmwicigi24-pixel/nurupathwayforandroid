@@ -37,7 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -328,7 +328,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
 
     // ── Badge detail sheet ──────────────────────────────────────────────────
     sheetBadge?.let { b ->
-        ModalBottomSheet(onDismissRequest = { sheetBadge = null }) {
+        NuruModalBottomSheet(onDismissRequest = { sheetBadge = null }) {
             val st = badgeStyle(b.category)
             val earned = b.awardedAt != null
             Column(
@@ -509,7 +509,7 @@ private fun EditFieldSheet(
     // Open to its content, never half-way (the keyboard used to drop it to
     // the half state), with a visible way out (Cycle 3's closing walk: "Save"
     // was the only control; the other sheets have ✕).
-    ModalBottomSheet(
+    NuruModalBottomSheet(
         onDismissRequest = onDismiss, containerColor = PROF.white,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {

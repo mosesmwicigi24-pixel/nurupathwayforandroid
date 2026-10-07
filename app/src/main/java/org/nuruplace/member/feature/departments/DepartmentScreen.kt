@@ -36,16 +36,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -177,7 +177,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                         HeroCircleButton(onClick = { menuOpen = true }) {
                             Icon(Lucide.EllipsisVertical, contentDescription = "More", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                         }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Leave this department", style = NuruType.body, color = Nuru.danger) },
                                 onClick = { menuOpen = false; confirmLeave = true },
@@ -264,7 +264,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
 
     // ── Dialogs & sheets ──
     if (confirmLeave) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { confirmLeave = false },
             title = { Text("Leave ${d.name}?", style = NuruType.cardTitle, color = Nuru.navy) },
             text = { Text("You can ask to serve here again any time.", style = NuruType.body, color = Nuru.ink600) },
@@ -279,7 +279,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
         )
     }
     removing?.let { post ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { removing = null },
             title = { Text("Remove this post?", style = NuruType.cardTitle, color = Nuru.navy) },
             text = { Text("Members will no longer see it.", style = NuruType.body, color = Nuru.ink600) },
@@ -416,7 +416,7 @@ private fun PostComposerSheet(busy: Boolean, onDismiss: () -> Unit, onPost: (bod
     val url = imageUrl.trim()
     val urlOk = url.isBlank() || url.startsWith("http://") || url.startsWith("https://")
     val valid = trimmedBody.isNotEmpty() && trimmedBody.length <= 2000 && urlOk
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Write a post", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
             Text("Members of this department are notified.", style = NuruType.caption, color = Nuru.ink600)
@@ -515,7 +515,7 @@ private fun NeedSheet(busy: Boolean, onDismiss: () -> Unit, onSubmit: (Departmen
     val amountMajor = amountText.filter { it.isDigit() }.take(8).toIntOrNull() ?: 0
     val deadlineOk = deadline.isBlank() || runCatching { LocalDate.parse(deadline.trim()) }.isSuccess
     val valid = title.trim().length in 3..120 && why.trim().length in 10..1500 && amountMajor in 1..50_000_000 && deadlineOk
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),

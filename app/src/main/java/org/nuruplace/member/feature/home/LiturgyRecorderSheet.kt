@@ -46,7 +46,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -100,7 +100,7 @@ private fun bandLabel(band: String): String = when (band) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiturgyRecorderSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
         val scope = rememberCoroutineScope()
         var rows by remember { mutableStateOf<List<LiturgyRecordingStatus>>(emptyList()) }
         var loading by remember { mutableStateOf(true) }

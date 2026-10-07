@@ -18,7 +18,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
@@ -817,7 +817,7 @@ private fun BuzzCard(eventId: String) {
                                 .clickable { attachMenu = true },
                             contentAlignment = Alignment.Center,
                         ) { Icon(Lucide.Plus, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
-                        DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                        NuruDropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("Take photo") },
                                 leadingIcon = { Icon(Lucide.Camera, null, modifier = Modifier.size(22.dp)) },

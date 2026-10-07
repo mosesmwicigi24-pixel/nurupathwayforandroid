@@ -29,7 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -179,7 +179,7 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
         }
     }
     startError?.let { msg ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { startError = null },
             confirmButton = { TextButton(onClick = { startError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
             title = { Text("Couldn't start this plan", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
@@ -214,7 +214,7 @@ private fun PlanDetailContent(
         val n = nextDay ?: 1
         val title = d.days.firstOrNull { it.dayNumber == n }?.title
         val named = if (title != null) "Day $n — $title" else "Day $n"
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { lockedNudgeFor = null },
             confirmButton = {
                 TextButton(onClick = { lockedNudgeFor = null }) {
@@ -303,7 +303,7 @@ private fun PlanDetailContent(
         )
     }
     inviteError?.let { msg ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { inviteError = null },
             confirmButton = { TextButton(onClick = { inviteError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
             title = { Text("Couldn't send that invite", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },

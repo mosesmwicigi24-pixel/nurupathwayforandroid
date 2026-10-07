@@ -39,7 +39,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -554,7 +554,7 @@ fun LiveBroadcastScreen(
         )
 
         if (showEndConfirm) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { showEndConfirm = false },
                 title = { Text("End this broadcast?", style = NuruType.cardTitle, color = Nuru.navy) },
                 text = { Text("Viewers watching now will see the stream end. This can't be undone.", style = NuruType.body, color = Nuru.ink600) },
@@ -819,7 +819,7 @@ private fun SummaryView(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        NuruAlertDialog(
             // Open until the server has deleted it (§7.4): a failure stays here
             // and says why — it used to close first and report nothing.
             onDismissRequest = { if (!deleting) { showDeleteConfirm = false; deleteError = null } },

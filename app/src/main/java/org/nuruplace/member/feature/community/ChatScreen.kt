@@ -28,7 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -58,7 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.BroadcastBody
@@ -498,7 +498,7 @@ fun ChatInboxScreen(
         // Stale-cache recovery: offer the connection request instead of a dead-end error.
         val prompt = consentPromptFor
         if (prompt != null) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { consentPromptFor = null },
                 containerColor = CHAT.white,
                 title = { Text("Not connected yet", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
@@ -1640,7 +1640,7 @@ private fun BroadcastTab(onOpenBroadcast: (String) -> Unit) {
     }
 
     if (confirming) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { confirming = false },
             containerColor = CHAT.white,
             title = { Text("Broadcast to all members?", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },

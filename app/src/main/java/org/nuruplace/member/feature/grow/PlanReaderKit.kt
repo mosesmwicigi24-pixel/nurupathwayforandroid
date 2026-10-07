@@ -29,11 +29,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -292,7 +292,7 @@ internal fun RLongPressSave(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })) {
             content()
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = pal.card) {
+            NuruDropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = pal.card) {
                 if (reference != null) {
                     DropdownMenuItem(
                         text = { Text("Save to my verses", style = rInter(13, FontWeight.SemiBold), color = pal.ink) },
@@ -494,7 +494,7 @@ internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: (
         ScriptureStore.passage(reference).onSuccess { passage = it }
             .onFailure { failure = "Couldn't load this passage. ${ApiException.message(it)}" }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = pal.bg) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = pal.bg) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

@@ -191,7 +191,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     }
     var showRevisit by remember { mutableStateOf(false) }
     if (showRevisit) {
-        androidx.compose.material3.AlertDialog(
+        org.nuruplace.member.ui.components.NuruAlertDialog(
             onDismissRequest = { showRevisit = false },
             containerColor = Color.White,
             title = { Text("You've completed this module", style = mlSerif(18, FontWeight.SemiBold), color = ML.navy) },

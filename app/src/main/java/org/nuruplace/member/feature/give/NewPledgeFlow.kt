@@ -62,10 +62,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
+import org.nuruplace.member.ui.components.NuruDatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -473,7 +473,7 @@ fun NewPledgeFlow(
                                 override fun isSelectableYear(year: Int): Boolean = year >= today.year
                             },
                         )
-                        DatePickerDialog(
+                        NuruDatePickerDialog(
                             onDismissRequest = { showDatePicker = false },
                             confirmButton = {
                                 TextButton(onClick = {
@@ -602,7 +602,7 @@ fun NewPledgeFlow(
 
     // Leaving part-made asks first (§7.2 #7): Keep editing / Leave.
     if (confirmLeave) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { confirmLeave = false },
             title = { Text(PLEDGE_LEAVE_TITLE, style = NuruType.cardTitle, color = Nuru.navy) },
             text = { Text(PLEDGE_LEAVE_LINE, style = NuruType.body, color = Nuru.ink600) },

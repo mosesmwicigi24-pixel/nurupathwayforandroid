@@ -33,7 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -71,7 +71,7 @@ internal fun LiveSourceSheet(
     onDismiss: () -> Unit,
     onPick: (SourceChoice) -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = Spacing.screen).padding(bottom = Spacing.lg)) {
             Text("Broadcast source", style = NuruType.title, color = Nuru.ink)
             Spacer(Modifier.height(Spacing.md))

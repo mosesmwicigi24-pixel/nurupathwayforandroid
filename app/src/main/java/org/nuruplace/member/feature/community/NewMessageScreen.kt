@@ -24,7 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -235,7 +235,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
         // Stale-cache recovery: offer the connection request instead of a dead-end error.
         val prompt = consentPromptFor
         if (prompt != null) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { consentPromptFor = null },
                 containerColor = CHAT.white,
                 title = { Text("Not connected yet", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },

@@ -34,7 +34,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -376,7 +376,7 @@ private fun AnsweredChip() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         val context = LocalContext.current
         var title by remember { mutableStateOf("") }
         var body by remember { mutableStateOf("") }

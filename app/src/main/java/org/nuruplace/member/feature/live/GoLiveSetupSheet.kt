@@ -31,7 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -234,7 +234,7 @@ fun GoLiveSetupSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = Spacing.screen).padding(bottom = Spacing.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Go Live", style = NuruType.title, color = Nuru.ink)

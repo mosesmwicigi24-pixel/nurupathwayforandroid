@@ -32,9 +32,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -135,7 +135,7 @@ fun CellRosterScreen(
 
     val prompt = consentPromptFor
     if (prompt != null) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { consentPromptFor = null },
             containerColor = Nuru.white,
             title = { Text("Not connected yet", style = NuruType.cardTitle, color = Nuru.navy) },
@@ -173,7 +173,7 @@ fun CellRosterScreen(
 
     val msg = notice
     if (msg != null) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { notice = null },
             containerColor = Nuru.white,
             title = { Text("Couldn't open the chat", style = NuruType.cardTitle, color = Nuru.navy) },
@@ -338,7 +338,7 @@ private fun MemberRow(
                         )
                     }
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
                         text = { Text("Message") },
                         onClick = { menuOpen = false; onMessage() },

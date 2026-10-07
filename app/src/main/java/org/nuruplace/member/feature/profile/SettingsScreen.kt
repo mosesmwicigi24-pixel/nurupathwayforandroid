@@ -471,7 +471,7 @@ private fun ActionsRow() {
         }
     }
     if (confirmSignOut) {
-        androidx.compose.material3.AlertDialog(
+        org.nuruplace.member.ui.components.NuruAlertDialog(
             onDismissRequest = { confirmSignOut = false },
             title = { Text("Sign out of Nuru Pathway?", style = pInter(16, FontWeight.SemiBold), color = PROF.navy) },
             text = {
@@ -506,7 +506,7 @@ private fun ActionsRow() {
         )
     }
     if (confirmDelete) {
-        androidx.compose.material3.AlertDialog(
+        org.nuruplace.member.ui.components.NuruAlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete account", style = pInter(16, FontWeight.SemiBold), color = PROF.navy) },
             text = {

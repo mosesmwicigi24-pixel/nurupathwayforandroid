@@ -47,9 +47,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -363,7 +363,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
                     Icon(Lucide.EllipsisVertical, contentDescription = "Broadcast options", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
                 }
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text("Play") },
                     leadingIcon = { Icon(Lucide.Play, null, modifier = Modifier.size(22.dp)) },
@@ -395,7 +395,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
+        NuruAlertDialog(
             // Open until the server has deleted it (§7.4): a failure stays here
             // and says why — it used to close first and report nothing.
             onDismissRequest = { if (!deleting) { showDeleteConfirm = false; deleteError = null } },

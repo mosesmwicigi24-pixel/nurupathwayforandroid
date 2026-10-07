@@ -25,8 +25,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruAlertDialog
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -313,7 +313,7 @@ private fun JournalCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Lucide.EllipsisVertical, contentDescription = "Prayer options", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (entry.isAnswered) {
                         DropdownMenuItem(
                             text = { Text("Reopen prayer") },
@@ -375,7 +375,7 @@ private fun JournalCard(
     }
 
     if (confirmShare) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { confirmShare = false },
             title = { Text("Share to the prayer wall?", style = NuruType.rowTitle, color = Nuru.ink) },
             text = { Text("Your cell will see this and pray with you.", style = NuruType.body, color = Nuru.ink600) },

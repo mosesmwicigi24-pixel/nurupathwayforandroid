@@ -26,8 +26,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruAlertDialog
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -206,7 +206,7 @@ fun SelahEditorScreen(
             ToolbarIcon(Lucide.Italic, controller.selectionItalic) { Haptics.tap(view); controller.toggleItalic() }
             Box {
                 ToolbarIcon(Lucide.Baseline, false) { colorMenuOpen = true }
-                DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
+                NuruDropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                     SelahColor.entries.forEach { c ->
                         DropdownMenuItem(text = { Text(c.label) }, onClick = {
                             colorMenuOpen = false; Haptics.tap(view); controller.applyColor(c)
@@ -216,7 +216,7 @@ fun SelahEditorScreen(
             }
             Box {
                 ToolbarIcon(Lucide.Type, false) { fontMenuOpen = true }
-                DropdownMenu(expanded = fontMenuOpen, onDismissRequest = { fontMenuOpen = false }) {
+                NuruDropdownMenu(expanded = fontMenuOpen, onDismissRequest = { fontMenuOpen = false }) {
                     SelahFont.entries.forEach { f ->
                         DropdownMenuItem(text = { Text(f.label) }, onClick = {
                             fontMenuOpen = false; Haptics.tap(view); controller.applyFont(context, f)
@@ -226,7 +226,7 @@ fun SelahEditorScreen(
             }
             Box {
                 ToolbarIcon(Lucide.List, false) { spacingMenuOpen = true }
-                DropdownMenu(expanded = spacingMenuOpen, onDismissRequest = { spacingMenuOpen = false }) {
+                NuruDropdownMenu(expanded = spacingMenuOpen, onDismissRequest = { spacingMenuOpen = false }) {
                     SelahSpacing.entries.forEach { s ->
                         DropdownMenuItem(text = { Text(s.label) }, onClick = {
                             spacingMenuOpen = false; Haptics.tap(view); controller.applySpacing(s.multiplier)
@@ -273,7 +273,7 @@ fun SelahEditorScreen(
     }
 
     if (pendingDelete) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { pendingDelete = false },
             title = { Text("Delete this thought?", style = NuruType.rowTitle, color = Nuru.ink) },
             text = { Text("It will be removed from Selah on every device.", style = NuruType.body, color = Nuru.ink600) },

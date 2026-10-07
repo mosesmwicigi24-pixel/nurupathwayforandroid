@@ -76,15 +76,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
+import org.nuruplace.member.ui.components.NuruDatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Switch
@@ -497,7 +497,7 @@ fun PartnersScreen(
         )
     }
     cancelling?.let { pl ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { cancelling = null },
             title = { Text("Cancel “${pl.displayTitle}”?", style = NuruType.cardTitle, color = Nuru.navy) },
             text = {
@@ -1011,7 +1011,7 @@ private fun EditPledgeSheet(
     val patch = pledgeEditPatch(pl, amountMinor.takeIf { it > 0 }, if (monthly) dueDay else null, pledgeEditTitlePatch(pl, name))
     val canSave = patch != null && amountMinor > 0 && nameValid && !busy
     val label = giInter(11, FontWeight.SemiBold, 1.6f)
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1304,7 +1304,7 @@ private fun PledgePage(
     // "I paid another way" — its form in a sheet over the page; the claim
     // joins PAID ANOTHER WAY the moment the office has it.
     if (claiming) {
-        ModalBottomSheet(onDismissRequest = { claiming = false }, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        NuruModalBottomSheet(onDismissRequest = { claiming = false }, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
                 ClaimForm(
                     pl = pl,
@@ -1733,7 +1733,7 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
                 override fun isSelectableYear(year: Int): Boolean = year in years
             },
         )
-        DatePickerDialog(
+        NuruDatePickerDialog(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {

@@ -31,7 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -168,7 +168,7 @@ fun MemoryVerseScreen(onBack: () -> Unit) {
                 skipPartiallyExpanded = true,
                 confirmValueChange = { it != SheetValue.Hidden || !saving },
             )
-            ModalBottomSheet(onDismissRequest = { if (!saving) practicing = null }, sheetState = sheetState) {
+            NuruModalBottomSheet(onDismissRequest = { if (!saving) practicing = null }, sheetState = sheetState) {
                 PracticeSheet(
                     v = v,
                     saving = saving,

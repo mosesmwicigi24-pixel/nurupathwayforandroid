@@ -30,7 +30,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -119,7 +119,7 @@ fun rememberNotificationAsk(): NotificationAsk {
         // The member's answer stands; whatever was turned on stays on.
     }
     pending?.let { (why, step) ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { pending = null },
             title = { Text(notificationAskTitle(step), style = NuruType.cardTitle, color = Nuru.navy) },
             text = { Text(notificationAskMessage(step, why), style = NuruType.body, color = Nuru.ink600) },

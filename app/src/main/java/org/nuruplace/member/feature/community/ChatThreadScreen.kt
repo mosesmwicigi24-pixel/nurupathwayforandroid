@@ -41,12 +41,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -727,7 +727,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Long-press action sheet — own messages only: Edit (text only), Delete ----
         actionsForMessage?.let { m ->
-            ModalBottomSheet(onDismissRequest = { actionsForMessage = null }) {
+            NuruModalBottomSheet(onDismissRequest = { actionsForMessage = null }) {
                 Column(Modifier.padding(bottom = 24.dp)) {
                     if (m.msgType != "voice" && m.msgType != "image") {
                         Row(
@@ -765,7 +765,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Edit sheet — prefilled with the current body; PATCH on save ----
         editingMessage?.let { m ->
-            ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            NuruModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
                     Text("Edit message", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
                     Spacer(Modifier.height(12.dp))
@@ -800,7 +800,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Delete confirm — irreversible, so always ask first ----
         deleteConfirmFor?.let { m ->
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { deleteConfirmFor = null },
                 title = { Text("Delete this message?", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
                 text = { Text("This can't be undone.", style = cInter(13), color = CHAT.ink600) },
@@ -820,7 +820,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Privacy info (pastoral ⋮ menu) — honest, no false E2EE claim ----
         if (showPrivacyInfo) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { showPrivacyInfo = false },
                 containerColor = CHAT.white,
                 title = { Text("About this conversation's privacy", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
@@ -1036,7 +1036,7 @@ private fun ConnectionMenuButton(busy: Boolean, onRemove: () -> Unit, onBlock: (
         } else {
             Icon(Lucide.EllipsisVertical, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        NuruDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text("Remove connection") },
                 leadingIcon = { Icon(Lucide.UserMinus, null, modifier = Modifier.size(22.dp)) },
@@ -1081,7 +1081,7 @@ private fun PastoralMenuButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(Lucide.EllipsisVertical, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        NuruDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (biometricOn) {
                 DropdownMenuItem(
                     text = { Text("Lock now") },
