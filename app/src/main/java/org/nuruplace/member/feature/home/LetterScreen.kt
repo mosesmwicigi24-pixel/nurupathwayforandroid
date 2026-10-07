@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -70,36 +71,16 @@ private val LetterBody get() = NuruType.rowTitle.copy(fontSize = 16.sp, lineHeig
 
 /** Home, when no letter has arrived yet. The ritual IS the pull: telling a
  *  member when their letter comes is honest anticipation, and it beats showing
- *  nothing at all — which is what Home did before. Wears the same deep navy as
- *  the unread knock card below (the old translucent navy read as grey on the
- *  cream page), with a live countdown to Sunday 6 pm East Africa Time. Tap
- *  opens the You tab — no letters-archive screen exists yet (GET /me/letters
- *  has no route), so the caller decides where "your letters" lives. */
+ *  nothing at all — which is what Home did before. The read card's quiet navy
+ *  with its own words (owner, 2026-10-07: colour option A), the countdown to
+ *  Sunday 6 pm East Africa Time folded into its line — a gold badge beside it
+ *  was a second gold pill on Home (the next step's is the one). Tap opens the
+ *  You tab — no letters-archive screen exists yet (GET /me/letters has no
+ *  route), so the caller decides where "your letters" lives. */
 @Composable
 fun LetterAwaitingCard(onClick: () -> Unit = {}) {
     val countdown = remember { letterCountdownLabel() }
-    Row(
-        Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
-            .border(1.dp, Color(0xFFC9A227).copy(alpha = 0.5f), RoundedCornerShape(18.dp))
-            .clickable { onClick() }
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(SealGrad), contentAlignment = Alignment.Center) {
-            Icon(Lucide.Mail, null, tint = Color.White, modifier = Modifier.size(18.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text("THE SUNDAY LETTER", style = nuruSans(11, FontWeight.Bold, tracking = 1.4f), color = Color(0xFFE8CA6C))
-            Text("Your letter arrives Sunday evening", style = nuruSerif(15, FontWeight.SemiBold), color = Color.White)
-            Text("Written for your week", style = nuruSans(12), color = Color(0xFFC7D0DC))
-        }
-        Box(
-            Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFC9A227)).padding(horizontal = 10.dp, vertical = 6.dp),
-        ) { Text(countdown, style = nuruSans(11, FontWeight.Bold), color = Color(0xFF0A1628)) }
-    }
+    LetterQuietCard("Your letter arrives Sunday evening", LetterWords.arrivalLine(countdown), onClick)
 }
 
 /** "Today" / "Tomorrow" / "In N days" until the next Sunday 6 pm in East
@@ -117,61 +98,100 @@ internal fun letterCountdownLabel(now: ZonedDateTime = ZonedDateTime.now(ZoneId.
 
 /** Home, once the letter has been read — a quiet way back in. Without this the
  *  letter became unreachable the moment it was opened, which is a poor fate for
- *  the most personal thing the app produces. */
+ *  the most personal thing the app produces. Navy, as every state of the letter
+ *  is — the church's voice (owner, 2026-10-07: colour option A): its own title,
+ *  "Sun 4 Oct · Read again", a gold chevron. It was a white row. */
 @Composable
 fun LetterReadRow(letter: PastoralLetter, onOpen: () -> Unit) {
-    // Ink on a white card, not pale-on-translucent-navy (owner, 2026-08-24 —
-    // iOS parity): this quiet row sits on the bright page, where the old
-    // colors simply vanished.
+    LetterQuietCard(letter.displayTitle ?: "Your Sunday Letter", LetterWords.readLine(letter.weekOf), onOpen)
+}
+
+/** The letter's navy ground (owner, 2026-10-07: colour option A). */
+private val LetterNavy = Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628)))
+private val LetterGold = Color(0xFFE8CA6C)
+private val LetterGoldGlow = Color(0xFFE6CA68)
+private val LetterMeta = Color(0xFFB9C4D4)
+private val LetterStroke = Color(0xFFC9A227)
+
+/** The quiet navy letter card — read, and before a letter exists (iOS
+ *  HomeLetterQuietCard): the gold envelope, "THE SUNDAY LETTER", a white
+ *  title, one line, a gold chevron; a gold hairline at 0.35 and a soft navy
+ *  shadow. */
+@Composable
+private fun LetterQuietCard(title: String, line: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
     Row(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
-            .border(1.dp, Color(0xFF0A2540).copy(alpha = 0.08f), RoundedCornerShape(18.dp))
-            .clickable { onOpen() }
+            .shadow(8.dp, shape, ambientColor = Color(0x2E0B1F33), spotColor = Color(0x2E0B1F33))
+            .clip(shape)
+            .background(LetterNavy)
+            .border(1.dp, LetterStroke.copy(alpha = 0.35f), shape)
+            .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(
-            Modifier.size(34.dp).clip(CircleShape).background(LetterTheme.resolve(letter.artKey).accentColor.copy(alpha = 0.20f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Lucide.Mail, null, tint = LetterTheme.resolve(letter.artKey).accentColor, modifier = Modifier.size(14.dp)) }
-        Column(Modifier.weight(1f)) {
-            Text(letter.displayTitle ?: "Your Sunday Letter", style = NuruType.rowTitle, color = Nuru.homeNavy, maxLines = 2)
-            Text("Read again", style = NuruType.caption, color = Color(0xFFA8861C))
+        Box(Modifier.size(44.dp).clip(CircleShape).background(SealGrad), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Mail, null, tint = Color(0xFF1E2A1F), modifier = Modifier.size(18.dp))
         }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("THE SUNDAY LETTER", style = NuruType.kicker, color = LetterGold)
+            org.nuruplace.member.ui.components.WholeWordsText(title, style = nuruSerif(16, FontWeight.SemiBold), color = Color.White)
+            Text(line, style = nuruSans(12), color = LetterMeta)
+        }
+        Icon(Lucide.ChevronRight, null, tint = LetterGoldGlow, modifier = Modifier.size(18.dp))
     }
+}
+
+/** The letter's quiet lines — the same words as iOS HomeLetterWords. */
+internal object LetterWords {
+    private val DAY = java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.ENGLISH)
+    private val DAY_YEAR = java.time.format.DateTimeFormatter.ofPattern("EEE d MMM yyyy", java.util.Locale.ENGLISH)
+
+    /** "Sun 4 Oct · Read again": the letter's Sunday (`week_of`), a calendar
+     *  date shown as sent, never shifted by a time zone (§8.1 rule 8), with
+     *  its year when it isn't this year; "Read again" alone if it can't be read. */
+    fun readLine(weekOf: String, today: java.time.LocalDate = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Nairobi"))): String {
+        val day = runCatching { java.time.LocalDate.parse(weekOf.take(10)) }.getOrNull() ?: return "Read again"
+        return "${day.format(if (day.year == today.year) DAY else DAY_YEAR)} · Read again"
+    }
+
+    /** "Written for your week · In 4 days": before a letter exists, its own
+     *  words with the countdown to Sunday evening in its one line. */
+    fun arrivalLine(countdown: String): String = "Written for your week · $countdown"
 }
 
 /** Home knock — shows while this week's letter is unread. */
 @Composable
 fun LetterKnockCard(letter: PastoralLetter, onOpen: () -> Unit) {
     Row(
+        // The knock (owner, 2026-10-07: colour option A — iOS's navy knock):
+        // the gold hairline at 0.55 with a gold glow, the gold envelope.
         Modifier.fillMaxWidth()
+            .shadow(10.dp, RoundedCornerShape(18.dp), ambientColor = LetterStroke.copy(alpha = 0.3f), spotColor = LetterStroke.copy(alpha = 0.55f))
             .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
-            .border(1.dp, Color(0xFFC9A227).copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+            .background(LetterNavy)
+            .border(1.dp, LetterStroke.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
             .clickable { onOpen() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(44.dp).clip(CircleShape).background(SealGrad), contentAlignment = Alignment.Center) {
-            Icon(Lucide.Mail, null, tint = Color(0xFF1E2A1F), modifier = Modifier.size(22.dp))
+            Icon(Lucide.Mail, null, tint = Color(0xFF1E2A1F), modifier = Modifier.size(18.dp))
         }
-        Column(Modifier.weight(1f)) {
-            Text("THE SUNDAY LETTER", style = NuruType.micro, color = Color(0xFFE8CA6C), fontWeight = FontWeight.Bold)
-            Text("A letter was written for you", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("THE SUNDAY LETTER", style = NuruType.kicker, color = LetterGold)
+            Text("A letter was written for you", style = nuruSerif(16, FontWeight.SemiBold), color = Color.White)
             // v2: the title is the hook — "A letter about the week you kept
             // going" earns a tap where "Your Sunday Letter" does not. Falls
             // back to the scripture for pre-v2 letters, never to a blank.
             (letter.displayTitle ?: letter.displayScripture)?.let {
-                Text(it, style = NuruType.caption, color = Color(0xFFB9C4D4), maxLines = 2)
+                Text(it, style = nuruSans(12), color = LetterMeta, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
         Box(
-            Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0xFFE8CA6C)).padding(horizontal = 14.dp, vertical = 8.dp),
+            Modifier.clip(RoundedCornerShape(999.dp)).background(LetterGold).padding(horizontal = 14.dp, vertical = 8.dp),
         ) { Text("Open", style = NuruType.micro, color = Color(0xFF1E2A1F), fontWeight = FontWeight.Bold) }
     }
 }
