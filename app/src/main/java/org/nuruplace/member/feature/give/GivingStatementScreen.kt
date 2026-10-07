@@ -198,9 +198,11 @@ fun GivingStatementScreen(
                         )
                         Spacer(Modifier.weight(1f))
                         // Statement PDF (giving/statement.pdf) — was shipped inert.
+                        // A year with no gifts has nothing to keep (final walk
+                        // C16): no download is offered for it.
                         val pdfScope = rememberCoroutineScope()
                         val pdfCtx = androidx.compose.ui.platform.LocalContext.current
-                        Box(
+                        if (yearRecords.isNotEmpty()) Box(
                             Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
@@ -308,6 +310,16 @@ fun GivingStatementScreen(
                 // Nothing ever given: one quiet card instead of the statement (iOS).
                 if (records.isEmpty()) {
                     EmptyStatement()
+                    return@Column
+                }
+                // A year with no gifts: §4's one state card, said once — it
+                // said "nothing" four ways (BY FUND, the total, the list and a
+                // footer about tapping gifts that weren't there; final walk C16).
+                if (yearRecords.isEmpty()) {
+                    org.nuruplace.member.ui.components.EmptyState(
+                        title = "No gifts $periodLabel",
+                        line = "Each gift you give is listed here, with its receipt.",
+                    )
                     return@Column
                 }
 

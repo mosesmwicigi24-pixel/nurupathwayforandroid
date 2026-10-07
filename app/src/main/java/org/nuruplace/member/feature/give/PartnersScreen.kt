@@ -618,11 +618,13 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
             },
             second = p.tier?.takeIf { it.name.isNotBlank() }?.let { tier -> { TierChip(tier.name, tierSpoken(tier, p.currency)) } },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // The ONLY gold-filled button on the page. At least 44dp tall, and
-            // taller rather than clipped when a large font wraps its label.
+        // The ONLY gold-filled button on the page. At least 44dp tall, and
+        // taller rather than clipped when a large font wraps its label; past
+        // the everyday sizes the two stand one above the other, each word
+        // whole — "Stateme / nt" (§9.7 M9).
+        val pledgeButton: @Composable (Modifier) -> Unit = { m ->
             Row(
-                Modifier.weight(1f).heightIn(min = 44.dp).clip(Capsule).background(GIVE.gold)
+                m.heightIn(min = 44.dp).clip(Capsule).background(GIVE.gold)
                     .clickable { Haptics.tap(view); onAddPledge() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
@@ -631,14 +633,25 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
                 Spacer(Modifier.width(6.dp))
                 Text("Make a pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
+        }
+        val statementButton: @Composable (Modifier) -> Unit = { m ->
             Row(
-                Modifier.weight(1f).heightIn(min = 44.dp).clip(Capsule).border(1.5.dp, GIVE.navy, Capsule)
+                m.heightIn(min = 44.dp).clip(Capsule).border(1.dp, GIVE.border, Capsule).background(GIVE.white)
                     .clickable { onOpenStatement() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
                 Text("Statement", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
+        }
+        if (org.nuruplace.member.ui.components.largeText()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                pledgeButton(Modifier.fillMaxWidth())
+                statementButton(Modifier.fillMaxWidth())
+            }
+        } else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            pledgeButton(Modifier.weight(1f))
+            statementButton(Modifier.weight(1f))
         }
     }
 }
@@ -649,9 +662,11 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
  *  reads the tier's whole sentence ([spoken], iOS's accessibility label). */
 @Composable
 private fun TierChip(name: String, spoken: String) {
+    // A rounded rectangle, not a capsule: a capsule's ends clipped the first
+    // and last of its wrapped lines at the largest size (§9.7 M9).
     Row(
-        Modifier.clip(Capsule).background(GIVE.goldChipBg).clearAndSetSemantics { contentDescription = spoken }
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+        Modifier.clip(RoundedCornerShape(12.dp)).background(GIVE.goldChipBg).clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Icon(Lucide.Award, null, tint = GIVE.goldChipText, modifier = Modifier.size(14.dp))
@@ -1846,7 +1861,7 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                     val sums = partnerStatementSummaries(shownYear, s, p.pledges)
                     Row(Modifier.fillMaxWidth()) {
                         SummaryColumn("PLEDGED", sums.map { money(it.pledgedMinor, it.currency) }, GIVE.navy, Modifier.weight(1f))
-                        SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f))
+                        SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f), valueColors = sums.map { paidTint(it.paidMinor) })
                         SummaryColumn("REMAINING", sums.map { money(it.remainingMinor, it.currency) }, GIVE.goldLo, Modifier.weight(1f))
                     }
                     Hairline()
@@ -1885,18 +1900,23 @@ internal fun SummaryColumn(label: String, value: String, color: Color, modifier:
     SummaryColumn(label, listOf(value), color, modifier)
 }
 
+/** Green says a state (§8.1 rule 1: on track): money paid. Nothing paid is a
+ *  plain figure, navy (final walk C11: "PAID · KSh 0" in green) — iOS
+ *  PaidTint, the same rule. */
+internal fun paidTint(paidMinor: Int): Color = if (paidMinor > 0) GIVE.successText else GIVE.navy
+
 /** A summary figure per currency, one under another, each the same size —
  *  the same currency on the same line in every column, never added
  *  together (iOS partnerSummaryColumn). */
 @Composable
-internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier) {
+internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier, valueColors: List<Color>? = null) {
     Column(modifier) {
         Text(label, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
         // One line each, shrunk to the column (iOS minimumScaleFactor 0.7) —
         // "KSh 1,250,000" never splits mid-figure in a third of the card.
         values.forEachIndexed { i, v ->
             Text(
-                v, style = giInter(16, FontWeight.SemiBold), color = color,
+                v, style = giInter(16, FontWeight.SemiBold), color = valueColors?.getOrNull(i) ?: color,
                 maxLines = 1, softWrap = false, modifier = Modifier.padding(top = if (i == 0) 4.dp else 3.dp).shrinkToFit(0.7f),
             )
         }

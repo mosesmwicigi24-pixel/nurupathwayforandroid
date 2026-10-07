@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -407,7 +408,11 @@ private fun RepeatGiftCard(g: GivingRecord, onRepeat: () -> Unit) {
         }
         Column(Modifier.weight(1f)) {
             Text("Repeat last gift", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-            Text(repeatGiftLine(g), style = giInter(11), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Whole at the largest text size (§9.7 M9): "KSh 200 ·…" was cut.
+            Text(
+                repeatGiftLine(g), style = giInter(11), color = GIVE.sub,
+                maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         Text("Give again", style = giInter(12, FontWeight.SemiBold), color = GIVE.gold)
     }
@@ -420,11 +425,10 @@ private fun RepeatGiftCard(g: GivingRecord, onRepeat: () -> Unit) {
 private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> Unit, onOpenReceipt: (String) -> Unit) {
     val shape = RoundedCornerShape(22.dp)
     Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("RECENT GIVING", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.weight(1f))
+        // Past the everyday sizes the link takes a line of its own, so the
+        // heading is never broken mid-word ("RECEN / T GIVING", §9.7 M9).
+        val large = org.nuruplace.member.ui.components.largeText()
+        val viewStatement: @Composable () -> Unit = {
             Row(
                 Modifier.clip(Capsule).clickable { onOpenStatement() }.padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -433,6 +437,21 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
                 Text("View statement", style = giInter(12, FontWeight.SemiBold), color = GIVE.gold)
                 Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
             }
+        }
+        if (large) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                org.nuruplace.member.ui.components.WholeWordsText("RECENT GIVING", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+                viewStatement()
+            }
+        } else Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("RECENT GIVING", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.weight(1f))
+            viewStatement()
         }
         if (recent.isEmpty()) {
             Row(
@@ -451,8 +470,9 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(giveFund(g.fund).name, style = giInter(14, FontWeight.SemiBold, -0.14f), color = GIVE.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(recentGiftMeta(g), style = giInter(11), color = GIVE.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // Whole at the largest size — "Mon 5 Oct · M…" was cut (§9.7 M9).
+                        Text(giveFund(g.fund).name, style = giInter(14, FontWeight.SemiBold, -0.14f), color = GIVE.navy, maxLines = if (large) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
+                        Text(recentGiftMeta(g), style = giInter(11), color = GIVE.sub, maxLines = if (large) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(money(g.amountMinor, g.currency), style = giInter(14, FontWeight.SemiBold, -0.14f), color = GIVE.navy, maxLines = 1)
@@ -1125,10 +1145,13 @@ private fun GiveTab(
                         Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
+                        // Past the everyday sizes the cards widen and the words
+                        // wrap whole — "Offerin / g", "A faithful" (§9.7 M9).
+                        val largeFunds = org.nuruplace.member.ui.components.largeText()
                         GIVE_FUNDS.forEach { f ->
                             val on = f.id == fundId
                             Column(
-                                Modifier.width(124.dp).clip(RoundedCornerShape(16.dp))
+                                Modifier.width(if (largeFunds) 196.dp else 124.dp).clip(RoundedCornerShape(16.dp))
                                     .background(if (on) GIVE.priorityBg else GIVE.white)
                                     .border(if (on) 2.dp else 1.dp, if (on) GIVE.gold else GIVE.border, RoundedCornerShape(16.dp))
                                     .clickable { fundId = f.id }
@@ -1137,8 +1160,8 @@ private fun GiveTab(
                                 Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(f.tint), contentAlignment = Alignment.Center) {
                                     Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(18.dp))
                                 }
-                                Text(f.name, style = giInter(13, FontWeight.SemiBold, -0.13f), color = GIVE.navy, modifier = Modifier.padding(top = 8.dp))
-                                Text(f.tagline, style = giInter(11), color = GIVE.sub, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
+                                org.nuruplace.member.ui.components.WholeWordsText(f.name, style = giInter(13, FontWeight.SemiBold, -0.13f), color = GIVE.navy, modifier = Modifier.padding(top = 8.dp))
+                                Text(f.tagline, style = giInter(11), color = GIVE.sub, maxLines = if (largeFunds) Int.MAX_VALUE else 2, modifier = Modifier.padding(top = 2.dp))
                             }
                         }
                     }
@@ -1226,13 +1249,16 @@ private fun GiveTab(
                 ) {
                     listOf("One-time", "Weekly", "Monthly").forEachIndexed { i, label ->
                         val on = freq == i
+                        // At least 40 dp, taller when the words need it; each
+                        // label whole — "One-tim" was cut (§9.7 M9).
                         Box(
-                            Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp))
+                            Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp))
                                 .then(if (on) Modifier.background(GIVE.white) else Modifier)
-                                .clickable { freq = i },
+                                .clickable { freq = i }
+                                .padding(horizontal = 2.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(label, style = giInter(13, FontWeight.SemiBold), color = if (on) GIVE.navy else GIVE.sub)
+                            org.nuruplace.member.ui.components.WholeWordsText(label, style = giInter(13, FontWeight.SemiBold), color = if (on) GIVE.navy else GIVE.sub, textAlign = TextAlign.Center)
                         }
                     }
                 }
@@ -2068,6 +2094,28 @@ private fun GiveResult(
 /** Preset gift-name chips on the custom-amount sheet — like an M-Pesa Paybill
  *  account name, shown on the church's M-Pesa statement (sanitized server-side). */
 
+/** "1000" → "1,000": the shillings' thousands, grouped (pure, for the test). */
+internal fun groupThousands(digits: String): String =
+    digits.reversed().chunked(3).joinToString(",").reversed()
+
+/** A field of digits shown grouped in thousands — "1,000" while it holds
+ *  "1000" — with the cursor kept on the same digit. */
+internal object ThousandsGrouping : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
+        val digits = text.text
+        val shown = groupThousands(digits)
+        val n = digits.length
+        val mapping = object : androidx.compose.ui.text.input.OffsetMapping {
+            // A comma sits before digit i when (n - i) % 3 == 0, i in 1 until n.
+            override fun originalToTransformed(offset: Int): Int =
+                offset + (1..minOf(offset, n - 1)).count { (n - it) % 3 == 0 }
+            override fun transformedToOriginal(offset: Int): Int =
+                shown.take(offset.coerceIn(0, shown.length)).count { it != ',' }
+        }
+        return androidx.compose.ui.text.input.TransformedText(androidx.compose.ui.text.AnnotatedString(shown), mapping)
+    }
+}
+
 /** The dollar entry's starting amount and PayPal's own range (cents). */
 private data class DollarEntry(val cents: Int, val minMinor: Long, val maxMinor: Long)
 
@@ -2103,6 +2151,10 @@ private fun CustomAmountDialog(
                     onValueChange = { v -> text = if (dollars != null) usdTyping(v) else v.filter { it.isDigit() }.take(7) },
                     singleLine = true,
                     prefix = { Text(if (dollars != null) "US$ " else "KSh ", style = giInter(15, FontWeight.Medium), color = GIVE.sub) },
+                    // "KSh 1,000", never "KSh 1000" (§8.1 rule 8; final walk
+                    // C16): the shillings are grouped as they're typed; the
+                    // field still holds the digits alone.
+                    visualTransformation = if (dollars != null) androidx.compose.ui.text.input.VisualTransformation.None else ThousandsGrouping,
                     textStyle = giSerif(26, FontWeight.SemiBold).copy(color = GIVE.navy),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = if (dollars != null) {
