@@ -110,7 +110,9 @@ fun PrayerWallScreen(
     Box(Modifier.fillMaxSize()) {
         NuruRefreshBox(refreshing = refreshing, onRefresh = { reloadRef[0]?.let { refreshing = true; it() } }) {
             Column(
-                Modifier.fillMaxSize().background(GrowPal.coolPaper).verticalScroll(rememberScrollState()),
+                // Warm paper, the page every tab stands on (§8.1 rule 1; final
+                // walk C16: it was the portal's cool #F7F9FC) — as iOS.
+                Modifier.fillMaxSize().background(GrowPal.paper).verticalScroll(rememberScrollState()),
             ) {
                 // Navy hero — embedded (My Prayer Room) supplies its own back
                 // button + title + segmented control instead.
@@ -184,10 +186,10 @@ fun PrayerWallScreen(
                             // §4's one state card with a labelled way forward (Cycle 3's
                             // closing walk): it was one bare line beside an unlabelled "+".
                             org.nuruplace.member.ui.components.StateCard(
-                                title = "No prayer requests yet",
+                                title = PrayerWallWords.EMPTY_TITLE,
                                 // One story about who sees a shared prayer — the
                                 // share prompt's (§9.7 M8): the congregation.
-                                line = "Be the first to share one — everyone in your congregation can pray with you.",
+                                line = PrayerWallWords.EMPTY_LINE,
                                 glyph = Lucide.HandHeart,
                                 actionLabel = "Share a prayer",
                                 onAction = { composing = true },
@@ -551,7 +553,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                     ),
                                 )
                                 // Warm toast — the server accepted the post (key = its uuid).
-                                CelebrationCenter.fire(Moment("wallpost-$pid", "Your prayer is on the wall", "Your cell is standing with you 🙏", confetti = false))
+                                CelebrationCenter.fire(Moment("wallpost-$pid", "Your prayer is on the wall", PrayerWallWords.POSTED, confetti = false))
                                 postIds = null
                                 onPosted()
                                 onDismiss()
@@ -579,4 +581,15 @@ private fun initials(name: String): String {
         parts.size == 1 -> parts[0].take(2).uppercase()
         else -> (parts.first().take(1) + parts.last().take(1)).uppercase()
     }
+}
+
+/** The wall's words — one story about who sees a shared prayer (final walk
+ *  M8): everyone in the member's congregation, as the share prompt says. iOS
+ *  PrayerWallWords, word for word. */
+object PrayerWallWords {
+    const val EMPTY_TITLE = "No requests yet"
+    const val EMPTY_LINE = "Be the first to share a prayer. Everyone in your congregation will see it and can pray with you."
+    /** Said once a prayer reaches the wall — "Your cell is standing with you"
+     *  told the other story. */
+    const val POSTED = "Everyone in your congregation can pray with you."
 }

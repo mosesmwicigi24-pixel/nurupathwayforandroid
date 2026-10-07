@@ -155,7 +155,7 @@ fun PrayerJournalScreen(
                                         Net.client.api.sharePrayerToWall(e.entryId)
                                     }?.let {
                                         sharedToWall = sharedToWall + e.entryId
-                                        CelebrationCenter.fire(Moment("prayer-share-${e.entryId}", "Shared to Corporate Prayer", "Your cell is standing with you 🙏", confetti = false))
+                                        CelebrationCenter.fire(Moment("prayer-share-${e.entryId}", "Shared to Corporate", org.nuruplace.member.feature.community.PrayerWallWords.POSTED, confetti = false))
                                     }
                                 }
                             },

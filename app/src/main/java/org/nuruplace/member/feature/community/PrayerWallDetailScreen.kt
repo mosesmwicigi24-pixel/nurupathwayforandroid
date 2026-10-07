@@ -61,7 +61,8 @@ private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
 fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(GrowPal.coolPaper).imePadding()) {
+    // Warm paper (§8.1 rule 1; final walk C16), as the wall itself.
+    Column(Modifier.fillMaxSize().background(GrowPal.paper).imePadding()) {
         AsyncContent(key = postId, load = { Net.client.api.prayerWallGet(postId) }) { detail: PrayerWallDetail, reload ->
             val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -193,11 +194,11 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
             commentError?.let {
                 Text(
                     it, style = gInter(12), color = Nuru.danger,
-                    modifier = Modifier.fillMaxWidth().background(GrowPal.coolPaper).padding(horizontal = 16.dp).padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().background(GrowPal.paper).padding(horizontal = 16.dp).padding(top = 8.dp),
                 )
             }
             Row(
-                Modifier.fillMaxWidth().background(GrowPal.coolPaper).navigationBarsPadding()
+                Modifier.fillMaxWidth().background(GrowPal.paper).navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
