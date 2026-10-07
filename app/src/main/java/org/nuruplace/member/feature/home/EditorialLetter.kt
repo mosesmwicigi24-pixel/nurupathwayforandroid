@@ -271,8 +271,11 @@ internal object EditorialLetter {
      *  who signed (owner, 2026-10-07 — as iOS). */
     const val WRITE_BACK = "Write back to your pastor"
 
-    /** The next step's pill: a lesson is begun; Pathway (or anything else) is opened. */
-    fun stepVerb(route: String): String = if (route == "module") "Begin" else "Open"
+    /** The next step's pill — the verb rule (EXPERIENCE.md §9, "Continue ·"),
+     *  as iOS LetterEditorialView: a lesson begins ("<title> is waiting",
+     *  route "module"); the journey continues ("Continue your journey",
+     *  route "pathway" — the only other route letters.ts sends). */
+    fun stepVerb(route: String): String = if (route == "module") "Begin" else "Continue"
 
     /** The member's letter before [current]: the newest with an earlier Sunday. */
     fun previousOf(all: List<PastoralLetter>, current: PastoralLetter): PastoralLetter? {

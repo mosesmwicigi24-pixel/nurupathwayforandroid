@@ -166,10 +166,12 @@ class EditorialLetterTest {
         assertFalse(EditorialLetter.WRITE_BACK.contains("Moses"))
     }
 
-    @Test fun `the next step's pill begins a lesson and opens anything else`() {
+    @Test fun `the next step's pill begins a lesson and continues the journey`() {
+        // letters.ts sends two routes: "module" ("<title> is waiting") and
+        // "pathway" ("Continue your journey").
         assertEquals("Begin", EditorialLetter.stepVerb("module"))
-        assertEquals("Open", EditorialLetter.stepVerb("pathway"))
-        assertEquals("Open", EditorialLetter.stepVerb("something-new"))
+        assertEquals("Continue", EditorialLetter.stepVerb("pathway"))
+        assertEquals("Continue", EditorialLetter.stepVerb("something-new"))
     }
 
     @Test fun `last week's letter is the newest with an earlier Sunday`() {
