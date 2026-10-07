@@ -1303,11 +1303,10 @@ private fun RhythmTile(words: RhythmTileWords, done: Boolean, modifier: Modifier
 // frame we cut ourselves when the server sends no thumbnail_url.
 @Composable
 private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth()
-            .shadow(6.dp, RoundedCornerShape(20.dp), spotColor = Color(0x1A0A2540))
-            .clip(RoundedCornerShape(20.dp)).background(Color(0xFFEEF0F3)).border(1.dp, Nuru.border, RoundedCornerShape(20.dp)).padding(Spacing.base),
-    ) {
+    // White, with a hairline and the one soft shadow — every Home card's look
+    // (owner, 2026-10-07: colour option A). It sat on an off-palette grey,
+    // #EEF0F3.
+    HomeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) { Text("✝", color = Nuru.white, style = NuruType.micro) }
             Spacer(Modifier.width(Spacing.sm))
