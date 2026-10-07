@@ -56,8 +56,14 @@ fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String, String?) -
             .background(EV.paper)
             .verticalScroll(rememberScrollState()),
     ) {
-        AsyncContent(load = { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }) { events: List<CalendarOccurrence>, _ ->
-            AllEventsCalendarBody(events = events, onBack = onBack, onOpenEvent = onOpenEvent)
+        AsyncContent(load = {
+            val events = Net.client.api.calendar(todayIso(), isoPlusDays(60)).data
+            // The member's own RSVPs — a card says "You're going" (final walk
+            // C5); an accent, so a failure here never fails the calendar.
+            val mine = runCatching { Net.client.api.myRsvps().data }.getOrDefault(emptyList()).associate { it.eventId to it.status }
+            events to mine
+        }) { (events, mine): Pair<List<CalendarOccurrence>, Map<String, String>>, _ ->
+            AllEventsCalendarBody(events = events, myRsvps = mine, onBack = onBack, onOpenEvent = onOpenEvent)
         }
     }
 }
@@ -65,6 +71,7 @@ fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String, String?) -
 @Composable
 private fun AllEventsCalendarBody(
     events: List<CalendarOccurrence>,
+    myRsvps: Map<String, String>,
     onBack: () -> Unit,
     onOpenEvent: (String, String?) -> Unit,
 ) {
@@ -225,7 +232,7 @@ private fun AllEventsCalendarBody(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 shown.forEach { occ ->
-                    EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
+                    EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) }, myRsvp = myRsvps[occ.occurrenceId])
                 }
             }
         }

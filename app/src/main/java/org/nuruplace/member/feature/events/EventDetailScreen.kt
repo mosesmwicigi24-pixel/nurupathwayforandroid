@@ -213,7 +213,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                     .padding(top = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                MetaCard(e, endAt, onAddToCalendar = addToCalendar, onShare = shareIntent)
+                MetaCard(e, endAt, mineGoing = (rsvpQueued ?: e.myRsvp) == "going", onAddToCalendar = addToCalendar, onShare = shareIntent)
 
                 e.description?.takeIf { it.isNotBlank() }?.let { AboutCard(it) }
 
@@ -221,7 +221,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 // already shows images[0], so only extra shots earn the strip.
                 e.images.drop(1).takeIf { it.isNotEmpty() }?.let { GalleryStrip(it) }
 
-                e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it) }
+                e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it, mineGoing = e.myRsvp == "going") }
 
                 RsvpCard(e, setRsvp, queued = rsvpQueued, busy = rsvpBusy, error = rsvpError)
 
@@ -349,10 +349,11 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit) {
 // ── Meta card ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
+private fun MetaCard(e: EventDetail, endAt: String?, mineGoing: Boolean, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
     val accent = evCategory(e.category)
-    val going = e.rsvpCounts.going ?: 0
-    val peopleLabel = if (going == 1) "1 person" else "$going people"
+    // The member's own RSVP is theirs (final walk C5, Android #12): "GOING ·
+    // You", not "GOING · 1 person".
+    val peopleLabel = evGoingTile(e.rsvpCounts.going ?: 0, mineGoing)
     Column(
         Modifier
             .fillMaxWidth()
@@ -387,7 +388,7 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
                 )
                 // No zero counts (EXPERIENCE.md §7.4 #9): nobody going yet
                 // leaves WHERE the row — the RSVP card below asks.
-                if (going > 0) MetaTile(Modifier.weight(1f), Lucide.User, "GOING", peopleLabel, accent)
+                if (peopleLabel != null) MetaTile(Modifier.weight(1f), Lucide.User, "GOING", peopleLabel, accent)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -496,7 +497,7 @@ private fun GalleryStrip(urls: List<String>) {
 // ── Roster card ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun RosterCard(attendees: List<EventAttendee>) {
+private fun RosterCard(attendees: List<EventAttendee>, mineGoing: Boolean) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -511,7 +512,7 @@ private fun RosterCard(attendees: List<EventAttendee>) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             EVOverline("Who's going")
-            Text("${attendees.size} going", style = evInter(11, FontWeight.Bold), color = EV.ink)
+            Text(evGoingLine(attendees.size, mineGoing) ?: "", style = evInter(11, FontWeight.Bold), color = EV.ink)
         }
         Spacer(Modifier.height(12.dp))
         Row(
@@ -578,9 +579,9 @@ private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit, queued: String? 
         EVOverline("Will you be there?")
         Spacer(Modifier.height(12.dp))
         Row(Modifier.alpha(if (busy) 0.6f else 1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            RsvpOption(Modifier.weight(1f), "Going", "going", EV.going, mine, setRsvp)
-            RsvpOption(Modifier.weight(1f), "Maybe", "maybe", EV.maybe, mine, setRsvp)
-            RsvpOption(Modifier.weight(1f), "Can't", "declined", EV.declined, mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Going", "going", mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Maybe", "maybe", mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Can't", "declined", mine, setRsvp)
         }
         if (error != null) {
             Text(error, style = evInter(12), color = Nuru.danger, modifier = Modifier.padding(top = 10.dp))
@@ -607,15 +608,16 @@ private fun RsvpOption(
     modifier: Modifier,
     label: String,
     status: String,
-    tint: Color,
     myRsvp: String?,
     setRsvp: (String) -> Unit,
 ) {
     val on = myRsvp == status
+    // Selected is navy, for every choice (§8.1 rule 6) — the chosen "Going"
+    // was green (final walk C16, Android #29).
     Box(
         modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(if (on) tint else Color.Transparent)
+            .background(if (on) EV.navy else Color.Transparent)
             .then(if (on) Modifier else Modifier.border(1.dp, EV.border, RoundedCornerShape(16.dp)))
             .clickable { setRsvp(status) }
             .padding(vertical = 10.dp),

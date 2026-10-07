@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.nuruplace.member.ui.components.CappedFontScale
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.theme.nuruSans
@@ -202,7 +203,7 @@ fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> 
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier = Modifier, myRsvp: String? = null) {
     val accent = evCategory(occ.category)
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
@@ -216,14 +217,25 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent, EV.navy.copy(alpha = 0.62f))),
                 ),
             )
-            // Date badge (top-start)
-            Column(
-                Modifier.align(Alignment.TopStart).padding(12.dp).size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.white),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(evWeekdayShort(occ.startAt), style = evInter(11, FontWeight.Bold, 0.8f), color = accent)
-                Text(evDayNum(occ.startAt), style = evSerif(18, FontWeight.SemiBold), color = EV.navy)
+            // Date badge (top-start). A gathering in another month carries
+            // its month (§8.1 rule 8; final walk C2: "SUN 11", "WED 25" on
+            // cards weeks out), as iOS. A figure in a fixed tile keeps the
+            // everyday size (§9.6 #4); the card's countdown carries the day,
+            // and grows.
+            val month = evOtherMonth(occ.startAt)
+            CappedFontScale(1f) {
+                Column(
+                    Modifier.align(Alignment.TopStart).padding(12.dp).size(width = 48.dp, height = if (month == null) 48.dp else 62.dp)
+                        .clip(RoundedCornerShape(16.dp)).background(EV.white),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(evWeekdayShort(occ.startAt), style = evInter(11, FontWeight.Bold, 0.8f), color = accent, maxLines = 1, softWrap = false)
+                    Text(evDayNum(occ.startAt), style = evSerif(18, FontWeight.SemiBold), color = EV.navy, maxLines = 1, softWrap = false)
+                    if (month != null) {
+                        Text(month, style = evInter(11, FontWeight.Bold, 0.8f), color = EV.secondary, maxLines = 1, softWrap = false)
+                    }
+                }
             }
             // Countdown chip (bottom-start)
             val cd = evCountdown(occ.startAt)
@@ -278,7 +290,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
             Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Lucide.User, null, tint = EV.secondary, modifier = Modifier.size(14.dp))
                 Text(
-                    if (occ.going > 0) "${occ.going} going" else "Be the first to RSVP",
+                    evGoingLine(occ.going, mine = myRsvp == "going") ?: "Be the first to RSVP",
                     style = evInter(11, FontWeight.SemiBold), color = EV.secondary,
                 )
             }
@@ -342,6 +354,37 @@ fun evWeekdayShort(iso: String?): String =
 
 /** "5" */
 fun evDayNum(iso: String?): String = evZdt(iso)?.dayOfMonth?.toString().orEmpty()
+
+/** Who is going, said from the member's side (Q5; final walk C5, Android
+ *  #12): their own RSVP is theirs — "You're going", not "1 going". Null when
+ *  nobody is going yet. */
+fun evGoingLine(going: Int, mine: Boolean): String? = when {
+    mine && going <= 1 -> "You're going"
+    mine -> "You and ${evOthers(going - 1)} are going"
+    going > 0 -> "$going going"
+    else -> null
+}
+
+/** The gathering's GOING tile: "You", "You and 2 others", "3 people". Null
+ *  when nobody is going yet. */
+fun evGoingTile(going: Int, mine: Boolean): String? = when {
+    mine && going <= 1 -> "You"
+    mine -> "You and ${evOthers(going - 1)}"
+    going == 1 -> "1 person"
+    going > 1 -> "$going people"
+    else -> null
+}
+
+private fun evOthers(n: Int): String = if (n == 1) "1 other" else "$n others"
+
+/** "NOV" when [iso] falls in a month other than [today]'s, for the card's
+ *  date chip; null in this month (§8.1 rule 8; iOS Ev.otherMonthLabel). */
+fun evOtherMonth(iso: String?, today: LocalDate = LocalDate.now(EV_ZONE)): String? =
+    evZdt(iso)?.toLocalDate()?.let { evOtherMonth(it, today) }
+
+internal fun evOtherMonth(date: LocalDate, today: LocalDate): String? =
+    if (date.year == today.year && date.month == today.month) null
+    else date.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)).uppercase()
 
 /** Today / Tomorrow / In N days ("" when past or unknown). */
 fun evCountdown(iso: String?): String {

@@ -51,6 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.nuruplace.member.ui.components.EVERYDAY_MAX_FONT_SCALE
+import org.nuruplace.member.ui.components.CappedFontScale
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.data.net.EventSeries
 import org.nuruplace.member.data.net.MyAnnouncement
@@ -199,6 +201,10 @@ fun EventsScreen(
                     }
                     // This week, whole and in view: today through the seventh
                         // day after (§6) — the same days "N this week" counts.
+                    // Seven fixed cells: their figures keep an everyday size
+                    // and never break — "10" read "1" over "0" at the largest
+                    // text (final walk C3, Android #17); the cards below grow.
+                    CappedFontScale(EVERYDAY_MAX_FONT_SCALE) {
                     Row(
                         Modifier.padding(top = 8.dp).fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -225,11 +231,13 @@ fun EventsScreen(
                                     date.format(DateTimeFormatter.ofPattern("EEEEE", Locale.ENGLISH)).uppercase(),
                                     style = evInter(11, FontWeight.SemiBold, 0.8f),
                                     color = if (selected) Color.White.copy(alpha = 0.65f) else EV.tertiary,
+                                    maxLines = 1, softWrap = false,
                                 )
                                 Text(
                                     date.dayOfMonth.toString(),
                                     style = evSerif(16, FontWeight.SemiBold),
                                     color = if (selected) Color.White else EV.navy,
+                                    maxLines = 1, softWrap = false,
                                 )
                                 Box(
                                     Modifier.padding(top = 4.dp).size(4.dp).clip(CircleShape)
@@ -237,6 +245,7 @@ fun EventsScreen(
                                 )
                             }
                         }
+                    }
                     }
                 }
 
@@ -371,18 +380,11 @@ fun EventsScreen(
                         segment == 2 -> "Your RSVPs"
                         else -> "Events on " + org.nuruplace.member.util.NuruDates.day(selectedDay, today)
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(sectionTitle, style = evSerif(18, FontWeight.SemiBold), color = EV.ink)
-                        Spacer(Modifier.weight(1f))
-                        Row(
-                            Modifier.clickable { onOpenCalendar() },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        ) {
-                            Text("All & calendar", style = evInter(11, FontWeight.SemiBold), color = EV.navy)
-                            Icon(Lucide.ChevronRight, null, tint = EV.navy, modifier = Modifier.size(14.dp))
-                        }
-                    }
+                    // One route to the calendar (§9.6 rule 3; final walk C5,
+                    // Android #23): the CALENDAR card above. This header's
+                    // "All & calendar ›" and the empty card's "View calendar"
+                    // were the second and third.
+                    Text(sectionTitle, style = evSerif(18, FontWeight.SemiBold), color = EV.ink)
 
                     // Filtered list
                     val filtered = events.filter { occ ->
@@ -412,24 +414,13 @@ fun EventsScreen(
                                 Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.tile),
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Lucide.CalendarDays, null, tint = EV.gold, modifier = Modifier.size(22.dp)) }
-                            Text("Nothing on this day", style = evInter(12, FontWeight.SemiBold), color = EV.navy)
-                            Text(
-                                "Browse the full calendar to find a gathering.",
-                                style = evInter(11), color = EV.tertiary,
-                            )
-                            Row(
-                                Modifier.clip(Capsule).background(EV.navy).clickable { onOpenCalendar() }
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Icon(Lucide.CalendarDays, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                Text("View calendar", style = evInter(11, FontWeight.SemiBold), color = Color.White)
-                            }
+                            val (emptyTitle, emptyLine) = eventsEmptyWords(segment, hasFilters = category != "All" || query.isNotBlank())
+                            Text(emptyTitle, style = evInter(12, FontWeight.SemiBold), color = EV.navy)
+                            Text(emptyLine, style = evInter(11), color = EV.tertiary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
                     } else {
                         filtered.forEach { occ ->
-                            EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
+                            EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) }, myRsvp = rsvpMap[occ.occurrenceId])
                         }
                     }
                 }
@@ -552,6 +543,15 @@ private fun QuietWeekCard() {
 
 /** The calendar and check-in entries as two compact rows — the quiet week's
  *  doors to the whole calendar and to a service's check-in (§6.5). */
+/** The empty list's words — no button: the calendar has its one route, the
+ *  CALENDAR card above (final walk C5). The same words as iOS
+ *  EventsViewModel.emptyTitle / emptyCaption. */
+internal fun eventsEmptyWords(segment: Int, hasFilters: Boolean): Pair<String, String> = when {
+    hasFilters -> "No events match" to "Try a different search or category."
+    segment == 2 -> "No RSVPs yet" to "Tap an event to say you'll be there."
+    else -> "Nothing on this day" to "The calendar above holds every gathering."
+}
+
 @Composable
 private fun QuietEntries(onOpenCalendar: () -> Unit, onOpenAttendance: () -> Unit) {
     Column(
