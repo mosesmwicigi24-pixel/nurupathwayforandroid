@@ -84,10 +84,29 @@ sealed interface WeekDest {
     data class Event(val occurrenceId: String, val endAt: String?) : WeekDest
 }
 
+/** A row that asks the member to act now (owner, 2026-10-07: colour option A,
+ *  "navy for your next step"): its one verb — Begin, Continue, Join, Pay or
+ *  Ask — and what that verb acts on. None for a row that only says where
+ *  things stand ("Going ·", "Giving ·", "Done today ·", "Gather ·", a level
+ *  being prepared, the exam opening soon) or a standing invitation ("Start a
+ *  reading plan", "Give", the church calendar). The same as iOS HomeWeekRow.Ask. */
+data class WeekAsk(val verb: String, val subject: String)
+
 /** One row: the next thing, one line of when or where it stands, and where a tap goes. */
-data class WeekRow(val form: WeekForm, val title: String, val line: String, val dest: WeekDest)
+data class WeekRow(val form: WeekForm, val title: String, val line: String, val dest: WeekDest, val ask: WeekAsk? = null)
 
 object YourWeek {
+    /** The week's one next step (owner, 2026-10-07: colour option A): the first
+     *  row, in the week's own order (Pathway · Plans · Events · Giving · Cell),
+     *  that asks the member to act now — drawn as a navy band under the card's
+     *  kicker — and the other rows in their order. None asks: no band. iOS
+     *  HomeWeek.cardOrder, the same rule. */
+    fun cardOrder(rows: List<WeekRow>): Pair<WeekRow?, List<WeekRow>> {
+        val i = rows.indexOfFirst { it.ask != null }
+        if (i < 0) return null to rows
+        return rows[i] to (rows.take(i) + rows.drop(i + 1))
+    }
+
     /** How far the week looks ahead: today and the seven days after — the
      *  server's own DUE window (PartnersService.DUE_WINDOW_DAYS). */
     const val WEEK_DAYS = 7L
@@ -109,10 +128,18 @@ object YourWeek {
         // Level 1 · God & His Nature" — a first day leads with the path's
         // first step (rule 4). The other stages' titles are their own verbs
         // or facts ("Take the Level 1 exam", "Level 2 is being prepared").
-        val title = if (j.stage == JourneyStage.LEARNING && j.next.action != null) {
+        val learning = j.stage == JourneyStage.LEARNING && j.next.action != null
+        val title = if (learning) {
             if (j.completedModules == 0) "Start Level ${j.levelNumber} · ${j.next.title}" else "Continue · ${j.next.title}"
         } else j.next.title
-        return WeekRow(WeekForm.JOURNEY, title, "Level ${j.levelNumber} · ${j.pill}", dest)
+        // A lesson to read, or the exam when it can be taken, is a step; a
+        // level waiting or being prepared only says where things stand.
+        val ask = when {
+            learning && j.totalModules > 0 -> WeekAsk(if (j.completedModules == 0) "Begin" else "Continue", j.next.title)
+            j.stage == JourneyStage.EXAM_READY && j.next.action != null -> WeekAsk("Begin", j.next.title)
+            else -> null
+        }
+        return WeekRow(WeekForm.JOURNEY, title, "Level ${j.levelNumber} · ${j.pill}", dest, ask)
     }
 
     /** Plans — an enrolled, unfinished plan: its title and today's word on it
@@ -135,7 +162,8 @@ object YourWeek {
             p.completedDays.isNullOrEmpty() && day == 1 -> "Start"
             else -> "Continue"
         }
-        return WeekRow(WeekForm.PLAN_DAY, "$verb · ${p.title}", planTodayLine(p, readToday, now), dest)
+        val ask = if (readToday) null else WeekAsk(if (verb == "Start") "Begin" else "Continue", p.title)
+        return WeekRow(WeekForm.PLAN_DAY, "$verb · ${p.title}", planTodayLine(p, readToday, now), dest, ask)
     }
 
     /** One gathering, from whichever reads know it. */
@@ -186,7 +214,10 @@ object YourWeek {
             return WeekRow(WeekForm.EVENT_GOING, "Going · ${g.title}", g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end))
         }
         (week.firstOrNull { it.rsvp != "declined" } ?: week.firstOrNull())?.let { g ->
-            return WeekRow(WeekForm.EVENT_NEXT, "Join · ${g.title}", g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end))
+            // A gathering the member hasn't answered asks them to join; one they
+            // declined (shown only when it is the week's only one) doesn't.
+            val ask = if (g.rsvp == "declined") null else WeekAsk("Join", g.title)
+            return WeekRow(WeekForm.EVENT_NEXT, "Join · ${g.title}", g.start.format(DAY_TIME), WeekDest.Event(g.id, g.end), ask)
         }
         return WeekRow(WeekForm.EVENT_NONE, "See the church calendar", "No gatherings this week", WeekDest.Tab("events"))
     }
@@ -261,7 +292,7 @@ object YourWeek {
             } else {
                 "$amount due" + (partnerDate(d.dueOn)?.let { " ${it.format(DAY)}" } ?: "")
             }
-            return WeekRow(WeekForm.PLEDGE_DUE, "Pay · $title", line, WeekDest.Tab("partners"))
+            return WeekRow(WeekForm.PLEDGE_DUE, "Pay · $title", line, WeekDest.Tab("partners"), WeekAsk("Pay", title))
         }
         return give
     }
@@ -310,6 +341,8 @@ object YourWeek {
             WeekForm.CELL_FIND, "Find your cell",
             askedAt?.let { CellConnectWords.sent(it, EV_ZONE, today) } ?: "Ask to be connected — tell the church where you live.",
             WeekDest.Screen("cell-connect"),
+            // Once asked, the pastor has it: nothing more to do here.
+            if (askedAt == null) WeekAsk("Ask", "Find your cell") else null,
         )
         val line = evZdt(c.next?.startAt)?.let { "Next gathering ${it.format(DAY)}" }
             ?: "Next gathering not set · ${c.members} ${if (c.members == 1) "member" else "members"}"

@@ -1115,16 +1115,91 @@ private fun ReflectionStrip(onClick: () -> Unit) {
  *  chevron; a tap opens that place. The rows are YourWeek's. */
 @Composable
 private fun YourWeekCard(rows: List<WeekRow>, onOpen: (WeekDest) -> Unit) {
+    // The week's one next step leads, as a navy band under the kicker; the
+    // other rows follow, white, in their order (owner, 2026-10-07: colour
+    // option A; YourWeek.cardOrder).
+    val (step, rest) = remember(rows) { YourWeek.cardOrder(rows) }
     HomeCard(pad = 0.dp) {
         Box(Modifier.padding(start = Spacing.base, end = Spacing.base, top = Spacing.base, bottom = Spacing.xs)) {
             CardKicker("Your week")
         }
-        rows.forEachIndexed { i, row ->
+        step?.ask?.let { ask ->
+            // Inset 10 dp from the card's edge, as drawn: wider than the rows.
+            NextStepBand(step, ask, Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) { onOpen(step.dest) }
+        }
+        rest.forEachIndexed { i, row ->
             // Inset to the text, as the Partners rows draw it.
             if (i > 0) Box(Modifier.padding(start = 68.dp, end = Spacing.base).fillMaxWidth().height(1.dp).background(Nuru.border))
             WeekRowView(row) { onOpen(row.dest) }
         }
         Spacer(Modifier.height(Spacing.xs))
+    }
+}
+
+/** Each pillar's one icon (§8.2 #2). */
+private fun weekIcon(pillar: WeekPillar) = when (pillar) {
+    WeekPillar.PATHWAY -> Lucide.BookOpen
+    WeekPillar.PLANS -> Lucide.BookMarked
+    WeekPillar.EVENTS -> Lucide.Calendar
+    WeekPillar.GIVING -> Lucide.HandHeart
+    WeekPillar.CELL -> Lucide.Users
+}
+
+/** The week's one next step (owner, 2026-10-07: colour option A, "navy for
+ *  your next step"): a navy band inside the white card — a gold-tint tile with
+ *  the pillar's gold icon, "YOUR NEXT STEP · ‹PILLAR›" in gold, what it acts
+ *  on in white Fraunces, the row's line in #B9C4D4, and the screen's one gold
+ *  primary pill with the row's verb. Past the everyday sizes the pill takes a
+ *  line of its own, so no word is squeezed (§9.6 #4). As iOS's band. */
+@Composable
+private fun NextStepBand(row: WeekRow, ask: WeekAsk, modifier: Modifier, onClick: () -> Unit) {
+    val gold = Color(0xFFE8CA6C)
+    val meta = Color(0xFFB9C4D4)
+    val shape = RoundedCornerShape(18.dp)
+    val large = org.nuruplace.member.ui.components.largeText()
+    val tile: @Composable () -> Unit = {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(gold.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
+            Icon(weekIcon(row.form.pillar), contentDescription = null, tint = gold, modifier = Modifier.size(18.dp))
+        }
+    }
+    val kicker: @Composable () -> Unit = { Text("YOUR NEXT STEP · ${row.form.pillar.name}", style = NuruType.kicker, color = gold) }
+    val title: @Composable () -> Unit = {
+        org.nuruplace.member.ui.components.WholeWordsText(
+            ask.subject, style = NuruType.cardTitle, color = Color.White,
+            maxLines = if (large) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
+        )
+    }
+    val pill: @Composable () -> Unit = {
+        Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldGradient).padding(horizontal = 16.dp, vertical = 9.dp)) {
+            Text(ask.verb, style = nuruSans(13, FontWeight.Bold), color = Nuru.navy, maxLines = 1, softWrap = false)
+        }
+    }
+    Box(
+        modifier.fillMaxWidth().clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
+            .clickable(onClickLabel = ask.verb) { onClick() }
+            .padding(16.dp),
+    ) {
+        if (large) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                tile(); kicker(); title()
+                if (row.line.isNotBlank()) Text(row.line, style = nuruSans(12), color = meta)
+                pill()
+            }
+        } else {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                tile()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    kicker(); title()
+                    // The kicker and title take the band's width; the pill sits at
+                    // the right of the line below.
+                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(row.line, style = nuruSans(12), color = meta, modifier = Modifier.weight(1f))
+                        pill()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1135,16 +1210,7 @@ private fun WeekRowView(row: WeekRow, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
-            Icon(
-                when (row.form.pillar) {
-                    WeekPillar.PATHWAY -> Lucide.BookOpen
-                    WeekPillar.PLANS -> Lucide.BookMarked
-                    WeekPillar.EVENTS -> Lucide.Calendar
-                    WeekPillar.GIVING -> Lucide.HandHeart
-                    WeekPillar.CELL -> Lucide.Users
-                },
-                contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp),
-            )
+            Icon(weekIcon(row.form.pillar), contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
