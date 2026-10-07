@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -317,7 +318,9 @@ private fun HubHeader(
             // under a dot that was always there.
             org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
         }
-        Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
+        // The level's name whole at the largest text — "Inner Transformation"
+        // broke inside "Transformation" (§9.6 #4; iOS 30b8b15).
+        org.nuruplace.member.ui.components.WholeWordsText(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
         // One Inter line: where the member is on the road, and how far through
         // the level — lessons, the exam a step of its own (§8.2 #4).
         Text(
@@ -369,9 +372,11 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(journey.kicker.uppercase(), style = PW.over(11), color = PW.goldLight, maxLines = 1)
+            // The kicker and title wrap at the largest text — "EXAM PASSED ·"
+            // lost "LEVEL 1" (§9.6 #4; iOS 84d2acb).
+            Text(journey.kicker.uppercase(), style = PW.over(11), color = PW.goldLight)
             // The navy card's title is a card title — Fraunces 18 (§8.1 rule 3; Cycle 4 walk 08).
-            Text(step.title, style = NuruType.cardTitle, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(step.title, style = NuruType.cardTitle, color = Color.White, maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
             Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
             if (action != null) {
                 Row(
@@ -401,7 +406,7 @@ private fun HubRing(pct: Int?) {
         // A ring's figure is Fraunces, as on Home's progress card, Map view
         // and the score page — one face for one kind of figure (§8.1 rule 3;
         // Cycle 4 walk: "26" was Fraunces in one ring and Inter in another).
-        pct?.let { Text("$it%", style = PW.serif(12, FontWeight.SemiBold), color = PW.eyebrow) }
+        pct?.let { org.nuruplace.member.ui.components.CappedFontScale(1f) { Text("$it%", style = PW.serif(12, FontWeight.SemiBold), color = PW.eyebrow) } }
     }
 }
 
@@ -418,9 +423,11 @@ private fun PWBar(pct: Int, fill: Brush, track: Color, height: androidx.compose.
 private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, current: Int?, onSelect: (Int) -> Unit, onMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(11), color = PW.goldDeep)
-            Spacer(Modifier.weight(1f))
-            Text("Map view", style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
+            // The kicker wraps between words; the link stays whole — at the
+            // largest text "Map view" was squeezed to "M / ap / vi / e / w".
+            Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(11), color = PW.goldDeep, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Text("Map view", style = PW.over(11, 0f), color = PW.gold, softWrap = false, modifier = Modifier.clickable { onMap() })
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp)) {
             // "You" on the member's own level — the journey's, whatever its
@@ -464,12 +471,15 @@ private fun JourneyNode(
         Modifier.widthIn(min = 76.dp).then(if (locked) Modifier else Modifier.clickable(onClickLabel = "Open Level $number") { onTap() }),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            when { active -> "▾ You"; upNext -> "▾ Next"; else -> " " },
-            style = PW.over(11, 0.7f),
-            color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
-            modifier = Modifier.height(16.dp),
-        )
+        // A mark in a fixed slot over the circle keeps the everyday size (§9.6 #4).
+        org.nuruplace.member.ui.components.CappedFontScale(1f) {
+            Text(
+                when { active -> "▾ You"; upNext -> "▾ Next"; else -> " " },
+                style = PW.over(11, 0.7f),
+                color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
+                modifier = Modifier.height(16.dp),
+            )
+        }
         // The level NUMBER never leaves the circle — completion becomes a corner
         // check-seal; locked levels keep their number with a lock-seal. Locked
         // circles are surface + a navy hairline (the flat #EEF1F5 fill and its
@@ -725,8 +735,8 @@ private fun ExamPassedRow(step: JourneyStep) {
  *  picture and these boxes have their own height). Navy behind it while it
  *  loads, or if it can't. */
 @Composable
-private fun CoverPhoto(url: String) {
-    Box(Modifier.fillMaxSize().background(PW.navyGrad)) {
+private fun CoverPhoto(url: String, modifier: Modifier = Modifier.fillMaxSize()) {
+    Box(modifier.background(PW.navyGrad)) {
         coil.compose.AsyncImage(
             model = url, contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
@@ -737,9 +747,10 @@ private fun CoverPhoto(url: String) {
 
 @Composable
 private fun SurrenderFigure() {
-    Box(Modifier.fillMaxWidth().height(224.dp)) {
-        CoverPhoto("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080")
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x26081424), Color(0x8C081424), Color(0xE6081424)))))
+    // At least the owner's 224 dp, and taller when its words need it (§9.6 #4).
+    Box(Modifier.fillMaxWidth().heightIn(min = 224.dp)) {
+        CoverPhoto("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", Modifier.matchParentSize())
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color(0x26081424), Color(0x8C081424), Color(0xE6081424)))))
         Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
             Text("PAUSE & SURRENDER", style = PW.over(11), color = PW.goldLight)
             Text("“Offer yourselves as a living sacrifice, holy and pleasing to God.”", style = PW.serif(12, FontWeight.Medium), color = Color.White)
@@ -764,8 +775,9 @@ private fun DisciplershipRow(onTap: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("WALK WITH YOUR DISCIPLER", style = PW.over(11), color = PW.goldDeep)
-            Text("Your Discipleship Hub", style = PW.t(14, FontWeight.SemiBold), color = PW.navy, maxLines = 1)
-            Text("Message, feedback & meeting notes", style = PW.t(11), color = PW.ink2, maxLines = 1)
+            // Wrap, never cut at the largest text (§8.1 rule 9).
+            Text("Your Discipleship Hub", style = PW.t(14, FontWeight.SemiBold), color = PW.navy)
+            Text("Message, feedback & meeting notes", style = PW.t(11), color = PW.ink2)
         }
         Icon(Lucide.ChevronRight, null, tint = Color(0xFFB5BDC9), modifier = Modifier.size(18.dp))
     }
@@ -825,7 +837,8 @@ private fun RewardBadge(name: String, glyph: androidx.compose.ui.graphics.vector
             Icon(glyph, null, tint = if (earned) PW.navy else PW.ink3, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(name, style = PW.t(11, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // A level's name, whole — "Foun…", "Trans…" at the largest text (§8.1 rule 9, §9.6 #4).
+        org.nuruplace.member.ui.components.WholeWordsText(name, style = PW.t(11, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(2.dp))
         if (earned) Row { repeat(3) { Icon(Lucide.Star, null, tint = PW.gold, modifier = Modifier.size(14.dp)) } }
         else Icon(Lucide.Lock, null, tint = PW.ink3, modifier = Modifier.size(14.dp))
@@ -853,15 +866,18 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("THE SUMMIT · WHERE THIS ROAD LEADS", style = PW.over(11), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
+        // At least the owner's 300 dp, and taller when its words need it — at
+        // the largest text "COMMISSIONED" landed on its seal and the road's
+        // dots fell out of the card (§9.6 #4).
         Box(
-            Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp))
+            Modifier.fillMaxWidth().heightIn(min = 300.dp).clip(RoundedCornerShape(24.dp))
                 // Reached earns a gold ceremonial ring; the road there stays quiet.
                 .border(if (reached) 1.5.dp else 0.dp, if (reached) PW.gold.copy(alpha = 0.85f) else Color.Transparent, RoundedCornerShape(24.dp)),
         ) {
             // Real sending: a worship gathering, hands raised, JESUS over the stage —
             // visually verified (not picked blind from an ID).
-            CoverPhoto("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080")
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x260A1628), Color(0x730A1628), Color(0xF20A1628)))))
+            CoverPhoto("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", Modifier.matchParentSize())
+            Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color(0x260A1628), Color(0x730A1628), Color(0xF20A1628)))))
             // status chip — on a navy scrim, so its white words read on any part
             // of the photograph (it was white on a light-grey band, §8.1 rule 5)
             Row(
@@ -874,7 +890,13 @@ private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName:
                 Spacer(Modifier.width(4.dp))
                 Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(11, 1f), color = if (reached) PW.navy else Color.White)
             }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    // Room for the status pill above, once the words fill the card.
+                    .padding(top = if (org.nuruplace.member.ui.components.largeText()) 52.dp else 0.dp)
+                    .padding(horizontal = 20.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 // Ceremonial seal — double gold ring, medal, no emoji.
                 Box(
                     Modifier.size(58.dp).clip(RoundedCornerShape(999.dp))
@@ -947,8 +969,9 @@ private fun WalkRow(onTap: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("EVERY STEP, REMEMBERED", style = NuruType.kicker, color = PW.goldDeep)
-            Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2, maxLines = 1)
+            // Wrap, never cut at the largest text — "Your whole journey on" (§8.1 rule 9).
+            Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold)
+            Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2)
         }
         Icon(Lucide.ChevronRight, contentDescription = null, tint = PW.ink3, modifier = Modifier.size(18.dp))
     }

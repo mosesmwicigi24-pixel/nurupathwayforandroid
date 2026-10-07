@@ -374,7 +374,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                                         Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
                                     }
                                 },
-                                label = { Text(tab.label, style = NuruType.micro, maxLines = 1, softWrap = false) },
+                                // Six tabs keep the standard size, as the system's own
+                                // bars do — at the largest text they read "Hom",
+                                // "Pathw" (§9.6 #4; iOS 84d2acb).
+                                label = { org.nuruplace.member.ui.components.CappedFontScale(1f) { Text(tab.label, style = NuruType.micro, maxLines = 1, softWrap = false) } },
                                 alwaysShowLabel = true,
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Nuru.navyDeep,

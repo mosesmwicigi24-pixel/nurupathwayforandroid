@@ -914,12 +914,15 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 // Unknown until the scores answer: "—", never a "0" (§7 rule 5).
-                Text(
-                    scores?.overall?.score?.toString() ?: "—",
-                    style = pSerif(16, FontWeight.SemiBold),
-                    color = PROF.navy,
-                    textAlign = TextAlign.Center,
-                )
+                // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+                org.nuruplace.member.ui.components.CappedFontScale(1f) {
+                    Text(
+                        scores?.overall?.score?.toString() ?: "—",
+                        style = pSerif(16, FontWeight.SemiBold),
+                        color = PROF.navy,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
             Column {
                 Text("Overall", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)

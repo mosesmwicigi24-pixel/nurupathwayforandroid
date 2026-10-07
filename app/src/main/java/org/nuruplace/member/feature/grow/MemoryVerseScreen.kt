@@ -241,8 +241,13 @@ private fun ScoreRing(score: Int) {
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
-            Text(score.toString(), style = gSerif(22, FontWeight.SemiBold), color = GrowPal.ink)
-            Text("/100", style = gInter(11, FontWeight.Medium), color = GrowPal.ink600)
+            // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+            org.nuruplace.member.ui.components.CappedFontScale(1f) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(score.toString(), style = gSerif(22, FontWeight.SemiBold), color = GrowPal.ink)
+                    Text("/100", style = gInter(11, FontWeight.Medium), color = GrowPal.ink600)
+                }
+            }
         }
     }
 }

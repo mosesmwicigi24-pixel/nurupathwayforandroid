@@ -795,7 +795,9 @@ private fun HomeHeader(
             // the far right on every tab (§8.1 rule 2; Cycle 4 walk 01). The
             // wider gap clears the trend badge that hangs off its corner.
             if ((growthScore ?: 0) > 0) {
-                Box {
+                // A figure in a fixed ring keeps the everyday size; the page's
+                // own words carry the score too, and they grow (§9.6 #4).
+                org.nuruplace.member.ui.components.CappedFontScale(1f) { Box {
                     ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
                         // One face for the score wherever it's a ring's figure —
                         // Fraunces, as on the progress card below (§8.1 rule 3;
@@ -806,7 +808,7 @@ private fun HomeHeader(
                     trend?.takeIf { it.delta != 0 }?.let { t ->
                         TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
                     }
-                }
+                } }
                 Spacer(Modifier.width(Spacing.md))
             }
             // The one bell (EXPERIENCE.md §7.2 #4, §8.1 rule 7): the inbox, a
@@ -1223,7 +1225,8 @@ private fun RhythmTile(words: RhythmTileWords, done: Boolean, modifier: Modifier
             )
         }
         Spacer(Modifier.height(Spacing.xs))
-        Text(words.label, style = NuruType.label, color = ink, fontWeight = FontWeight.SemiBold)
+        // Whole words at the largest text — it read "Reflectio / n" (§9.6 #4).
+        org.nuruplace.member.ui.components.WholeWordsText(words.label, style = NuruType.label.copy(fontWeight = FontWeight.SemiBold), color = ink, textAlign = TextAlign.Center)
         Text(words.status(done), style = NuruType.micro, color = ink.copy(alpha = 0.8f))
     }
 }
@@ -1349,6 +1352,7 @@ private fun FeaturedVideo(v: WelcomeVideo, playing: Boolean, onPlay: (String) ->
 private val VERSE_REACTIONS = listOf("❤️", "🙏", "🔥", "🙌", "👍")
 
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 private fun VerseCard(
     v: TailoredVerse,
     reactions: VerseReactions? = null,
@@ -1413,10 +1417,12 @@ private fun VerseCard(
         }
         // One row (iOS parity): reaction chips left, Save + Share pushed right.
         Spacer(Modifier.height(Spacing.md))
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
+        // One line at the everyday sizes; past them it wraps, so Save and Share
+        // are never behind a sideways swipe (§8.1 rule 9, §9.6 #4).
+        androidx.compose.foundation.layout.FlowRow(
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             VERSE_REACTIONS.forEach { e ->
                 val count = reactions?.counts?.get(e) ?: 0
@@ -1706,7 +1712,7 @@ private fun ProgressCard(s: ScoresSummary, onView: () -> Unit) {
         Spacer(Modifier.height(Spacing.md))
         Row(verticalAlignment = Alignment.CenterVertically) {
             ProgressRing(s.overall.score, 64.dp, 6.dp, Nuru.goldChipBg, Nuru.gold) {
-                Text("${s.overall.score}", style = NuruType.rowTitle, color = Nuru.ink)
+                org.nuruplace.member.ui.components.CappedFontScale(1f) { Text("${s.overall.score}", style = NuruType.rowTitle, color = Nuru.ink) }
             }
             Spacer(Modifier.width(Spacing.base))
             Column {
@@ -1770,7 +1776,8 @@ private val SCORE_VALUE_STYLE: TextStyle get() = NuruType.caption.copy(fontWeigh
 @Composable
 private fun ScoreBar(line: ScoreLine, deltaWidth: Dp, valueWidth: Dp) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(line.label, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.width(84.dp))
+        // Whole words at the largest text — "Curric / ulum", "Attend / ance" (§9.6 #4).
+        org.nuruplace.member.ui.components.WholeWordsText(line.label, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.width(84.dp))
         Box(Modifier.weight(1f)) { ProgressBar(line.value, line.color, height = 8.dp) }
         // A whisper of movement vs the previous 28 days, next to the score.
         val delta = scoreDelta(line.delta)
@@ -1785,6 +1792,9 @@ private fun ScoreBar(line: ScoreLine, deltaWidth: Dp, valueWidth: Dp) {
         } else {
             Spacer(Modifier.width(deltaWidth))
         }
+        // Past the everyday sizes the two columns are as wide as their figures,
+        // and "▲94" ran into "94" — a gap keeps them two numbers.
+        if (org.nuruplace.member.ui.components.largeText()) Spacer(Modifier.width(6.dp))
         Text(
             "${line.value}", style = SCORE_VALUE_STYLE, color = Nuru.ink,
             maxLines = 1, softWrap = false,
@@ -1888,8 +1898,9 @@ private fun GrowTile(title: String, sub: String, icon: androidx.compose.ui.graph
         Spacer(Modifier.width(Spacing.sm))
         // The words wrap inside the tile — never cut (§8.1 rule 9, §8.2 #20).
         Column(Modifier.weight(1f)) {
-            Text(title, style = NuruType.cardCta, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
-            Text(sub, style = NuruType.micro, color = Nuru.ink600)
+            // Whole words at the largest text — "Devotio / nal" (§9.6 #4).
+            org.nuruplace.member.ui.components.WholeWordsText(title, style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold), color = Nuru.ink)
+            org.nuruplace.member.ui.components.WholeWordsText(sub, style = NuruType.micro, color = Nuru.ink600)
         }
     }
 }

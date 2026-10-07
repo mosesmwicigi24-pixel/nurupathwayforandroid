@@ -180,9 +180,12 @@ private fun ProgressRing(pct: Int) {
                 topLeft = Offset(inset, inset), size = arc, style = Stroke(width = stroke, cap = StrokeCap.Round),
             )
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("$pct%", style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.Medium)
-            Text("DONE", style = NuruType.micro, color = Nuru.ink400)
+        // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+        org.nuruplace.member.ui.components.CappedFontScale(1f) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("$pct%", style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.Medium)
+                Text("DONE", style = NuruType.micro, color = Nuru.ink400)
+            }
         }
     }
 }

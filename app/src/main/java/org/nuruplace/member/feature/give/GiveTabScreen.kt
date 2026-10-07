@@ -112,12 +112,16 @@ internal fun GiveSegmentControl(segment: GiveSegment, onSelect: (GiveSegment) ->
                     .clickable { onSelect(s) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    s.label.uppercase(),
-                    style = giInter(13, FontWeight.SemiBold, 1.2f),
-                    color = if (on) Nuru.goldGlow else GIVE.ink600,
-                    maxLines = 1,
-                )
+                // A fixed 38 dp switch: its words grow to the largest everyday
+                // size and stop there (§9.6 #4; iOS 84d2acb).
+                org.nuruplace.member.ui.components.CappedFontScale(org.nuruplace.member.ui.components.EVERYDAY_MAX_FONT_SCALE) {
+                    Text(
+                        s.label.uppercase(),
+                        style = giInter(13, FontWeight.SemiBold, 1.2f),
+                        color = if (on) Nuru.goldGlow else GIVE.ink600,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

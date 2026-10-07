@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -208,13 +209,15 @@ fun LevelDetailScreen(
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             // Hero — navy gradient with overlaid pills + serif title (data-honest
             // fallback for the Figma's per-level hero image).
-            Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Nuru.heroGradient)) {
+            // At least 220 dp, and taller when the level's name needs it — its
+            // words stay clear of the back button (§9.6 #4; iOS 30b8b15).
+            Box(Modifier.fillMaxWidth().heightIn(min = 220.dp).clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Nuru.heroGradient)) {
                 IconButton(onClick = onBack, modifier = Modifier.padding(top = Spacing.md, start = Spacing.sm)) {
                     Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.navyDeep.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
                         Icon(Lucide.ArrowLeft, "Back", tint = Nuru.onNavy, modifier = Modifier.size(22.dp))
                     }
                 }
-                Column(Modifier.align(Alignment.BottomStart).padding(Spacing.screen)) {
+                Column(Modifier.align(Alignment.BottomStart).padding(top = if (org.nuruplace.member.ui.components.largeText()) 64.dp else 0.dp).padding(Spacing.screen)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
                             Text("LEVEL $levelNumber", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.Bold)
@@ -235,7 +238,9 @@ fun LevelDetailScreen(
                         }
                     }
                     Spacer(Modifier.height(Spacing.sm))
-                    Text(level?.title ?: "Level $levelNumber", style = NuruType.display, color = Nuru.onNavy, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    // The level's name whole: its words never break, and past the
+                    // everyday sizes it takes the lines it needs (§9.6 #4).
+                    org.nuruplace.member.ui.components.WholeWordsText(level?.title ?: "Level $levelNumber", style = NuruType.display, color = Nuru.onNavy, maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     level?.theme?.let { Text(it, style = NuruType.body, color = Nuru.onNavyDim) }
                 }
             }
@@ -668,7 +673,10 @@ private fun StatsRing(pct: Int) {
             drawArc(Color.White.copy(alpha = 0.18f), 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(sw))
             drawArc(Nuru.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
-        Text("$pct%", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.Bold)
+        // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+        org.nuruplace.member.ui.components.CappedFontScale(1f) {
+            Text("$pct%", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
