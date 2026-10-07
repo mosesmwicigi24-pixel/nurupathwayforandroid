@@ -518,17 +518,29 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
     val pct = (day.toFloat() / total).coerceIn(0f, 1f)
 
     val shape = RoundedCornerShape(20.dp)
+    // The plan being read is the tab's next step, in navy — "navy for your
+    // next step" (owner, 2026-10-07: colour option A); other plans stay white.
+    val ink = if (primary) Color.White else PL.navy
+    val meta = if (primary) Color(0xFFB9C4D4) else PL.ink2
     Column(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
-            .border(1.dp, PL.border, shape)
+            .then(
+                if (primary) Modifier.background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
+                else Modifier.background(Color.White).border(1.dp, PL.border, shape),
+            )
             .clickable { onOpenPlan(plan.planId) }
             .padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PLCover(url = plan.imageUrl, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
+            // On navy the cover keeps a gold hairline, so a dark photograph's
+            // edge never meets the dark card.
+            PLCover(
+                url = plan.imageUrl,
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))
+                    .then(if (primary) Modifier.border(1.dp, Color(0xFFE8CA6C).copy(alpha = 0.35f), RoundedCornerShape(12.dp)) else Modifier),
+            )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 // A plan is a content row (§8.1 rule 3): Fraunces 15 semibold,
@@ -536,7 +548,7 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
                 Text(
                     plan.title,
                     style = NuruType.rowTitle,
-                    color = PL.navy,
+                    color = ink,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -547,7 +559,7 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
                 Text(
                     planCardLine(plan, readToday),
                     style = plInter(12),
-                    color = PL.ink2,
+                    color = meta,
                     // Wraps, never cut (rule 9).
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -562,7 +574,7 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
                             .weight(1f)
                             .height(6.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(PL.navy.copy(alpha = 0.08f)),
+                            .background(if (primary) Color.White.copy(alpha = 0.16f) else PL.navy.copy(alpha = 0.08f)),
                     ) {
                         Box(
                             Modifier
@@ -573,7 +585,7 @@ private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (S
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text("Day $day/$total", style = plInter(11, FontWeight.SemiBold), color = PL.ink2)
+                    Text("Day $day/$total", style = plInter(11, FontWeight.SemiBold), color = meta)
                 }
             }
             if (!primary) {
