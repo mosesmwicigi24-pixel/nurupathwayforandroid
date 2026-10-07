@@ -151,14 +151,19 @@ class EditorialLetterTest {
         val by = LetterSignedBy("Pastor Moses", "Nuru Place")
         assertEquals("Pastor Moses", EditorialLetter.signerName(by))
         assertEquals("Nuru Place", EditorialLetter.signerRole(by))
-        assertEquals("Write back to Pastor Moses", EditorialLetter.writeBackLabel(by))
     }
 
-    @Test fun `with no signer, the church's name in type and "your pastor"`() {
+    @Test fun `with no signer, the church's name in type`() {
         assertNull(EditorialLetter.signerName(null))
         assertNull(EditorialLetter.signerName(LetterSignedBy(" ", "")))
         assertEquals("Nuru Place", EditorialLetter.signerRole(null))
-        assertEquals("Write back to your pastor", EditorialLetter.writeBackLabel(null))
+    }
+
+    @Test fun `the reply goes to the member's own pastor, whoever signed`() {
+        // The row opens the member's pastoral thread — their ASSIGNED pastor —
+        // so it never names the signer (owner, 2026-10-07).
+        assertEquals("Write back to your pastor", EditorialLetter.WRITE_BACK)
+        assertFalse(EditorialLetter.WRITE_BACK.contains("Moses"))
     }
 
     @Test fun `the next step's pill begins a lesson and opens anything else`() {

@@ -266,8 +266,10 @@ internal object EditorialLetter {
     /** Under the name: the role; and the church's name where no one signed. */
     fun signerRole(signedBy: LetterSignedBy?): String = signedBy?.role?.trim()?.takeIf { it.isNotEmpty() } ?: "Nuru Place"
 
-    /** "Write back to Pastor Moses" — "your pastor" when no one signed. */
-    fun writeBackLabel(signedBy: LetterSignedBy?): String = signerName(signedBy)?.let { "Write back to $it" } ?: "Write back to your pastor"
+    /** The reply row says where the reply really goes: the member's own
+     *  pastoral thread reaches their ASSIGNED pastor, who may not be the one
+     *  who signed (owner, 2026-10-07 — as iOS). */
+    const val WRITE_BACK = "Write back to your pastor"
 
     /** The next step's pill: a lesson is begun; Pathway (or anything else) is opened. */
     fun stepVerb(route: String): String = if (route == "module") "Begin" else "Open"
@@ -372,7 +374,7 @@ internal fun EditorialLetterPage(
             }
             Signature(letter.signedBy)
             Column(Modifier.fillMaxWidth().rule(top = true)) {
-                FooterRow(Lucide.Reply, EditorialLetter.writeBackLabel(letter.signedBy), writeBack, onWriteBack)
+                FooterRow(Lucide.Reply, EditorialLetter.WRITE_BACK, writeBack, onWriteBack)
                 if (pdf != null) FooterRow(Lucide.FileText, "Keep this letter as a PDF", pdf, onKeepPdf)
                 previous?.let { FooterRow(Lucide.BookOpen, EditorialLetter.previousLabel(it, letter), LetterRowState(), onOpenPrevious) }
             }
