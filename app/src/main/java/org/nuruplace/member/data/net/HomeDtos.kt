@@ -9,11 +9,15 @@ import kotlinx.serialization.Serializable
 // The server writes these two keys in camelCase inside a snake_case envelope;
 // the client's global SnakeCase naming strategy would look for `module_id`
 // and never match — so the hero's "module" route always fell back to the
-// pathway tab (found 2026-09-16 while wiring the nudges rail). Explicit
-// @SerialName wins over the naming strategy.
+// pathway tab (found 2026-09-16 while wiring the nudges rail).
 data class NextActionParams(
-    @SerialName("moduleId") val moduleId: String? = null,
-    @SerialName("levelNumber") val levelNumber: Int? = null,
+    // The naming strategy renames @SerialName names too ("moduleId" →
+    // "module_id"), so @SerialName never matched; @JsonNames adds the
+    // camelCase key as written (2026-10-07, with the letter's params).
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.json.JsonNames("moduleId") val moduleId: String? = null,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.json.JsonNames("levelNumber") val levelNumber: Int? = null,
 )
 
 @Serializable
