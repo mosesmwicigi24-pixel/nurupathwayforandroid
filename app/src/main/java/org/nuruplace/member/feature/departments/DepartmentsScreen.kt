@@ -144,7 +144,9 @@ private fun DepartmentsEmpty() {
                 Spacer(Modifier.height(Spacing.xs))
                 Text("No departments yet", style = NuruType.cardTitle, color = Nuru.ink, textAlign = TextAlign.Center)
                 Text(
-                    "When your church sets up its teams they'll appear here — what each one does, who leads it, and where you'd be a good fit.",
+                    // The header above says what a team is for; this says only
+                    // what's true now (§9.6 rule 1: no line said twice).
+                    "When your church sets up its teams, they'll appear here.",
                     style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center,
                 )
             }

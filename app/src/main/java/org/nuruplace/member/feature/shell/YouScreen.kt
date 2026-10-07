@@ -20,7 +20,6 @@ package org.nuruplace.member.feature.shell
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,6 +50,9 @@ import org.nuruplace.member.feature.community.Segment
 import org.nuruplace.member.feature.departments.DepartmentsSegment
 import org.nuruplace.member.feature.profile.ProfileScreen
 import org.nuruplace.member.feature.profile.SettingsScreen
+import org.nuruplace.member.ui.components.CappedFontScale
+import org.nuruplace.member.ui.components.EVERYDAY_MAX_FONT_SCALE
+import org.nuruplace.member.ui.components.FirstThatFits
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.icons.Lucide
 
@@ -96,22 +97,40 @@ fun YouScreen(
                 .background(CHAT.paper)
                 .padding(horizontal = Spacing.screen, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // The capsule at the start, the gear at the far right — where
+            // every tab keeps its header's last button (§8.1 rule 2).
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                Modifier
-                    .weight(1f, fill = false)
-                    .horizontalScroll(rememberScrollState())
-                    .clip(Capsule)
-                    .background(CHAT.white.copy(alpha = 0.7f))
-                    .border(1.dp, CHAT.border, Capsule)
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                YouSegment.entries.filter { it != YouSegment.Settings }.forEach { s ->
-                    val count = if (s == YouSegment.Chat) chatUnread.takeIf { it > 0 } else null
-                    Segment(label = s.label, icon = s.icon, count = count, selected = segment == s) { segment = s }
+            // Every segment in view at every size (final walk M10, C3): the
+            // fullest form that fits — icons and words, then words alone,
+            // then the chosen one's words with the others' icons — as iOS's
+            // CapsuleSegmentBar. It scrolled, and cut "Profile" at its edge.
+            // A bar's words stop at the everyday ceiling (§9.6 #4).
+            val segments = YouSegment.entries.filter { it != YouSegment.Settings }
+            val capsule: @Composable (form: Int) -> Unit = { form ->
+                Row(
+                    Modifier
+                        .clip(Capsule)
+                        .background(CHAT.white.copy(alpha = 0.7f))
+                        .border(1.dp, CHAT.border, Capsule)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    segments.forEach { s ->
+                        val count = if (s == YouSegment.Chat) chatUnread.takeIf { it > 0 } else null
+                        val chosen = segment == s
+                        Segment(
+                            label = s.label, icon = s.icon, count = count, selected = chosen,
+                            showIcon = form != 1, showLabel = form != 2 || chosen,
+                        ) { segment = s }
+                    }
                 }
+            }
+            CappedFontScale(EVERYDAY_MAX_FONT_SCALE) {
+                FirstThatFits(
+                    Modifier.weight(1f, fill = false).padding(end = 8.dp),
+                    candidates = listOf({ capsule(0) }, { capsule(1) }, { capsule(2) }),
+                )
             }
             // Settings: the tab's one gear, pinned beside the bar — always in
             // view and reachable at every text size, and named for TalkBack

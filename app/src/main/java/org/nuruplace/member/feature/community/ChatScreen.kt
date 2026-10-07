@@ -44,6 +44,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -643,6 +645,10 @@ internal fun Segment(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     count: Int?,
     selected: Boolean,
+    /** The You bar's narrower forms (FirstThatFits): words alone, or the
+     *  icon alone — still named for TalkBack. */
+    showIcon: Boolean = true,
+    showLabel: Boolean = true,
     onSelect: () -> Unit,
 ) {
     val on = selected
@@ -650,14 +656,15 @@ internal fun Segment(
         Modifier
             .clip(Capsule)
             .then(if (on) Modifier.background(CHAT.selectedSeg) else Modifier)
-            .clickable { onSelect() }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .clickable(onClickLabel = label) { onSelect() }
+            .then(if (showLabel) Modifier else Modifier.semantics { contentDescription = label })
+            .padding(horizontal = if (showLabel) 14.dp else 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(icon, contentDescription = null, tint = if (on) Color.White else CHAT.ink600, modifier = Modifier.size(14.dp))
-            Text(label, style = cInter(12, FontWeight.SemiBold), color = if (on) Color.White else CHAT.ink600, maxLines = 1)
+            if (showIcon) Icon(icon, contentDescription = null, tint = if (on) Color.White else CHAT.ink600, modifier = Modifier.size(14.dp))
+            if (showLabel) Text(label, style = cInter(12, FontWeight.SemiBold), color = if (on) Color.White else CHAT.ink600, maxLines = 1, softWrap = false)
             if (count != null) {
                 Box(
                     Modifier
