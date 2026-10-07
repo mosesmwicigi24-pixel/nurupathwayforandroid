@@ -60,6 +60,14 @@ private fun levelCountLine(levelNumber: Int, done: Int, total: Int, counted: (do
     else -> counted(minOf(done, total), total)
 }
 
+/** Modules still to read on the member's own level, for the header's
+ *  "Only N modules to complete this level": only while learning, and only
+ *  once a lesson is done — a first day's header already says "10 modules"
+ *  (final walk C8, Android #25); "1 module left" beside "Exam ready" would
+ *  contradict it. 0 when there's nothing to say. */
+internal fun remainingModules(stage: JourneyStage?, lessonsDone: Int, lessonCount: Int): Int =
+    if (stage != JourneyStage.LEARNING || lessonsDone <= 0) 0 else (lessonCount - lessonsDone).coerceAtLeast(0)
+
 /** The count under a level's name over its list on Pathway: "10 of 10 done". */
 internal fun sectionCountLine(level: PathwayLevel): String =
     levelCountLine(level.levelNumber, level.lessonsDone, level.lessonCount) { d, t -> "$d of $t done" }
@@ -71,6 +79,16 @@ internal fun cardCountLine(level: PathwayLevel): String =
 /** The level page's progress line: "3 of 10 modules". */
 internal fun levelPageCountLine(levelNumber: Int, done: Int, total: Int): String =
     levelCountLine(levelNumber, done, total) { d, t -> "$d of $t modules" }
+
+/** The level page's progress line beside its percent: the lessons, and —
+ *  every lesson done, the exam still ahead — what the rest of the percent is,
+ *  by the exam's one name: "10 of 10 modules · the Level 1 exam is next"
+ *  beside "91%" (final walk C8; iOS #13: the first view named no exam and
+ *  left the 9% unexplained). The same words as iOS LevelProgressWords. */
+internal fun levelPageProgressLine(levelNumber: Int, done: Int, total: Int, pct: Int): String {
+    val count = levelPageCountLine(levelNumber, done, total)
+    return if (total > 0 && done >= total && pct < 100) "$count · the ${ExamWords.name(levelNumber)} is next" else count
+}
 
 /** An empty list's line: a level with nothing published keeps §3's promise;
  *  a level whose lessons exist but aren't open to the member opens as they go. */

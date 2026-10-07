@@ -255,7 +255,7 @@ fun LevelDetailScreen(
                     // "10 modules", "3 of 10 modules" — the percent, bar and
                     // lesson chip only once there is something to show.
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(levelPageCountLine(levelNumber, done, total), style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text(levelPageProgressLine(levelNumber, done, total, pct), style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         if (pct > 0) Text("$pct%", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.Bold)
                     }
                     if (pct > 0) {

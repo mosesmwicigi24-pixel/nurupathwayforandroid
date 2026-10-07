@@ -226,6 +226,9 @@ fun PathwayHubScreen(
         Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
             val failed = loadError?.takeIf { summary == null }
             if (failed != null) {
+                // The tab keeps its header — kicker, title and bell — over the
+                // failed state (final walk M4; iOS #36): it stood alone.
+                HubHeader(null, emptyList(), null, ::go, onOpenNotifications)
                 FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
                 return@Column
             }
@@ -283,14 +286,13 @@ private fun HubHeader(
     onBell: () -> Unit,
 ) {
     val idx = levels.indexOfFirst { it.levelNumber == active?.levelNumber }.coerceAtLeast(0)
-    // Lessons, never the exam (§8.2 #4): production counts the exam
-    // container in total_modules, and the bar read "20/21" beside "20 of 20
-    // modules done".
-    val pct = active?.let { if (it.lessonCount > 0) it.lessonsDone * 100 / it.lessonCount else 0 } ?: 0
-    // Modules still to read — only while learning ("1 module left" beside
-    // "Exam ready" would contradict it).
-    val remaining = active?.takeIf { journey?.stage == JourneyStage.LEARNING }
-        ?.let { (it.lessonCount - it.lessonsDone).coerceAtLeast(0) } ?: 0
+    // One measure (final walk C8, Android #20): the level page's and Map's,
+    // the exam its last step (§9.2 #10) — a full "10/10" bar here stood
+    // against "91%" there. The line above the bar counts the lessons.
+    val pct = active?.let { levelPercent(it, journey) } ?: 0
+    // Modules still to read — only while learning, and once one is done: on a
+    // first day the header line already says "10 modules" (Android #25).
+    val remaining = active?.let { remainingModules(journey?.stage, it.lessonsDone, it.lessonCount) } ?: 0
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
@@ -323,22 +325,25 @@ private fun HubHeader(
         org.nuruplace.member.ui.components.WholeWordsText(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
         // One Inter line: where the member is on the road, and how far through
         // the level — lessons, the exam a step of its own (§8.2 #4).
-        Text(
-            journey?.headerLine ?: "Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}",
-            style = nuruSans(13), color = PW.ink2, modifier = Modifier.padding(top = 4.dp),
-        )
+        // Nothing known (a failed read), nothing claimed — it said "Level 1 of 1".
+        (journey?.headerLine ?: levels.takeIf { it.isNotEmpty() }?.let { "Level ${idx + 1} of ${it.size}" })?.let { line ->
+            Text(line, style = nuruSans(13), color = PW.ink2, modifier = Modifier.padding(top = 4.dp))
+        }
         // The level's bar once a lesson is done — not an empty "0/10" on a
         // first day (§9.2 #4; the line above says "10 modules").
         if ((active?.lessonsDone ?: 0) > 0) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
             Box(Modifier.weight(1f)) { PWBar(pct, PW.goldGrad, PW.navy.copy(alpha = 0.10f)) }
             Spacer(Modifier.width(Spacing.sm))
-            Text("${active?.lessonsDone ?: 0}/${active?.lessonCount ?: 0}", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2)
+            org.nuruplace.member.ui.components.CappedFontScale(org.nuruplace.member.ui.components.EVERYDAY_MAX_FONT_SCALE) {
+                Text("$pct%", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2, maxLines = 1, softWrap = false)
+            }
         }
         if (remaining > 0) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Icon(Lucide.Sparkles, null, tint = PW.eyebrow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (remaining == 1) "Just 1 module left to level up 🎉" else "Only $remaining modules to complete this level", style = PW.t(11, FontWeight.SemiBold), color = PW.eyebrow)
+                // Body words in ink, not gold, and no emoji (§8.1 rules 1, 7).
+                Text(if (remaining == 1) "Just 1 module left to level up" else "Only $remaining modules to complete this level", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2)
             }
         }
         // The member's next step (§3) — the same words Home's continue card says.
@@ -558,7 +563,12 @@ private fun SelectedModules(
     val folds = trailFolds(journey, level.levelNumber, ordered)
     // "Continue →" goes where the list's open row goes — never to an exam
     // the hero already offers, nor to one with nothing to ask yet (§7.2 #1).
-    val resume = shown.firstOrNull { it.status == ModuleStatus.NEXT && !it.examOpensSoon }
+    // On the member's own level the hero above already offers this step, and
+    // the header already counts its modules: neither is said again here
+    // (§9.6 rules 1 and 3; final walk C8, Android #25 — "10 modules" four
+    // times and "Start" three ways on a first day).
+    val ownLevel = journey?.levelNumber == level.levelNumber
+    val resume = shown.firstOrNull { it.status == ModuleStatus.NEXT && !it.examOpensSoon }?.takeIf { !ownLevel }
     var expanded by rememberSaveable(level.levelNumber) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
@@ -566,7 +576,7 @@ private fun SelectedModules(
                 Text(level.title.uppercase(), style = PW.over(11), color = PW.goldDeep, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // Lessons, as the folded row and the header count them (§8.2 #4).
                 // Never a count of nothing: "Level 3 is being prepared", "10 modules", "3 of 10 done".
-                Text(sectionCountLine(level), style = PW.t(11), color = PW.ink2)
+                if (!(ownLevel && level.lessonsDone <= 0)) Text(sectionCountLine(level), style = PW.t(11), color = PW.ink2)
             }
             resume?.let { r -> Text(ModuleWords.trailLink(level.lessonsDone), style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
@@ -660,7 +670,11 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                 Text(caption, style = PW.t(11, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
-                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(ModuleWords.trailAction(m), style = PW.over(11, 0f), color = PW.gold) }
+                // The exam keeps its door; a lesson's row says "Up next · tap
+                // to start" and is the tap — its navy "Start" pill was a third
+                // "Start" beside the hero's (Android #25).
+                active && exam -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(ModuleWords.trailAction(m), style = PW.over(11, 0f), color = PW.gold) }
+                active -> Icon(Lucide.ChevronRight, null, tint = PW.goldDeep, modifier = Modifier.size(18.dp))
                 soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(11, 0f), color = PW.goldDeep) }
                 done -> Icon(Lucide.ChevronRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(18.dp))
             }

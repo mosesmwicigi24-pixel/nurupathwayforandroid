@@ -129,6 +129,9 @@ fun ModuleScreen(
     onBack: () -> Unit,
     onTakeQuiz: (String) -> Unit,
     onCompleted: () -> Unit,
+    /** The level's exam (its number) — a finished lesson points there once
+     *  every lesson in the level is done (final walk C9). */
+    onOpenExam: (Int) -> Unit = {},
 ) {
     var m by remember(moduleId) { mutableStateOf<ModuleDetail?>(null) }
     var loadError by remember(moduleId) { mutableStateOf<String?>(null) }
@@ -142,11 +145,18 @@ fun ModuleScreen(
         }
         return
     }
-    Loaded(detail, onBack, onTakeQuiz, onCompleted)
+    Loaded(detail, onBack, onTakeQuiz, onCompleted, onOpenExam)
 }
 
+/** What a finished lesson points to next (final walk C9, Android #15): the
+ *  level's exam, once every lesson in it is done and the exam is open — the
+ *  journey's own step, in its words. Null otherwise: the lesson offered only
+ *  "Retake" or "Revisit this module", and nothing pointed to the exam. */
+internal fun lessonExamStep(journey: Journey?, levelNumber: Int, completed: Boolean): JourneyStep? =
+    journey?.takeIf { completed && it.stage == JourneyStage.EXAM_READY && it.levelNumber == levelNumber }?.next
+
 @Composable
-private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> Unit, onCompleted: () -> Unit) {
+private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> Unit, onCompleted: () -> Unit, onOpenExam: (Int) -> Unit) {
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     var chromeHidden by remember { mutableStateOf(false) }
@@ -189,6 +199,17 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
         canLeaveVoiceNote = runCatching { Net.client.api.me().profile.role }.getOrNull() in
             setOf("Instructor", "Admin", "SuperAdmin")
     }
+    // A finished lesson: is the level's exam the next step? Best effort — a
+    // read that fails says nothing rather than something untrue.
+    var journey by remember(m.moduleId) { mutableStateOf<Journey?>(null) }
+    LaunchedEffect(m.moduleId, m.completed) {
+        if (m.completed) {
+            journey = runCatching {
+                JourneyState.derive(Net.client.api.pathway(), Net.client.api.levelModules(m.levelNumber).data)
+            }.getOrNull()
+        }
+    }
+    val examStep = lessonExamStep(journey, m.levelNumber, m.completed)
     var showRevisit by remember { mutableStateOf(false) }
     if (showRevisit) {
         org.nuruplace.member.ui.components.NuruAlertDialog(
@@ -306,6 +327,9 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 }
                 Spacer(Modifier.height(24.dp))
             }
+            if (!chromeHidden && examStep != null) {
+                ExamNextBar(examStep) { flush(); onOpenExam(m.levelNumber) }
+            }
             if (!chromeHidden && !m.completed) {
                 BottomGate(
                     doneCount = doneCount, readDone = readDone, reflectDone = reflectDone, complete = complete,
@@ -401,20 +425,26 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
             MetaPill(Lucide.BookOpen, "$sectionCount section" + if (sectionCount == 1) "" else "s")
         }
         if (m.completed) {
-            // Completed ribbon — ✓ COMPLETED · score · finish time · Retake.
+            // Completed ribbon — ✓ COMPLETED · score, the finish time on its
+            // own line under them (as iOS; "Mon 5 Oct · 10:08 AM" shared one
+            // line with the status and Retake, and a longer date is cut), Retake.
             Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(999.dp))
+                Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(16.dp))
                     .background(ML.gold.copy(alpha = 0.14f))
-                    .border(1.dp, ML.gold.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                    .border(1.dp, ML.gold.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("COMPLETED", style = ml(11, FontWeight.Bold, 1.4f), color = ML.navy)
+                        if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
+                    }
+                    m.finishedLine?.let { Text(it, style = ml(11), color = ML.secondary) }
+                }
                 Spacer(Modifier.width(6.dp))
-                Text("COMPLETED", style = ml(11, FontWeight.Bold, 1.4f), color = ML.navy)
-                if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
-                m.finishedLine?.let { Spacer(Modifier.width(6.dp)); Text("· $it", style = ml(11), color = ML.secondary, maxLines = 1) }
-                Spacer(Modifier.weight(1f))
                 if (onRetake != null) {
                     Box(
                         Modifier.clip(RoundedCornerShape(999.dp)).background(ML.navy)
@@ -468,7 +498,7 @@ private fun BottomGate(
     Column(Modifier.fillMaxWidth().background(ML.cream).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
         Text(
-            if (complete) "All steps done 🎉" else "$doneCount of 2 steps done",
+            if (complete) "All steps done" else "$doneCount of 2 steps done",
             style = ml(11, FontWeight.Bold), color = if (complete) ML.overline else ML.navy,
         )
         // The done state collapses to the celebratory line + CTA; in progress,
@@ -492,6 +522,19 @@ private fun BottomGate(
             requiresQuiz -> GoldCta(if (busy) "…" else "Start the quiz  →", busy) { onStartQuiz() }
             else -> GoldCta(if (busy) "…" else "Mark complete", busy) { onComplete() }
         }
+    }
+}
+
+/** A finished lesson's way on, pinned where the gate stands on an unfinished
+ *  one: the journey's step — "Every module is done — the exam opens the way
+ *  to Level 2." — and its one action, "Begin the exam". */
+@Composable
+private fun ExamNextBar(step: JourneyStep, onGo: () -> Unit) {
+    Column(Modifier.fillMaxWidth().background(ML.cream).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
+        Text(step.title, style = mlSerif(16, FontWeight.SemiBold), color = ML.navy)
+        if (step.line.isNotBlank()) Text(step.line, style = ml(13), color = ML.secondary)
+        step.action?.let { a -> GoldCta(a.label, busy = false) { onGo() } }
     }
 }
 

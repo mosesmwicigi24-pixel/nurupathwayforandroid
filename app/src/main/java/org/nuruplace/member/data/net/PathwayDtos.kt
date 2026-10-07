@@ -202,16 +202,12 @@ data class ModuleDetail(
 ) {
     val requiresQuiz: Boolean get() = evaluationKind.lowercase().contains("quiz")
 
-    /** "11 Jul 2026 · 20:14" from completed_at's Postgres text form, or null. */
-    val finishedLine: String? get() {
-        val raw = completedAt ?: return null
-        // "2026-07-11 17:14:09.123+00" or ISO — take date + hh:mm, render simply.
-        val m = Regex("(\\d{4})-(\\d{2})-(\\d{2})[T ](\\d{2}):(\\d{2})").find(raw) ?: return null
-        val (y, mo, d, h, min) = m.destructured
-        val months = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
-        val name = months.getOrNull(mo.toInt() - 1) ?: return null
-        return "${d.toInt()} $name $y · $h:$min"
-    }
+    /** When the lesson was finished, said the one way (EXPERIENCE.md §8.1
+     *  rule 8; final walk C2): "Mon 5 Oct · 10:08 AM" in the phone's zone —
+     *  the year only when it isn't this year. completed_at comes as
+     *  Postgres's text form ("2026-10-05 10:08:19.848184+03") or ISO; it
+     *  read "5 Oct 2026 · 10:08", the server's wall clock. Null when unread. */
+    val finishedLine: String? get() = org.nuruplace.member.util.NuruDates.dayTime(completedAt)
 
     /** Pages to render — the server split when present, else the whole body. */
     val pages: List<String> get() = contentPages?.takeIf { it.isNotEmpty() } ?: listOf(lessonContent)

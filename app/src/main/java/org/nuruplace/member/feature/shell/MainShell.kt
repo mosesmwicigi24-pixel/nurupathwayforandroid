@@ -1191,6 +1191,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onBack = { nav.popBackStack() },
                     onTakeQuiz = { nav.navigate("quiz/$it") },
                     onCompleted = { nav.popBackStack() },
+                    onOpenExam = { nav.navigate("exam/$it") },
                 )
             }
             composable(

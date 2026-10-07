@@ -31,6 +31,16 @@ class NuruDatesTest {
         assertEquals(LocalDate.of(2026, 11, 5), NuruDates.date("2026-11-05", nairobi))
     }
 
+    @Test fun `Postgres's own text form reads as the instant it is (final walk C2 — the lesson's finish)`() {
+        // The module endpoint sends completed_at as "2026-10-05 10:08:19.848184+03";
+        // the lesson read "5 Oct 2026 · 10:08" — this year's year, a 24-hour clock.
+        assertEquals("Mon 5 Oct · 10:08 AM", NuruDates.dayTime("2026-10-05 10:08:19.848184+03", nairobi, today))
+        assertEquals("Mon 5 Oct · 1:08 PM", NuruDates.dayTime("2026-10-05 10:08:19+00", nairobi, today))
+        assertEquals("Mon 5 Oct · 10:08 AM", NuruDates.dayTime("2026-10-05 07:08:19.5+00:00", nairobi, today))
+        assertEquals("Sun 5 Oct 2025 · 10:08 AM", NuruDates.dayTime("2025-10-05 10:08:19+03", nairobi, today))
+        assertNull(NuruDates.dayTime("2026-10-05 10:08", nairobi, today)) // no offset: not an instant
+    }
+
     @Test fun `what can't be read is null — never the raw text`() {
         assertNull(NuruDates.day("soon", nairobi, today))
         assertNull(NuruDates.dayTime("", nairobi, today))

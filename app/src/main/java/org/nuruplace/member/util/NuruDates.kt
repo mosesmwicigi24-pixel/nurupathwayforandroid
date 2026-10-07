@@ -50,11 +50,24 @@ object NuruDates {
     /** "2:00 PM" for a wall-clock time. */
     fun time(local: LocalTime): String = TIME.format(local)
 
-    /** An instant the server sent ("…Z" or with an offset); null when unreadable. */
+    /** An instant the server sent ("…Z" or with an offset), or Postgres's
+     *  own text form ("2026-10-05 10:08:19.848184+03", which a few columns
+     *  pass through as-is); null when unreadable. */
     fun instant(iso: String?): Instant? {
         val s = iso?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         return runCatching { Instant.parse(s) }.getOrNull()
             ?: runCatching { OffsetDateTime.parse(s).toInstant() }.getOrNull()
+            ?: postgresText(s)
+    }
+
+    private val PG_TEXT = Regex("""^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)([+-]\d{2})(?::?(\d{2}))?$""")
+
+    private fun postgresText(s: String): Instant? {
+        val m = PG_TEXT.matchEntire(s) ?: return null
+        val (date, time, hours, minutes) = m.destructured
+        return runCatching {
+            OffsetDateTime.parse("${date}T$time$hours:${minutes.ifEmpty { "00" }}").toInstant()
+        }.getOrNull()
     }
 
     /**
