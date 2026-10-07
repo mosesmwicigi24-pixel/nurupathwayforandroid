@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Pure-Compose app: the XML theme only styles the window before
          setContent runs. Parent on a platform theme so we don't need the XML
          Material-Components library. Warm-paper window avoids a white flash;
@@ -15,13 +15,18 @@
         <item name="android:windowBackground">@color/nuru_live_navy</item>
     </style>
 
-    <!-- Cold-start splash (SplashScreen compat): the round TGNM mark on its
-         own paper tone, then a clean hand-off into the app. One UI, HiOS and
-         stock Android each render this with their native splash motion. -->
+    <!-- Cold-start splash (SplashScreen compat): the round TGNM mark on the
+         app's own paper, then a clean hand-off into the app. One UI, HiOS and
+         stock Android each render this with their native splash motion.
+         Final walk C15 (Android #28): it was a blank #E5DEDA — the launcher
+         icon's tone, not paper, and no mark. The mark is asked for on every
+         start (icon_preferred, API 33+): left to the platform, a start from
+         Recents or a notification gets the solid colour alone. -->
     <style name="Theme.NuruMember.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenBackground">@color/nuru_paper</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
         <item name="windowSplashScreenAnimationDuration">400</item>
+        <item name="android:windowSplashScreenBehavior" tools:targetApi="33">icon_preferred</item>
         <item name="postSplashScreenTheme">@style/Theme.NuruMember</item>
     </style>
 </resources>
