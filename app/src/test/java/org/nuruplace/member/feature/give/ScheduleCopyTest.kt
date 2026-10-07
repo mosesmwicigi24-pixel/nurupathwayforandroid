@@ -319,15 +319,19 @@ class ScheduleCopyTest {
     }
 
     @Test
-    fun `a paused card says when it comes back, else that nothing is owed`() {
+    fun `a paused card says whether and when it comes back (final walk C11)`() {
         val paused = sched.copy(status = "paused")
+        val waits = "Nothing is owed — it won't prompt again until you resume it"
         assertEquals("Resumes Mon 12 Oct", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "2026-10-12"), LocalDate.of(2026, 10, 1)))
-        // Paused by the member until resumed, after failures, or with its pledge: nothing is owed.
-        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = null)))
-        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "failures", consecutiveFailures = 3)))
-        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "pledge")))
-        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = null)))
-        assertEquals("Nothing is owed", pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "someday")))
+        // A date the server holds says when, whatever paused it.
+        assertEquals("Resumes Mon 12 Oct", pauseCardLine(paused.copy(pauseReason = "failures", resumeOn = "2026-10-12"), LocalDate.of(2026, 10, 1)))
+        // With its pledge: when the pledge is resumed.
+        assertEquals("Resumes when you resume its pledge", pauseCardLine(paused.copy(pauseReason = "pledge")))
+        // Otherwise it waits for the member — and says so (Cara's stopped gift).
+        assertEquals(waits, pauseCardLine(paused.copy(pauseReason = "member", resumeOn = null)))
+        assertEquals(waits, pauseCardLine(paused.copy(pauseReason = "failures", consecutiveFailures = 3)))
+        assertEquals(waits, pauseCardLine(paused.copy(pauseReason = null)))
+        assertEquals(waits, pauseCardLine(paused.copy(pauseReason = "member", resumeOn = "someday")))
     }
 
     @Test

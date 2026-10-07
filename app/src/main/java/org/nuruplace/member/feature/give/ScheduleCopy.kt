@@ -95,15 +95,16 @@ fun nairobiToday(now: Instant): LocalDate = now.atZone(NAIROBI_ZONE).toLocalDate
 fun listedSchedules(all: List<GivingSchedule>): List<GivingSchedule> =
     all.filter { it.status.trim().lowercase() == "active" } + all.filter { it.status.trim().lowercase() == "paused" }
 
-/** A paused gift's card line (iOS PauseCopy.cardLine): when it comes back
- *  on its own — "Resumes 12 Oct", a member's pause with a date — else
- *  "Nothing is owed". */
+/** Whether and when a paused gift prompts again (final walk C11: "Paused"
+ *  never said) — iOS PauseCopy.cardLine, word for word: "Resumes Mon 12 Oct"
+ *  when it comes back on its own; with its pledge, "Resumes when you resume
+ *  its pledge"; otherwise it waits for the member, and nothing is owed
+ *  meanwhile. Give's card and Home's week say it in these words. */
 fun pauseCardLine(s: GivingSchedule, today: LocalDate = LocalDate.now(NAIROBI_ZONE)): String {
-    if (s.pauseReason?.trim()?.lowercase() == "member") {
-        s.resumeOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
-            ?.let { return "Resumes ${org.nuruplace.member.util.NuruDates.day(it, today)}" }
-    }
-    return "Nothing is owed"
+    if (s.pauseReason?.trim()?.lowercase() == "pledge") return "Resumes when you resume its pledge"
+    s.resumeOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+        ?.let { return "Resumes ${org.nuruplace.member.util.NuruDates.day(it, today)}" }
+    return "Nothing is owed — it won't prompt again until you resume it"
 }
 
 /** A Give card's next prompt: "Next Mon 5 Oct" — the year only when it

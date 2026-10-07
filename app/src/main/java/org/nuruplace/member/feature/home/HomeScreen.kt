@@ -675,7 +675,10 @@ fun HomeScreen(
                 // took the place of the "For you today" hero, the continue-level
                 // card, the plan-resume banner, the minis row, the this-week and
                 // "Your cell" cards, and the upcoming list.
-                Entrance(entrance, 3) { YourWeekCard(week) { openWeek(it) } }
+                // Its reads answer with the first load: until then the card
+                // holds its shape — a row never says "Didn't load" while it is
+                // still loading (final walk M4), nor guesses a "none" form.
+                Entrance(entrance, 3) { if (loadedOnce) YourWeekCard(week) { openWeek(it) } else YourWeekSkeleton() }
                 // 4 · The day — today's rhythm, then today's echo (the app
                 // remembers you, Wave 1; nothing at all on a day without one).
                 rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
@@ -1162,6 +1165,28 @@ private fun YourWeekCard(rows: List<WeekRow>, onOpen: (WeekDest) -> Unit) {
     }
 }
 
+/** YOUR WEEK before its reads first answer: the card's kicker over five
+ *  shimmering rows, in the card's own shape. */
+@Composable
+private fun YourWeekSkeleton() {
+    HomeCard(pad = 0.dp) {
+        Box(Modifier.padding(start = Spacing.base, end = Spacing.base, top = Spacing.base, bottom = Spacing.xs)) {
+            CardKicker("Your week")
+        }
+        repeat(5) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = Spacing.base, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                org.nuruplace.member.ui.components.SkeletonBlock(height = 36.dp, width = 36.dp, corner = 10.dp)
+                Spacer(Modifier.width(Spacing.md))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    org.nuruplace.member.ui.components.SkeletonBlock(height = 14.dp, width = 160.dp, corner = 6.dp)
+                    org.nuruplace.member.ui.components.SkeletonBlock(height = 12.dp, width = 110.dp, corner = 6.dp)
+                }
+            }
+        }
+        Spacer(Modifier.height(Spacing.xs))
+    }
+}
+
 /** Each pillar's one icon (§8.2 #2). */
 private fun weekIcon(pillar: WeekPillar) = when (pillar) {
     WeekPillar.PATHWAY -> Lucide.BookOpen
@@ -1268,7 +1293,15 @@ private fun WeekRowView(row: WeekRow, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(row.title, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (row.line.isNotBlank()) {
-                Text(row.line, style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.padding(top = 2.dp))
+                // A prompt that didn't go through reads as Give draws it — the
+                // server's words in the urgent colour (final walk M2).
+                val failing = row.form == WeekForm.GIFT_FAILING
+                Text(
+                    row.line,
+                    style = NuruType.caption, color = if (failing) Nuru.goldChipText else Nuru.ink600,
+                    fontWeight = if (failing) FontWeight.SemiBold else null,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
         }
         Spacer(Modifier.width(Spacing.sm))

@@ -68,6 +68,9 @@ enum class WeekForm(val pillar: WeekPillar) {
     GIFT_COLLECTED(WeekPillar.GIVING),
     /** A running gift whose last prompt failed — Give's words (§9.7 M2). */
     GIFT_FAILING(WeekPillar.GIVING),
+    /** The gifts or the partnership didn't load — never "Give" as if nothing
+     *  were in motion (§9.7 M4). */
+    GIVING_UNKNOWN(WeekPillar.GIVING),
     /** A paused gift — Give's words, never a new "Give" (§9.7 M2). */
     GIFT_PAUSED(WeekPillar.GIVING),
     /** A pledge instalment due that no collector takes. */
@@ -125,7 +128,7 @@ object YourWeek {
      *  never shows a fake fact"): it is never the "none" form — "Start a
      *  reading plan", "Find your cell · Ask", "No gatherings this week" — for
      *  a member who may well have a plan, a cell, a Sunday. */
-    const val DIDNT_LOAD = "Didn't load — pull down to try again"
+    const val DIDNT_LOAD = "Didn't load just now"
 
     private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
     private val DAY_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM · h:mm a", Locale.ENGLISH)
@@ -166,7 +169,7 @@ object YourWeek {
      *  a plan day today. */
     fun plans(plans: List<ReadingPlanRow>?, sealedHere: Boolean = false, now: java.time.Instant = java.time.Instant.now()): WeekRow {
         // [plans] null: the read never answered — said as that (§9.7 M4).
-        if (plans == null) return WeekRow(WeekForm.PLAN_UNKNOWN, "Your reading plan", DIDNT_LOAD, WeekDest.Tab("plans"))
+        if (plans == null) return WeekRow(WeekForm.PLAN_UNKNOWN, "Your reading plans", DIDNT_LOAD, WeekDest.Tab("plans"))
         val p = activePlan(plans) ?: return WeekRow(
             WeekForm.PLAN_START, "Start a reading plan", "A few minutes a day — with the whole family of God.", WeekDest.Tab("plans"),
         )
@@ -239,7 +242,7 @@ object YourWeek {
         }
         // [calendar] null: the church calendar never answered — "No gatherings
         // this week" would be a guess (§9.7 M4).
-        if (calendar == null) return WeekRow(WeekForm.EVENT_UNKNOWN, "The church calendar", DIDNT_LOAD, WeekDest.Tab("events"))
+        if (calendar == null) return WeekRow(WeekForm.EVENT_UNKNOWN, "See the church calendar", DIDNT_LOAD, WeekDest.Tab("events"))
         return WeekRow(WeekForm.EVENT_NONE, "See the church calendar", "No gatherings this week", WeekDest.Tab("events"))
     }
 
@@ -263,19 +266,23 @@ object YourWeek {
      *     shilling of which is on its way is not owed at all.
      *  3. otherwise "Give", the rails line ([railsLine]), Give.
      *
-     * Either read failed → "Give": nothing about a gift or a pledge is said
-     * on a guess. [today] is the church's (Nairobi) day.
+     * Either read failed → "Your giving · Didn't load just now": nothing
+     * about a gift or a pledge is said on a guess, nor "Give" as if nothing
+     * were in motion (§9.7 M4). [today] is the church's (Nairobi) day. The
+     * same order and words as iOS HomeWeek.givingRow.
      */
     fun giving(partnership: Partnership?, schedules: List<GivingSchedule>?, railsLine: String, today: LocalDate): WeekRow {
         val give = WeekRow(WeekForm.GIVE, "Give", railsLine, WeekDest.Tab("give"))
-        val gifts = schedules ?: return give
+        val p = partnership
+        val gifts = schedules
+        if (p == null || gifts == null) return WeekRow(WeekForm.GIVING_UNKNOWN, "Your giving", DIDNT_LOAD, WeekDest.Tab("give"))
         // 0. A running gift whose last prompt failed (EXPERIENCE.md §9.7 M2):
         //    Give's own words — "There wasn't enough in the M-Pesa account." —
-        //    never "Collected on …" over a prompt that didn't go through.
+        //    never "Collected on …" over a prompt that didn't go through. Its
+        //    sheet, where it is put right.
         gifts.firstOrNull { scheduleRunning(it.status) && giftFailureLine(it) != null }?.let { f ->
-            return giftRow(WeekForm.GIFT_FAILING, f, partnership, giftFailureLine(f)!!)
+            return WeekRow(WeekForm.GIFT_FAILING, "Giving · ${giftTitle(f, p)}", giftFailureLine(f)!!, WeekDest.Screen(scheduleRoute(f.scheduleId)))
         }
-        val p = partnership ?: return pausedGiftRow(gifts, null, today) ?: give
         val pledgeOf = p.pledges.associateBy { it.pledgeId }
         // The instalments Partners lists as due, less those already fully on
         // their way, less those a collector takes.
@@ -323,7 +330,9 @@ object YourWeek {
         }
         // 4. A paused gift is told as Give tells it — never offered as a new
         //    "Give" (§9.7 M2): "Paused · The M-Pesa prompt couldn't reach the
-        //    phone.", "Paused · Resumes Mon 12 Oct", "Paused · Nothing is owed".
+        //    phone." on Give; "Paused · Your monthly gift" with whether and
+        //    when it prompts again here — "Resumes Mon 12 Oct", "Nothing is
+        //    owed — it won't prompt again until you resume it".
         return pausedGiftRow(gifts, p, today) ?: give
     }
 
@@ -331,28 +340,24 @@ object YourWeek {
      *  server's reason; null while it isn't failing. */
     fun giftFailureLine(s: GivingSchedule): String? = s.lastFailure?.reason?.trim()?.takeIf { it.isNotEmpty() }
 
-    /** A gift's row: the pledge it collects (its title, the pledge's page), or
-     *  "Your weekly gift" / "Your monthly gift" (the gift's sheet). */
-    private fun giftRow(form: WeekForm, g: GivingSchedule, partnership: Partnership?, line: String): WeekRow {
+    /** "Your weekly gift" · "Your monthly gift" · the pledge it collects. */
+    private fun giftTitle(g: GivingSchedule, partnership: Partnership?): String {
         val pledgeId = g.pledge?.pledgeId?.takeIf { it.isNotBlank() }
             ?: partnership?.pledges?.firstOrNull { !it.scheduleId.isNullOrBlank() && it.scheduleId == g.scheduleId }?.pledgeId
-        return if (pledgeId != null) {
-            val title = partnership?.pledges?.firstOrNull { it.pledgeId == pledgeId }?.displayTitle
-                ?: g.pledge?.title?.takeIf { it.isNotBlank() } ?: "Your pledge"
-            WeekRow(form, "Giving · $title", line, WeekDest.Screen(pledgeRoute(pledgeId)))
-        } else {
-            val title = if (g.frequency.equals("weekly", ignoreCase = true)) "Your weekly gift" else "Your monthly gift"
-            WeekRow(form, "Giving · $title", line, WeekDest.Screen(scheduleRoute(g.scheduleId)))
-        }
+            ?: return if (g.frequency.equals("weekly", ignoreCase = true)) "Your weekly gift" else "Your monthly gift"
+        return partnership?.pledges?.firstOrNull { it.pledgeId == pledgeId }?.displayTitle
+            ?: g.pledge?.title?.takeIf { it.isNotBlank() } ?: "Your pledge"
     }
 
-    /** The first paused gift, in Give's words: why it stopped (its last
-     *  failure), else when it comes back ("Resumes Mon 12 Oct") or "Nothing
-     *  is owed" (org.nuruplace.member.feature.give.pauseCardLine). */
+    /** The first paused gift: "Paused · Your monthly gift" and, in Give's own
+     *  words, whether and when it prompts again (final walk M2, C11;
+     *  org.nuruplace.member.feature.give.pauseCardLine) — its sheet. */
     private fun pausedGiftRow(gifts: List<GivingSchedule>, partnership: Partnership?, today: LocalDate): WeekRow? {
         val g = gifts.firstOrNull { it.status.trim().equals("paused", ignoreCase = true) } ?: return null
-        val why = giftFailureLine(g) ?: org.nuruplace.member.feature.give.pauseCardLine(g, today)
-        return giftRow(WeekForm.GIFT_PAUSED, g, partnership, "Paused · $why")
+        return WeekRow(
+            WeekForm.GIFT_PAUSED, "Paused · ${giftTitle(g, partnership)}",
+            org.nuruplace.member.feature.give.pauseCardLine(g, today), WeekDest.Screen(scheduleRoute(g.scheduleId)),
+        )
     }
 
     /** A first day on the path: Level 1, nothing done yet (Ben). It leads

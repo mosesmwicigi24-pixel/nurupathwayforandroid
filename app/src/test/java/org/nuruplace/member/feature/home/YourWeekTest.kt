@@ -121,7 +121,7 @@ class YourWeekTest {
         // The read never answered: never "Start a reading plan" for a member
         // who may well be reading one (EXPERIENCE.md §9.7 M4).
         assertEquals(
-            WeekRow(WeekForm.PLAN_UNKNOWN, "Your reading plan", "Didn't load — pull down to try again", WeekDest.Tab("plans")),
+            WeekRow(WeekForm.PLAN_UNKNOWN, "Your reading plans", "Didn't load just now", WeekDest.Tab("plans")),
             YourWeek.plans(null),
         )
     }
@@ -177,7 +177,7 @@ class YourWeekTest {
         assertEquals(none, YourWeek.events(listOf(farTue, earlier), null, null, now))
         // The calendar never answered: never "No gatherings this week" (§9.7 M4).
         assertEquals(
-            WeekRow(WeekForm.EVENT_UNKNOWN, "The church calendar", "Didn't load — pull down to try again", WeekDest.Tab("events")),
+            WeekRow(WeekForm.EVENT_UNKNOWN, "See the church calendar", "Didn't load just now", WeekDest.Tab("events")),
             YourWeek.events(null, null, null, now),
         )
         // …though a gathering the member's own RSVPs know is still told.
@@ -302,14 +302,18 @@ class YourWeekTest {
             WeekRow(WeekForm.GIFT_FAILING, "Giving · Your weekly gift", "There wasn't enough in the M-Pesa account.", WeekDest.Screen("schedules?open=g1")),
             YourWeek.giving(p, listOf(failing), rails, today),
         )
-        // Even beyond this week, and even without the partnership read.
+        // Even beyond this week; a pledge's collector opens its own sheet too.
         val later = failing.copy(nextRunAt = "2026-10-20T06:00:00Z")
         assertEquals(WeekForm.GIFT_FAILING, YourWeek.giving(p, listOf(later), rails, today).form)
-        assertEquals(WeekForm.GIFT_FAILING, YourWeek.giving(null, listOf(failing), rails, today).form)
+        val roofs = Partnership(isPartner = true, pledges = listOf(roof))
+        assertEquals(
+            WeekRow(WeekForm.GIFT_FAILING, "Giving · Roof", "There wasn't enough in the M-Pesa account.", WeekDest.Screen("schedules?open=g1")),
+            YourWeek.giving(roofs, listOf(failing.copy(pledge = org.nuruplace.member.data.net.IntentPledge(pledgeId = "roof", title = "Roof"))), rails, today),
+        )
     }
 
     @Test
-    fun `Giving — a paused gift says why, in Give's words, and is never offered as a new Give (Cara)`() {
+    fun `Giving — a paused gift says whether and when it comes back, in Give's words, and is never offered as a new Give (Cara)`() {
         val p = Partnership(isPartner = false)
         val stopped = gift(status = "paused").copy(
             pauseReason = "failures", consecutiveFailures = 3,
@@ -317,15 +321,15 @@ class YourWeekTest {
         )
         val row = YourWeek.giving(p, listOf(stopped), rails, today)
         assertEquals(
-            WeekRow(WeekForm.GIFT_PAUSED, "Giving · Your monthly gift", "Paused · The M-Pesa prompt couldn't reach the phone.", WeekDest.Screen("schedules?open=g1")),
+            WeekRow(WeekForm.GIFT_PAUSED, "Paused · Your monthly gift", "Nothing is owed — it won't prompt again until you resume it", WeekDest.Screen("schedules?open=g1")),
             row,
         )
         // Not the GIVE form, so Home's "Give now" banner stays away.
         assertTrue(row.form != WeekForm.GIVE)
-        // A member's own pause with a date says when it comes back; without one, nothing is owed.
+        // A member's own pause with a date says when it comes back; without one, that it waits for them.
         val mine = gift(status = "paused").copy(pauseReason = "member", resumeOn = "2026-10-12")
-        assertEquals("Paused · Resumes Mon 12 Oct", YourWeek.giving(p, listOf(mine), rails, today).line)
-        assertEquals("Paused · Nothing is owed", YourWeek.giving(p, listOf(gift(status = "paused")), rails, today).line)
+        assertEquals("Resumes Mon 12 Oct", YourWeek.giving(p, listOf(mine), rails, today).line)
+        assertEquals("Nothing is owed — it won't prompt again until you resume it", YourWeek.giving(p, listOf(gift(status = "paused")), rails, today).line)
         // A pledge owed by hand still comes first.
         val owed = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue()))
         assertEquals(WeekForm.PLEDGE_DUE, YourWeek.giving(owed, listOf(stopped), rails, today).form)
@@ -338,12 +342,16 @@ class YourWeekTest {
     }
 
     @Test
-    fun `Giving — otherwise, or either read failed, Give and the rails`() {
+    fun `Giving — otherwise Give and the rails, and a read that failed says so (final walk M4)`() {
         assertEquals(give, YourWeek.giving(Partnership(), emptyList(), rails, today))
         val owed = Partnership(isPartner = true, pledges = listOf(roof), due = listOf(roofDue()))
-        // Nothing is said on a guess: without the gifts, a collector cannot be ruled out.
-        assertEquals(give, YourWeek.giving(owed, null, rails, today))
-        assertEquals(give, YourWeek.giving(null, listOf(gift()), rails, today))
+        // Nothing is said on a guess — without the gifts a collector cannot be
+        // ruled out — and nothing invites a new gift as if none were in motion.
+        val unloaded = WeekRow(WeekForm.GIVING_UNKNOWN, "Your giving", "Didn't load just now", WeekDest.Tab("give"))
+        assertEquals(unloaded, YourWeek.giving(owed, null, rails, today))
+        assertEquals(unloaded, YourWeek.giving(null, listOf(gift()), rails, today))
+        assertEquals(unloaded, YourWeek.giving(null, null, rails, today))
+        assertTrue(unloaded.form != WeekForm.GIVE)
     }
 
     // ── Cell ──
@@ -369,7 +377,7 @@ class YourWeekTest {
         // The read never answered: never "Find your cell · Ask" — the navy
         // band's ask — for a member who may be in one (§9.7 M4).
         assertEquals(
-            WeekRow(WeekForm.CELL_UNKNOWN, "Your cell", "Didn't load — pull down to try again", WeekDest.Screen("cell-info")),
+            WeekRow(WeekForm.CELL_UNKNOWN, "Your cell", "Didn't load just now", WeekDest.Screen("cell-info")),
             YourWeek.cell(null),
         )
         assertEquals(null, YourWeek.cell(null).ask)
