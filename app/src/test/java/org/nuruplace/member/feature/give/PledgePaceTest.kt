@@ -225,4 +225,34 @@ class PledgePaceTest {
         assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(pledgeCollection(roof, methods(), emptyList())))
         assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(pledgeCollection(kenya, methods(), null)))
     }
+
+    // ── A claim the office is checking (EXPERIENCE.md §9.3 rule 1, §9.7 M1) ──
+
+    @Test
+    fun `a pledge leads with the claim the office is checking, in its own currency — never subtracted`() {
+        val eli = Pledge(pledgeId = "eli", shape = "monthly", amountMinor = 5_000, currency = "USD", dueDay = 15, title = "Missions partner", pendingClaimMinor = 5_000)
+        assertEquals("US$ 50.00 is being checked by the office", pledgeClaimLine(eli))
+        val ada = Pledge(pledgeId = "roof", shape = "total", targetMinor = 2_000_000, currency = "KES", title = "Roof sheets", pendingClaimMinor = 200_000)
+        assertEquals("KSh 2,000 is being checked by the office", pledgeClaimLine(ada))
+        assertNull(pledgeClaimLine(eli.copy(pendingClaimMinor = 0)))
+        // Said, never subtracted: the pledge's own figures stand as they are.
+        assertEquals(5_000, eli.amountMinor)
+    }
+
+    @Test
+    fun `while a claim covers it, Pay now is secondary — the member must never pay twice`() {
+        val eli = Pledge(pledgeId = "eli", shape = "monthly", amountMinor = 5_000, currency = "USD", dueDay = 15, pendingClaimMinor = 5_000)
+        assertEquals(PledgePayButton("Pay now", primary = false), pledgePayButton(PledgeCollection.None, eli.pendingClaimMinor))
+        assertEquals(PledgePayButton("Pay now", primary = true), pledgePayButton(PledgeCollection.None, 0))
+    }
+
+    @Test
+    fun `the pledge row reads pending_claim_minor from the wire`() {
+        @OptIn(ExperimentalSerializationApi::class)
+        val json = Json { ignoreUnknownKeys = true; coerceInputValues = true; namingStrategy = JsonNamingStrategy.SnakeCase }
+        // GET /giving/partnership pledges[0] for Eli, from the local API (pathway#516, 2026-10-07).
+        val pl = json.decodeFromString<Pledge>("""{"pledge_id":"c8687254-d345-4749-87f2-ed761618deaf","title":"Missions partner","currency":"USD","shape":"monthly","amount_minor":5000,"status":"active","pending_claim_minor":5000}""")
+        assertEquals(5_000, pl.pendingClaimMinor)
+        assertEquals("US$ 50.00 is being checked by the office", pledgeClaimLine(pl))
+    }
 }

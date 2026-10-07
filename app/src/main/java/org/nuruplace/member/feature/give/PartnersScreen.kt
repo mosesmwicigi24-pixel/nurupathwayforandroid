@@ -936,6 +936,11 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
             Column(Modifier.weight(1f)) {
                 // A pledge is a content row (§8.1 rule 3): Fraunces 15 semibold.
                 Text(pl.displayTitle, style = NuruType.rowTitle, color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // What the office is checking leads (§9.3 rule 1, §9.7 M1):
+                // said, never subtracted — the member mustn't pay twice.
+                pledgeClaimLine(pl)?.let {
+                    Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                }
                 // The promise as iOS says it — "KSh 20,000 · by 31 Dec", the
                 // date once (it read "KSh 20,000 by Dec · due 31 Dec").
                 Text(pledgeAmountLine(pl, today), style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
@@ -1250,6 +1255,9 @@ private fun PledgePage(
                 // be set up (auto_schedule_error) — said once, nothing blocks.
                 notice?.let { AutoScheduleNotice(it, onDismissNotice) }
                 actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                // What the office is checking leads the page (§9.3 rule 1,
+                // §9.7 M1) — it sat at the foot under a gold "Pay now →".
+                pledgeClaimLine(pl)?.let { PledgeClaimLead(it) }
                 PledgePromiseCard(pl, today)
                 // The recurring gift that collects it — ANY pledge, monthly or
                 // total — or, for a total pledge with a pace, the offer
@@ -1271,7 +1279,7 @@ private fun PledgePage(
                     PledgeActionsCard(
                         paused = pl.status == "paused", busy = busy, online = online, reminders = pl.remindersEnabled,
                         // Collected automatically: "Pay early", not the call to action (§7 rule 6).
-                        pay = pledgePayButton(collection),
+                        pay = pledgePayButton(collection, pl.pendingClaimMinor),
                         onPayNow = onPayNow, onPauseResume = onPauseResume, onEdit = onEdit, onCancel = onCancel,
                         onPaidAnotherWay = { claiming = true }, onReminders = onReminders,
                     )
@@ -1316,6 +1324,25 @@ private fun PledgePage(
                     onClose = { claiming = false },
                 )
             }
+        }
+    }
+}
+
+/** The claim the office is checking, leading the pledge's page: a gold-tint
+ *  band with the clock, "US$ 50.00 is being checked by the office", and what
+ *  it means — nothing more to pay until they've matched it. */
+@Composable
+private fun PledgeClaimLead(line: String) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(GIVE.goldChipBg)
+            .border(1.dp, GIVE.border, RoundedCornerShape(16.dp)).padding(14.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Lucide.Clock4, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp).size(18.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(line, style = NuruType.rowTitle, color = GIVE.navy)
+            Text("It's added to your pledge once they've matched it — there's nothing more to pay for it.", style = giInter(12), color = GIVE.sub)
         }
     }
 }

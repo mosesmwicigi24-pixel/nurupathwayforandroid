@@ -99,9 +99,21 @@ data class PledgePayButton(val label: String, val primary: Boolean)
  *  action — "Pay early", secondary, beside Pause. With none, or a paused one
  *  (it collects nothing until resumed), "Pay now" stays the page's one gold
  *  button. Only the words and the weight: the tap is the same. */
-fun pledgePayButton(collection: PledgeCollection): PledgePayButton =
-    if (collection is PledgeCollection.Collected && scheduleRunning(collection.schedule.status)) PledgePayButton("Pay early", primary = false)
-    else PledgePayButton("Pay now", primary = true)
+fun pledgePayButton(collection: PledgeCollection, pendingClaimMinor: Int = 0): PledgePayButton = when {
+    // A claim the office is still checking covers it (EXPERIENCE.md §9.7 M1):
+    // paying by hand must never be the call to action — the member could pay
+    // twice. Still there, secondary.
+    pendingClaimMinor > 0 -> PledgePayButton("Pay now", primary = false)
+    collection is PledgeCollection.Collected && scheduleRunning(collection.schedule.status) -> PledgePayButton("Pay early", primary = false)
+    else -> PledgePayButton("Pay now", primary = true)
+}
+
+/** What a pledge's row and page lead with while the office checks a claim
+ *  toward it (EXPERIENCE.md §9.3 rule 1, §9.7 M1): "US$ 50.00 is being
+ *  checked by the office" — in the pledge's own currency and the app's money
+ *  format; said, never subtracted. Null with none. */
+fun pledgeClaimLine(pl: Pledge): String? =
+    pl.pendingClaimMinor.takeIf { it > 0 }?.let { "${money(it, pl.currency)} is being checked by the office" }
 
 /** POST /giving/schedules for "Collect it automatically at this pace": the
  *  pledge's pace, monthly, on M-Pesa, bound to the pledge, its first prompt

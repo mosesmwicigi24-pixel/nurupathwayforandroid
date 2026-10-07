@@ -414,6 +414,12 @@ data class Pledge(
      *  date not passed: the pace that reaches it on time. Null otherwise (a
      *  monthly pledge never has one) and from an older server. */
     val pace: PledgePace? = null,
+    /** What the member told the office they paid toward this pledge, still
+     *  being checked — in the pledge's own currency (wire
+     *  `pending_claim_minor`, pathway#516). Said first, never subtracted:
+     *  a claim counts once the office confirms it (EXPERIENCE.md §9.3 rule 1,
+     *  §9.7 M1). 0 from an older server. */
+    val pendingClaimMinor: Int = 0,
 ) {
     /** What the pledge is for, derived client-side from its target — the
      *  fallback when an older server sends no `title`. */
