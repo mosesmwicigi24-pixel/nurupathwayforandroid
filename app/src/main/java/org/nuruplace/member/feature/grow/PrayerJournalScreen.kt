@@ -378,7 +378,7 @@ private fun JournalCard(
         NuruAlertDialog(
             onDismissRequest = { confirmShare = false },
             title = { Text("Share to the prayer wall?", style = NuruType.rowTitle, color = Nuru.ink) },
-            text = { Text("Your cell will see this and pray with you.", style = NuruType.body, color = Nuru.ink600) },
+            text = { Text("Everyone in your congregation will see this and can pray with you.", style = NuruType.body, color = Nuru.ink600) },
             confirmButton = {
                 TextButton(onClick = { confirmShare = false; Haptics.confirm(view); onPublish() }) {
                     Text("Share to wall", style = NuruType.cardCta, color = Nuru.eyebrow)
