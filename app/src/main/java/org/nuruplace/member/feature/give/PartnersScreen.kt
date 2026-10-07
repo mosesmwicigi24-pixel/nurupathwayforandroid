@@ -145,6 +145,7 @@ import org.nuruplace.member.data.offline.Connectivity
 import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.NuruRefreshBox
+import org.nuruplace.member.ui.components.largeText
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.TypeScale
@@ -950,7 +951,9 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
                 // A pledge is a content row (§8.1 rule 3): Fraunces 15 semibold.
-                Text(pl.displayTitle, style = NuruType.rowTitle, color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Two lines at the everyday sizes; past them, the lines it
+                // needs (§8.1 rule 9; "Roof sheets for the new…" at the largest).
+                Text(pl.displayTitle, style = NuruType.rowTitle, color = GIVE.navy, maxLines = if (largeText()) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
                 // What the office is checking leads (§9.3 rule 1, §9.7 M1):
                 // said, never subtracted — the member mustn't pay twice.
                 pledgeClaimLine(pl)?.let {
@@ -1859,11 +1862,7 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                     // One line per currency — never one sum across them: the
                     // server's summary_by_currency (Cycle 9), else summed here.
                     val sums = partnerStatementSummaries(shownYear, s, p.pledges)
-                    Row(Modifier.fillMaxWidth()) {
-                        SummaryColumn("PLEDGED", sums.map { money(it.pledgedMinor, it.currency) }, GIVE.navy, Modifier.weight(1f))
-                        SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f), valueColors = sums.map { paidTint(it.paidMinor) })
-                        SummaryColumn("REMAINING", sums.map { money(it.remainingMinor, it.currency) }, GIVE.goldLo, Modifier.weight(1f))
-                    }
+                    StatementFigures(sums, Modifier.fillMaxWidth())
                     Hairline()
                     val rows = pledgePayments(s.payments).sortedByDescending { it.occurredAt ?: "" }
                     // Still processing: listed first, never in Paid above (iOS).
@@ -1898,6 +1897,44 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
 @Composable
 internal fun SummaryColumn(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
     SummaryColumn(label, listOf(value), color, modifier)
+}
+
+/** Pledged · Paid · Remaining, one line per currency under each (Giving
+ *  Cycle 5). Three columns at the everyday sizes; past them, three rows —
+ *  the label whole at the left, the figures whole at the right (§9.6 #4:
+ *  at the largest text the columns read "PLEDG / ED", "REMAI / NING" and
+ *  "KSh 30,0"). */
+@Composable
+internal fun StatementFigures(sums: List<CurrencyStatementSummary>, modifier: Modifier = Modifier) {
+    val pledged = sums.map { money(it.pledgedMinor, it.currency) }
+    val paid = sums.map { money(it.paidMinor, it.currency) }
+    val paidColors = sums.map { paidTint(it.paidMinor) }
+    val remaining = sums.map { money(it.remainingMinor, it.currency) }
+    if (!largeText()) {
+        Row(modifier) {
+            SummaryColumn("PLEDGED", pledged, GIVE.navy, Modifier.weight(1f))
+            SummaryColumn("PAID", paid, GIVE.successText, Modifier.weight(1f), valueColors = paidColors)
+            SummaryColumn("REMAINING", remaining, GIVE.goldLo, Modifier.weight(1f))
+        }
+        return
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            Triple("PLEDGED", pledged, pledged.map { GIVE.navy }),
+            Triple("PAID", paid, paidColors),
+            Triple("REMAINING", remaining, remaining.map { GIVE.goldLo }),
+        ).forEach { (label, values, colors) ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Text(label, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    values.forEachIndexed { i, v ->
+                        Text(v, style = giInter(16, FontWeight.SemiBold), color = colors.getOrElse(i) { GIVE.navy }, textAlign = TextAlign.End)
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Green says a state (§8.1 rule 1: on track): money paid. Nothing paid is a

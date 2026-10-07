@@ -666,7 +666,9 @@ private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit
         // "Not set" (it read "—"), a birthday "1 Jan 1990" — the calendar date
         // sent, never shifted by the phone's zone (it read the raw
         // "1989-12-31T21:00:00.000Z") — and a gender its own words.
-        InfoRow(Lucide.Mail, "EMAIL", profileValue(p?.email), onEdit = { onEdit(EditField.EMAIL) })
+        // The address breaks only after its "@" (final walk C3, Android #10:
+        // "student1@dev / .local" in this row at the largest text).
+        InfoRow(Lucide.Mail, "EMAIL", emailBreaks(profileValue(p?.email)), onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
         InfoRow(Lucide.User, "FULL NAME", profileValue(p?.fullName), onEdit = { onEdit(EditField.NAME) })
         // Read the Kenyan way, as Give shows it ("0700 000 000", not "+254700000000");

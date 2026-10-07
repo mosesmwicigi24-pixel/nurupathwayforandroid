@@ -645,11 +645,7 @@ private fun YearChip(year: Int, on: Boolean, onClick: () -> Unit) {
  *  tiles (an older server sends no `impact`). */
 @Composable
 private fun SummaryCard(sums: List<CurrencyStatementSummary>) {
-    Row(Modifier.partnerCard()) {
-        SummaryColumn("PLEDGED", sums.map { money(it.pledgedMinor, it.currency) }, GIVE.navy, Modifier.weight(1f))
-        SummaryColumn("PAID", sums.map { money(it.paidMinor, it.currency) }, GIVE.successText, Modifier.weight(1f), valueColors = sums.map { paidTint(it.paidMinor) })
-        SummaryColumn("REMAINING", sums.map { money(it.remainingMinor, it.currency) }, GIVE.goldLo, Modifier.weight(1f))
-    }
+    StatementFigures(sums, Modifier.partnerCard())
 }
 
 /** COMMITMENTS (iOS commitmentsSection): one row per pledge — a tap opens

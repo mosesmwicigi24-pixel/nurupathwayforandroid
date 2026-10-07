@@ -1333,14 +1333,19 @@ private fun GiveTab(
                             // enough that it never shrinks under it (§8.1 rule 3; iOS's 52 × 40).
                             Box(Modifier.size(width = 52.dp, height = 40.dp).clip(RoundedCornerShape(12.dp)).background(m.badgeBg), contentAlignment = Alignment.Center) {
                                 if (m.badgeText != null) {
-                                    Text(
-                                        m.badgeText,
-                                        style = giInter(11, FontWeight.Bold, -0.2f),
-                                        color = m.badgeFg,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                    )
+                                    // A mark in a fixed slot keeps the everyday size (§9.6 #4):
+                                    // at the largest text "M-PESA" read "M-P". The row's own
+                                    // words beside it grow.
+                                    org.nuruplace.member.ui.components.CappedFontScale(1f) {
+                                        Text(
+                                            m.badgeText,
+                                            style = giInter(11, FontWeight.Bold, -0.2f),
+                                            color = m.badgeFg,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                        )
+                                    }
                                 } else {
                                     Icon(m.badgeIcon!!, contentDescription = null, tint = m.badgeFg, modifier = Modifier.size(18.dp))
                                 }
