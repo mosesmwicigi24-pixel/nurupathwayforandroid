@@ -302,11 +302,15 @@ fun LetterDialog(
                 },
                 onNextStep = { step -> onNextStep(step.route, step.params?.moduleId) },
             )
-            // Over the page as it scrolls: the paper's own colour, so the words
-            // passing under it don't show through.
+            // Always within reach, over the page as it scrolls — so a solid
+            // circle of the paper's own colour, with a hairline and a soft
+            // shadow: it sits above the words passing under it, never among
+            // them (at the largest size the title runs beneath it).
             Box(
                 Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 14.dp)
-                    .size(36.dp).clip(CircleShape).background(Color(0xF2FBF6EC))
+                    .size(36.dp)
+                    .shadow(4.dp, CircleShape, ambientColor = Color(0x2E0B1F33), spotColor = Color(0x2E0B1F33))
+                    .clip(CircleShape).background(Color(0xFFFBF6EC))
                     .border(1.dp, Color(0x1A0B1F33), CircleShape)
                     .clickable(onClickLabel = "Close") { onDismiss() },
                 contentAlignment = Alignment.Center,
