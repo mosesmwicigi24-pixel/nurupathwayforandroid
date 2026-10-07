@@ -19,6 +19,7 @@ package org.nuruplace.member.feature.shell
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -34,7 +36,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -88,9 +95,12 @@ fun YouScreen(
                 .fillMaxWidth()
                 .background(CHAT.paper)
                 .padding(horizontal = Spacing.screen, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(
                 Modifier
+                    .weight(1f, fill = false)
                     .horizontalScroll(rememberScrollState())
                     .clip(Capsule)
                     .background(CHAT.white.copy(alpha = 0.7f))
@@ -98,10 +108,25 @@ fun YouScreen(
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                YouSegment.entries.forEach { s ->
+                YouSegment.entries.filter { it != YouSegment.Settings }.forEach { s ->
                     val count = if (s == YouSegment.Chat) chatUnread.takeIf { it > 0 } else null
                     Segment(label = s.label, icon = s.icon, count = count, selected = segment == s) { segment = s }
                 }
+            }
+            // Settings: the tab's one gear, pinned beside the bar — always in
+            // view and reachable at every text size, and named for TalkBack
+            // (EXPERIENCE.md §9.7 M10). It sat at the scrolling bar's end:
+            // cut at the default size, scrolled away at Large, unlabelled.
+            val onSettings = segment == YouSegment.Settings
+            Box(
+                Modifier.size(44.dp).clip(Capsule)
+                    .then(if (onSettings) Modifier.background(CHAT.selectedSeg) else Modifier.background(CHAT.white.copy(alpha = 0.7f)))
+                    .border(1.dp, CHAT.border, Capsule)
+                    .clickable(onClickLabel = "Open Settings") { segment = YouSegment.Settings }
+                    .semantics { selected = onSettings },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Lucide.Settings, contentDescription = "Settings", tint = if (onSettings) Color.White else CHAT.ink600, modifier = Modifier.size(18.dp))
             }
         }
 

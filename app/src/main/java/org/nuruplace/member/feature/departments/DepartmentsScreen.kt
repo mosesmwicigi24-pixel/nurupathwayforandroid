@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import org.nuruplace.member.data.net.Department
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.feature.profile.ProfCreamHeaderBox
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
@@ -67,24 +68,22 @@ fun DepartmentsSegment(onOpen: (String) -> Unit) {
         // Held by the tab (EXPERIENCE.md §7.2 #8): Back from a department
         // finds the same list at the same scroll, refreshed in place.
         heldAs = "Departments",
+        // The header stands over the loading and failed states too.
+        header = { DepartmentsHeader() },
     ) { departments, _ ->
         if (departments.isEmpty()) {
             DepartmentsEmpty()
         } else {
             LazyColumn(
                 Modifier.fillMaxSize().background(Nuru.paper),
-                contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.md),
+                contentPadding = PaddingValues(bottom = Spacing.md),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                item {
-                    Text(
-                        "WHERE TO SERVE",
-                        style = NuruType.sectionLabel, color = Nuru.eyebrow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-                    )
-                }
+                // The title says "Where to serve" — the list needs no label
+                // repeating it (the old "WHERE TO SERVE" over the cards).
+                item { DepartmentsHeader() }
                 items(departments, key = { it.departmentId }) { d ->
-                    DepartmentCard(d) { onOpen(d.departmentId) }
+                    Box(Modifier.padding(horizontal = Spacing.screen)) { DepartmentCard(d) { onOpen(d.departmentId) } }
                 }
                 item { Spacer(Modifier.height(Spacing.lg)) }
             }
@@ -92,16 +91,44 @@ fun DepartmentsSegment(onOpen: (String) -> Unit) {
     }
 }
 
+/** The segment's one header (EXPERIENCE.md §8.1 rule 2; final walk C14,
+ *  Android #26): kicker · Fraunces title · one line, in the cream band the
+ *  You tab's Community and Settings wear — the same words as iOS. */
+@Composable
+private fun DepartmentsHeader() {
+    ProfCreamHeaderBox {
+        Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
+            Text("DEPARTMENTS", style = NuruType.kicker, color = Nuru.eyebrow)
+            Text(
+                "Where to serve",
+                style = nuruSerif(28, FontWeight.SemiBold),
+                color = Nuru.navy,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                DEPARTMENTS_LINE,
+                style = nuruSans(13, FontWeight.Normal),
+                color = Nuru.ink600,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+internal const val DEPARTMENTS_LINE =
+    "The teams that carry this church — what they do, what they need, and where you'd fit."
+
 @Composable
 private fun DepartmentsEmpty() {
     // A scrollable so pull-to-refresh still works on the empty state.
     LazyColumn(
         Modifier.fillMaxSize().background(Nuru.paper),
-        contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.lg),
+        contentPadding = PaddingValues(bottom = Spacing.lg),
     ) {
+        item { DepartmentsHeader() }
         item {
             Column(
-                Modifier.fillMaxWidth()
+                Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.lg).fillMaxWidth()
                     .clip(CardShape).background(Nuru.white)
                     .border(1.dp, Nuru.border, CardShape)
                     .padding(22.dp),
