@@ -187,7 +187,13 @@ fun LetterKnockCard(letter: PastoralLetter, onOpen: () -> Unit) {
             // going" earns a tap where "Your Sunday Letter" does not. Falls
             // back to the scripture for pre-v2 letters, never to a blank.
             (letter.displayTitle ?: letter.displayScripture)?.let {
-                Text(it, style = nuruSans(12), color = LetterMeta, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                // Two lines at the everyday sizes; past them the whole line —
+                // it stopped at "you marked an…" at the largest (§9.6 #4).
+                Text(
+                    it, style = nuruSans(12), color = LetterMeta,
+                    maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
             }
         }
         Box(
