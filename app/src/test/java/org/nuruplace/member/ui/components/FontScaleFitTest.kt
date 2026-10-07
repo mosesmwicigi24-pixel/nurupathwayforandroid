@@ -27,6 +27,16 @@ class FontScaleFitTest {
         assertEquals(0.8f, wholeWordsScale(current = 0.8f, widestWordPx = 300f, availablePx = 100f), 0f)
     }
 
+    @Test fun `a line that ends inside a word is caught, a break between words is not`() {
+        // "Devotion / al" — the walk at 2.0: the line ended after "Devotion".
+        assertTrue(breaksInsideWord("Devotional", listOf(8)))
+        // "Hide His / Word": the line ended after the space.
+        assertEquals(false, breaksInsideWord("Hide His Word", listOf(9)))
+        // A hyphen is a place to break; one line has no breaks at all.
+        assertEquals(false, breaksInsideWord("Self-control", listOf(5)))
+        assertEquals(false, breaksInsideWord("Reflection", emptyList()))
+    }
+
     @Test fun `nothing known changes nothing`() {
         assertEquals(2f, wholeWordsScale(current = 2f, widestWordPx = 0f, availablePx = 100f), 0f)
         assertEquals(2f, wholeWordsScale(current = 2f, widestWordPx = 100f, availablePx = 0f), 0f)

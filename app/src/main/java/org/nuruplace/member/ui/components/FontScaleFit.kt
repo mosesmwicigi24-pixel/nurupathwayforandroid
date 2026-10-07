@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -67,6 +70,13 @@ fun wholeWordsScale(current: Float, widestWordPx: Float, availablePx: Float, flo
 /** The words a text wraps between. */
 internal fun wordsOf(text: String): List<String> = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
 
+/** Whether a laid-out text broke a line inside a word: [lineEnds] are the
+ *  offsets where each line but the last ends (TextLayoutResult.getLineEnd).
+ *  A break after a space or a hyphen is between words. */
+internal fun breaksInsideWord(text: String, lineEnds: List<Int>): Boolean = lineEnds.any { e ->
+    e in 1 until text.length && !text[e - 1].isWhitespace() && !text[e].isWhitespace() && text[e - 1] != '-'
+}
+
 /**
  * A [Text] whose words are never broken: at a size where its widest word is
  * wider than the space it has, its font scale steps down until that word
@@ -90,13 +100,24 @@ fun WholeWordsText(
                 measurer.measure(word, style, softWrap = false, maxLines = 1, density = density).size.width.toFloat()
             } ?: 0f
         }
-        val scale = if (constraints.hasBoundedWidth) {
+        val first = if (constraints.hasBoundedWidth) {
             wholeWordsScale(density.fontScale, widest, constraints.maxWidth.toFloat())
         } else {
             density.fontScale
         }
+        // The layout has the last word: the measured word can come out a few
+        // per cent narrower than the drawn one ("Devotion / al" at 2.0), so a
+        // line that still ends inside a word steps down 5 % more, to the floor.
+        val floor = minOf(WHOLE_WORDS_FLOOR, density.fontScale)
+        var trim by remember(text, constraints.maxWidth, density.fontScale) { mutableFloatStateOf(1f) }
+        val scale = (first * trim).coerceAtLeast(floor)
         val draw: @Composable () -> Unit = {
-            Text(text, style = style, color = color, maxLines = maxLines, overflow = overflow, textAlign = textAlign)
+            Text(
+                text, style = style, color = color, maxLines = maxLines, overflow = overflow, textAlign = textAlign,
+                onTextLayout = { r ->
+                    if (scale > floor && breaksInsideWord(text, (0 until r.lineCount - 1).map { r.getLineEnd(it) })) trim *= 0.95f
+                },
+            )
         }
         if (scale < density.fontScale) {
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale), content = draw)
