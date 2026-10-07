@@ -273,6 +273,8 @@ private fun JournalCard(
     val view = LocalView.current
     var menuOpen by remember { mutableStateOf(false) }
     var confirmShare by remember { mutableStateOf(false) }
+    // Deleting a prayer is for good — asked first, as iOS (§9.7 M8).
+    var confirmDelete by remember { mutableStateOf(false) }
 
     // Green answered · navy on-the-wall · gold private — ONLY the avatar,
     // name and timestamp carry this color; title/body stay neutral (iOS
@@ -329,7 +331,8 @@ private fun JournalCard(
                     }
                     if (!shared) {
                         DropdownMenuItem(
-                            text = { Text("Publish to Corporate") },
+                            // One name for the step everywhere (§9.1 rule 1, §9.7 M8).
+                            text = { Text("Share to Corporate") },
                             leadingIcon = { Icon(Lucide.Megaphone, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; confirmShare = true },
                         )
@@ -342,7 +345,7 @@ private fun JournalCard(
                     DropdownMenuItem(
                         text = { Text("Delete") },
                         leadingIcon = { Icon(Lucide.Trash2, null, modifier = Modifier.size(22.dp)) },
-                        onClick = { menuOpen = false; onDelete() },
+                        onClick = { menuOpen = false; confirmDelete = true },
                     )
                 }
             }
@@ -377,15 +380,32 @@ private fun JournalCard(
     if (confirmShare) {
         NuruAlertDialog(
             onDismissRequest = { confirmShare = false },
-            title = { Text("Share to the prayer wall?", style = NuruType.rowTitle, color = Nuru.ink) },
+            title = { Text("Share to Corporate?", style = NuruType.rowTitle, color = Nuru.ink) },
             text = { Text("Everyone in your congregation will see this and can pray with you.", style = NuruType.body, color = Nuru.ink600) },
             confirmButton = {
                 TextButton(onClick = { confirmShare = false; Haptics.confirm(view); onPublish() }) {
-                    Text("Share to wall", style = NuruType.cardCta, color = Nuru.eyebrow)
+                    Text("Share", style = NuruType.cardCta, color = Nuru.eyebrow)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { confirmShare = false }) { Text("Keep it private", style = NuruType.cardCta, color = Nuru.ink600) }
+            },
+            containerColor = Nuru.white,
+        )
+    }
+
+    if (confirmDelete) {
+        NuruAlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this prayer?", style = NuruType.rowTitle, color = Nuru.ink) },
+            text = { Text("It will be removed from your journal on every device.", style = NuruType.body, color = Nuru.ink600) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; Haptics.confirm(view); onDelete() }) {
+                    Text("Delete prayer", style = NuruType.cardCta, color = Nuru.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Keep it", style = NuruType.cardCta, color = Nuru.ink600) }
             },
             containerColor = Nuru.white,
         )

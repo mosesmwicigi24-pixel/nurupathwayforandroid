@@ -185,7 +185,9 @@ fun PrayerWallScreen(
                             // closing walk): it was one bare line beside an unlabelled "+".
                             org.nuruplace.member.ui.components.StateCard(
                                 title = "No prayer requests yet",
-                                line = "Be the first to share one — your cell will stand with you.",
+                                // One story about who sees a shared prayer — the
+                                // share prompt's (§9.7 M8): the congregation.
+                                line = "Be the first to share one — everyone in your congregation can pray with you.",
                                 glyph = Lucide.HandHeart,
                                 actionLabel = "Share a prayer",
                                 onAction = { composing = true },
