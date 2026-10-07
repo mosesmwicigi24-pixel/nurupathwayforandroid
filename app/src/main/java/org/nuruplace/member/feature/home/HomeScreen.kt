@@ -572,6 +572,32 @@ fun HomeScreen(
                         )
                     }
                 }
+                // What the opening will hold, worked out before it is drawn (the
+                // order below never changes): "What needs you today" — the
+                // exam's own nudge only while that exam can be taken (§7.2 #1),
+                // never one that repeats a YOUR WEEK row (§9.1 rule 3), and a
+                // first day's side task held back (§9.1 rule 4) — or the
+                // reflection strip; and the Live-now card.
+                val shownNudges = nudges.filter {
+                    nudgeOffered(it, pathway) && !YourWeek.repeats(it, week) && !YourWeek.heldOnFirstDay(it, journey)
+                }
+                // Android only (§7.3): while the phone has notifications off,
+                // "Turn on notifications" goes first.
+                val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
+                    { NotificationsOffCard(onTurnOn = notificationsCard.turnOn, onNotNow = notificationsCard.notNow) }
+                } else null
+                val needsRail = shownNudges.isNotEmpty() || notifyLead != null
+                val reflectionStrip = shownNudges.isEmpty() && reflectionDue && !YourWeek.firstDay(journey)
+                val liveNow = liveNowInfo(upcoming)
+                // A quiet divider when dark cards would touch (owner, 2026-10-07):
+                // the navy letter on the liturgy's photograph on a first day, the
+                // navy Live-now card right on the letter. Nothing moves.
+                val quietBefore = HomeQuiet.dividersBefore(
+                    HomeQuiet.opening(
+                        verseArt = verse?.art?.url?.isNotBlank() == true, video = welcomeVideo != null,
+                        liveNow = liveNow != null, needsRail = needsRail, reflectionStrip = reflectionStrip,
+                    ),
+                )
                 // 0 · Featured welcome video — right under the header (owner ask); it
                 // IS the "start here" moment, so it leads the feed. The thin ON AIR
                 // bar stays pinned above it while a broadcast is live.
@@ -584,7 +610,7 @@ fun HomeScreen(
                 // starting within the hour (iOS HomeView.liveNowInfo/liveNowCard
                 // parity). Driven by the same calendar occurrences as Upcoming;
                 // no invented live-stream data, just a route to the real event.
-                liveNowInfo(upcoming)?.let { info ->
+                liveNow?.let { info ->
                     Entrance(entrance, 1) {
                         LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
                     }
@@ -592,6 +618,7 @@ fun HomeScreen(
                 // The Sunday Letter knock — three states (knock / quiet row / awaiting).
                 // Awaiting opens the You tab: there is no letters-archive route
                 // (GET /me/letters has no screen), and You is where "yours" lives.
+                if (HomeEdge.LETTER in quietBefore) SelahDivider()
                 if (letter == null) Entrance(entrance, 2) { LetterAwaitingCard(onClick = { onSelectTab("profile") }) }
                 letter?.takeIf { !it.isUnread }?.let { lt ->
                     LetterReadRow(lt) { showLetter = true }
@@ -616,19 +643,8 @@ fun HomeScreen(
                 // purpose reflection strip stands in, so Home never loses the
                 // nudge that ticks the rhythm. The unread-letter nudge opens the
                 // same letter sheet the knock card does, in place.
-                // The exam's own nudge only while that exam can be taken (§7.2 #1),
-                // and never one that repeats a YOUR WEEK row below (§9.1 rule 3).
-                // A first day leads with the path's first step, not a side
-                // task (§9.1 rule 4): the reflection waits.
-                val shownNudges = nudges.filter {
-                    nudgeOffered(it, pathway) && !YourWeek.repeats(it, week) && !YourWeek.heldOnFirstDay(it, journey)
-                }
-                // Android only (§7.3): while the phone has notifications off,
-                // "Turn on notifications" goes first.
-                val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
-                    { NotificationsOffCard(onTurnOn = notificationsCard.turnOn, onNotNow = notificationsCard.notNow) }
-                } else null
-                if (shownNudges.isNotEmpty() || notifyLead != null) {
+                // (shownNudges, notifyLead: worked out above, with the opening.)
+                if (needsRail) {
                     Entrance(entrance, 2) {
                         NeedsYouRail(shownNudges, lead = notifyLead) { n ->
                             if (n.route == "letter" && letter != null) showLetter = true
@@ -636,12 +652,13 @@ fun HomeScreen(
                         }
                     }
                 }
-                if (shownNudges.isEmpty() && reflectionDue && !YourWeek.firstDay(journey)) {
+                if (reflectionStrip) {
                     // Reflection due — deep-links to the devotional's reflection
                     // composer, the one act that ticks the rhythm and clears this.
                     Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
                 }
                 // The hour's word — BELOW the reflection strip (owner's order).
+                if (HomeEdge.LITURGY in quietBefore) SelahDivider()
                 Entrance(entrance, 0) {
                     LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
                 }
