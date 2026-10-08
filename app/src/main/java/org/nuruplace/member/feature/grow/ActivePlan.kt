@@ -90,19 +90,14 @@ fun pauseLine(pausedOn: LocalDate, waitingDay: Int, now: Instant = Instant.now()
 }
 
 /**
- * "Today" means today (EXPERIENCE.md §9.7 M6): a plan day is today's only
- * when it is the day the member is on ([planDay]) and the plan isn't paused
- * ([planPausedOn]) — Day 4, waiting since Monday, read "TODAY'S JOURNEY" and
- * "TODAY'S READING". Unknown (the plans list didn't answer): not today's.
+ * A plan day's kickers ("Today" means today, EXPERIENCE.md §9.7 M6): the
+ * day's own parts, reading and questions, which may be read on any day —
+ * never "TODAY'S" over a day paused since Monday. iOS PlanDayWords, word for
+ * word: "THIS DAY · 3 PARTS", "THE READING", "THE QUESTION(S)".
  */
-fun planDayIsToday(row: ReadingPlanRow?, dayNumber: Int, now: Instant = Instant.now()): Boolean =
-    row != null && row.enrolled && row.completedAt == null && planDay(row) == dayNumber && planPausedOn(row, now) == null
-
-/** The day hub's kicker: "TODAY'S JOURNEY · 3 PARTS" on today's day, else
- *  "THE JOURNEY · 3 PARTS". */
-fun dayJourneyKicker(today: Boolean, parts: Int): String =
-    "${if (today) "TODAY'S JOURNEY" else "THE JOURNEY"} · $parts PART${if (parts == 1) "" else "S"}"
-
-/** The Word's kicker: "TODAY'S READING" on today's day, else "THE READING". */
-fun dayReadingKicker(today: Boolean): String = if (today) "TODAY'S READING" else "THE READING"
+object PlanDayWords {
+    fun hubKicker(parts: Int): String = "THIS DAY · $parts PART${if (parts == 1) "" else "S"}"
+    const val READING_KICKER = "THE READING"
+    fun questionKicker(n: Int): String = if (n == 1) "THE QUESTION" else "THE QUESTIONS"
+}
 

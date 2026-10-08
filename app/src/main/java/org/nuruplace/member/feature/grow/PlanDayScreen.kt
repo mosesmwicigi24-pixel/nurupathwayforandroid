@@ -133,14 +133,6 @@ fun PlanDayScreen(
     var reflectionSaving by remember { mutableStateOf(false) }
     var reflectionJustSaved by remember { mutableStateOf(false) }
 
-    // Whether this is today's day (§9.7 M6) — from the plans list, which
-    // knows when the member last finished a day; unknown is not today's.
-    var isToday by remember { mutableStateOf(false) }
-    LaunchedEffect(planId, dayNumber) {
-        isToday = runCatching { Net.client.api.plans().data.firstOrNull { it.planId == planId } }.getOrNull()
-            .let { planDayIsToday(it, dayNumber) }
-    }
-
     // Load the plan + isolate this day, then pre-fill the reflection.
     LaunchedEffect(planId, dayNumber, attempt) {
         val loaded = runCatching { Net.client.api.plan(planId) }
@@ -210,7 +202,7 @@ fun PlanDayScreen(
                     val failed = loadError?.takeIf { day == null }
                     if (failed != null) FailedState(failed, onRetry = { attempt++ })
                     else Text(
-                        dayJourneyKicker(isToday, parts.size),
+                        PlanDayWords.hubKicker(parts.size),
                         style = plInter(11, Bold, 1.8f), color = PL.catText,
                     )
                     parts.forEach { p ->
@@ -935,7 +927,8 @@ internal data class HubPart(
     val icon: ImageVector get() = when (tag) {
         "media" -> Lucide.Play
         "word" -> Lucide.BookOpen
-        "respond" -> Lucide.HandHeart
+        // Prayer's heart, not Give's hand-heart (§8.1 rule 7; final walk C16).
+        "respond" -> Lucide.Heart
         else -> Lucide.MessageCircle
     }
 }

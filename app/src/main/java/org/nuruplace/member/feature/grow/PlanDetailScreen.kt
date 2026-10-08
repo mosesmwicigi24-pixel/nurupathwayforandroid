@@ -379,9 +379,11 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
                     style = plInter(11, FontWeight.Bold, 1.4f),
                     color = PL.navy,
                     maxLines = 1,
+                    // A label pill is white with navy words (§8.1 rule 6; final
+                    // walk C16: "FOUNDATIONS" was gold-filled).
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(PL.gold)
+                        .background(Color.White)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }
@@ -724,11 +726,13 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            // A day is a content row: its title Fraunces, wrapping to two
+            // lines (§8.1 rules 3 and 9; final walk C16: Inter, cut at one).
             Text(
                 day.title ?: "Reading & reflection",
-                style = plInter(12, FontWeight.SemiBold),
+                style = plSerif(15, FontWeight.SemiBold),
                 color = PL.navy,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(

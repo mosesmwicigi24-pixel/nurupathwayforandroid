@@ -410,9 +410,10 @@ private fun StreakStrip(view: StreakView) {
                 // at any text size — iOS adopts these words ("0 days wi…" was cut).
                 // The words take the card's width: beside the seven week dots
                 // they had about a third of it and broke over three lines.
+                // A card title is Fraunces (§8.1 rule 3; final walk C16: Inter bold).
                 Text(
                     StreakWords.label(count),
-                    style = plInter(14, FontWeight.Bold, -0.14f),
+                    style = plSerif(18, FontWeight.SemiBold, -0.2f),
                     color = PL.navy,
                 )
                 Text(
@@ -803,8 +804,10 @@ private fun PlanPromo(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(plan.title, style = plSerif(18, FontWeight.Medium, -0.3f), color = PL.navy)
+            // Words in ink, not gold (§8.1 rule 1; final walk C16: the
+            // tagline was gold body text).
             plan.subtitle?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = plInter(12, FontWeight.SemiBold), color = PL.gold)
+                Text(it, style = plInter(12, FontWeight.SemiBold), color = PL.ink2)
             }
             hook?.let {
                 Text(
@@ -834,17 +837,11 @@ private fun PlanPromo(
                 // It opens the plan, so it says so (as iOS); the one way to start
                 // a plan is the plan page's "Begin Day 1" — it said "Begin the
                 // journey" here, a second name for the same start.
+                // Its words alone — no arrow inside a button (§8.1 rule 4).
                 Text(
                     PLAN_PROMO_CTA,
                     style = plInter(12, FontWeight.Bold),
                     color = PL.navy,
-                )
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    Lucide.ArrowRight,
-                    contentDescription = null,
-                    tint = PL.navy,
-                    modifier = Modifier.size(14.dp),
                 )
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -858,17 +855,19 @@ private fun PlanPromo(
 
 @Composable
 private fun PromoKicker(label: String, shimmer: Boolean) {
+    // A label pill is white with navy words (§8.1 rule 6; final walk C16:
+    // "WORTH YOUR WEEK" was gold-filled); the sparkle keeps its gold.
     Box(
         Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(PL.gold)
+            .background(Color.White)
             .clipToBounds(),
     ) {
         Row(
             Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Lucide.Sparkles, contentDescription = null, tint = PL.navy, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Sparkles, contentDescription = null, tint = PL.gold, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
             Text(label, style = plInter(11, FontWeight.Bold, 1.26f), color = PL.navy)
         }
@@ -1102,9 +1101,11 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
             Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            // A plan is a content row: its title Fraunces (§8.1 rule 3; final
+            // walk C16: Inter bold).
             Text(
                 plan.title,
-                style = plInter(12, FontWeight.Bold),
+                style = plSerif(15, FontWeight.SemiBold),
                 color = PL.navy,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -1156,7 +1157,7 @@ private fun InvitationCard(onClick: () -> Unit) {
             Icon(Lucide.Users, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text("Read with a friend", style = plInter(13, FontWeight.Bold), color = PL.navy)
+            Text("Read with a friend", style = plSerif(15, FontWeight.SemiBold), color = PL.navy)
             Text(
                 "Invite your cell to a plan and keep each other going.",
                 style = plInter(11), color = PL.ink2,

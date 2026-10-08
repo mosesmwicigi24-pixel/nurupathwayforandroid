@@ -368,7 +368,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
-                        Lucide.HandHeart,
+                        Lucide.Heart,
                         contentDescription = null,
                         tint = GrowPal.gold,
                         modifier = Modifier.size(18.dp),

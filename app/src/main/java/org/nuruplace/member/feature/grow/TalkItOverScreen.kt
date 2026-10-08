@@ -233,7 +233,8 @@ fun TalkItOverScreen(planId: String, dayNumber: Int, onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         val lines = prompt.split("\n").map { it.trim().removePrefix("—").trim() }.filter { it.isNotBlank() }
-                        Text(if (lines.size == 1) "TODAY'S QUESTION" else "TODAY'S QUESTIONS", style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.goldChipText)
+                        // The day's own words, not "TODAY'S" (final walk M6, as iOS).
+                        Text(PlanDayWords.questionKicker(lines.size), style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.goldChipText)
                         lines.forEach { Text(it, style = gSerif(16, FontWeight.Normal).copy(lineHeight = 22.sp), color = GrowPal.navy) }
                     }
                 }
