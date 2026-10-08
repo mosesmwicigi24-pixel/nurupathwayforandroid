@@ -80,6 +80,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.data.net.Achievements
 import org.nuruplace.member.ui.components.rememberHeld
+import org.nuruplace.member.ui.components.loadingLabel
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Badge
 import org.nuruplace.member.data.net.Certificate
@@ -112,6 +113,11 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     var achievements by rememberHeld("Profile.achievements") { mutableStateOf<Achievements?>(null) }
     var badgeGallery by rememberHeld("Profile.badgeGallery") { mutableStateOf<List<Badge>>(emptyList()) }
     var certs by rememberHeld("Profile.certs") { mutableStateOf<List<Certificate>>(emptyList()) }
+    // Whether each read has answered once: until then the section holds its
+    // loading shape — never "Your certificates will appear here…" or an empty
+    // badge while the read is in flight (final walk M4's class; iOS).
+    var badgesAnswered by rememberHeld("Profile.badgesAnswered") { mutableStateOf(false) }
+    var certsAnswered by rememberHeld("Profile.certsAnswered") { mutableStateOf(false) }
     // Departments I actively serve in (GET /me/departments, spec §4) — the
     // "Serving in" card below; requests-in-waiting live on the Departments
     // segment, not here.
@@ -129,6 +135,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
         scores = runCatching { Net.client.api.scores() }.getOrElse { scores }
         achievements = runCatching { Net.client.api.achievements() }.getOrElse { achievements }
         certs = runCatching { Net.client.api.certificates().data }.getOrElse { certs }
+        certsAnswered = true
         serving = runCatching { Net.client.api.myDepartments().data.filter { it.isActive } }.getOrElse { serving }
         // GET /badges catalogue merged with earned awards (iOS ProfileView.loadExtras):
         // earned first (with awarded_at), then locked — so the rail shows what's
@@ -140,6 +147,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                 .map { c -> earnedByCode[c.code] ?: c }
                 .sortedByDescending { it.awardedAt != null }
         }
+        badgesAnswered = true
     }
 
     val context = LocalContext.current
@@ -295,12 +303,13 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                 DisciplesEntryCard { onOpen("disciples") }
             }
             if (serving.isNotEmpty()) ServingInCard(serving) { onOpen("department/$it") }
-            AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
+            AchievementsSection(achievements, badgeGallery, loading = !badgesAnswered) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             AiConsentCard()
             MilestonesCard(me, journey)
             CertificatesCard(
                 certs = certs,
+                loading = !certsAnswered,
                 copiedCode = copiedCode,
                 onCopy = { code ->
                     clipboard.setText(AnnotatedString(code))
@@ -840,7 +849,7 @@ private fun DisciplesEntryCard(onOpen: () -> Unit) {
 
 // ── Achievements ────────────────────────────────────────────────────────────
 @Composable
-private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, onBadge: (Badge) -> Unit) {
+private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, loading: Boolean, onBadge: (Badge) -> Unit) {
     SectionCard {
         SectionTitle(Lucide.Sparkles, "ACHIEVEMENTS") {
             // A text action is gold (§8.1 rule 4).
@@ -849,7 +858,12 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
         // Catalogue merge (GET /badges): earned first, locked after — the rail
         // shows what's ahead. Falls back to earned-only while the catalogue loads.
         val badges = gallery.ifEmpty { achievements?.badges.orEmpty() }
-        if (badges.isEmpty()) {
+        if (badges.isEmpty() && loading) {
+            org.nuruplace.member.ui.components.SkeletonBlock(
+                height = 92.dp, corner = 16.dp,
+                modifier = Modifier.padding(top = 12.dp).loadingLabel(org.nuruplace.member.ui.components.SkeletonWords.BADGES),
+            )
+        } else if (badges.isEmpty()) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.Center,
@@ -1131,12 +1145,20 @@ private fun MilestonesCard(me: MeResponse?, journey: org.nuruplace.member.featur
 @Composable
 private fun CertificatesCard(
     certs: List<Certificate>,
+    loading: Boolean,
     copiedCode: String?,
     onCopy: (String) -> Unit,
     onDownload: (Certificate) -> Unit,
 ) {
     SectionCard {
         SectionTitle(Lucide.BadgeCheck, "CERTIFICATES")
+        if (certs.isEmpty() && loading) {
+            org.nuruplace.member.ui.components.SkeletonBlock(
+                height = 120.dp, corner = 16.dp,
+                modifier = Modifier.padding(top = 12.dp).loadingLabel(org.nuruplace.member.ui.components.SkeletonWords.CERTIFICATES),
+            )
+            return@SectionCard
+        }
         if (certs.isEmpty()) {
             Text(
                 "Your certificates will appear here as you complete each Pathway level.",
@@ -1325,7 +1347,8 @@ private fun AiConsentCard() {
             androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f)) {
                 androidx.compose.material3.Text(
                     "Personal companion & Sunday Letter",
-                    style = org.nuruplace.member.ui.theme.NuruType.rowTitle,
+                    // A card's title (§8.1 rule 3; iOS: Fraunces 18 semibold).
+                    style = org.nuruplace.member.ui.theme.NuruType.cardTitle,
                     color = org.nuruplace.member.ui.theme.Nuru.navy,
                 )
                 androidx.compose.material3.Text(

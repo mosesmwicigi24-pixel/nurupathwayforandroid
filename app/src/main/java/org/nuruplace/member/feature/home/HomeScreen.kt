@@ -128,6 +128,7 @@ import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.components.rememberHeld
+import org.nuruplace.member.ui.components.loadingLabel
 import org.nuruplace.member.feature.live.GoLiveButton
 import org.nuruplace.member.feature.live.GoLiveSetupSheet
 import org.nuruplace.member.feature.live.canGoLive
@@ -878,7 +879,10 @@ private fun HomeHeader(
         // streak is the rhythm card's (§9.2 #3). Until the level is known, a
         // shimmer in its place (B11).
         if (level == null) {
-            if (!levelUnknown) org.nuruplace.member.ui.components.SkeletonBlock(height = 26.dp, width = 140.dp, corner = 999.dp)
+            if (!levelUnknown) org.nuruplace.member.ui.components.SkeletonBlock(
+                height = 26.dp, width = 140.dp, corner = 999.dp,
+                modifier = Modifier.loadingLabel(org.nuruplace.member.ui.components.SkeletonWords.LEVEL),
+            )
         } else Row(
             Modifier.clip(RoundedCornerShape(999.dp))
                 .background(Nuru.white)
@@ -1160,6 +1164,12 @@ private fun YourWeekCard(rows: List<WeekRow>, onOpen: (WeekDest) -> Unit) {
  *  shimmering rows, in the card's own shape. */
 @Composable
 private fun YourWeekSkeleton() {
+    // One label for the whole shape (iOS): "Your week, loading".
+    Box(Modifier.loadingLabel(org.nuruplace.member.ui.components.SkeletonWords.WEEK)) { YourWeekSkeletonShape() }
+}
+
+@Composable
+private fun YourWeekSkeletonShape() {
     HomeCard(pad = 0.dp) {
         Box(Modifier.padding(start = Spacing.base, end = Spacing.base, top = Spacing.base, bottom = Spacing.xs)) {
             CardKicker("Your week")

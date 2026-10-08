@@ -993,13 +993,18 @@ private fun HubRow(part: HubPart, done: Boolean, isNext: Boolean, onClick: () ->
             Icon(part.icon, null, tint = if (warm) PL.goldDeep else PL.blurb, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(part.label, style = plInter(14, SemiBold), color = PL.navy)
-            Text(hubSub(part, done), style = plInter(11), color = if (done) PL.goldDeep else PL.blurb, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // A day's part is a content row (§8.1 rule 3: Fraunces 15
+            // semibold — it was Inter), and its line wraps rather than cut
+            // (rule 9). iOS's plan day, the same.
+            Text(part.label, style = plSerif(15, SemiBold), color = PL.navy)
+            Text(hubSub(part, done), style = plInter(11), color = if (done) PL.goldDeep else PL.blurb, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         when {
             done -> Icon(Lucide.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
-            isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text("Next", style = plInter(11, Bold), color = PL.navy)
+            // A status chip, not a second primary beside the gold button
+            // (§8.1 rules 4 and 6; final walk C16: gold-filled). iOS, the same.
+            isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Text("Next", style = plInter(11, Bold), color = org.nuruplace.member.ui.theme.Nuru.goldChipText)
             }
             else -> Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(22.dp))
         }
