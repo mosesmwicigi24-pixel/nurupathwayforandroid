@@ -165,7 +165,7 @@ fun EventsScreen(
                     // reads "0 you're going" (EXPERIENCE.md §7.4 #9).
                     if (!quiet && (thisWeek > 0 || going > 0)) {
                         Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (thisWeek > 0) HeaderPill("$thisWeek this week", Lucide.CalendarDays)
+                            if (thisWeek > 0) HeaderPill(eventsSoonPill(thisWeek), Lucide.CalendarDays)
                             if (going > 0) HeaderPill("$going you're going", Lucide.Check)
                         }
                     }
@@ -194,8 +194,9 @@ fun EventsScreen(
                         // A date picked on the strip brings the Today tab
                         // forward — the strip filters that tab; on Upcoming
                         // a date tap would change nothing (§7.4 #6, as iOS).
+                        // A text action is gold (§8.1 rule 4; final walk C16: navy).
                         Text(
-                            "TODAY", style = evInter(11, FontWeight.Bold, 1f), color = EV.navy,
+                            "TODAY", style = evInter(11, FontWeight.Bold, 1f), color = EV.gold,
                             modifier = Modifier.clickable { selectedDay = today; segment = EVENTS_TAB_TODAY },
                         )
                     }
@@ -284,10 +285,12 @@ fun EventsScreen(
                         }
                     }
 
-                    // CHURCH ATTENDANCE — the tab's one navy feature card: on a
-                    // Sunday morning it is the reason to open the app.
+                    // CHURCH ATTENDANCE — a paper card, as the CALENDAR card above
+                    // (owner, 2026-10-08, option A): navy is the church's voice
+                    // and each tab's next step only.
                     Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.navyCard)
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
+                            .border(1.dp, EV.border, RoundedCornerShape(22.dp))
                             .clickable { onOpenAttendance() },
                     ) {
                         Row(
@@ -296,21 +299,19 @@ fun EventsScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Box(
-                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.goldTile),
+                                Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint)
+                                    .border(1.dp, EV.gold.copy(alpha = 0.25f), RoundedCornerShape(16.dp)),
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Lucide.ScanQrCode, null, tint = EV.navy, modifier = Modifier.size(22.dp)) }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("CHURCH ATTENDANCE", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.goldLight)
-                                Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = Color.White)
+                                Text("CHURCH ATTENDANCE", style = evInter(11, FontWeight.Bold, 1.4f), color = EV.overline)
+                                Text("Check in to a service", style = evSerif(15, FontWeight.SemiBold), color = EV.navy)
                                 Text(
                                     "Scan the QR at church · see your streak",
-                                    style = evInter(11), color = Color.White.copy(alpha = 0.55f),
+                                    style = evInter(11), color = EV.secondary,
                                 )
                             }
-                            Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Lucide.ChevronRight, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            Icon(Lucide.ChevronRight, null, tint = EV.secondary, modifier = Modifier.size(18.dp))
                         }
                     }
 
@@ -535,7 +536,7 @@ private fun QuietWeekCard() {
             contentAlignment = Alignment.Center,
         ) { Icon(Lucide.CalendarDays, null, tint = EV.gold, modifier = Modifier.size(18.dp)) }
         Text(
-            "The calendar is quiet this week — gatherings the church posts appear here.",
+            EVENTS_QUIET_LINE,
             style = evInter(12), color = EV.secondary, modifier = Modifier.weight(1f),
         )
     }

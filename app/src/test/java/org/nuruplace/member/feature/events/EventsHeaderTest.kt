@@ -35,9 +35,9 @@ class EventsHeaderTest {
     }
 
     @Test
-    fun `nothing from today on — a quiet week, in the header's words`() {
+    fun `nothing from today on — quiet, in the header's words, never called a week (D3)`() {
         val past = listOf(occ("sat", "Choir practice", "2026-10-03T12:00:00Z"))
-        assertEquals("Nothing planned this week", eventsHeaderLine(past, today))
+        assertEquals("Nothing planned yet", eventsHeaderLine(past, today))
         assertTrue(eventsQuiet(past, today))
         assertTrue(eventsQuiet(emptyList(), today))
         // A start that cannot be read is not something to filter.
@@ -112,6 +112,12 @@ class ThisWeekTest {
         org.junit.Assert.assertEquals(mon5, days.first())
         org.junit.Assert.assertEquals(LocalDate.of(2026, 10, 12), days.last())
         org.junit.Assert.assertTrue(LocalDate.of(2026, 10, 11) in days) // the Sunday the walk counted
+    }
+
+    @org.junit.Test fun `the strip rolls from today and its count never says week (owner, 2026-10-08)`() {
+        org.junit.Assert.assertEquals("2 in the next 7 days", eventsSoonPill(2))
+        org.junit.Assert.assertFalse(eventsSoonPill(1).contains("week"))
+        org.junit.Assert.assertFalse(EVENTS_QUIET_LINE.contains("week"))
     }
 
     @org.junit.Test fun `the count's days are the strip's days`() {

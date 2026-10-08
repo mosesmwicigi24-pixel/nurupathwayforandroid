@@ -57,7 +57,8 @@ import org.nuruplace.member.ui.icons.Lucide
 fun AnnouncementsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     Column(Modifier.fillMaxSize().background(EV.paper)) {
         EvSubHeader(
-            eyebrow = "ANNOUNCEMENTS",
+            // The kicker names where it came from, the title what it is (iOS).
+            eyebrow = "Home",
             title = "Announcements",
             subtitle = "From your church",
             onBack = onBack,
@@ -136,7 +137,7 @@ fun AnnouncementDetailScreen(announcementId: String, onBack: () -> Unit) {
             Modifier.fillMaxSize().background(EV.paper).verticalScroll(rememberScrollState()),
         ) {
             EvSubHeader(
-                eyebrow = "ANNOUNCEMENT",
+                eyebrow = "Announcement",
                 title = a.title.ifBlank { "Announcement" },
                 subtitle = whenString,
                 onBack = onBack,

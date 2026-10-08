@@ -169,33 +169,13 @@ fun EvCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxScop
     }
 }
 
-/** Sub-page header (Calendar / AnnouncementDetail): back · eyebrow pill · serif title · subtitle · gold accent bar. */
+/** Sub-page header (Calendar / Announcements / an announcement): the pushed page's header. */
 @Composable
-fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> Unit) {
-    EvCreamHeaderBox {
-        Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(EV.white)
-                        .border(1.dp, EV.border, RoundedCornerShape(16.dp)).clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                // One back control on every pushed page: the arrow (Cycle 4 walk 63).
-                ) { Icon(Lucide.ArrowLeft, "Back", tint = EV.navy, modifier = Modifier.size(22.dp)) }
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(EV.white)
-                        .border(1.dp, EV.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
-                ) { Text(eyebrow.uppercase(), style = evInter(11, FontWeight.Bold, 1.4f), color = EV.eyebrowGold) }
-            }
-            Text(title, style = evSerif(26, FontWeight.SemiBold), color = EV.navy, modifier = Modifier.padding(top = 16.dp))
-            if (subtitle.isNotBlank()) Text(subtitle, style = evInter(12), color = EV.secondary, modifier = Modifier.padding(top = 6.dp))
-            Box(
-                Modifier.padding(top = 12.dp).width(48.dp).height(3.dp).clip(RoundedCornerShape(2.dp))
-                    .background(Brush.horizontalGradient(listOf(EV.gold, EV.gold.copy(alpha = 0f)))),
-            )
-        }
-    }
-}
+fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> Unit) =
+    // The pushed page's one header — back · kicker · title · one line (§8.1
+    // rule 2; final walk C16: "ANNOUNCEMENT" sat as a white pill at the far
+    // right, over a gold underline) — iOS EvSubHeader → NuruPushedHeader.
+    org.nuruplace.member.ui.components.PushedHeader(kicker = eyebrow, title = title, line = subtitle, onBack = onBack)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared event card — used by the Events tab ("Today's gatherings") and the

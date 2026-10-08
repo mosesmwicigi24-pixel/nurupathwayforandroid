@@ -240,24 +240,26 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
             if (route != null) onNavigate(route) else popup = n
         }
         Column(Modifier.fillMaxSize().background(Nuru.paper)) {
-            // White app bar with count + Mark-all pill.
-            Row(
-                Modifier.fillMaxWidth().background(Nuru.white).padding(horizontal = Spacing.sm).padding(top = Spacing.lg, bottom = Spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
-                Column(Modifier.weight(1f)) {
-                    Text("Notifications", style = NuruType.cardTitle, color = Nuru.ink)
+            // The pushed page's one header (§8.1 rule 2; final walk C16: a
+            // white band with no kicker) — INBOX · Notifications · the count,
+            // as iOS; "Mark all read" a gold text action (rule 4), only while
+            // something is unread.
+            org.nuruplace.member.ui.components.PushedHeader(
+                kicker = "Inbox",
+                title = "Notifications",
+                onBack = onBack,
+                lineContent = {
                     // Animates with the OPTIMISTIC count — mark-all lands here immediately.
                     AnimatedContent(targetState = unreadCount, label = "notifUnreadCount") { u ->
                         // Words, no emoji (§8.1 rule 7; final walk C16) — as iOS.
                         Text(if (u > 0) "$u unread" else "All caught up", style = NuruType.caption, color = Nuru.ink600)
                     }
-                }
-                AnimatedVisibility(visible = unreadCount > 0, enter = fadeIn(), exit = fadeOut()) {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
-                            .clickable {
+                },
+                trailing = {
+                    AnimatedVisibility(visible = unreadCount > 0, enter = fadeIn(), exit = fadeOut()) {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(Radii.pill))
+                                .clickable {
                                 // Flip the whole page NOW, then tell the server and quietly confirm.
                                 locallyRead = locallyRead + res.data.map { it.notificationId }
                                 markedAll = true
@@ -270,15 +272,22 @@ fun NotificationsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
                                     reload()
                                 }
                             }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    ) { Text("✓ Mark all read", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.SemiBold) }
-                }
-            }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(Lucide.CheckCheck, contentDescription = null, tint = Nuru.goldLo, modifier = Modifier.size(14.dp))
+                            Text("Mark all read", style = NuruType.micro, color = Nuru.goldLo, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                },
+            )
 
             if (res.data.isEmpty()) {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(64.dp).clip(RoundedCornerShape(Radii.card)).background(Nuru.white), contentAlignment = Alignment.Center) {
-                        Text("✦", style = NuruType.display, color = Nuru.gold)
+                        // A Lucide glyph, not a typed mark (§8.1 rule 7).
+                        Icon(Lucide.Sparkle, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(22.dp))
                     }
                     Spacer(Modifier.height(Spacing.md))
                     Text("You're all caught up", style = NuruType.cardTitle, color = Nuru.ink)

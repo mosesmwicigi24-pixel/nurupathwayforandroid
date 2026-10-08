@@ -21,7 +21,7 @@ class EventsWordsTest {
         assertEquals("OCT", evOtherMonth(LocalDate.of(2027, 10, 11), today))
     }
 
-    @Test fun `the member's own RSVP is theirs — "You're going", never "1 going" (C5, Android #12)`() {
+    @Test fun `the member's own RSVP is theirs — You're going, never 1 going (C5, Android #12)`() {
         assertEquals("You're going", evGoingLine(going = 1, mine = true))
         // A count the server hasn't caught up with yet still says it.
         assertEquals("You're going", evGoingLine(going = 0, mine = true))

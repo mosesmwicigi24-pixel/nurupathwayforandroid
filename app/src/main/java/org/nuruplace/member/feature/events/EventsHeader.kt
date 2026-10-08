@@ -31,11 +31,20 @@ internal fun eventsQuiet(events: List<CalendarOccurrence>, today: LocalDate): Bo
     fromToday(events, today).isEmpty()
 
 /** The header's line of what matters now (§6.2): "Next: Sunday Service ·
- *  Sun 5 Oct", else "Nothing planned this week". */
+ *  Sun 5 Oct", else "Nothing planned yet" — Events rolls from today and
+ *  never calls itself a week (§9.1 rule 8; owner, 2026-10-08). */
 internal fun eventsHeaderLine(events: List<CalendarOccurrence>, today: LocalDate): String =
     fromToday(events, today).firstOrNull()
         ?.let { (o, start) -> "Next: ${o.title} · ${start.format(NEXT_DAY)}" }
-        ?: "Nothing planned this week"
+        ?: "Nothing planned yet"
+
+/** The header's count of the strip's days — "2 in the next 7 days": today
+ *  and the seven days after, never "this week" (the strip rolls from today;
+ *  §9.1 rule 8, owner 2026-10-08). */
+internal fun eventsSoonPill(count: Int): String = "$count in the next 7 days"
+
+/** The quiet card's line: nothing in range, said without a week. */
+internal const val EVENTS_QUIET_LINE = "The calendar is quiet for now — gatherings the church posts appear here."
 
 /** "This week" (§6, both apps): today through the seventh day after — the
  *  week strip's days and the header's "N this week" count the same days. The
