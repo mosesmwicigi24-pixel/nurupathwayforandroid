@@ -50,6 +50,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import org.nuruplace.member.ui.theme.Radii
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -2119,35 +2122,39 @@ private fun EncouragementCard(prayerCount: Int) {
  *  gift here (giveRailsLine); it used to promise "M-Pesa, card and more". */
 @Composable
 private fun GiveCard(railsLine: String, onGive: () -> Unit) {
-    // A paper card (owner, 2026-10-08, option A): navy is the church's voice
-    // and each tab's next step only — this banner is neither. Gold accents,
-    // navy words, and "Give now" a secondary (§8.1 rule 4: the week's band
-    // holds the one gold primary; no chevron inside a button).
-    HomeCard(pad = Spacing.screen) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) { Icon(Lucide.HandHeart, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
-                Spacer(Modifier.height(Spacing.md))
-                CardKicker("Support God's work")
-                Spacer(Modifier.height(Spacing.xs))
-                Text("Sow into something eternal", style = NuruType.featureTitle, color = Nuru.navy, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(Spacing.sm))
-                Text(
-                    "Every gift carries the gospel further — raising disciples, sustaining the mission, and lighting the way for the next person to find Christ. Give cheerfully, as the Lord leads.",
-                    style = NuruType.caption, color = Nuru.ink600, textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(Spacing.base))
-                Box(
-                    Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.white)
-                        .border(1.dp, Nuru.border, RoundedCornerShape(16.dp)).clickable { onGive() }.padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Give now", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
-                }
-                Spacer(Modifier.height(Spacing.sm))
-                Text(railsLine, style = NuruType.micro, color = Nuru.ink400)
-            }
+    // A gentle prompt on gold tint (owner, 2026-10-08: iOS's version, §8.1
+    // rule 5): priority paper with a gold hairline — navy is the church's
+    // voice and each tab's next step only. Its way on is a gold text action,
+    // "Give now ›" (rule 4); the whole card opens Give. iOS HomeGiveCard.
+    val shape = RoundedCornerShape(Radii.card)
+    Column(
+        Modifier.fillMaxWidth().pressScale().clip(shape).background(Nuru.priorityBg)
+            .border(1.dp, Nuru.gold.copy(alpha = 0.25f), shape)
+            .clickable(onClickLabel = "Opens Give") { onGive() }
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(48.dp).clip(CircleShape).background(Nuru.goldChipBg).border(1.dp, Nuru.gold.copy(alpha = 0.3f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Lucide.HandHeart, null, tint = Nuru.goldChipText, modifier = Modifier.size(22.dp)) }
+        Spacer(Modifier.height(12.dp))
+        CardKicker("Support God's work")
+        Spacer(Modifier.height(4.dp))
+        Text("Sow into something eternal", style = NuruType.cardTitle, color = Nuru.navy, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Every gift carries the gospel further — raising disciples, sustaining the mission, and lighting the way for the next person to find Christ. Give cheerfully, as the Lord leads.",
+            style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 300.dp),
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Give now", style = NuruType.cardCta, color = Nuru.gold)
+            Icon(Lucide.ChevronRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
         }
+        Spacer(Modifier.height(6.dp))
+        Text(railsLine, style = NuruType.micro, color = Nuru.ink400)
     }
 }
 

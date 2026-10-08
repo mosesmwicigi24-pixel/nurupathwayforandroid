@@ -68,30 +68,40 @@ fun PrayerRoomScreen(
     Column(Modifier.fillMaxSize().background(Nuru.paper)) {
         GrowCreamHeader {
             Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.lg)) {
+                // Rule 2's header (§8.1), as iOS: the kicker names where you
+                // are — "PRAY" — and the title says it once; the bell at the
+                // right. Pushed, it is the standard shape — back, then kicker,
+                // then title (it sat the kicker beside the back button).
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!embedded) {
                         Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(Nuru.white)
-                                .border(1.dp, Nuru.border, CircleShape)
-                                .clickable { onBack() },
+                            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.white)
+                                .border(1.dp, Nuru.border, RoundedCornerShape(16.dp))
+                                .clickable(onClickLabel = "Back") { onBack() },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(Lucide.ArrowLeft, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                         }
-                        Spacer(Modifier.width(Spacing.md))
+                        Spacer(Modifier.weight(1f))
+                    } else {
+                        Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
                     }
-                    // Rule 2's header (§8.1), as iOS: the kicker names where you
-                    // are — "PRAY" — and the title says it once (it read "MY
-                    // PRAYER ROOM" over "My Prayer Room"); the bell at the right.
-                    Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
                     onOpenNotifications?.let {
                         org.nuruplace.member.ui.components.InboxBell(onClick = it)
                     }
                 }
-                Text(
-                    "My Prayer Room", style = NuruType.title, color = Nuru.navy,
-                    modifier = Modifier.padding(top = if (onOpenNotifications != null) 0.dp else Spacing.sm, bottom = Spacing.md),
-                )
+                if (!embedded) {
+                    Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.padding(top = 14.dp))
+                    Text(
+                        "My Prayer Room", style = org.nuruplace.member.ui.theme.nuruSerif(26, androidx.compose.ui.text.font.FontWeight.SemiBold), color = Nuru.navy,
+                        modifier = Modifier.padding(top = 4.dp, bottom = Spacing.md),
+                    )
+                } else {
+                    Text(
+                        "My Prayer Room", style = NuruType.title, color = Nuru.navy,
+                        modifier = Modifier.padding(top = if (onOpenNotifications != null) 0.dp else Spacing.sm, bottom = Spacing.md),
+                    )
+                }
                 SegmentedControl(tab) { tab = it }
             }
         }

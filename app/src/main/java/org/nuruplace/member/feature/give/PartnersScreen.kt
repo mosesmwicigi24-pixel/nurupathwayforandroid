@@ -1439,7 +1439,7 @@ private fun PaceOfferCard(starting: Boolean, enabled: Boolean, online: Boolean, 
         Row(
             Modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (enabled || starting) 1f else 0.5f)
                 .clip(RoundedCornerShape(12.dp)).background(GIVE.white)
-                .border(1.2.dp, GIVE.navy, RoundedCornerShape(12.dp))
+                .border(1.dp, GIVE.border, RoundedCornerShape(12.dp)) // a hairline secondary (§8.1 rule 4)
                 .clickable(enabled = enabled) { onStart() }
                 .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,

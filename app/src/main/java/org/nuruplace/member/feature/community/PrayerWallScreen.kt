@@ -520,7 +520,9 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
             Box(
                 Modifier.fillMaxWidth().height(52.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (canPost) GrowPal.navyDeep else GrowPal.navyDeep.copy(alpha = 0.5f))
+                    // The sheet's one primary: gold fill, navy words, radius 14
+                    // (§8.1 rule 4; it was navy-filled — owner, 2026-10-08).
+                    .background(if (canPost) GrowPal.gold else GrowPal.gold.copy(alpha = 0.45f))
                     .clickable(enabled = canPost) {
                         val t = title
                         val b = body
@@ -569,7 +571,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (posting) "Posting…" else "Post to wall", style = gInter(16, FontWeight.Medium), color = Color.White)
+                Text(if (posting) "Posting…" else "Post to wall", style = gInter(16, FontWeight.Bold), color = GrowPal.navy)
             }
         }
     }

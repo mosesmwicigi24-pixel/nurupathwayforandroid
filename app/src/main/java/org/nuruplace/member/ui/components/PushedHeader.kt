@@ -54,7 +54,7 @@ fun PushedHeader(
                 Spacer(Modifier.weight(1f))
                 trailing?.invoke()
             }
-            Text(kicker.uppercase(), style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.padding(top = 14.dp))
+            if (kicker.isNotBlank()) Text(kicker.uppercase(), style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.padding(top = 14.dp))
             Text(title, style = nuruSerif(26, FontWeight.SemiBold), color = Nuru.navy, modifier = Modifier.padding(top = 4.dp))
             when {
                 lineContent != null -> Box(Modifier.padding(top = 6.dp)) { lineContent() }

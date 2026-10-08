@@ -1,31 +1,21 @@
-// Standard screen header — warm cream gradient card (gold glow, rounded bottom
-// corners, hairline) matching the Home header treatment, with an optional back
-// button + kicker. Reused across the Grow / Community / Give feature screens.
+// A pushed page's header — now the one standard shape (EXPERIENCE.md §8.1 rule
+// 2: back · kicker · title), the same as PushedHeader and iOS's
+// NuruPushedHeader. It was a compact form with the kicker beside the back
+// button; every caller moved with it in one change (final walk C16, owner's
+// parity round 2026-10-08).
 package org.nuruplace.member.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
-import org.nuruplace.member.ui.theme.Spacing
-import org.nuruplace.member.ui.icons.Lucide
+import org.nuruplace.member.ui.theme.nuruSerif
 
 @Composable
 fun ScreenHeader(
@@ -33,35 +23,15 @@ fun ScreenHeader(
     kicker: String? = null,
     onBack: (() -> Unit)? = null,
 ) {
+    if (onBack != null) {
+        PushedHeader(kicker = kicker.orEmpty(), title = title, onBack = onBack)
+        return
+    }
+    // No way back (a root page): the same band, kicker and title.
     GrowCreamHeader {
-        Column(
-            Modifier.fillMaxWidth()
-                .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(Nuru.white)
-                            .border(1.dp, Nuru.border, CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Lucide.ArrowLeft, "Back",
-                            tint = Nuru.navy, modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(Spacing.md))
-                }
-                if (kicker != null) Text(kicker.uppercase(), style = NuruType.kicker, color = Nuru.eyebrow)
-            }
-            Text(
-                title, style = NuruType.title, color = Nuru.navy,
-                modifier = Modifier.padding(
-                    start = if (onBack != null) Spacing.xs else 0.dp,
-                    top = if (onBack != null || kicker != null) Spacing.sm else 0.dp,
-                ),
-            )
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 22.dp)) {
+            if (!kicker.isNullOrBlank()) Text(kicker.uppercase(), style = NuruType.kicker, color = Nuru.eyebrow)
+            Text(title, style = nuruSerif(26, FontWeight.SemiBold), color = Nuru.navy, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }

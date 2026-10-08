@@ -568,7 +568,7 @@ private fun OutlineSheetButton(label: String, modifier: Modifier = Modifier, ena
     Row(
         modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (enabled) 1f else 0.5f).clip(RoundedCornerShape(16.dp))
             .background(GIVE.white)
-            .border(1.2.dp, GIVE.navy.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+            .border(1.dp, GIVE.border, RoundedCornerShape(16.dp)) // a hairline secondary (§8.1 rule 4)
             .clickable(enabled = enabled) { Haptics.tap(view); onClick() }
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

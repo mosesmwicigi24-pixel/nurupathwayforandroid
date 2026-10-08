@@ -73,42 +73,11 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
     var consentPromptFor by remember { mutableStateOf<ChatPerson?>(null) }
 
     Column(Modifier.fillMaxSize().background(CHAT.paper).imePadding()) {
-        // ── Cream header ──
-        ChatCreamHeaderBox {
-            Column(
-                Modifier
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 12.dp, bottom = 24.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(CHAT.white)
-                            .border(1.dp, CHAT.border, CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Lucide.ArrowLeft,
-                            contentDescription = "Back",
-                            tint = CHAT.navy,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("NEW MESSAGE", style = cInter(11, FontWeight.Bold, 1.98f), color = CHAT.eyebrow)
-                        Text(
-                            "Start a conversation",
-                            style = cSerif(26, FontWeight.SemiBold, -0.48f),
-                            color = CHAT.navy,
-                        )
-                    }
-                }
-            }
-        }
+        // ── The pushed page's standard header (§8.1 rule 2: back · kicker ·
+        // title) — it sat the kicker and title beside the back button.
+        org.nuruplace.member.ui.components.PushedHeader(
+            kicker = "New message", title = "Start a conversation", onBack = onBack,
+        )
 
         // ── Search field ──
         Row(

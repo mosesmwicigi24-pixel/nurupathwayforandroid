@@ -750,11 +750,13 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
         if (isNext) {
             // The day the member is on says what is left once it's begun
             // ("1 part left"), not "Start" (EXPERIENCE.md §7.4 #2).
+            // Rule 4's compact in-row action — a navy pill — not a second
+            // gold primary beside "Continue · Day N" (owner, 2026-10-08).
             Text(
                 nextDayPill(day),
                 style = plInter(11, FontWeight.Bold),
-                color = PL.navy,
-                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
+                color = Color.White,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.navy).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         } else if (syncing) {
             Icon(Lucide.Clock4, null, tint = PL.goldDeep, modifier = Modifier.size(14.dp))
