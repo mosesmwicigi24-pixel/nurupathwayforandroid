@@ -65,9 +65,12 @@ fun AnnouncementsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         )
         AsyncContent(load = { Net.client.api.myAnnouncements().data }) { rows: List<MyAnnouncement>, _ ->
             if (rows.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No announcements yet.", style = evInter(14), color = EV.secondary)
-                }
+                // §4's state card, not a bare line (final walk C16; iOS). A
+                // failed read is AsyncContent's standard failure card.
+                org.nuruplace.member.ui.components.EmptyState(
+                    title = ANNOUNCEMENTS_EMPTY,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                )
             } else {
                 LazyColumn(
                     Modifier.fillMaxWidth(),
@@ -207,3 +210,6 @@ internal fun announcementGallery(a: AnnouncementDetail): List<String> {
     val cover = a.primaryImageUrl?.takeIf { it.isNotBlank() } ?: return all
     return all.filter { it != cover }
 }
+
+/** The announcements list with none yet — §4's state title (iOS, word for word). */
+internal const val ANNOUNCEMENTS_EMPTY = "No announcements yet"

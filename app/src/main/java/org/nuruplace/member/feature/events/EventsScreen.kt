@@ -329,6 +329,12 @@ fun EventsScreen(
                         SegmentPill("My RSVPs", segRsvpCount, segment == 2, Modifier.weight(1f)) { segment = 2 }
                     }
 
+                    // Search and the filters stand over something to search
+                    // (final walk C16; iOS): over an empty day they offered
+                    // nothing. A search or filter in use stays, so the way back
+                    // is there.
+                    val segmentCount = when (segment) { 0 -> segTodayCount; 1 -> segUpcomingCount; else -> segRsvpCount }
+                    if (eventsShowsSearchAndFilters(segmentCount, query, category)) {
                     // Search field
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(EV.white)
@@ -372,6 +378,7 @@ fun EventsScreen(
                                     .padding(horizontal = 16.dp, vertical = 9.dp),
                             )
                         }
+                    }
                     }
 
                     // "Today's gatherings" header
@@ -420,8 +427,13 @@ fun EventsScreen(
                             Text(emptyLine, style = evInter(11), color = EV.tertiary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
                     } else {
-                        filtered.forEach { occ ->
-                            EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) }, myRsvp = rsvpMap[occ.occurrenceId])
+                        // A series' later dates fold under its first card (final
+                        // walk C16; iOS): one weekly service filled a screen per Sunday.
+                        evGrouped(filtered).forEach { g ->
+                            EvCardView(g.first, onClick = { onOpenEvent(g.first.occurrenceId, g.first.endAt) }, myRsvp = rsvpMap[g.first.occurrenceId])
+                            if (g.more.isNotEmpty()) {
+                                EvMoreDates(g.more, rsvpMap) { occ -> onOpenEvent(occ.occurrenceId, occ.endAt) }
+                            }
                         }
                     }
                 }
@@ -463,7 +475,7 @@ fun EventsScreen(
                             EVOverline("ANNOUNCEMENTS")
                             Spacer(Modifier.weight(1f))
                             Text(
-                                "See all", style = evInter(11, FontWeight.SemiBold), color = EV.navy,
+                                "See all", style = evInter(11, FontWeight.SemiBold), color = EV.gold, // a text action is gold (§8.1 rule 4)
                                 modifier = Modifier.clickable { onOpenAnnouncements() },
                             )
                         }
@@ -659,7 +671,7 @@ private fun SeriesRail(
             Spacer(Modifier.weight(1f))
             onSeeAll?.let { open ->
                 Text(
-                    "See all", style = evInter(11, FontWeight.SemiBold), color = EV.navy,
+                    "See all", style = evInter(11, FontWeight.SemiBold), color = EV.gold, // a text action is gold (§8.1 rule 4)
                     modifier = Modifier.clickable { open() },
                 )
             }
