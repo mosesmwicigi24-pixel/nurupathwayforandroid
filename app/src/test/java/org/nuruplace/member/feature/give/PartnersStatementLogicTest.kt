@@ -233,7 +233,9 @@ class PartnersStatementLogicTest {
         t as DisciplesTile.Toward
         // As iOS: "KSh 6,000 of 20,000" under the bar, what it is toward beneath.
         assertEquals("KSh 6,000 of 20,000", t.ofLine)
-        assertEquals("toward carrying one disciple through a level", TOWARD_CAPTION)
+        // Nothing carried yet: the tile says what it is toward (owner, 2026-10-08: D1; iOS).
+        assertEquals("TOWARD A DISCIPLE", TOWARD_KICKER)
+        assertEquals("through a level", TOWARD_CAPTION)
         assertEquals("KSh 6,000 of KSh 20,000 toward carrying one disciple through a level", t.spoken)
         assertEquals(0.3f, t.fraction, 0.0001f)
         assertFalse(t.ofLine.startsWith("0"))

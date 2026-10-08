@@ -21,6 +21,22 @@ class DueContextTest {
         assertNull(dueClaimLine(due(claim = 200_000, kind = "schedule")))
     }
 
+    @Test fun `while the office checks a claim the row's Pay is the quiet secondary — final walk M1`() {
+        org.junit.Assert.assertTrue(duePayQuiet(due(claim = 200_000)))
+        // Nothing waiting: Pay stays the row's navy ask.
+        org.junit.Assert.assertFalse(duePayQuiet(due(claim = 0)))
+        // Only where the claim line is said — a schedule row carries none.
+        org.junit.Assert.assertFalse(duePayQuiet(due(claim = 200_000, kind = "schedule")))
+        // A paused row's Resume is never quieted.
+        org.junit.Assert.assertFalse(duePayQuiet(due(claim = 200_000).copy(action = "resume")))
+    }
+
+    @Test fun `an empty year is a state title with no full stop — final walk C16`() {
+        assertEquals("No pledge payments in 2026", noPledgePaymentsTitle(2026))
+        assertEquals("No gifts this year", givingYearEmptyTitle("this year"))
+        assertEquals("No gifts in 2025", givingYearEmptyTitle("in 2025"))
+    }
+
     @Test fun `DUE only within the fortnight — further out it is coming up`() {
         val today = java.time.LocalDate.of(2026, 10, 5)
         fun on(day: String, overdue: Boolean? = false) = DueItem(kind = "pledge", id = "p", dueOn = day, overdue = overdue, amountMinor = 500_000)

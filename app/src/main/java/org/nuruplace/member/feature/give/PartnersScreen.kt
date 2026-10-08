@@ -569,10 +569,12 @@ internal fun Hairline() {
 }
 
 @Composable
-private fun NavyPill(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun NavyPill(label: String, enabled: Boolean = true, quiet: Boolean = false, onClick: () -> Unit) {
     Text(
-        label, style = giInter(12, FontWeight.SemiBold), color = Color.White,
-        modifier = Modifier.alpha(if (enabled) 1f else 0.45f).clip(Capsule).background(GIVE.navy)
+        label, style = giInter(12, FontWeight.SemiBold), color = if (quiet) GIVE.navy else Color.White,
+        modifier = Modifier.alpha(if (enabled) 1f else 0.45f).clip(Capsule)
+            .background(if (quiet) GIVE.white else GIVE.navy)
+            .then(if (quiet) Modifier.border(1.dp, GIVE.border, Capsule) else Modifier)
             .clickable(enabled = enabled) { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }
@@ -801,7 +803,10 @@ private fun DueSection(
                                 Haptics.tap(view); onOpenPledge(d.id)
                             }
                         } else {
-                            NavyPill("Pay") {
+                            // While the office checks money toward it, Pay is the
+                            // quiet secondary — never the row's navy ask (final walk
+                            // M1; iOS's DUE row, the same rule).
+                            NavyPill("Pay", quiet = duePayQuiet(d)) {
                                 Haptics.tap(view)
                                 onPayNow(
                                     GivePreset(
@@ -1352,21 +1357,25 @@ private fun PledgePage(
     }
 }
 
-/** The claim the office is checking, leading the pledge's page: a gold-tint
- *  band with the clock, "US$ 50.00 is being checked by the office", and what
- *  it means — nothing more to pay until they've matched it. */
+/** The claim the office is checking, leading the pledge's page: a gentle
+ *  prompt on gold tint (§8.1 rule 5) — the clock on its gold-tint tile (rule
+ *  7), "US$ 50.00 is being checked by the office", and what it means. iOS's
+ *  PledgeClaimLead, the same. */
 @Composable
 private fun PledgeClaimLead(line: String) {
+    val shape = RoundedCornerShape(16.dp)
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(GIVE.goldChipBg)
-            .border(1.dp, GIVE.border, RoundedCornerShape(16.dp)).padding(14.dp),
+        Modifier.fillMaxWidth().clip(shape).background(GIVE.priorityBg)
+            .border(1.dp, GIVE.gold.copy(alpha = 0.25f), shape).padding(14.dp),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(Lucide.Clock4, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp).size(18.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.goldChipBg), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Clock4, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(line, style = NuruType.rowTitle, color = GIVE.navy)
-            Text(PLEDGE_CLAIM_COUNTS, style = giInter(12), color = GIVE.sub)
+            Text(PLEDGE_CLAIM_COUNTS, style = giInter(12), color = GIVE.ink600)
         }
     }
 }
@@ -1482,12 +1491,13 @@ private fun PledgeActionsCard(
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // The page's one gold button — unless the pledge is collected
-            // automatically, when paying early is a choice and wears Pause's
-            // quiet style beside it. A paused pledge takes nothing.
+            // automatically, or the office is checking money toward it, when
+            // paying is a choice: the plain secondary, white with a hairline
+            // (iOS; §8.1 rule 4). A paused pledge takes nothing.
             Row(
                 Modifier.weight(1f).heightIn(min = 40.dp).alpha(if (paused) 0.5f else 1f)
                     .clip(shape)
-                    .then(if (pay.primary) Modifier.background(GIVE.gold) else Modifier.background(GIVE.surface).border(1.dp, GIVE.border, shape))
+                    .then(if (pay.primary) Modifier.background(GIVE.gold) else Modifier.background(GIVE.white).border(1.dp, GIVE.border, shape))
                     .clickable(enabled = !paused && !busy) { Haptics.tap(view); onPayNow() }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
@@ -1885,7 +1895,8 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                             Hairline()
                         }
                         if (rows.isEmpty() && pending.isEmpty()) {
-                            Text("No pledge payments in $shownYear.", style = giInter(13), color = GIVE.ink600)
+                            // The empty year in §4's state, its slim row (final walk C16; iOS).
+                            org.nuruplace.member.ui.components.StateStrip(noPledgePaymentsTitle(shownYear))
                         } else {
                             rows.forEachIndexed { i, pay ->
                                 if (i > 0) Hairline()

@@ -303,11 +303,11 @@ class PartnerStatementMathTest {
         // Before any money lands the server says "will carry" (owner,
         // 2026-10-08); the chip's spoken line adds no "carries" of its own.
         assertEquals(
-            "Your partnership will carry one disciple through a level, every year — KSh 1,700 a month.",
+            "will carry one disciple through a level, every year. KSh 1,700 a month.",
             tierSpoken(PartnerTier(name = "will carry one disciple through a level, every year", monthlyMinor = 170_000), "KES"),
         )
         assertEquals(
-            "Your partnership carries 3 disciples through a level, every year — KSh 5,000 a month.",
+            "carries 3 disciples through a level, every year. KSh 5,000 a month.",
             tierSpoken(PartnerTier(name = "carries 3 disciples through a level, every year", monthlyMinor = 500_000), "KES"),
         )
         assertEquals("0 percent", progressSpoken(0f))

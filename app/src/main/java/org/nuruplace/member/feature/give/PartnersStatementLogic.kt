@@ -327,12 +327,17 @@ internal sealed interface DisciplesTile {
 
         /** The tile, read aloud: "KSh 6,000 of KSh 20,000 toward carrying one
          *  disciple through a level". */
-        val spoken: String get() = "${ksh(towardMinor)} of ${ksh(perDiscipleMinor)} $TOWARD_CAPTION"
+        val spoken: String get() = "${ksh(towardMinor)} of ${ksh(perDiscipleMinor)} toward carrying one disciple through a level"
     }
 }
 
+/** Below the first disciple nothing is carried yet: the tile says what the
+ *  money is toward — never "carried" beside the server's "will carry" (owner,
+ *  2026-10-08: D1). iOS PartnerTierWords, word for word. */
+internal const val TOWARD_KICKER = "TOWARD A DISCIPLE"
+
 /** The progress tile's caption, under "KSh 6,000 of 20,000". */
-internal const val TOWARD_CAPTION = "toward carrying one disciple through a level"
+internal const val TOWARD_CAPTION = "through a level"
 
 /** The Kept tile (iOS HeroTiles.kept): kept = on time + late — "kept" has one
  *  meaning, a due date paid in full (owner, 2026-09-25) — of those that fell

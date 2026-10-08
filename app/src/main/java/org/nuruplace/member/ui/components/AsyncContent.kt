@@ -153,6 +153,35 @@ fun StateCard(
     }
 }
 
+/** The state card's slim row (iOS NuruStateView `compact`): for an empty part
+ *  of a screen whose other sections still stand — "No pledge payments in
+ *  2026" inside Partners' statement card. The glyph on its tile, the title,
+ *  an optional line. */
+@Composable
+fun StateStrip(
+    title: String,
+    modifier: Modifier = Modifier,
+    line: String? = null,
+    glyph: ImageVector = Lucide.Sparkles,
+    glyphTint: Color = Nuru.gold,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth().clip(shape).background(Nuru.white).border(1.dp, Nuru.border, shape).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Nuru.surface),
+            contentAlignment = Alignment.Center,
+        ) { Icon(glyph, contentDescription = null, tint = glyphTint, modifier = Modifier.size(18.dp)) }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = org.nuruplace.member.ui.theme.nuruSans(13, androidx.compose.ui.text.font.FontWeight.SemiBold), color = Nuru.navy)
+            line?.takeIf { it.isNotBlank() }?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
+        }
+    }
+}
+
 /** An empty screen, in the shared card — the screen's own words, no action. */
 @Composable
 fun EmptyState(title: String, modifier: Modifier = Modifier, line: String? = null) =

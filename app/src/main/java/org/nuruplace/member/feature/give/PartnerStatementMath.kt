@@ -218,6 +218,10 @@ internal fun pledgeKeptThisYear(pl: Pledge, currentYearStatement: GivingStatemen
     return keptThisYear(pl, currentYearStatement?.payments.orEmpty(), today)
 }
 
+/** An empty year's PAYMENTS, as §4's state title — no full stop (final walk
+ *  C16; iOS PartnerStatementWords.noPayments). */
+internal fun noPledgePaymentsTitle(year: Int): String = "No pledge payments in $year"
+
 /** What TalkBack reads for the tier chip: the server's own sentence and what
  *  it gives a month. The tier's name is the server's words — "will carry one
  *  disciple through a level, every year" until the partner's money lands,
@@ -225,7 +229,7 @@ internal fun pledgeKeptThisYear(pl: Pledge, currentYearStatement: GivingStatemen
  *  its own: it read "… partner — … KSh 20,000 carries one disciple" beside
  *  KSh 0 paid. */
 internal fun tierSpoken(tier: PartnerTier, currency: String?): String =
-    "Your partnership ${tier.name.trim()} — ${money(tier.monthlyMinor, currency)} a month."
+    "${tier.name.trim()}. ${money(tier.monthlyMinor, currency)} a month."
 
 /** A pledge card's progress bar to TalkBack (iOS): "40 percent". */
 internal fun progressSpoken(fraction: Float): String = "${Math.round(fraction.coerceIn(0f, 1f) * 100)} percent"
@@ -452,6 +456,12 @@ internal fun pledgeCollectedChip(d: DueItem, collector: GivingSchedule?): String
 internal fun dueClaimLine(d: DueItem): String? =
     d.pendingClaimMinor.takeIf { d.kind == "pledge" && it > 0 }
         ?.let { "${money(it, d.currency)} is being checked by the office" }
+
+/** While the office checks money toward a DUE row, its Pay is the quiet
+ *  secondary — white, a hairline, navy words — never the row's navy ask: the
+ *  claim line above says what is happening (final walk M1; iOS's DUE row).
+ *  A paused row's Resume is never quieted. */
+internal fun duePayQuiet(d: DueItem): Boolean = d.action != "resume" && dueClaimLine(d) != null
 
 internal fun dueLeadLine(d: DueItem, view: DueRowView, whenText: String): String =
     "${money(view.leadMinor, d.currency)}${if (view.processingNote != null) " left" else ""} · $whenText"

@@ -12,7 +12,7 @@ package org.nuruplace.member.feature.give
 //   HERO       "PARTNERS STATEMENT · 2026", "Thank you, Moses." (plain
 //              "Thank you." without a name), "Partner since Sep 2026 ·
 //              Builder", and the tiles when the server sends `impact`:
-//              DISCIPLES CARRIED (never 0 — below the first it is the bar,
+//              DISCIPLES CARRIED (never 0 — below the first, TOWARD A DISCIPLE: the bar,
 //              "KSh 5,000 of 20,000" and what it is toward, full width, with
 //              KEPT and GIVEN side by side beneath; from one up, three
 //              across), KEPT "5 of 6" · "commitments · 1 late" (hidden before
@@ -126,6 +126,7 @@ import org.nuruplace.member.data.net.StatementPledge
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.theme.NuruType
 import retrofit2.HttpException
 import java.io.IOException
 import java.time.LocalDate
@@ -483,7 +484,7 @@ private fun ImpactTiles(t: HeroTiles, modifier: Modifier = Modifier) {
 /** Below the first disciple: the bar, "KSh 5,000 of 20,000" and what it is toward. */
 @Composable
 private fun TowardTile(d: DisciplesTile.Toward, modifier: Modifier) {
-    HeroTile("DISCIPLES CARRIED", d.spoken, modifier) {
+    HeroTile(TOWARD_KICKER, d.spoken, modifier) {
         Box(
             Modifier.padding(top = 6.dp).fillMaxWidth().height(5.dp)
                 .clip(Capsule).background(Color.White.copy(alpha = 0.15f)),
@@ -696,7 +697,10 @@ private fun PledgeRow(e: StatementPledge, today: LocalDate, onOpen: (() -> Unit)
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(e.title.ifBlank { "Pledge" }, style = giInter(15, FontWeight.SemiBold), color = GIVE.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // A pledge is a content row (§8.1 rule 3): Fraunces 15
+                // semibold, as on Partners — it was Inter here (final walk
+                // C16; iOS StatementPledgeRow, the same).
+                Text(e.title.ifBlank { "Pledge" }, style = NuruType.rowTitle, color = GIVE.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(pledgeAmountLine(e, today), style = giInter(12), color = GIVE.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             StateChip(state, chipBg, chipFg)
@@ -722,7 +726,8 @@ private fun PaymentsSection(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Eyebrow("PAYMENTS")
         if (months.isEmpty() && pending.isEmpty()) {
-            Box(Modifier.partnerCard()) { Text("No pledge payments in $year.", style = giInter(13), color = GIVE.ink600) }
+            // The empty year in §4's state card (final walk C16; iOS) — not a bare line.
+            org.nuruplace.member.ui.components.EmptyState(noPledgePaymentsTitle(year))
         } else {
             Column(Modifier.partnerCard()) {
                 if (pending.isNotEmpty()) {
@@ -802,12 +807,13 @@ private fun StatementActions(busy: Boolean, error: String?, onDownload: () -> Un
     }
 }
 
-/** A secondary — white with a hairline and navy words (§8.1 rule 4; final
- *  walk C16: it was navy-filled). */
+/** The page's one primary — gold fill, navy words, radius 14 (§8.1 rule 4;
+ *  final walk C16: it was navy-filled). iOS's statement, the same. */
 @Composable
 private fun DownloadPdfButton(busy: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Row(
-        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.white).border(1.dp, GIVE.border, Capsule).clickable(enabled = !busy) { onClick() },
+        Modifier.fillMaxWidth().height(48.dp).clip(shape).background(GIVE.gold).clickable(enabled = !busy) { onClick() },
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         if (busy) {
@@ -816,12 +822,12 @@ private fun DownloadPdfButton(busy: Boolean, onClick: () -> Unit) {
             Icon(Lucide.Download, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
         }
         Spacer(Modifier.width(8.dp))
-        Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+        Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
     }
 }
 
-/** A secondary with a hairline — it wore a heavy navy outline and an arrow
- *  inside (§8.1 rule 4; final walk C16). */
+/** The secondary — white with a hairline and navy words (§8.1 rule 4; final
+ *  walk C16: a heavy navy outline), its arrow to the other statement as iOS. */
 @Composable
 private fun GivingStatementButton(onClick: () -> Unit) {
     Row(
@@ -829,5 +835,7 @@ private fun GivingStatementButton(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Giving statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
+        Spacer(Modifier.width(6.dp))
+        Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
     }
 }

@@ -403,8 +403,10 @@ private fun RepeatGiftCard(g: GivingRecord, onRepeat: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.gold), contentAlignment = Alignment.Center) {
-            Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
+        // A row's icon sits on a gold-tint tile (§8.1 rule 7; final walk
+        // C16: a solid gold tile). iOS's repeat card, the same.
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.goldChipBg), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Repeat, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("Repeat last gift", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
@@ -471,7 +473,9 @@ private fun RecentGivingCard(recent: List<GivingRecord>, onOpenStatement: () -> 
                 ) {
                     Column(Modifier.weight(1f)) {
                         // Whole at the largest size — "Mon 5 Oct · M…" was cut (§9.7 M9).
-                        Text(giveFund(g.fund).name, style = giInter(14, FontWeight.SemiBold, -0.14f), color = GIVE.navy, maxLines = if (large) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
+                        // A gift is a content row (§8.1 rule 3): Fraunces 15
+                        // semibold — it was Inter (final walk C16; iOS, the same).
+                        Text(giveFund(g.fund).name, style = NuruType.rowTitle, color = GIVE.navy, maxLines = if (large) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
                         Text(recentGiftMeta(g), style = giInter(11), color = GIVE.sub, maxLines = if (large) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.width(8.dp))

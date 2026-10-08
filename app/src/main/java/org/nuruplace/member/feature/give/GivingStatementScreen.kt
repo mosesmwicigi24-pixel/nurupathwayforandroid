@@ -69,6 +69,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.ui.icons.Lucide
 
@@ -312,10 +313,7 @@ fun GivingStatementScreen(
                 // said "nothing" four ways (BY FUND, the total, the list and a
                 // footer about tapping gifts that weren't there; final walk C16).
                 if (yearRecords.isEmpty()) {
-                    org.nuruplace.member.ui.components.EmptyState(
-                        title = "No gifts $periodLabel",
-                        line = "Each gift you give is listed here, with its receipt.",
-                    )
+                    org.nuruplace.member.ui.components.EmptyState(title = givingYearEmptyTitle(periodLabel))
                     return@Column
                 }
 
@@ -385,10 +383,8 @@ fun GivingStatementScreen(
 
                 // Every gift of the year by day, whatever became of it.
                 if (split.gifts.isEmpty()) {
-                    Text(
-                        "No gifts $periodLabel.", style = giInter(14), color = GIVE.sub, textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
+                    // §4's state card, not a bare line (final walk C16; iOS).
+                    org.nuruplace.member.ui.components.EmptyState(title = givingYearEmptyTitle(periodLabel), modifier = Modifier.padding(top = 8.dp))
                 }
                 statementDays(split.gifts).forEach { day ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -475,7 +471,9 @@ private fun StatementRecordRow(r: GivingRecord, onOpenReceipt: (String) -> Unit)
             Icon(f.icon, contentDescription = null, tint = f.fg, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(f.name, style = giInter(14, FontWeight.Bold, -0.14f), color = GIVE.navy)
+            // A gift is a content row (§8.1 rule 3): Fraunces 15 semibold —
+            // it was Inter (final walk C16; iOS's statement, the same).
+            Text(f.name, style = NuruType.rowTitle, color = GIVE.navy)
             // "8:11 PM · M-Pesa" — the rail by its name (M-Pesa when the row
             // names none), as iOS. One time per gift (Cycle 3's closing walk,
             // B8): the moment it settled, as its receipt says — the statement
@@ -817,16 +815,17 @@ fun GivingReceiptScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         // At least 48dp, taller rather than clipped when a large
                         // font wraps the label (half a phone's width each).
-                        // Two secondaries — white with a hairline and navy words
-                        // (§8.1 rule 4; final walk C16: "Share receipt" was
-                        // navy-filled, "View statement" heavily outlined).
+                        // The page's one primary — gold fill, navy words, radius
+                        // 14 — and its secondary, white with a hairline (§8.1
+                        // rule 4; final walk C16: "Share receipt" was navy-filled,
+                        // "View statement" heavily outlined). iOS's receipt, the same.
+                        val primary = RoundedCornerShape(14.dp)
                         Row(
                             Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
-                                .clip(Capsule)
-                                .background(GIVE.white)
-                                .border(1.dp, GIVE.border, Capsule)
+                                .clip(primary)
+                                .background(GIVE.gold)
                                 .clickable(enabled = !sharing) { share() }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.Center,
@@ -838,7 +837,11 @@ fun GivingReceiptScreen(
                                 Icon(Lucide.Share2, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
                             }
                             Spacer(Modifier.width(8.dp))
-                            Text(if (sharing) "Preparing…" else "Share receipt", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
+                            Text(
+                                if (sharing) "Preparing…" else "Share receipt",
+                                style = giInter(14, if (sharing) FontWeight.SemiBold else FontWeight.Bold),
+                                color = GIVE.navy, textAlign = TextAlign.Center,
+                            )
                         }
                         Row(
                             Modifier
@@ -1053,3 +1056,7 @@ internal fun shareTextOnly(context: Context, text: String) {
         context.startActivity(Intent.createChooser(send, "Share receipt").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
+
+/** An empty period's state title — "No gifts this year", "No gifts in 2025" —
+ *  with no full stop (final walk C16; iOS's statement, word for word). */
+internal fun givingYearEmptyTitle(periodLabel: String): String = "No gifts $periodLabel"
