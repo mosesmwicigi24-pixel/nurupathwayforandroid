@@ -233,11 +233,13 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 }
                 Spacer(Modifier.height(14.dp))
             }
-            // The lead: the composed statement, small and golden — it frames the verse.
+            // The lead: the composed statement, small — it frames the verse.
+            // In ink, not gold: words are ink (§8.1 rule 1; final walk C16 —
+            // "Growth is minutes, not seasons…" was gold body text).
             Text(
                 l.line,
                 style = NuruType.label.copy(lineHeight = 17.sp, fontWeight = FontWeight.SemiBold),
-                color = LitDeepGold,
+                color = Nuru.ink600,
             )
             val vl = l.verseLine?.takeIf { it.text.isNotBlank() }
             if (vl != null) {

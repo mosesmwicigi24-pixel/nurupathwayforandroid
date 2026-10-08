@@ -121,18 +121,22 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                     if (c.leader != null) {
                         AvatarCircle(c.leader.avatarUrl, c.leader.name, size = 52)
                     } else {
+                        // The empty seat on the gold-tint tile every row icon sits
+                        // on (§8.1 rule 7; final walk C16: a grey disc).
                         Box(
-                            Modifier.size(52.dp).clip(CircleShape).background(Nuru.inputBg)
-                                .border(1.dp, Nuru.border, CircleShape),
+                            Modifier.size(52.dp).clip(CircleShape).background(Nuru.goldTint),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Lucide.Armchair, contentDescription = "No leader yet", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
+                            Icon(Lucide.Armchair, contentDescription = "No leader yet", tint = Nuru.navy, modifier = Modifier.size(22.dp))
                         }
                     }
                     Spacer(Modifier.size(Spacing.md))
                     Column(Modifier.weight(1f)) {
                         Kicker("Cell leader")
-                        Text(c.leader?.name ?: "Not assigned yet", style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Bold)
+                        // A name is a content row title; the empty value is the
+                        // quiet Inter every other empty value wears (§8.1 rule 3).
+                        if (c.leader != null) Text(c.leader.name, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Bold)
+                        else Text("Not assigned yet", style = NuruType.body, color = Nuru.ink600)
                         c.leader?.role?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
                     }
                 }
@@ -153,10 +157,9 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                     c.meets?.let { RhythmRow("Meets", it) }
                     c.next?.let { RhythmRow("Next session", fmtEventTime(it.startAt)) }
                     c.room?.let { RhythmRow("Where", it) }
-                    if (notScheduled) {
-                        Spacer(Modifier.height(Spacing.sm))
-                        Text("Not scheduled yet", style = NuruType.body, color = Nuru.ink600)
-                    }
+                    // When it meets, always said (final walk C4): with nothing
+                    // on the books, "No gathering set yet" — iOS CellRhythmWords.
+                    if (notScheduled) RhythmRow("Next gathering", CELL_NO_GATHERING, muted = true)
                 }
             }
 
@@ -260,7 +263,9 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                     .clickable { onNavigate(cellRoomId?.let { "chat/$it" } ?: "you") },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Open community ›", style = NuruType.cardCta, color = Nuru.navy)
+                // Its words alone — no chevron inside a button (§8.1 rule 4;
+                // final walk C16).
+                Text("Open community", style = NuruType.cardCta, color = Nuru.navy)
             }
         }
     }
@@ -327,10 +332,10 @@ private fun MembersFacesRow(roster: CellSummary.Roster, members: Int, onOpen: ()
 }
 
 @Composable
-private fun RhythmRow(label: String, value: String) {
+private fun RhythmRow(label: String, value: String, muted: Boolean = false) {
     Spacer(Modifier.height(Spacing.sm))
     Text(label, style = NuruType.micro, color = Nuru.ink400)
-    Text(value, style = NuruType.body, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+    Text(value, style = NuruType.body, color = if (muted) Nuru.ink600 else Nuru.ink, fontWeight = if (muted) FontWeight.Normal else FontWeight.SemiBold)
 }
 
 @Composable
@@ -353,3 +358,7 @@ internal fun cellRoom(conversations: List<ChatConversation>, cellName: String?):
     val named = cellName?.takeIf { it.isNotBlank() }?.let { n -> rooms.firstOrNull { it.title == "$n cell" } }
     return (named ?: rooms.singleOrNull())?.conversationId
 }
+
+/** The cell page's words for a cell with no gathering on the books (final
+ *  walk C4) — iOS CellRhythmWords.noneSet. */
+internal const val CELL_NO_GATHERING = "No gathering set yet"

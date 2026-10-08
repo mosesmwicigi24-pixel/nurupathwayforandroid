@@ -206,6 +206,9 @@ fun HomeScreen(
     // and the progress line, in the words the Pathway hub uses.
     var pathway by rememberHeld("Home.pathway") { mutableStateOf<PathwaySummary?>(null) }
     var currentTrail by rememberHeld("Home.currentTrail") { mutableStateOf<List<LevelModule>?>(null) }
+    // Whether the trail's read has answered once — until then no journey is
+    // told (journeyToTell): the pill and the rows wait, never guess.
+    var currentTrailAnswered by rememberHeld("Home.currentTrailAnswered") { mutableStateOf(false) }
     // The rails GET /giving/methods says can take a gift — the giving card
     // names only those (null = no answer yet: no rail named). A failed
     // refresh keeps the last answer.
@@ -309,6 +312,8 @@ fun HomeScreen(
         pathway = pathwayRead.getOrElse { pathway }
         currentTrail = JourneyState.derive(pathway)?.levelNumber
             ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrElse { currentTrail } }
+        // Answered — loaded or not; a failed read keeps what was shown.
+        currentTrailAnswered = true
         letter = runCatching { Net.client.api.latestLetter().letter }.getOrElse { letter }
         announcement = runCatching { Net.client.api.featuredAnnouncement().data }.getOrElse { announcement }
         cohort = runCatching { Net.client.api.cellSummary() }.getOrElse { cohort }
@@ -399,7 +404,11 @@ fun HomeScreen(
     // "Level 1" or a "friend" that may not be true — a Level 3 member read
     // "Level 1" until /me landed.
     val level = me?.enrollment?.currentLevel
-    val journey = remember(pathway, currentTrail) { JourneyState.derive(pathway, currentTrail) }
+    // Told only once the trail has answered (final walk, M4's class): the
+    // summary alone can't tell an open exam from the lessons.
+    val journey = remember(pathway, currentTrail, currentTrailAnswered) {
+        org.nuruplace.member.feature.pathway.journeyToTell(pathway, currentTrail, trailInFlight = !currentTrailAnswered)
+    }
     // YOUR WEEK (§6.1): the five rows, in the journey's order.
     val week = remember(journey, plans, upcoming, upcomingAnswered, homeEvents, rsvps, partnership, gifts, giveRails, cohort, cellAskedAt, me) {
         listOf(
@@ -942,24 +951,6 @@ private fun HomeCard(
             .clip(shape)
             .background(Nuru.white)
             .border(1.dp, Nuru.border, shape)
-            .padding(pad),
-        content = content,
-    )
-}
-
-@Composable
-private fun NavyCard(
-    modifier: Modifier = Modifier,
-    pad: androidx.compose.ui.unit.Dp = Spacing.base,
-    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
-) {
-    val shape = RoundedCornerShape(20.dp)
-    Column(
-        modifier.fillMaxWidth()
-            .shadow(6.dp, shape, spotColor = Color(0x330A1628))
-            .clip(shape)
-            .background(Nuru.homeNavyGradient)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
             .padding(pad),
         content = content,
     )
@@ -1673,12 +1664,13 @@ private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
         // No zero counts (§7.4 #9): no pill until someone prays or replies.
         org.nuruplace.member.util.ZeroCounts.prayerLine(praying = post.prayCount, replies = post.commentCount ?: 0)?.let { counts ->
             Spacer(Modifier.height(Spacing.sm))
-            // iOS's pill: the hand-heart and the counts — not a "🤲" typed in (§8.1 rule 7).
+            // The pill: a heart and the counts — not a "🤲" typed in (§8.1 rule
+            // 7), and not Give's hand-heart, which means giving (final walk C16).
             Row(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Lucide.HandHeart, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
+                Icon(Lucide.Heart, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(5.dp))
                 Text(counts, style = NuruType.micro, color = Nuru.goldChipText, fontWeight = FontWeight.SemiBold)
             }
@@ -1984,7 +1976,8 @@ private fun GrowSection(onNavigate: (String) -> Unit, discipler: HomeDiscipler?)
             }
             Spacer(Modifier.height(Spacing.sm))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                GrowTile("My Prayer Room", "Pray with the family", Lucide.HandHeart, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
+                // Prayer's heart, not Give's hand-heart (§8.1 rule 7; final walk C16).
+                GrowTile("My Prayer Room", "Pray with the family", Lucide.Heart, Modifier.weight(1f)) { onNavigate("prayer-room?tab=corporate") }
                 GrowTile("Your Calling", "Discover your gifts", Lucide.Sparkles, Modifier.weight(1f)) { onNavigate("gifts") }
             }
             // Unknown until GET /growth/mentor answers — never a guess.
@@ -2106,7 +2099,7 @@ private fun EncouragementCard(prayerCount: Int) {
     ) {
         Box(Modifier.width(3.dp).height(40.dp).background(Nuru.gold))
         Spacer(Modifier.width(Spacing.md))
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.white), contentAlignment = Alignment.Center) { Icon(Lucide.HandHeart, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.white), contentAlignment = Alignment.Center) { Icon(Lucide.Heart, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
         Spacer(Modifier.width(Spacing.md))
         Text("Your community lifted $prayerCount prayers — stand with one of them today.", style = NuruType.body, color = Nuru.navy)
     }
@@ -2116,32 +2109,33 @@ private fun EncouragementCard(prayerCount: Int) {
  *  gift here (giveRailsLine); it used to promise "M-Pesa, card and more". */
 @Composable
 private fun GiveCard(railsLine: String, onGive: () -> Unit) {
-    NavyCard(pad = Spacing.screen) {
+    // A paper card (owner, 2026-10-08, option A): navy is the church's voice
+    // and each tab's next step only — this banner is neither. Gold accents,
+    // navy words, and "Give now" a secondary (§8.1 rule 4: the week's band
+    // holds the one gold primary; no chevron inside a button).
+    HomeCard(pad = Spacing.screen) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(56.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.gold), contentAlignment = Alignment.Center) { Icon(Lucide.HandHeart, null, tint = Nuru.homeNavy, modifier = Modifier.size(22.dp)) }
+                Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) { Icon(Lucide.HandHeart, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.height(Spacing.md))
-                CardKicker("Support God's work", Nuru.goldSoft)
+                CardKicker("Support God's work")
                 Spacer(Modifier.height(Spacing.xs))
-                Text("Sow into something eternal", style = NuruType.featureTitle, color = Nuru.onNavy, textAlign = TextAlign.Center)
+                Text("Sow into something eternal", style = NuruType.featureTitle, color = Nuru.navy, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(Spacing.sm))
                 Text(
                     "Every gift carries the gospel further — raising disciples, sustaining the mission, and lighting the way for the next person to find Christ. Give cheerfully, as the Lord leads.",
-                    style = NuruType.caption, color = Nuru.onNavyDim, textAlign = TextAlign.Center,
+                    style = NuruType.caption, color = Nuru.ink600, textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(Spacing.base))
                 Box(
-                    Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.goldGradient).clickable { onGive() }.padding(vertical = 14.dp),
+                    Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(16.dp)).background(Nuru.white)
+                        .border(1.dp, Nuru.border, RoundedCornerShape(16.dp)).clickable { onGive() }.padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // iOS's words: "Give now" and the chevron — no "🤲" or typed "›" (§8.1 rule 7).
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Give now", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.SemiBold)
-                        Icon(Lucide.ChevronRight, null, tint = Nuru.homeNavy, modifier = Modifier.size(18.dp))
-                    }
+                    Text("Give now", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(Spacing.sm))
-                Text(railsLine, style = NuruType.micro, color = Nuru.onNavyFaint)
+                Text(railsLine, style = NuruType.micro, color = Nuru.ink400)
             }
         }
     }
