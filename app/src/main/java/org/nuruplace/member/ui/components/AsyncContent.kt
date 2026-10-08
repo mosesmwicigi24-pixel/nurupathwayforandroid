@@ -11,6 +11,7 @@
 package org.nuruplace.member.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -131,16 +132,21 @@ fun StateCard(
             }
             if (actionLabel != null && onAction != null) {
                 Spacer(Modifier.height(18.dp))
+                // A secondary — white with a hairline and navy words (§8.1
+                // rule 4; final walk C16: "Share a prayer", "Try again" were
+                // navy-filled with gold words).
                 Box(
-                    Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
+                    Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.white)
+                        .border(1.dp, Nuru.border, RoundedCornerShape(Radii.pill))
                         .clickable { onAction() }.padding(horizontal = 22.dp, vertical = 11.dp),
                     contentAlignment = Alignment.Center,
-                ) { Text(actionLabel, style = NuruType.cardCta, color = Nuru.gold) }
+                ) { Text(actionLabel, style = NuruType.cardCta, color = Nuru.navy) }
             }
             if (secondaryLabel != null && onSecondary != null) {
                 Spacer(Modifier.height(Spacing.xs))
+                // A text action is gold (§8.1 rule 4).
                 TextButton(onClick = onSecondary) {
-                    Text(secondaryLabel, style = NuruType.cardCta, color = Nuru.ink600)
+                    Text(secondaryLabel, style = NuruType.cardCta, color = Nuru.gold)
                 }
             }
         }
