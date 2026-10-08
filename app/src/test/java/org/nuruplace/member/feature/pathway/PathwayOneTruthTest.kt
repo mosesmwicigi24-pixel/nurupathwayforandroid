@@ -48,7 +48,7 @@ class PathwayOneTruthTest {
         assertEquals("Level 2 is being prepared", levelPageProgressLine(2, done = 0, total = 0, pct = 0))
     }
 
-    @Test fun `a first day says "10 modules" once — no "Only 10 modules to complete this level" under it (Android #25)`() {
+    @Test fun `a first day says its module count once — no Only 10 modules line under it (Android #25)`() {
         assertEquals(0, remainingModules(JourneyStage.LEARNING, lessonsDone = 0, lessonCount = 10))
         assertEquals(7, remainingModules(JourneyStage.LEARNING, lessonsDone = 3, lessonCount = 10))
         assertEquals(1, remainingModules(JourneyStage.LEARNING, lessonsDone = 9, lessonCount = 10))
@@ -70,5 +70,18 @@ class PathwayOneTruthTest {
         val learning = JourneyState.derive(summary(done = 4), trail(done = 4))
         assertNull(lessonExamStep(learning, levelNumber = 1, completed = true))
         assertNull(lessonExamStep(null, levelNumber = 1, completed = true))
+    }
+
+    @Test fun `no guessed step while the trail is on its way — loading, then the truth (M4's class)`() {
+        // Ada: 10 of 10 lessons, the exam open. From the summary alone the
+        // level still reads "active" (its exam counts among its modules), and
+        // the hero said "CONTINUE · Level 1 · Continue" for ~2 s.
+        val s = summary(done = 10)
+        assertEquals(JourneyStage.LEARNING, JourneyState.derive(s)!!.stage) // the guess this prevents
+        assertNull(journeyToTell(s, currentTrail = null, trailInFlight = true))
+        // Once the trail answers: the exam, as it is.
+        assertEquals(JourneyStage.EXAM_READY, journeyToTell(s, trail(done = 10), trailInFlight = false)!!.stage)
+        // The summary not read yet: nothing to tell either way.
+        assertNull(journeyToTell(null, null, trailInFlight = false))
     }
 }

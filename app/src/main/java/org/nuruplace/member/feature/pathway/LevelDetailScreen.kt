@@ -219,22 +219,21 @@ fun LevelDetailScreen(
                 }
                 Column(Modifier.align(Alignment.BottomStart).padding(top = if (org.nuruplace.member.ui.components.largeText()) 64.dp else 0.dp).padding(Spacing.screen)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                        // A label pill is white with navy words; a state is a tinted
+                        // chip (§8.1 rule 6; final walk C16: both were gold-filled).
+                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.white).padding(horizontal = 10.dp, vertical = 4.dp)) {
                             Text("LEVEL $levelNumber", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.Bold)
                         }
                         // The one journey state (Cycle 3's closing walk, B3): "EXAM
                         // READY" when Pathway says so, never "IN PROGRESS" beside it.
                         val badge = levelBadge(levelNumber, level, bundle.journey)
-                        val badgeBg = when (badge.tone) {
-                            LevelBadge.Tone.ACHIEVED -> Nuru.success
-                            LevelBadge.Tone.NEXT_STEP -> Nuru.gold
-                            LevelBadge.Tone.QUIET -> Nuru.white.copy(alpha = 0.22f)
+                        val (badgeBg, badgeFg) = when (badge.tone) {
+                            LevelBadge.Tone.ACHIEVED -> Nuru.successBg to Nuru.successText
+                            LevelBadge.Tone.NEXT_STEP -> Nuru.goldChipBg to Nuru.goldChipText
+                            LevelBadge.Tone.QUIET -> Nuru.white.copy(alpha = 0.22f) to Nuru.onNavy
                         }
                         Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(badgeBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text(
-                                badge.text, style = NuruType.micro, fontWeight = FontWeight.Bold,
-                                color = if (badge.tone == LevelBadge.Tone.NEXT_STEP) Nuru.navy else Nuru.onNavy,
-                            )
+                            Text(badge.text, style = NuruType.micro, fontWeight = FontWeight.Bold, color = badgeFg)
                         }
                     }
                     Spacer(Modifier.height(Spacing.sm))
@@ -475,7 +474,9 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                     isNext -> "Up next — tap to start."
                     else -> "Unlocks when you finish the one before."
                 },
-                style = NuruType.micro, color = if (done) Nuru.goldChipText else if (isNext) Nuru.goldLo else Nuru.ink400,
+                // Words in ink, not gold (§8.1 rule 1; final walk C16:
+                // "Completed — nicely done." was gold italic body text).
+                style = NuruType.micro, color = if (isNext) Nuru.navy else if (done) Nuru.ink600 else Nuru.ink400,
                 fontStyle = FontStyle.Italic,
             )
         }
@@ -779,8 +780,12 @@ private fun ModuleStatusPill(done: Boolean, isNext: Boolean, soon: Boolean = fal
 
 @Composable
 private fun MetaChip(label: String, gold: Boolean = false) {
+    // White with a hairline, as every unselected pill (§8.1 rule 6; final
+    // walk C16: "≈ 194 min" was grey-filled); the quiz's pass mark tinted.
     Box(
-        Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (gold) Nuru.goldTint else Nuru.inputBg).padding(horizontal = 8.dp, vertical = 2.dp),
+        Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (gold) Nuru.goldTint else Nuru.white)
+            .then(if (gold) Modifier else Modifier.border(1.dp, Nuru.border, RoundedCornerShape(Radii.pill)))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
     ) { Text(label, style = NuruType.micro, color = if (gold) Nuru.goldChipText else Nuru.ink600) }
 }
 

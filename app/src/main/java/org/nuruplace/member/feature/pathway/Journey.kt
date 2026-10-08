@@ -138,6 +138,16 @@ fun levelPercent(level: PathwayLevel, journey: Journey?): Int {
     return (levelFraction(level.lessonsDone, level.lessonCount, passed) * 100).roundToInt()
 }
 
+/**
+ * The journey a hero or a row may tell — only once the current level's trail
+ * has answered (final walk, M4's class): from the summary alone a member at
+ * the exam read "CONTINUE · Level 1 · Continue" for about two seconds before
+ * "EXAM READY", because the open exam is the trail's row. Null while that read
+ * is in flight, so the screen shows its loading state (§4), never a guess.
+ */
+fun journeyToTell(summary: PathwaySummary?, currentTrail: List<LevelModule>?, trailInFlight: Boolean): Journey? =
+    if (trailInFlight) null else JourneyState.derive(summary, currentTrail)
+
 object JourneyState {
     /**
      * The journey from the pathway summary and the CURRENT level's module

@@ -178,7 +178,10 @@ fun PathwayHubScreen(
     // The journey (docs/EXPERIENCE.md §3): the level from the summary first,
     // then the full step once that level's trail has loaded.
     val currentNum = JourneyState.derive(summary)?.levelNumber
-    val journey = JourneyState.derive(summary, currentNum?.let { modulesByLevel[it] })
+    // Never a guessed step while the level's trail is on its way (final walk,
+    // M4's class): the hero holds its loading shape until the trail answers.
+    val trailInFlight = currentNum != null && modulesByLevel[currentNum] == null
+    val journey = journeyToTell(summary, currentNum?.let { modulesByLevel[it] }, trailInFlight)
     val active = levels.firstOrNull { it.levelNumber == currentNum } ?: levels.firstOrNull()
     val selNum = selected ?: active?.levelNumber
     val selLevel = levels.firstOrNull { it.levelNumber == selNum } ?: active
@@ -232,7 +235,7 @@ fun PathwayHubScreen(
                 FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
                 return@Column
             }
-            HubHeader(active, levels, journey, ::go, onOpenNotifications)
+            HubHeader(active, levels, journey, ::go, onOpenNotifications, stepLoading = trailInFlight)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -284,6 +287,8 @@ private fun HubHeader(
     journey: Journey?,
     onGo: (JourneyDestination) -> Unit,
     onBell: () -> Unit,
+    /** The step is on its way: the hero's loading shape (§4), never a guess. */
+    stepLoading: Boolean = false,
 ) {
     val idx = levels.indexOfFirst { it.levelNumber == active?.levelNumber }.coerceAtLeast(0)
     // One measure (final walk C8, Android #20): the level page's and Map's,
@@ -347,7 +352,10 @@ private fun HubHeader(
             }
         }
         // The member's next step (§3) — the same words Home's continue card says.
-        journey?.let { NextStepCard(it, onGo) }
+        if (journey != null) NextStepCard(journey, onGo)
+        else if (stepLoading) org.nuruplace.member.ui.components.SkeletonBlock(
+            height = 132.dp, corner = 22.dp, modifier = Modifier.padding(top = 18.dp),
+        )
     }
 }
 
@@ -384,13 +392,14 @@ private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
             Text(step.title, style = NuruType.cardTitle, color = Color.White, maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
             Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
             if (action != null) {
-                Row(
-                    Modifier.padding(top = 8.dp).clip(RoundedCornerShape(999.dp)).background(PW.gold)
-                        .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                // The primary's shape — radius 14, its words alone; no chevron
+                // inside a button (§8.1 rule 4; final walk C16: "Begin the exam ›"
+                // was a gold capsule with a chevron).
+                Box(
+                    Modifier.padding(top = 8.dp).clip(RoundedCornerShape(14.dp)).background(PW.gold)
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
                 ) {
-                    Text(action.label, style = PW.t(11, FontWeight.Bold), color = PW.navy, maxLines = 1)
-                    Icon(Lucide.ChevronRight, null, tint = PW.navy, modifier = Modifier.size(14.dp))
+                    Text(action.label, style = PW.t(12, FontWeight.Bold), color = PW.navy, maxLines = 1)
                 }
             }
         }
