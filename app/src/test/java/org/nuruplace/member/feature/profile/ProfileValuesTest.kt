@@ -70,7 +70,7 @@ class ProfileValuesTest {
         org.junit.Assert.assertEquals("not-an-address", emailBreaks("not-an-address"))
     }
 
-    @org.junit.Test fun `a badge's name never breaks at its hyphen — "Seven-Day" holds together`() {
+    @org.junit.Test fun `a badge's name never breaks at its hyphen — Seven-Day holds together`() {
         org.junit.Assert.assertEquals("Seven\u2011Day Faithful", badgeLabel("Seven-Day Faithful"))
         org.junit.Assert.assertEquals("Thirty\u2011Day Faithful", badgeLabel("Thirty-Day Faithful"))
         org.junit.Assert.assertEquals("First Step", badgeLabel("First Step"))

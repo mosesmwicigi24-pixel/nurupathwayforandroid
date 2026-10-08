@@ -76,6 +76,7 @@ import kotlinx.serialization.json.buildJsonObject
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.data.net.Achievements
 import org.nuruplace.member.ui.components.rememberHeld
@@ -210,7 +211,10 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                             Modifier
                                 .size(72.dp)
                                 .clip(CircleShape)
-                                .background(PROF.tintBlue)
+                                // The palette's gold-chip tint, navy initials —
+                                // it was a pale blue with blue letters, a second
+                                // blue (§8.1 rule 1; final walk C16).
+                                .background(Nuru.goldChipBg)
                                 .border(2.dp, PROF.gold, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -229,7 +233,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                     Text(
                                         initials(fullName),
                                         style = pInter(28, FontWeight.SemiBold),
-                                        color = PROF.navyMid,
+                                        color = PROF.navy,
                                         textAlign = TextAlign.Center,
                                         maxLines = 1, softWrap = false,
                                     )
@@ -839,7 +843,8 @@ private fun DisciplesEntryCard(onOpen: () -> Unit) {
 private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, onBadge: (Badge) -> Unit) {
     SectionCard {
         SectionTitle(Lucide.Sparkles, "ACHIEVEMENTS") {
-            Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.navy)
+            // A text action is gold (§8.1 rule 4).
+            Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.gold)
         }
         // Catalogue merge (GET /badges): earned first, locked after — the rail
         // shows what's ahead. Falls back to earned-only while the catalogue loads.
@@ -860,17 +865,22 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                     Icon(Lucide.BadgeCheck, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(22.dp))
                 }
             }
-        } else {
+        } else androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             val large = largeText()
+            // A deliberate peek (§8.1 rule 9; final walk C16: the fifth badge
+            // was cut wherever the row happened to end): four and a half tiles
+            // at the everyday sizes, two and a half past them — the half says
+            // the rail goes on.
+            val tile = badgeTileWidth(maxWidth, count = badges.size, large = large)
             Row(
-                Modifier.fillMaxWidth().padding(top = 12.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(BADGE_GAP),
             ) {
                 badges.forEach { b ->
                     val st = badgeStyle(b.category)
                     val earned = b.awardedAt != null
                     Column(
-                        Modifier.width(if (large) 104.dp else 66.dp).clickable { onBadge(b) },
+                        Modifier.width(tile).clickable { onBadge(b) },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
@@ -1382,4 +1392,19 @@ private fun MemberIdFoot(onCopy: () -> Unit) {
         Spacer(Modifier.width(6.dp))
         Text(label, style = pInter(13, FontWeight.SemiBold), color = org.nuruplace.member.ui.theme.Nuru.goldChipText)
     }
+}
+
+private val BADGE_GAP = 10.dp
+
+/** A badge tile's width on the rail: its everyday 66 dp (104 past the
+ *  everyday sizes) while the badges fit; when they don't, the width at which
+ *  four and a half (two and a half) show, so the rail ends on a deliberate
+ *  half tile — never wherever a badge happens to be cut. */
+internal fun badgeTileWidth(available: androidx.compose.ui.unit.Dp, count: Int, large: Boolean): androidx.compose.ui.unit.Dp {
+    val natural = if (large) 104.dp else 66.dp
+    val shown = if (large) 2.5f else 4.5f
+    val whole = shown.toInt()
+    val fits = natural * count + BADGE_GAP * (count - 1) <= available
+    if (fits) return natural
+    return ((available - BADGE_GAP * whole) / shown).coerceAtLeast(56.dp)
 }

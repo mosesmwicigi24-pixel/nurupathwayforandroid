@@ -78,6 +78,7 @@ import org.nuruplace.member.data.net.TailoredVerse
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.ListSkeleton
 import org.nuruplace.member.ui.components.QuickNotice
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import java.util.UUID
 import org.nuruplace.member.ui.icons.Lucide
@@ -530,30 +531,20 @@ fun ChatInboxScreen(
 }
 
 // ── AI "Quick help from Nuru" card ──
-// Navy with gold accents (EXPERIENCE.md §8.1 rule 1, §8.2 #3): the gold orb,
-// a gold hairline, one soft gold glow and a gold "AI" chip. It was a purple
-// and green gradient with a tri-colour ring — hues the brand does not have.
+// A paper card with gold accents (owner, 2026-10-08, option A): navy is the
+// church's voice and each tab's next step only — an AI helper is neither. The
+// gold orb and the gold "AI" chip stay; the words are navy, as the Prayer
+// Room's row beside it.
 @Composable
 private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(CHAT.aiCard)
-            .border(1.dp, CHAT.gold.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+            .background(CHAT.white)
+            .border(1.dp, CHAT.border, RoundedCornerShape(24.dp))
             .clickable { onOpenAssistant() },
     ) {
-        // One soft gold glow at the orb's corner — matchParentSize so it
-        // doesn't inflate the card's height.
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.radialGradient(
-                    colors = listOf(CHAT.gold.copy(alpha = 0.22f), Color.Transparent),
-                    center = Offset(150f, 40f),
-                    radius = 320f,
-                ),
-            ),
-        )
         Row(
             Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -570,33 +561,25 @@ private fun AiCard(totalUnread: Int, spaceCount: Int, onOpenAssistant: () -> Uni
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Quick help from Nuru", style = cSerif(15, FontWeight.SemiBold, -0.16f), color = Color.White)
+                    Text("Quick help from Nuru", style = cSerif(15, FontWeight.SemiBold, -0.16f), color = CHAT.navy)
                     Box(
                         Modifier
                             .clip(Capsule)
-                            .background(CHAT.goldLight)
+                            .background(Nuru.goldChipBg)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
-                        Text("AI", style = cInter(11, FontWeight.Bold, 1.1f), color = CHAT.navy)
+                        Text("AI", style = cInter(11, FontWeight.Bold, 1.1f), color = Nuru.goldChipText)
                     }
                 }
                 // No zero counts (§7.4 #9): "0 updates across 0 spaces" said nothing.
                 Text(
                     org.nuruplace.member.util.ZeroCounts.assistantLine(unread = totalUnread, spaces = spaceCount),
                     style = cInter(11),
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = CHAT.ink600,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(Color.White.copy(alpha = 0.10f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Lucide.ChevronRight, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(18.dp))
-            }
+            Icon(Lucide.ChevronRight, contentDescription = null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -623,7 +606,8 @@ private fun PrayerRoomDoor(onOpen: () -> Unit) {
                 .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Lucide.HandHeart, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
+            // Prayer's heart, not Give's hand-heart (§8.1 rule 7; final walk C16).
+            Icon(Lucide.Heart, contentDescription = null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Text("My Prayer Room", style = org.nuruplace.member.ui.theme.NuruType.rowTitle, color = CHAT.navy)
@@ -701,8 +685,11 @@ private fun MySpaceTab(
     // A Lucide icon, as every other section label — not a typed "#" (§8.1
     // rule 7; final walk C4, Android #24), the same glyph as iOS.
     Section("YOUR SPACES", Lucide.MessageSquareText)
+    // "Follow one below" only while there is one below (final walk C4) —
+    // iOS SpaceWords, word for word.
+    val canFollow = discover.any { query.isBlank() || (it.title ?: "").contains(query, ignoreCase = true) }
     if (filteredSpaces.isEmpty()) {
-        EmptyState("No spaces yet.")
+        EmptyState(spacesNoneWords(canFollow))
     } else {
         GroupedCard {
             filteredSpaces.forEachIndexed { idx, c ->
@@ -752,7 +739,7 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    c.title ?: "Space",
+                    c.title?.let(::roomShownTitle) ?: "Space",
                     style = cInter(12, if (c.unread > 0) FontWeight.SemiBold else FontWeight.Medium, -0.12f),
                     color = CHAT.navy,
                     modifier = Modifier.weight(1f),
@@ -767,7 +754,9 @@ private fun SpaceRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(previewText(c), style = cInter(11), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
-                if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
+                // A read mark only beside a message (§8.1 rule 8: "✓✓" sat
+                // beside "No messages yet") — as iOS.
+                if (c.unread > 0) UnreadBadge(c.unread) else if (c.lastAt != null) DoubleCheck()
             }
             // Bottom meta: overlapping member stack + count pill · space topic on the right
             Row(
@@ -1099,7 +1088,9 @@ private fun DmRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Unit)
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(previewText(c), style = cInter(11), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
-                if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
+                // A read mark only beside a message (§8.1 rule 8: "✓✓" sat
+                // beside "No messages yet") — as iOS.
+                if (c.unread > 0) UnreadBadge(c.unread) else if (c.lastAt != null) DoubleCheck()
             }
         }
     }
@@ -1235,7 +1226,7 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    c.title ?: "Group",
+                    c.title?.let(::roomShownTitle) ?: "Group",
                     style = cInter(12, if (c.unread > 0) FontWeight.SemiBold else FontWeight.Medium, -0.12f),
                     color = CHAT.navy,
                     modifier = Modifier.weight(1f),
@@ -1250,7 +1241,9 @@ private fun GroupRow(c: ChatConversation, idx: Int, onOpenThread: (String) -> Un
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(previewText(c), style = cInter(11), color = CHAT.ink600, modifier = Modifier.weight(1f), maxLines = 1)
-                if (c.unread > 0) UnreadBadge(c.unread) else DoubleCheck()
+                // A read mark only beside a message (§8.1 rule 8: "✓✓" sat
+                // beside "No messages yet") — as iOS.
+                if (c.unread > 0) UnreadBadge(c.unread) else if (c.lastAt != null) DoubleCheck()
             }
         }
     }

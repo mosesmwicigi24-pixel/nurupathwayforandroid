@@ -190,7 +190,7 @@ fun PrayerWallScreen(
                                 // One story about who sees a shared prayer — the
                                 // share prompt's (§9.7 M8): the congregation.
                                 line = PrayerWallWords.EMPTY_LINE,
-                                glyph = Lucide.HandHeart,
+                                glyph = Lucide.Heart,
                                 actionLabel = "Share a prayer",
                                 onAction = { composing = true },
                                 modifier = Modifier.padding(top = 12.dp),
@@ -350,7 +350,8 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
 @Composable
 internal fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.Dp) {
     Box(
-        Modifier.size(size).clip(CircleShape).background(GrowPal.tintBlue),
+        // The palette's gold-chip tint and navy initials (§8.1 rule 1; final walk C16).
+        Modifier.size(size).clip(CircleShape).background(Nuru.goldChipBg),
         contentAlignment = Alignment.Center,
     ) {
         if (!url.isNullOrBlank()) {
@@ -359,7 +360,7 @@ internal fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.D
             Text(
                 initials(name),
                 style = gInter(TypeScale.initials(size.value), FontWeight.SemiBold),
-                color = GrowPal.navyMid,
+                color = Nuru.navy,
             )
         }
     }

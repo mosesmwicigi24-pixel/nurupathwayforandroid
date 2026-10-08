@@ -122,6 +122,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
                 }
                 Text("PREFERENCES", style = NuruType.kicker, color = PROF.eyebrow)
                 Text("Settings", style = pSerif(26, FontWeight.SemiBold), color = PROF.navy, modifier = Modifier.padding(top = 4.dp))
+                // The header's one line (§8.1 rule 2; final walk C16: none).
+                Text(SETTINGS_LINE, style = pInter(13), color = PROF.ink600, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
@@ -940,3 +942,6 @@ private fun Icon(icon: ImageVector, tint: Color, size: androidx.compose.ui.unit.
 
 /** "Nuru Pathway · version 2.59.0 (84)" — the name and build this phone runs. */
 internal fun appVersionLine(versionName: String, versionCode: Int): String = "Nuru Pathway · version $versionName ($versionCode)"
+
+/** Settings' header line (§8.1 rule 2) — what lives here. */
+internal const val SETTINGS_LINE = "Your account, your notifications, and how the app looks."

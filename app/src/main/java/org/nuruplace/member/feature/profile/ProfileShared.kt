@@ -74,7 +74,8 @@ fun badgeStyle(category: String?): BadgeStyle = when (category?.lowercase()?.tri
     "journey" -> BadgeStyle(Lucide.Sparkles, PROF.navy, PROF.goldTint)
     "consistency" -> BadgeStyle(Lucide.Flame, PROF.navy, PROF.goldTint)
     "community" -> BadgeStyle(Lucide.Users, PROF.navy, PROF.goldTint)
-    "service" -> BadgeStyle(Lucide.HandHeart, PROF.navy, PROF.goldTint)
+    // Serving's handshake — Give's hand-heart means giving (§8.1 rule 7).
+    "service" -> BadgeStyle(Lucide.Handshake, PROF.navy, PROF.goldTint)
     else -> BadgeStyle(Lucide.BadgeCheck, PROF.navy, PROF.goldTint)
 }
 

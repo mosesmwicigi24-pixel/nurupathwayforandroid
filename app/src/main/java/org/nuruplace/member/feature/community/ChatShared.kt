@@ -185,7 +185,9 @@ fun ChatSquircleAvatar(
     }
 }
 
-/** Circular avatar (DM rows + story rail) — tintBlue disc + navyMid initials, or a photo. */
+/** Circular avatar (DM rows + story rail) — the palette's gold-chip tint and
+ *  navy initials, or a photo. It was a pale blue with blue letters, a second
+ *  blue the palette doesn't have (§8.1 rule 1; final walk C16). */
 @Composable
 fun ChatCircleAvatar(
     name: String,
@@ -194,11 +196,11 @@ fun ChatCircleAvatar(
     avatarUrl: String? = null,
     textSize: Int = 16,
 ) {
-    Box(modifier.size(size).clip(CircleShape).background(CHAT.tintBlue), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).clip(CircleShape).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
         if (!avatarUrl.isNullOrBlank()) {
             AsyncImage(model = avatarUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
         } else {
-            Text(chatInitials(name), style = cInter(textSize, FontWeight.SemiBold), color = CHAT.navyMid)
+            Text(chatInitials(name), style = cInter(textSize, FontWeight.SemiBold), color = Nuru.navy)
         }
     }
 }
@@ -315,4 +317,22 @@ fun connectionStateFor(
     outgoing.firstOrNull { it.userId == userId }?.let { return ConnectionState.RequestSent(it.requestId) }
     incoming.firstOrNull { it.userId == userId }?.let { return ConnectionState.RequestReceived(it.requestId) }
     return ConnectionState.NotConnected
+}
+
+/** Your spaces' words when there are none (final walk C4): "follow one
+ *  below" only while there is one below to follow. iOS SpaceWords.none. */
+internal fun spacesNoneWords(canFollow: Boolean): String =
+    if (canFollow) "No spaces yet — follow one below to get started."
+    else "No spaces yet. When the church opens one, you can follow it here."
+
+/** A room's name as a member reads it (§8.1 rule 8; final walk C4): the
+ *  server names a cell's room "<cell> cell", which read "Dev Cell A cell"
+ *  for a cell already called a Cell — the doubled word goes. iOS
+ *  ChatConversation.shownTitle, the same rule. */
+internal fun roomShownTitle(raw: String): String {
+    val t = raw.trim()
+    if (!t.lowercase().endsWith(" cell")) return t
+    val head = t.dropLast(5)
+    val words = head.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+    return if ("cell" in words) head else t
 }
