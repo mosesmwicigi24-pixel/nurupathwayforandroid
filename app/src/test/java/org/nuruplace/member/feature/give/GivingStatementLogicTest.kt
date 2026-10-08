@@ -191,15 +191,19 @@ class GivingStatementLogicTest {
     }
 
     @Test
-    fun `a statement row's chip is iOS's — its four statuses, any other by name`() {
-        assertEquals("Succeeded", giveStatus("completed").first)
+    fun `a statement row's chip is iOS's — a member's words, any other status by name`() {
+        // "Received", not the server's "Succeeded" (final walk C16).
+        assertEquals("Received", giveStatus("completed").first)
+        assertEquals("Received", giveStatus("succeeded").first)
         assertEquals("Processing", giveStatus("processing").first)
+        assertEquals("Processing", giveStatus("pending").first)
+        assertEquals("Waiting for you", giveStatus("requires_action").first)
         assertEquals("Failed", giveStatus("failed").first)
+        // A cancelled or expired gift was never received — nor refunded (iOS statusChip).
+        assertEquals("Failed", giveStatus("cancelled").first)
+        assertEquals("Failed", giveStatus("expired").first)
         assertEquals("Refunded", giveStatus("refunded").first)
-        // A cancelled gift was never refunded.
-        assertEquals("Cancelled", giveStatus("cancelled").first)
-        assertEquals("Pending", giveStatus("pending").first)
-        assertEquals("Requires action", giveStatus("requires_action").first)
+        assertEquals("On hold", giveStatus("on_hold").first)
     }
 
     @Test

@@ -1210,6 +1210,9 @@ private fun PledgePage(
     var claims by remember(pl.pledgeId) { mutableStateOf<List<PledgeClaim>?>(null) }
     var claimsFailed by remember(pl.pledgeId) { mutableStateOf(false) }
     var claiming by remember(pl.pledgeId) { mutableStateOf(false) }
+    val checkingMinor = pledgeCheckingMinor(
+        listOf(pl.pendingClaimMinor, detail?.pledge?.pendingClaimMinor, detail?.pendingClaimMinor), claims, pl.currency,
+    )
     LaunchedEffect(pl.pledgeId, attempt) {
         error = null
         runCatching { Net.client.api.pledge(pl.pledgeId) }
@@ -1274,8 +1277,10 @@ private fun PledgePage(
                 notice?.let { AutoScheduleNotice(it, onDismissNotice) }
                 actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
                 // What the office is checking leads the page (§9.3 rule 1,
-                // §9.7 M1) — it sat at the foot under a gold "Pay now →".
-                pledgeClaimLine(pl)?.let { PledgeClaimLead(it) }
+                // §9.7 M1) — it sat at the foot under a gold "Pay now →" —
+                // whichever read knows it (the row, the single read, the
+                // page's own pending claims; iOS PledgeChecking).
+                pledgeCheckingLine(checkingMinor, pl.currency)?.let { PledgeClaimLead(it) }
                 PledgePromiseCard(pl, today)
                 // The recurring gift that collects it — ANY pledge, monthly or
                 // total — or, for a total pledge with a pace, the offer
@@ -1297,7 +1302,7 @@ private fun PledgePage(
                     PledgeActionsCard(
                         paused = pl.status == "paused", busy = busy, online = online, reminders = pl.remindersEnabled,
                         // Collected automatically: "Pay early", not the call to action (§7 rule 6).
-                        pay = pledgePayButton(collection, pl.pendingClaimMinor),
+                        pay = pledgePayButton(collection, checkingMinor),
                         onPayNow = onPayNow, onPauseResume = onPauseResume, onEdit = onEdit, onCancel = onCancel,
                         onPaidAnotherWay = { claiming = true }, onReminders = onReminders,
                     )
@@ -1334,6 +1339,7 @@ private fun PledgePage(
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
                 ClaimForm(
                     pl = pl,
+                    checking = pledgeCheckingLine(checkingMinor, pl.currency),
                     onSent = { made ->
                         claims = listOf(made) + claims.orEmpty().filter { it.claimId != made.claimId }
                         claimsFailed = false
@@ -1360,7 +1366,7 @@ private fun PledgeClaimLead(line: String) {
         Icon(Lucide.Clock4, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp).size(18.dp))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(line, style = NuruType.rowTitle, color = GIVE.navy)
-            Text("It's added to your pledge once they've matched it — there's nothing more to pay for it.", style = giInter(12), color = GIVE.sub)
+            Text(PLEDGE_CLAIM_COUNTS, style = giInter(12), color = GIVE.sub)
         }
     }
 }
@@ -1510,7 +1516,8 @@ private fun PledgeActionsCard(
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SmallAction("Edit", Lucide.Pencil, GIVE.ink600, enabled = !busy, modifier = Modifier.weight(1f), onClick = onEdit)
+            // A text action is gold (§8.1 rule 4; final walk C16: grey).
+            SmallAction("Edit", Lucide.Pencil, GIVE.gold, enabled = !busy, modifier = Modifier.weight(1f), onClick = onEdit)
             Box(Modifier.width(1.dp).height(16.dp).background(GIVE.border))
             SmallAction("Cancel", Lucide.X, GIVE.danger, enabled = !busy, modifier = Modifier.weight(1f), onClick = onCancel)
         }
@@ -1651,7 +1658,7 @@ private fun ClaimRow(c: PledgeClaim, today: LocalDate) {
  *  five waiting) are shown in its words. Shown in a sheet over the page. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> Unit) {
+private fun ClaimForm(pl: Pledge, checking: String?, onSent: (PledgeClaim) -> Unit, onClose: () -> Unit) {
     val view = LocalView.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1696,6 +1703,9 @@ private fun ClaimForm(pl: Pledge, onSent: (PledgeClaim) -> Unit, onClose: () -> 
             }
         }
         Text(claimIntro(pl.displayTitle), style = giInter(12), color = Nuru.ink600)
+        // What the office is already checking, so the same money is never
+        // told twice (final walk M1; iOS PledgeClaimSheet).
+        checking?.let { Text("$it.", style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText) }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(claimAmountLabel(pl.currency), style = label, color = GIVE.overline)
             OutlinedTextField(

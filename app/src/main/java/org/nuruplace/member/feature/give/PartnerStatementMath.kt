@@ -218,10 +218,14 @@ internal fun pledgeKeptThisYear(pl: Pledge, currentYearStatement: GivingStatemen
     return keptThisYear(pl, currentYearStatement?.payments.orEmpty(), today)
 }
 
-/** What TalkBack reads for the tier chip (iOS accessibilityLabel): the
- *  tier, what it gives a month, and the costing it is measured by. */
+/** What TalkBack reads for the tier chip: the server's own sentence and what
+ *  it gives a month. The tier's name is the server's words — "will carry one
+ *  disciple through a level, every year" until the partner's money lands,
+ *  then "carries …" (owner, 2026-10-08) — so nothing here says "carries" on
+ *  its own: it read "… partner — … KSh 20,000 carries one disciple" beside
+ *  KSh 0 paid. */
 internal fun tierSpoken(tier: PartnerTier, currency: String?): String =
-    "${tier.name} partner — ${money(tier.monthlyMinor, currency)} a month. KSh 20,000 carries one disciple through a level."
+    "Your partnership ${tier.name.trim()} — ${money(tier.monthlyMinor, currency)} a month."
 
 /** A pledge card's progress bar to TalkBack (iOS): "40 percent". */
 internal fun progressSpoken(fraction: Float): String = "${Math.round(fraction.coerceIn(0f, 1f) * 100)} percent"

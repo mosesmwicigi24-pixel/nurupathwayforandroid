@@ -18,6 +18,7 @@
 // automatically.
 package org.nuruplace.member.feature.give
 
+import org.nuruplace.member.data.net.PledgeClaim
 import org.nuruplace.member.data.net.CreateScheduleBody
 import org.nuruplace.member.data.net.GivingMethodsRes
 import org.nuruplace.member.data.net.GivingSchedule
@@ -112,8 +113,29 @@ fun pledgePayButton(collection: PledgeCollection, pendingClaimMinor: Int = 0): P
  *  toward it (EXPERIENCE.md §9.3 rule 1, §9.7 M1): "US$ 50.00 is being
  *  checked by the office" — in the pledge's own currency and the app's money
  *  format; said, never subtracted. Null with none. */
-fun pledgeClaimLine(pl: Pledge): String? =
-    pl.pendingClaimMinor.takeIf { it > 0 }?.let { "${money(it, pl.currency)} is being checked by the office" }
+fun pledgeClaimLine(pl: Pledge): String? = pledgeCheckingLine(pl.pendingClaimMinor, pl.currency)
+
+/** "US$ 50.00 is being checked by the office" for [minor] in [currency]; null at 0. */
+fun pledgeCheckingLine(minor: Int, currency: String): String? =
+    minor.takeIf { it > 0 }?.let { "${money(it, currency)} is being checked by the office" }
+
+/** What the office is still checking toward one pledge (final walk M1),
+ *  whichever read knows it: the pledge rows' `pending_claim_minor` (the list,
+ *  Partners and now the single read carry it) or the pledge page's own
+ *  pending claims in the pledge's currency — the most any of them says.
+ *  Shown, never subtracted. iOS PledgeChecking.minor, the same rule. */
+fun pledgeCheckingMinor(rows: List<Int?>, claims: List<PledgeClaim>?, currency: String): Int {
+    val fromRows = rows.filterNotNull().maxOrNull() ?: 0
+    val code = currency.uppercase()
+    val fromClaims = claims.orEmpty()
+        .filter { it.status == "pending" && it.currency.uppercase() == code }
+        .sumOf { maxOf(0L, it.amountMinor) }
+        .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    return maxOf(fromRows, fromClaims, 0)
+}
+
+/** Under the claim on the pledge page (iOS PledgeClaimLead.counts). */
+const val PLEDGE_CLAIM_COUNTS = "It counts toward this pledge once the office confirms it — no need to pay it again."
 
 /** POST /giving/schedules for "Collect it automatically at this pace": the
  *  pledge's pace, monthly, on M-Pesa, bound to the pledge, its first prompt

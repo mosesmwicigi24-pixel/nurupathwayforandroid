@@ -802,32 +802,32 @@ private fun StatementActions(busy: Boolean, error: String?, onDownload: () -> Un
     }
 }
 
-/** Navy fill = the money-document action (spec §3 button roles). */
+/** A secondary — white with a hairline and navy words (§8.1 rule 4; final
+ *  walk C16: it was navy-filled). */
 @Composable
 private fun DownloadPdfButton(busy: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.navy).clickable(enabled = !busy) { onClick() },
+        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.white).border(1.dp, GIVE.border, Capsule).clickable(enabled = !busy) { onClick() },
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         if (busy) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = GIVE.navy, strokeWidth = 2.dp)
         } else {
-            Icon(Lucide.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Download, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
         }
         Spacer(Modifier.width(8.dp))
-        Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.Bold), color = Color.White)
+        Text(if (busy) "Preparing PDF…" else "Download PDF", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
     }
 }
 
-/** Navy outline = secondary: the general giving statement, one tap away. */
+/** A secondary with a hairline — it wore a heavy navy outline and an arrow
+ *  inside (§8.1 rule 4; final walk C16). */
 @Composable
 private fun GivingStatementButton(onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.white).border(1.2.dp, GIVE.navy, Capsule).clickable { onClick() },
+        Modifier.fillMaxWidth().height(48.dp).clip(Capsule).background(GIVE.white).border(1.dp, GIVE.border, Capsule).clickable { onClick() },
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Giving statement", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy)
-        Spacer(Modifier.width(6.dp))
-        Icon(Lucide.ArrowRight, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
     }
 }

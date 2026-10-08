@@ -589,12 +589,15 @@ data class PledgeDetail(
     val untilOn: String? = null,
     val pace: PledgePace? = null,
     val payments: List<PledgePayment> = emptyList(),
+    /** What the office is still checking toward it — the single read carries
+     *  it too now (pathway d6478e4); 0 from an older server. */
+    val pendingClaimMinor: Int = 0,
 ) {
     fun asPledge(): Pledge = pledge ?: Pledge(
         pledgeId, shape, amountMinor, targetMinor, currency, dueDay, dueOn, fund, campaign,
         needId, status, progress, scheduleId, remindersEnabled,
         createdAt = createdAt, title = title, customTitle = customTitle, paysTo = paysTo,
-        startsOn = startsOn, untilOn = untilOn, pace = pace,
+        startsOn = startsOn, untilOn = untilOn, pace = pace, pendingClaimMinor = pendingClaimMinor,
     )
 }
 

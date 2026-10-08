@@ -1173,7 +1173,8 @@ private fun GiveTab(
                         .border(1.dp, GIVE.border, RoundedCornerShape(22.dp)).padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("AMOUNT", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
+                    // A kicker is gold, as every other (§8.1 rule 3; final walk C16: grey).
+                    Text("AMOUNT", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
                     Row(
                         Modifier.padding(top = 8.dp),
                         verticalAlignment = Alignment.Bottom,
@@ -1243,22 +1244,26 @@ private fun GiveTab(
                     }
                 }
 
-                // Frequency segmented — a bound gift is one-time, so no control.
+                // Frequency — a bound gift is one-time, so no control. Full
+                // pills, as iOS (§8.1 rule 6; final walk C16): selected navy,
+                // unselected white with a hairline — not the grey track.
                 if (targetCopy == null) Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(GIVE.track).padding(4.dp),
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     listOf("One-time", "Weekly", "Monthly").forEachIndexed { i, label ->
                         val on = freq == i
                         // At least 40 dp, taller when the words need it; each
                         // label whole — "One-tim" was cut (§9.7 M9).
                         Box(
-                            Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp))
-                                .then(if (on) Modifier.background(GIVE.white) else Modifier)
+                            Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(999.dp))
+                                .background(if (on) GIVE.navy else GIVE.white)
+                                .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, RoundedCornerShape(999.dp)))
                                 .clickable { freq = i }
-                                .padding(horizontal = 2.dp, vertical = 4.dp),
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            org.nuruplace.member.ui.components.WholeWordsText(label, style = giInter(13, FontWeight.SemiBold), color = if (on) GIVE.navy else GIVE.sub, textAlign = TextAlign.Center)
+                            org.nuruplace.member.ui.components.WholeWordsText(label, style = giInter(13, FontWeight.SemiBold), color = if (on) Color.White else GIVE.ink600, textAlign = TextAlign.Center)
                         }
                     }
                 }

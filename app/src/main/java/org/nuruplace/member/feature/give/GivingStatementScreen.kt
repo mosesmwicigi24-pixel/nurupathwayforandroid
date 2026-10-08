@@ -279,29 +279,25 @@ fun GivingStatementScreen(
                     .padding(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // Period selector
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(GIVE.track)
-                        .padding(4.dp),
-                ) {
+                // Period selector — full pills, as iOS (§8.1 rule 6; final walk
+                // C16: it selected white on a grey track).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("This year", "Last year").forEachIndexed { i, label ->
                         val on = period == i
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(38.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .then(if (on) Modifier.background(GIVE.white) else Modifier)
+                                .heightIn(min = 38.dp)
+                                .clip(Capsule)
+                                .background(if (on) GIVE.navy else GIVE.white)
+                                .then(if (on) Modifier else Modifier.border(1.dp, GIVE.border, Capsule))
                                 .clickable { period = i },
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 label,
                                 style = giInter(13, FontWeight.SemiBold),
-                                color = if (on) GIVE.navy else GIVE.sub,
+                                color = if (on) Color.White else GIVE.ink600,
                             )
                         }
                     }
@@ -499,7 +495,8 @@ private fun StatementRecordRow(r: GivingRecord, onOpenReceipt: (String) -> Unit)
                 Text("“$it”", style = giInter(11, FontWeight.SemiBold), color = GIVE.sub)
             }
             r.receiptCode?.takeIf { it.isNotBlank() }?.let {
-                Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.eyebrow)
+                // A reference is a detail, in ink (§8.1 rule 1; final walk C16: gold).
+                Text("Ref $it", style = giInter(11, FontWeight.SemiBold), color = GIVE.ink600)
             }
             // A gift that did not go through says why (Giving Cycle 1) — the
             // server's reason, then its hint, verbatim.
@@ -676,23 +673,10 @@ fun GivingReceiptScreen(
                 .background(GIVE.paper)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Cream header — back · Receipt · share
-            GiveCreamHeaderBox {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ReceiptHeaderButton(Lucide.ArrowLeft, "Back") { onBack() }
-                    Text("Receipt", style = giSerif(22, FontWeight.SemiBold), color = GIVE.navy)
-                    Spacer(Modifier.weight(1f))
-                    // Same action as "Share receipt" below; spins while it fetches.
-                    ReceiptHeaderButton(Lucide.Share2, "Share receipt", busy = sharing) { share() }
-                }
-            }
+            // The pushed page's one header — back · GIVE · Receipt (§8.1 rule
+            // 2; final walk C16: no kicker), as iOS. Share is offered once —
+            // "Share receipt" below, beside "View statement" (§9.6 #3).
+            org.nuruplace.member.ui.components.PushedHeader(kicker = "Give", title = "Receipt", onBack = onBack)
 
             Column(
                 Modifier
@@ -833,24 +817,28 @@ fun GivingReceiptScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         // At least 48dp, taller rather than clipped when a large
                         // font wraps the label (half a phone's width each).
+                        // Two secondaries — white with a hairline and navy words
+                        // (§8.1 rule 4; final walk C16: "Share receipt" was
+                        // navy-filled, "View statement" heavily outlined).
                         Row(
                             Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .clip(Capsule)
-                                .background(GIVE.navy)
+                                .background(GIVE.white)
+                                .border(1.dp, GIVE.border, Capsule)
                                 .clickable(enabled = !sharing) { share() }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (sharing) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = GIVE.navy, strokeWidth = 2.dp)
                             } else {
-                                Icon(Lucide.Share2, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Icon(Lucide.Share2, contentDescription = null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
                             }
                             Spacer(Modifier.width(8.dp))
-                            Text(if (sharing) "Preparing…" else "Share receipt", style = giInter(14, FontWeight.SemiBold), color = Color.White, textAlign = TextAlign.Center)
+                            Text(if (sharing) "Preparing…" else "Share receipt", style = giInter(14, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
                         }
                         Row(
                             Modifier
@@ -858,7 +846,7 @@ fun GivingReceiptScreen(
                                 .heightIn(min = 48.dp)
                                 .clip(Capsule)
                                 .background(GIVE.white)
-                                .border(1.2.dp, GIVE.navy.copy(alpha = 0.35f), Capsule)
+                                .border(1.dp, GIVE.border, Capsule)
                                 .clickable { Haptics.tap(view); onOpenStatement() }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.Center,

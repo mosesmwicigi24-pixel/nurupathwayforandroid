@@ -299,10 +299,16 @@ class PartnerStatementMathTest {
     // ── What TalkBack reads on the list (iOS accessibility labels) ──
 
     @Test
-    fun `the tier chip and the progress bar speak as iOS does`() {
+    fun `the tier chip speaks the server's own sentence, and the progress bar its percent`() {
+        // Before any money lands the server says "will carry" (owner,
+        // 2026-10-08); the chip's spoken line adds no "carries" of its own.
         assertEquals(
-            "Builder partner — KSh 20,000 a month. KSh 20,000 carries one disciple through a level.",
-            tierSpoken(PartnerTier(name = "Builder", monthlyMinor = 2_000_000), "KES"),
+            "Your partnership will carry one disciple through a level, every year — KSh 1,700 a month.",
+            tierSpoken(PartnerTier(name = "will carry one disciple through a level, every year", monthlyMinor = 170_000), "KES"),
+        )
+        assertEquals(
+            "Your partnership carries 3 disciples through a level, every year — KSh 5,000 a month.",
+            tierSpoken(PartnerTier(name = "carries 3 disciples through a level, every year", monthlyMinor = 500_000), "KES"),
         )
         assertEquals("0 percent", progressSpoken(0f))
         assertEquals("40 percent", progressSpoken(0.4f))

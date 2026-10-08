@@ -192,9 +192,12 @@ fun GiveCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
  *  "Pending", "Cancelled", "Requires action" (iOS capitalises the raw word;
  *  the underscore is read as a space here). */
 fun giveStatus(status: String?): Triple<String, Color, Color> = when (val s = status?.lowercase()?.trim().orEmpty()) {
-    "succeeded", "settled", "completed" -> Triple("Succeeded", GIVE.successBg, GIVE.successText)
-    "processing" -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
-    "failed" -> Triple("Failed", GIVE.danger.copy(alpha = 0.12f), GIVE.danger)
+    // A member's word, not the server's status (§8.1 rule 8; final walk
+    // C16): "Received", as iOS — it read "Succeeded".
+    "succeeded", "settled", "completed" -> Triple("Received", GIVE.successBg, GIVE.successText)
+    "processing", "pending", "initiated" -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
+    "requires_action" -> Triple("Waiting for you", GIVE.goldChipBg, GIVE.goldChipText)
+    "failed", "cancelled", "canceled", "expired" -> Triple("Failed", GIVE.danger.copy(alpha = 0.12f), GIVE.danger)
     "refunded" -> Triple("Refunded", GIVE.mutedBg, GIVE.ink600)
     else -> Triple(s.replace('_', ' ').replaceFirstChar { it.uppercase() }, GIVE.mutedBg, GIVE.ink600)
 }
