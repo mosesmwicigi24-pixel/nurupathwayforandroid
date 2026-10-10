@@ -172,7 +172,7 @@ private fun WatchCard(g: EkklesiaGroup, onJoin: () -> Unit, onLeave: () -> Unit)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("EKKLESIA · INTERCESSORS", style = gInter(10, FontWeight.SemiBold, 1.8f), color = GrowPal.gold)
+                Text("EKKLESIA · INTERCESSORS", style = gInter(11, FontWeight.SemiBold, 1.8f), color = GrowPal.gold)
                 Text(g.mission, style = gSerif(22, FontWeight.SemiBold), color = Color.White, modifier = Modifier.padding(top = 4.dp))
             }
             Box(
@@ -256,7 +256,7 @@ internal fun Face(name: String, url: String?, size: androidx.compose.ui.unit.Dp,
         } else {
             Text(
                 name.trim().split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }.ifBlank { "?" },
-                style = gInter((size.value * 0.36f).toInt(), FontWeight.SemiBold), color = Nuru.navy,
+                style = gInter(when { size >= 36.dp -> 13; size >= 32.dp -> 12; else -> 11 }, FontWeight.SemiBold), color = Nuru.navy,
             )
         }
     }
@@ -386,7 +386,7 @@ private fun StatusPill(label: String, count: Int, on: Boolean, onSelect: () -> U
             Text(label, style = gInter(12, FontWeight.Bold), color = if (on) Color.White else GrowPal.ink600)
             if (count > 0) {
                 Box(Modifier.clip(Capsule).background(if (on) GrowPal.gold else GrowPal.goldChipBg).padding(horizontal = 7.dp, vertical = 1.dp)) {
-                    Text("$count", style = gInter(10, FontWeight.Bold), color = if (on) GrowPal.navyDeep else GrowPal.goldChipText)
+                    Text("$count", style = gInter(11, FontWeight.Bold), color = if (on) GrowPal.navyDeep else GrowPal.goldChipText)
                 }
             }
         }
@@ -397,10 +397,10 @@ private fun StatusPill(label: String, count: Int, on: Boolean, onSelect: () -> U
 internal fun UrgencyChip(urgent: Boolean, pinned: Boolean) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (pinned) Box(Modifier.clip(Capsule).background(GrowPal.goldChipBg).padding(horizontal = 8.dp, vertical = 3.dp)) {
-            Text("PINNED", style = gInter(9, FontWeight.Bold, 1.2f), color = GrowPal.goldChipText)
+            Text("PINNED", style = gInter(11, FontWeight.Bold, 1.2f), color = GrowPal.goldChipText)
         }
         if (urgent) Box(Modifier.clip(Capsule).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp)) {
-            Text("URGENT", style = gInter(9, FontWeight.Bold, 1.2f), color = Nuru.warning)
+            Text("URGENT", style = gInter(11, FontWeight.Bold, 1.2f), color = Nuru.warning)
         }
     }
 }
@@ -414,7 +414,7 @@ private fun PreviewCard(p: EkklesiaPreview) {
         UrgencyChip(urgent = p.urgency == "urgent", pinned = false)
         Text(p.title, style = gSerif(16, FontWeight.SemiBold), color = GrowPal.ink)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Lucide.Lock, null, tint = GrowPal.ink400, modifier = Modifier.size(12.dp))
+            Icon(Lucide.Lock, null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
             Text(
                 EkklesiaWords.countsLine(p.intercessorCount, 0, 0)?.let { "$it · ${relTime(p.createdAt)}" } ?: relTime(p.createdAt),
                 style = gInter(11), color = GrowPal.ink400,
@@ -469,7 +469,7 @@ private fun RequestCard(r: EkklesiaRequest, onOpen: () -> Unit, onIntercede: () 
                 }
             } else UrgencyChip(r.isUrgent, r.isPinned)
         }
-        Text(r.title, style = gSerif(17, FontWeight.SemiBold), color = GrowPal.ink, modifier = Modifier.padding(top = 10.dp))
+        Text(r.title, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.ink, modifier = Modifier.padding(top = 10.dp))
         r.forWhom?.takeIf { it.isNotBlank() }?.let {
             Text("For $it", style = gInter(12, FontWeight.Medium), color = GrowPal.goldChipText, modifier = Modifier.padding(top = 2.dp))
         }

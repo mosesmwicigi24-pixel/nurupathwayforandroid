@@ -59,7 +59,7 @@ fun EkklesiaInvite(onOpen: () -> Unit, modifier: Modifier = Modifier) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 if (member) "EKKLESIA · THE WATCH" else "EKKLESIA · INTERCESSORS",
-                style = gInter(10, FontWeight.SemiBold, 1.6f),
+                style = gInter(11, FontWeight.SemiBold, 1.6f),
                 color = if (member) GrowPal.gold else GrowPal.goldChipText,
             )
             Text(

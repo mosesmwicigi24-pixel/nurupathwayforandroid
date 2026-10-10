@@ -89,7 +89,7 @@ fun EkklesiaRequestScreen(requestId: String, onBack: () -> Unit) {
                     .clickable(onClickLabel = "Back") { onBack() },
                 contentAlignment = Alignment.Center,
             ) { Icon(Lucide.ArrowLeft, "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
-            Text("EKKLESIA · THE WATCH", style = gInter(10, FontWeight.SemiBold, 1.8f), color = GrowPal.goldChipText)
+            Text("EKKLESIA · THE WATCH", style = gInter(11, FontWeight.SemiBold, 1.8f), color = GrowPal.goldChipText)
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             AsyncContent(loading = { ListSkeleton(rows = 4) }, load = { Net.client.api.ekklesiaRequest(requestId) }) { d: EkklesiaRequestDetail, reload ->
@@ -175,7 +175,7 @@ private fun RequestFull(r: EkklesiaRequest) {
             Column(
                 Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(GrowPal.successBg).padding(12.dp),
             ) {
-                Text("ANSWERED${r.answeredAt?.let { " · ${relTime(it)}" } ?: ""}", style = gInter(10, FontWeight.Bold, 1.4f), color = GrowPal.successText)
+                Text("ANSWERED${r.answeredAt?.let { " · ${relTime(it)}" } ?: ""}", style = gInter(11, FontWeight.Bold, 1.4f), color = GrowPal.successText)
                 r.answeredNote?.takeIf { it.isNotBlank() }?.let {
                     Text("“$it”", style = gInter(13).copy(lineHeight = 19.sp), color = GrowPal.successText, modifier = Modifier.padding(top = 4.dp))
                 }
@@ -188,7 +188,7 @@ private fun RequestFull(r: EkklesiaRequest) {
 private fun Standing(d: EkklesiaRequestDetail) {
     val r = d.request
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("STANDING ON THIS NEED", style = gInter(10, FontWeight.SemiBold, 1.6f), color = GrowPal.eyebrow)
+        Text("STANDING ON THIS NEED", style = gInter(11, FontWeight.SemiBold, 1.6f), color = GrowPal.eyebrow)
         Column(
             Modifier.fillMaxWidth().clip(CardShape).background(GrowPal.white).border(1.dp, GrowPal.border, CardShape).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -211,7 +211,7 @@ private fun Standing(d: EkklesiaRequestDetail) {
 private fun Updates(updates: List<EkklesiaUpdate>) {
     if (updates.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("WORD BACK TO THE WATCH", style = gInter(10, FontWeight.SemiBold, 1.6f), color = GrowPal.eyebrow)
+        Text("WORD BACK TO THE WATCH", style = gInter(11, FontWeight.SemiBold, 1.6f), color = GrowPal.eyebrow)
         updates.forEach { u ->
             val testimony = u.kind == "testimony"
             Column(
@@ -223,7 +223,7 @@ private fun Updates(updates: List<EkklesiaUpdate>) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Face(u.authorName, u.authorAvatar, 26.dp)
                     Text(if (u.mine) "You" else u.authorName, style = gInter(12, FontWeight.Bold), color = GrowPal.ink, modifier = Modifier.weight(1f))
-                    if (testimony) Text("TESTIMONY", style = gInter(9, FontWeight.Bold, 1.2f), color = GrowPal.goldChipText)
+                    if (testimony) Text("TESTIMONY", style = gInter(11, FontWeight.Bold, 1.2f), color = GrowPal.goldChipText)
                     Text(relTime(u.createdAt), style = gInter(11), color = GrowPal.ink400)
                 }
                 Text(u.body, style = gInter(13).copy(lineHeight = 19.sp), color = GrowPal.ink, modifier = Modifier.padding(top = 6.dp))
