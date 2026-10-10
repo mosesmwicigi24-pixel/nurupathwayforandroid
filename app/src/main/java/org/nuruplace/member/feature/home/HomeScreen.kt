@@ -328,6 +328,9 @@ fun HomeScreen(
         // Home's own prayer-wall preview endpoint (iOS HomeView.prayerWallHome
         // parity) — distinct from the community/prayer-wall feed's sort query.
         prayers = runCatching { Net.client.api.prayerWallHome().data }.getOrElse { prayers }
+        // Ekklesia, the intercessory watch — the Home card and the invitations
+        // share one small read (EkklesiaPulse).
+        org.nuruplace.member.feature.community.EkklesiaPulse.refresh(force = true)
         discipler = runCatching { HomeDiscipler(Net.client.api.mentor().mentor) }.getOrElse { discipler }
         radio = runCatching { Net.client.api.radioNowPlaying() }.getOrElse { radio }
         runCatching { Net.client.api.getLiveNow().data }.onSuccess { rows ->
@@ -701,6 +704,11 @@ fun HomeScreen(
                 // wall preview on its Corporate tab, the post itself pushed
                 // directly (deep-link parity).
                 if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-room?tab=corporate") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                // 5a · Ekklesia — the watch: an intercessor's needs for today, or the
+                // door in (one line, never a nag). Opens the Prayer Room on its tab.
+                org.nuruplace.member.feature.community.EkklesiaPulse.summary?.let { ek ->
+                    Entrance(entrance, 7) { EkklesiaHomeCard(ek, onOpen = { onNavigate(org.nuruplace.member.feature.community.EkklesiaWords.ROUTE) }) }
+                }
                 // 5b · Celebrate the family (moments, Phase 4).
                 CelebrationsRail()
                 FeaturedCarousel(
@@ -1660,6 +1668,52 @@ private fun PrayerWallCard(posts: List<PrayerWallPost>, onOpenWall: () -> Unit, 
     }
 }
 
+/** Ekklesia on Home — the watch in one card: for an intercessor, what waits
+ *  on them today and the first need; for everyone else, the mission and the
+ *  day's invitation. Both open the Prayer Room on its Ekklesia tab. */
+@Composable
+private fun EkklesiaHomeCard(s: org.nuruplace.member.data.net.EkklesiaSummary, onOpen: () -> Unit) {
+    val words = org.nuruplace.member.feature.community.EkklesiaWords
+    HomeCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CardKicker(if (s.isMember) "Ekklesia · the watch" else "Ekklesia · intercessors")
+            Spacer(Modifier.weight(1f))
+            RowScopeLink(if (s.isMember) "Open the watch ›" else "Join ›", onOpen)
+        }
+        Spacer(Modifier.height(Spacing.sm))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onOpen() }) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(999.dp)).background(Nuru.goldChipBg),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Lucide.Flame, null, tint = Nuru.goldChipText, modifier = Modifier.size(18.dp)) }
+            Spacer(Modifier.width(Spacing.sm))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (s.isMember) words.memberLine(s.needsMeToday, s.urgentCount)
+                    else words.invitation(java.time.LocalDate.now().dayOfYear),
+                    style = NuruType.rowTitle, color = Nuru.ink,
+                )
+                val under = when {
+                    s.isMember -> s.latest.firstOrNull()?.let { l -> l.forWhom?.takeIf { it.isNotBlank() }?.let { "Newest: ${l.title} · for $it" } ?: "Newest: ${l.title}" }
+                        ?: (if (s.memberCount > 1) "${s.memberCount} intercessors on the watch" else null)
+                    else -> words.standing(s.memberCount) ?: s.mission
+                }
+                under?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        if (!s.isMember) {
+            Spacer(Modifier.height(Spacing.sm))
+            Box(
+                Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.gold).clickable(onClickLabel = "Join the watch") { onOpen() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) { Text("Stand in the gap", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
 @Composable
 private fun PrayerPostRow(post: PrayerWallPost, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {
@@ -2194,6 +2248,8 @@ private fun nudgeRouteFor(n: HomeNudge): String = when (n.route.ifBlank { n.kind
     "plan", "plan_day_due" -> n.planId?.let { "plan/$it" } ?: "plans"
     "reading_invite" -> n.token?.let { "reading/join/$it" } ?: "read-with-friend"
     "chat", "chat_unread" -> n.conversationId?.let { "chat/$it" } ?: "chat"
+    // Ekklesia (modules/ekklesia): an intercessor's needs for today → the watch.
+    "ekklesia", "ekklesia_watch" -> org.nuruplace.member.feature.community.EkklesiaWords.ROUTE
     // Partners programme (docs/PARTNERS_PROGRAMME.md §3): a pledge due/overdue
     // nudge opens the Give tab on Partners, where Pay now lives.
     "partners", "pledge", "pledge_due", "pledge_due_soon", "pledge_overdue", "pledge_fulfilled" -> "partners"

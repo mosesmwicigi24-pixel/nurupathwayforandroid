@@ -128,6 +128,8 @@ fun PathwayHubScreen(
     onOpenWalk: () -> Unit,
     /** The header's bell — the inbox, as on every tab (§7.2 #4). */
     onOpenNotifications: () -> Unit = {},
+    /** Ekklesia's invitation to intercede (the Prayer Room's tab). */
+    onOpenEkklesia: () -> Unit = {},
 ) {
     // The hub's server data is HELD by the "pathway" destination
     // (rememberHeld): Back from a level, a module or the exam finds the same
@@ -248,6 +250,8 @@ fun PathwayHubScreen(
                 }
                 // Studying together, apart (Wave 2) — renders nothing when quiet.
                 CellPresenceLine()
+                // Ekklesia's invitation to intercede (one quiet row; the Prayer Room's tab).
+                org.nuruplace.member.feature.community.EkklesiaInvite(onOpen = onOpenEkklesia, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
                 // A circle opens its level's page (§9.2 #9) — it only changed
                 // the selection, so tapping the member's own "1" did nothing.
                 JourneyRail(levels, selNum ?: -1, current = currentNum, onSelect = onOpenLevel, onMap = onOpenMap)

@@ -88,6 +88,8 @@ fun ReadingPlansScreen(
     onOpenPlan: (String) -> Unit,
     onOpenNotifications: () -> Unit = {},
     onOpenReadWithFriend: () -> Unit = {},
+    /** Ekklesia's invitation to intercede — one quiet row (the Prayer Room's tab). */
+    onOpenEkklesia: () -> Unit = {},
 ) {
     // Held by the tab (rememberHeld, EXPERIENCE.md §7.2 #8): Back from a plan
     // finds the same library at the same scroll, refreshed in place.
@@ -273,6 +275,7 @@ fun ReadingPlansScreen(
                         onOpenPlan = onOpenPlan,
                     )
                     InvitationCard(onClick = onOpenReadWithFriend)
+                    org.nuruplace.member.feature.community.EkklesiaInvite(onOpen = onOpenEkklesia)
                 }
             }
         }

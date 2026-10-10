@@ -200,6 +200,8 @@ class NuruMessagingService : FirebaseMessagingService() {
                 // watchable stream (or says the Live has ended) — only for a
                 // notice that names no stream.
                 "live" in t -> "live-now"
+                // ekklesia_request (modules/ekklesia): the watch, not the wall.
+                "ekklesia" in t -> "prayer-room?tab=ekklesia"
                 "prayer" in t -> "prayer-room?tab=corporate"
                 "verse" in t || "memory" in t -> "memory-verses"
                 "devotional" in t -> "devotional"

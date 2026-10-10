@@ -224,6 +224,41 @@ interface MemberApi {
     @DELETE("prayer-wall/{id}")
     suspend fun deletePrayerWallPost(@Path("id") postId: String): Unit
 
+    // --- Ekklesia: the intercessory watch (Prayer Room tab 5, the Home card,
+    //     the invitations). Reads are tolerant; writes carry client ids. ---
+    @GET("ekklesia")
+    suspend fun ekklesia(@retrofit2.http.Query("status") status: String = "active"): EkklesiaOverview
+
+    @GET("ekklesia/summary")
+    suspend fun ekklesiaSummary(): EkklesiaSummary
+
+    @POST("ekklesia/join")
+    suspend fun ekklesiaJoin(): EkklesiaJoinRes
+
+    @POST("ekklesia/leave")
+    suspend fun ekklesiaLeave(): EkklesiaLeaveRes
+
+    @POST("ekklesia/requests")
+    suspend fun ekklesiaBring(@Body body: EkklesiaRequestBody): EkklesiaCreateRes
+
+    @GET("ekklesia/requests/{id}")
+    suspend fun ekklesiaRequest(@Path("id") requestId: String): EkklesiaRequestDetail
+
+    @DELETE("ekklesia/requests/{id}")
+    suspend fun ekklesiaWithdraw(@Path("id") requestId: String): Unit
+
+    @POST("ekklesia/requests/{id}/intercede")
+    suspend fun ekklesiaIntercede(@Path("id") requestId: String): EkklesiaIntercedeRes
+
+    @POST("ekklesia/requests/{id}/updates")
+    suspend fun ekklesiaWriteBack(@Path("id") requestId: String, @Body body: EkklesiaUpdateBody): Unit
+
+    @POST("ekklesia/requests/{id}/answered")
+    suspend fun ekklesiaAnswered(@Path("id") requestId: String, @Body body: EkklesiaAnsweredBody): Unit
+
+    @POST("ekklesia/requests/{id}/pinned")
+    suspend fun ekklesiaPinned(@Path("id") requestId: String, @Body body: EkklesiaPinnedBody): Unit
+
     // --- Chat ---
     @GET("chat/conversations")
     suspend fun chatInbox(@retrofit2.http.Query("scope") scope: String = "mine"): ChatInbox

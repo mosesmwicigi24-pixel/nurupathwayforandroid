@@ -4491,3 +4491,84 @@ Committed in this worktree (`.worktrees/liturgyaudio`, branch
 `feat/liturgy-audio`, built on top of origin/main `5354bd9`); not pushed, no
 PR opened yet by this session (the task brief says "PR opened, do NOT
 merge" — opening the PR is the next step after this report).
+
+## 2026-10-10 — Ekklesia: a congregation-wide intercessory watch as the fifth My Prayer Room segment (branch claude/ekklesia; pathway #519 · iOS nurupathwayforios #170 · this repo)
+
+The owner's ask, from a screenshot of the "Ekklesia Intercessory · Pray for
+the Body of Christ" WhatsApp group: put that group *inside* the app, beside
+Private · Corporate · Selah · Prayer Points, and invite the whole church into
+it from several pages. Owner spec: `pathway/packages/backend/src/modules/ekklesia/service.ts`
+(wire truth) + `pathway/packages/shared/src/openapi/openapi.yaml` `/ekklesia*`
+(from line 6480). Member-only — portal and iPad are N/A.
+
+**Shape (server-authoritative, §1.1):** one Ekklesia group per congregation.
+Anyone may *bring a need* (`POST /ekklesia/requests`, index.ts:38 → service
+`createRequest` :316); only members who have *joined* read bodies and
+intercede — a non-member's `POST …/intercede` (index.ts:47 → `intercede`
+:367) returns `403 FORBIDDEN_SCOPE` with `details.join = true`, which is the
+signal the client uses to show the join prompt instead of an error. One
+intercession per member per request per Nairobi day; `summary`
+(`GET /ekklesia/summary`, service :205) carries `needs_me_today` /
+`my_prayers_today` / `my_days` and three faces so Home and the invites can
+say something true without a second call. Leaders = appointed intercessor
+leaders OR church Instructor/Admin/SuperAdmin (pin, reassign roles, close
+any need). A new need pushes `ekklesia_request` (dispatch.ts:166) once to
+every active intercessor; Home grows a `ekklesia_watch` nudge (home
+service.ts:712, route `ekklesia`) for members with unprayed active needs.
+
+**iOS change (nurupathwayforios #170):** `Models/Ekklesia.swift`,
+`MemberAPI+Ekklesia.swift`, `EkklesiaView` / `EkklesiaRequestView` /
+`EkklesiaInvite` (+ `EkklesiaPulse.shared`), `PrayerRoomView` `case
+ekklesia`, `CommunityRoute.ekklesia` / `.ekklesiaRequest`, Home card + nudge
+route, invites on Pathway / Reading Plans / Events, NoticeRouter
+`ekklesia*`, pulse cleared on sign-out.
+
+**Android change (this repo), mirror for mirror:**
+- `data/net/EkklesiaDtos.kt` + `MemberApi.kt` `ekklesia*()` — the eleven
+  calls, snake_case via the shared serializer; every model tolerant
+  (defaults on optional fields) so a server that adds a field never breaks
+  an installed build.
+- `feature/community/EkklesiaWords.kt` — the ONE source of copy and the
+  deep-link route `prayer-room?tab=ekklesia`. The six invitation lines
+  rotate by day-of-year (`invitation(dayOfYear)`), the standing line reads
+  "N intercessors are on the watch" only when N > 0 (never "0 intercessors"),
+  and `memberLine` / `countsLine` are pure so `EkklesiaWordsTest` pins the
+  exact strings iOS uses.
+- `EkklesiaPulse.kt` — app-wide `object` holding the summary (same shape as
+  `RadioController`/`AppPrefs`): Home's load calls `refresh(force = true)`,
+  the invites read it without a network call, `invalidate()` after any
+  write, `clear()` on sign-out (`AuthStore` + `SettingsScreen`).
+- `EkklesiaScreen.kt` — the segment body: watch card (counts, faces, my
+  streak), "Bring a need" prompt + sheet (stable `client_mutation_id` per
+  open sheet so a retry never doubles a need, §3.6), active/answered pills,
+  preview cards for non-members (titles only — bodies stay inside the
+  watch), full cards + `IntercedeButton` for members; a 403 with
+  `details.join` flips the button into "Join Ekklesia".
+- `EkklesiaRequestScreen.kt` — route `ekklesia/{id}`: full need, who has
+  stood with it, updates/testimonies, write-back, Mark answered / Reopen
+  (author or leader), Pin (leader), Withdraw (two-tap, author or leader).
+- `PrayerRoomScreen.kt` — enum gains `Ekklesia` between Corporate and
+  Selah; segment label "Ekklesia"; `MainShell.kt` maps `?tab=ekklesia`,
+  registers `ekklesia/{id}`, passes `onOpenEkklesia` to Pathway hub,
+  Reading Plans and Events.
+- **Invitations ("ads") where the owner asked:** `EkklesiaHomeCard` on
+  Home (after Prayer Wall, deep-links to the segment), `EkklesiaInvite`
+  rows on Pathway hub, Reading Plans and Events — one row each, quiet,
+  rotating copy, never shown twice on one screen.
+- `NuruMessagingService.kt` — any `ekklesia*` push template lands on
+  `prayer-room?tab=ekklesia` (checked before the generic `prayer` rule so
+  it is not swallowed); `HomeScreen.nudgeRouteFor` maps `ekklesia` /
+  `ekklesia_watch` the same way.
+
+**Offline (§1.7):** online-only by design — a need and an intercession are
+read by other people within seconds, and the join prompt depends on a live
+403; nothing here is queued. Writes carry stable ids so the server dedupes
+a retried POST. No money anywhere (§5.6 N/A).
+
+**Verify:** `./gradlew :app:testDebugUnitTest --tests '*Ekklesia*' --tests
+'*NuruMessagingServiceDestForTest*'`; on device: My Prayer Room shows five
+segments with Ekklesia third; a non-member sees titles and "Join Ekklesia";
+after joining, Intercede counts once and greys for the day; a new need from
+another account arrives as a push that opens the Ekklesia segment; Home
+shows the Ekklesia card and, for a member with unprayed needs, the
+"wait on the watch" nudge.

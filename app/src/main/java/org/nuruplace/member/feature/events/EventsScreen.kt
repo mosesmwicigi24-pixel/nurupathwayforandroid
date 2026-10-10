@@ -93,6 +93,8 @@ fun EventsScreen(
      *  MainShell mounts at the top of the body — Go Live / return / My
      *  Broadcasts (feature/live/BroadcastCard.kt). Null for everyone else. */
     broadcastCard: (@Composable () -> Unit)? = null,
+    /** Ekklesia's invitation to intercede — one quiet row under the gatherings' head. */
+    onOpenEkklesia: () -> Unit = {},
 ) {
     // A tab root: its failed state offers Try again, not a "Go back" to nowhere.
     // Held by the tab (§7.2 #8): Back from an event finds the same list at the
@@ -179,6 +181,7 @@ fun EventsScreen(
             ) {
                 // Broadcast (live:go members only) — Live moved into Events.
                 broadcastCard?.invoke()
+                org.nuruplace.member.feature.community.EkklesiaInvite(onOpen = onOpenEkklesia, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
 
                 // Week strip card
                 Column(
