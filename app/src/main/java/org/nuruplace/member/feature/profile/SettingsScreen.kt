@@ -503,6 +503,7 @@ private fun ActionsRow() {
                         // (No AuthStore yet — never so in a signed-in shell — still
                         // clears this phone.)
                         Net.client.onSessionExpired?.invoke() ?: Net.client.signOutLocally()
+        org.nuruplace.member.feature.community.EkklesiaPulse.clear()
                     }.padding(12.dp),
                 )
             },

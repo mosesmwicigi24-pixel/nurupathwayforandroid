@@ -448,6 +448,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             }
             composable("pathway") {
                 PathwayHubScreen(
+                    onOpenEkklesia = { nav.navigate(org.nuruplace.member.feature.community.EkklesiaWords.ROUTE) },
                     me = me,
                     onOpenLevel = { nav.navigate("level/$it") },
                     onOpenModule = { nav.navigate("module/$it") },
@@ -472,6 +473,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("plans") {
                 ReadingPlansScreen(
                     onOpenPlan = { nav.navigate("plan/$it") },
+                    onOpenEkklesia = { nav.navigate(org.nuruplace.member.feature.community.EkklesiaWords.ROUTE) },
                     onOpenNotifications = { nav.navigate("notifications") },
                     onOpenReadWithFriend = { nav.navigate("read-with-friend") },
                 )
@@ -610,6 +612,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 val initialTab = when (entry.arguments?.getString("tab")) {
                     "corporate" -> org.nuruplace.member.feature.community.PrayerRoomTab.Corporate
+                    "ekklesia" -> org.nuruplace.member.feature.community.PrayerRoomTab.Ekklesia
                     "selah" -> org.nuruplace.member.feature.community.PrayerRoomTab.Selah
                     "prayer-points" -> org.nuruplace.member.feature.community.PrayerRoomTab.PrayerPoints
                     // "answered" no longer has a top-level slot — it folds into
@@ -620,7 +623,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     initialTab = initialTab,
                     onBack = { nav.popBackStack() },
                     onOpenPost = { nav.navigate("prayer-wall/$it") },
+                    onOpenEkklesiaRequest = { nav.navigate("ekklesia/$it") },
                 )
+            }
+            // A need on the watch (Ekklesia), pushed from the room, Home, or a push.
+            composable(
+                "ekklesia/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.community.EkklesiaRequestScreen(requestId = entry.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
             }
             composable(
                 "prayer-wall/{id}",
@@ -731,6 +742,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable(EVENTS_TAB_ROUTE) {
                 val broadcaster = org.nuruplace.member.feature.live.canGoLive(me)
                 org.nuruplace.member.feature.events.EventsScreen(
+                    onOpenEkklesia = { nav.navigate(org.nuruplace.member.feature.community.EkklesiaWords.ROUTE) },
                     onOpenEvent = { id, end -> nav.navigate("event/$id?end=${android.net.Uri.encode(end ?: "")}") },
                     onOpenCalendar = { nav.navigate("events-calendar") },
                     onOpenAnnouncement = { nav.navigate("announcement/$it") },

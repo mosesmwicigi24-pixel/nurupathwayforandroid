@@ -1,5 +1,5 @@
 // My Prayer Room — the single destination that replaces the separate
-// "Prayer wall" and "Prayer journal" entries. THREE tabs over one screen:
+// "Prayer wall" and "Prayer journal" entries. FIVE tabs over one screen:
 // Private (the member's own journal, PrayerJournalScreen, embedded), Corporate
 // (the congregation's wall, PrayerWallScreen, embedded), and Answered (the
 // journal again, pinned to its answered filter — iOS build 80 parity). Child
@@ -48,7 +48,9 @@ import org.nuruplace.member.ui.icons.Lucide
 // Active/Answered chips (PrayerJournalScreen already shows them whenever it
 // isn't pinned to a forced tab) so the room stays at a clean four across —
 // Selah and Prayer Points took its top-level slot.
-enum class PrayerRoomTab { Private, Corporate, Selah, PrayerPoints }
+// Ekklesia (2026-10-10): the church's intercessory watch, beside Corporate —
+// the two shared segments stand together; the private ones follow.
+enum class PrayerRoomTab { Private, Corporate, Ekklesia, Selah, PrayerPoints }
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -62,6 +64,8 @@ fun PrayerRoomScreen(
     /** The bell at the header's right (§8.1 rule 2) — given on the Pray door. */
     onOpenNotifications: (() -> Unit)? = null,
     onOpenPost: (String) -> Unit,
+    /** A need on the watch, pushed to its own page (EkklesiaRequestScreen). */
+    onOpenEkklesiaRequest: (String) -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(initialTab) }
 
@@ -110,6 +114,7 @@ fun PrayerRoomScreen(
                 PrayerRoomTab.Private -> PrayerJournalScreen(embedded = true)
                 // Off the tab (a pushed route), the wall's "+" clears the gesture bar itself.
                 PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, clearNavigationBar = !embedded, onOpenPost = onOpenPost)
+                PrayerRoomTab.Ekklesia -> EkklesiaScreen(clearNavigationBar = !embedded, onOpenRequest = onOpenEkklesiaRequest)
                 PrayerRoomTab.Selah -> SelahScreen()
                 PrayerRoomTab.PrayerPoints -> PrayerPointsScreen()
             }
@@ -129,6 +134,7 @@ private fun SegmentedControl(tab: PrayerRoomTab, onSelect: (PrayerRoomTab) -> Un
     ) {
         item { SegmentButton("Private", tab == PrayerRoomTab.Private) { onSelect(PrayerRoomTab.Private) } }
         item { SegmentButton("Corporate", tab == PrayerRoomTab.Corporate) { onSelect(PrayerRoomTab.Corporate) } }
+        item { SegmentButton("Ekklesia", tab == PrayerRoomTab.Ekklesia) { onSelect(PrayerRoomTab.Ekklesia) } }
         item { SegmentButton("Selah", tab == PrayerRoomTab.Selah) { onSelect(PrayerRoomTab.Selah) } }
         item { SegmentButton("Prayer Points", tab == PrayerRoomTab.PrayerPoints) { onSelect(PrayerRoomTab.PrayerPoints) } }
     }

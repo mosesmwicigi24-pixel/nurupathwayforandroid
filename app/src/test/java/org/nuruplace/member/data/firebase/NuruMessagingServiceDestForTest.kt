@@ -115,6 +115,7 @@ class NuruMessagingServiceDestForTest {
 
     @Test fun `template fallbacks still resolve`() {
         assertEquals("prayer-room?tab=corporate", NuruMessagingService.destFor(mapOf("template" to "prayer_chain")))
+        assertEquals("prayer-room?tab=ekklesia", NuruMessagingService.destFor(mapOf("template" to "ekklesia_request")))
         assertEquals("memory-verses", NuruMessagingService.destFor(mapOf("template" to "memory_verse")))
         assertEquals("give", NuruMessagingService.destFor(mapOf("template" to "giving_receipt")))
         assertEquals("profile", NuruMessagingService.destFor(mapOf("template" to "badge_awarded")))
