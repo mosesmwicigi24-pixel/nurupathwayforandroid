@@ -134,10 +134,29 @@ class PartnersStatementLogicTest {
     }
 
     @Test
-    fun `amount line names the rhythm or the deadline`() {
-        assertEquals("KSh 2,000 monthly · due on the 5th", pledgeAmountLine(StatementPledge(shape = "monthly", amountMinor = 200_000, dueDay = 5)))
-        assertEquals("KSh 2,000 monthly", pledgeAmountLine(StatementPledge(shape = "monthly", amountMinor = 200_000)))
-        assertEquals("KSh 50,000 by Dec 2026", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2026-12-15")))
+    fun `amount line is the pledge card's own words, the year only when it isn't this one`() {
+        assertEquals("KSh 2,000 monthly · due on the 5th", pledgeAmountLine(StatementPledge(shape = "monthly", amountMinor = 200_000, dueDay = 5), today))
+        assertEquals("KSh 2,000 monthly", pledgeAmountLine(StatementPledge(shape = "monthly", amountMinor = 200_000), today))
+        assertEquals("KSh 50,000 · by Tue 15 Dec", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2026-12-15"), today))
+        assertEquals("KSh 50,000 · by Mon 1 Mar 2027", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000, dueOn = "2027-03-01"), today))
+        // No date to state: the amount alone, never "by a date".
+        assertEquals("KSh 50,000", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 5_000_000), today))
+        assertEquals("US$ 500.00 · by Tue 15 Dec", pledgeAmountLine(StatementPledge(shape = "total", targetMinor = 50_000, currency = "USD", dueOn = "2026-12-15"), today))
+    }
+
+    @Test
+    fun `commitment chip reads the status, then behind or on track`() {
+        assertEquals("Paused", statementPledgeState(StatementPledge(status = "paused", kept = 0, dueCount = 3), today))
+        assertEquals("Fulfilled", statementPledgeState(StatementPledge(status = "fulfilled", shape = "total", dueOn = "2026-01-01"), today))
+        assertEquals("Cancelled", statementPledgeState(StatementPledge(status = "cancelled"), today))
+        // Monthly: behind while fewer due dates are kept than have come.
+        assertEquals("Behind", statementPledgeState(StatementPledge(shape = "monthly", kept = 2, dueCount = 3), today))
+        assertEquals("On track", statementPledgeState(StatementPledge(shape = "monthly", kept = 3, dueCount = 3), today))
+        assertEquals("On track", statementPledgeState(StatementPledge(shape = "monthly", kept = 0, dueCount = 0), today))
+        // Total: behind only once its date has passed unfulfilled — its day itself is still on track.
+        assertEquals("Behind", statementPledgeState(StatementPledge(shape = "total", dueOn = "2026-09-24"), today))
+        assertEquals("On track", statementPledgeState(StatementPledge(shape = "total", dueOn = "2026-09-25"), today))
+        assertEquals("On track", statementPledgeState(StatementPledge(shape = "total"), today))
     }
 
     // ── Payments by month ──
@@ -157,10 +176,10 @@ class PartnersStatementLogicTest {
         assertEquals(listOf(2026, 2026), months.map { it.year })
         // Newest first inside the month, the later same-day gift ahead of the earlier.
         assertEquals(listOf("sep20pm", "sep20", "sep3"), months[0].payments.map { it.transactionId })
-        assertEquals(900_000, months[0].subtotalMinor)
+        assertEquals(listOf(CurrencyAmount("KES", 900_000)), months[0].subtotals)
         assertEquals(listOf("jul5"), months[1].payments.map { it.transactionId })
-        assertEquals(100_000, months[1].subtotalMinor)
-        assertEquals(1_000_000, statementYearTotal(months))
+        assertEquals(listOf(CurrencyAmount("KES", 100_000)), months[1].subtotals)
+        assertEquals(listOf(CurrencyAmount("KES", 1_000_000)), statementYearTotals(months))
         assertTrue(months.none { it.undated })
     }
 
@@ -169,8 +188,28 @@ class PartnersStatementLogicTest {
         val months = paymentsByMonth(listOf(payment(100_000, "m1", "2026-02-05T09:00:00Z"), payment(70_000, "m1", null), payment(30_000, "m1", "not a date")))
         assertEquals(listOf(2, 0), months.map { it.month })
         assertTrue(months.last().undated)
-        assertEquals(100_000, months.last().subtotalMinor)
-        assertEquals(200_000, statementYearTotal(months))
+        assertEquals(listOf(CurrencyAmount("KES", 100_000)), months.last().subtotals)
+        assertEquals(listOf(CurrencyAmount("KES", 200_000)), statementYearTotals(months))
+    }
+
+    @Test
+    fun `a month group says its month and year, a row its weekday and day`() {
+        assertEquals("SEPTEMBER 2026", statementMonthLabel(StatementMonth(2026, 9, emptyList(), emptyList())))
+        assertEquals("JANUARY 2025", statementMonthLabel(StatementMonth(2025, 1, emptyList(), emptyList())))
+        assertEquals("UNDATED", statementMonthLabel(StatementMonth(0, 0, emptyList(), emptyList())))
+        assertEquals("Sun 20", statementPaymentDay("2026-09-20T09:00:00Z"))
+        // The church's calendar: 22:30 UTC on the 30th is the 1st in Nairobi.
+        assertEquals("Thu 1", statementPaymentDay("2026-09-30T22:30:00Z"))
+        assertEquals("—", statementPaymentDay(null))
+        assertEquals("—", statementPaymentDay("not a date"))
+    }
+
+    @Test
+    fun `a statement row's meta is the rail, else the fund, then the receipt code`() {
+        assertEquals("M-Pesa · UIKJ2713B5", statementLineMeta(StatementPayment(method = "mpesa", fund = "tithe", fundName = "Tithe", receiptCode = "UIKJ2713B5")))
+        assertEquals("Discipleship Fund · R1", statementLineMeta(StatementPayment(fund = "discipleship", fundName = "Discipleship Fund", receiptCode = "R1")))
+        assertEquals(giveFund("tithe").name, statementLineMeta(StatementPayment(fund = "tithe")))
+        assertEquals("", statementLineMeta(StatementPayment()))
     }
 
     @Test
@@ -192,13 +231,20 @@ class PartnersStatementLogicTest {
         val t = disciplesTile(StatementImpact(paidMinor = 600_000, perDiscipleMinor = 2_000_000, disciplesCarried = 0, towardNextMinor = 600_000))
         assertTrue(t is DisciplesTile.Toward)
         t as DisciplesTile.Toward
-        assertEquals("KSh 6,000 of 20,000 toward carrying one disciple through a level", t.text)
+        // As iOS: "KSh 6,000 of 20,000" under the bar, what it is toward beneath.
+        assertEquals("KSh 6,000 of 20,000", t.ofLine)
+        // Nothing carried yet: the tile says what it is toward (owner, 2026-10-08: D1; iOS).
+        assertEquals("TOWARD A DISCIPLE", TOWARD_KICKER)
+        assertEquals("through a level", TOWARD_CAPTION)
+        assertEquals("KSh 6,000 of KSh 20,000 toward carrying one disciple through a level", t.spoken)
         assertEquals(0.3f, t.fraction, 0.0001f)
-        assertFalse(t.text.startsWith("0"))
+        assertFalse(t.ofLine.startsWith("0"))
         // Nothing paid yet still reads as progress, never "0 disciples".
         val none = disciplesTile(StatementImpact(perDiscipleMinor = 2_000_000)) as DisciplesTile.Toward
-        assertEquals("KSh 0 of 20,000 toward carrying one disciple through a level", none.text)
+        assertEquals("KSh 0 of 20,000", none.ofLine)
         assertEquals(0f, none.fraction, 0f)
+        assertEquals("1 disciple carried through a level", DisciplesTile.Carried(1).spoken)
+        assertEquals("3 disciples carried through a level", DisciplesTile.Carried(3).spoken)
     }
 
     @Test
@@ -206,7 +252,7 @@ class PartnersStatementLogicTest {
         // per_disciple 0 → the tier costing (KSh 20,000), so no divide-by-zero.
         val noCost = disciplesTile(StatementImpact(paidMinor = 500_000, perDiscipleMinor = 0, disciplesCarried = 0, towardNextMinor = 500_000)) as DisciplesTile.Toward
         assertEquals(DISCIPLE_COST_MINOR, noCost.perDiscipleMinor)
-        assertEquals("KSh 5,000 of 20,000 toward carrying one disciple through a level", noCost.text)
+        assertEquals("KSh 5,000 of 20,000", noCost.ofLine)
         // toward_next absent while money was paid → the paid amount's remainder.
         val noToward = disciplesTile(StatementImpact(paidMinor = 800_000, perDiscipleMinor = 2_000_000)) as DisciplesTile.Toward
         assertEquals(800_000, noToward.towardMinor)
@@ -217,10 +263,78 @@ class PartnersStatementLogicTest {
     }
 
     @Test
-    fun `kept tile is kept on time plus late of due, hidden before anything is due`() {
-        assertEquals("5 of 6", keptTileValue(StatementFaithfulness(keptOnTime = 4, late = 1, missed = 1, dueCount = 6)))
-        assertNull(keptTileValue(StatementFaithfulness(dueCount = 0)))
-        assertNull(keptTileValue(null))
+    fun `kept tile is kept on time plus late of due, the late ones said, hidden before anything is due`() {
+        val k = keptTile(StatementFaithfulness(keptOnTime = 4, late = 1, missed = 1, dueCount = 6))!!
+        assertEquals(KeptTile(kept = 5, due = 6, late = 1), k)
+        assertEquals("commitments · 1 late", k.caption)
+        assertEquals("5 of 6 commitments kept, 1 late", k.spoken)
+        val onTime = keptTile(StatementFaithfulness(keptOnTime = 3, dueCount = 3))!!
+        assertEquals("commitments", onTime.caption)
+        assertEquals("3 of 3 commitments kept", onTime.spoken)
+        assertNull(keptTile(StatementFaithfulness(dueCount = 0)))
+        assertNull(keptTile(null))
+    }
+
+    @Test
+    fun `given tile says a second currency in its caption, never added to the first`() {
+        val one = GivenTile(listOf(CurrencyAmount("KES", 2_500_000)))
+        assertEquals("toward pledges", one.caption)
+        assertNull(one.rest)
+        assertEquals("Given KSh 25,000 toward pledges", one.spoken)
+        val two = GivenTile(listOf(CurrencyAmount("KES", 2_500_000), CurrencyAmount("USD", 29_999)))
+        assertEquals("+ US$ 299.99", two.rest)
+        assertEquals("toward pledges · + US$ 299.99", two.caption)
+        assertEquals("Given KSh 25,000 + US$ 299.99 toward pledges", two.spoken)
+    }
+
+    @Test
+    fun `the tiles need impact - without it the summary card stays`() {
+        assertNull(heroTiles(GivingStatement(year = 2026)))
+        val s = GivingStatement(
+            year = 2026,
+            impact = StatementImpact(paidMinor = 600_000, perDiscipleMinor = 2_000_000, towardNextMinor = 600_000),
+            faithfulness = StatementFaithfulness(keptOnTime = 2, dueCount = 2),
+        )
+        val t = heroTiles(s)!!
+        assertTrue(t.disciples is DisciplesTile.Toward)
+        assertEquals(KeptTile(2, 2, 0), t.kept)
+        // No per-currency answer: the impact's paid, in shillings.
+        assertEquals(listOf(CurrencyAmount("KES", 600_000)), t.given.amounts)
+        // Nothing paid in any currency reads 0 in the statement's own currency.
+        val dollars = GivingStatement(year = 2026, impact = StatementImpact(), summaryCurrency = "USD", summaryByCurrency = emptyList())
+        assertEquals(listOf(CurrencyAmount("USD", 0)), givenTileAmounts(dollars))
+    }
+
+    @Test
+    fun `the hero thanks the member by first name, or plainly`() {
+        assertEquals("Thank you, Grace.", thankYouLine("Grace Wanjiru"))
+        assertEquals("Thank you, Grace.", thankYouLine("  Grace  "))
+        assertEquals("Thank you.", thankYouLine(null))
+        assertEquals("Thank you.", thankYouLine("   "))
+    }
+
+    @Test
+    fun `a PDF that can't be had says why in iOS's words`() {
+        assertEquals("There's no partners statement for you yet.", partnersPdfErrorLine(status = 404, offline = false))
+        // §4: "You're offline" only when the phone is — never "You appear to be offline".
+        assertEquals("You're offline — the PDF needs a connection.", partnersPdfErrorLine(status = null, offline = true))
+        assertEquals("The PDF isn't available right now. The statement above is still complete.", partnersPdfErrorLine(status = 500, offline = false))
+        // A dropped answer with a network is not the connection (§4).
+        assertEquals("The PDF isn't available right now. The statement above is still complete.", partnersPdfErrorLine(status = null, offline = false))
+    }
+
+    @Test
+    fun `the giving statement's PDF says why too — it said nothing`() {
+        assertEquals("You're offline — the PDF needs a connection.", givingPdfErrorLine(offline = true))
+        assertEquals("The PDF isn't available right now. The statement below is still complete.", givingPdfErrorLine(offline = false))
+    }
+
+    @Test
+    fun `the strip is read aloud as one sentence, January to December`() {
+        val marks = listOf(MonthMark.Kept, MonthMark.Late, MonthMark.Missed, MonthMark.Upcoming) + List(8) { MonthMark.None }
+        val spoken = faithfulnessSpoken(marks)
+        assertTrue(spoken.startsWith("Faithfulness: January kept on time, February kept late, March missed, April upcoming, May nothing due"))
+        assertTrue(spoken.endsWith("December nothing due"))
     }
 
     @Test
@@ -270,7 +384,7 @@ class PartnersStatementLogicTest {
         // The statement's counts — the ledger the hero's Kept tile reads —
         // even where the strip's months would count differently.
         assertEquals(
-            "6 kept on time · 1 late · next due 5 Oct",
+            "6 kept on time · 1 late · next due Mon 5 Oct",
             faithfulnessLine(StatementFaithfulness(keptOnTime = 6, late = 1, missed = 0, dueCount = 7), marks, LocalDate.of(2026, 10, 5), today),
         )
         assertEquals("2 missed", faithfulnessLine(StatementFaithfulness(missed = 2, dueCount = 2), marks, null, today))
@@ -279,10 +393,10 @@ class PartnersStatementLogicTest {
         assertEquals("1 kept on time · 2 late · 1 missed", faithfulnessLine(null, twoLate, null, today))
         // A new partner with nothing behind them: just the next due.
         val fresh = List(9) { MonthMark.None } + List(3) { MonthMark.Upcoming }
-        assertEquals("Next due 5 Oct", faithfulnessLine(StatementFaithfulness(), fresh, LocalDate.of(2026, 10, 5), today))
-        assertEquals("Next due 5 Oct", faithfulnessLine(null, fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due Mon 5 Oct", faithfulnessLine(StatementFaithfulness(), fresh, LocalDate.of(2026, 10, 5), today))
+        assertEquals("Next due Mon 5 Oct", faithfulnessLine(null, fresh, LocalDate.of(2026, 10, 5), today))
         // Next year's date carries its year.
-        assertEquals("Next due 5 Jan 2027", faithfulnessLine(null, fresh, LocalDate.of(2027, 1, 5), today))
+        assertEquals("Next due Tue 5 Jan 2027", faithfulnessLine(null, fresh, LocalDate.of(2027, 1, 5), today))
         assertNull(faithfulnessLine(StatementFaithfulness(), fresh, null, today))
         assertNull(faithfulnessLine(null, fresh, null, today))
     }
@@ -318,7 +432,7 @@ class PartnersStatementLogicTest {
         )
         assertEquals(LocalDate.of(2026, 10, 25), nextPledgeDue(paidToday, today))
         assertEquals(
-            "1 kept on time · next due 25 Oct",
+            "1 kept on time · next due Sun 25 Oct",
             faithfulnessLine(
                 StatementFaithfulness(keptOnTime = 1, dueCount = 1),
                 List(8) { MonthMark.None } + MonthMark.Kept + List(3) { MonthMark.None }, nextPledgeDue(paidToday, today), today,
@@ -342,7 +456,7 @@ class PartnersStatementLogicTest {
         assertEquals(LocalDate.of(2026, 9, 27), nextPledgeDue(p, today))
         val marks = List(7) { MonthMark.Kept } + List(2) { MonthMark.Missed } + List(3) { MonthMark.Upcoming }
         assertEquals(
-            "3 kept on time · 2 missed · next due 27 Sep",
+            "3 kept on time · 2 missed · next due Sun 27 Sep",
             faithfulnessLine(StatementFaithfulness(keptOnTime = 3, missed = 2, dueCount = 5), marks, nextPledgeDue(p, today), today),
         )
     }
@@ -366,7 +480,7 @@ class PartnersStatementLogicTest {
             StatementPledge(pledgeId = "b", remainingYearMinor = 0),
             StatementPledge(pledgeId = "c", remainingYearMinor = 1_000_000),
         )
-        assertEquals(1_600_000, remainingThisYear(rows))
+        assertEquals(listOf(CurrencyAmount("KES", 1_600_000)), remainingThisYear(rows))
         assertNull(remainingThisYear(listOf(StatementPledge(pledgeId = "a", pledgedMinor = 5, paidMinor = 1))))
         assertNull(remainingThisYear(emptyList()))
     }
@@ -427,6 +541,35 @@ class PartnersStatementLogicTest {
     }
 
     @Test
+    fun `pending rows are only the statement's own year, or undated`() {
+        val s = GivingStatement(
+            year = 2026,
+            pending = listOf(
+                pending("this", at = "2026-09-26T19:04:00Z"),
+                pending("last", at = "2025-12-31T10:00:00Z"),
+                // 22:30Z on 31 Dec is already the new year in Nairobi.
+                pending("new-year", at = "2025-12-31T22:30:00Z"),
+                pending("undated", at = null),
+            ),
+        )
+        assertEquals(setOf("this", "new-year", "undated"), pendingPaymentRows(s).map { it.transactionId }.toSet())
+    }
+
+    @Test
+    fun `a payment row names its pledge, then its fund first and the receipt code`() {
+        val pledges = listOf(monthly(id = "p1", amount = 200_000, dueDay = 5, createdAt = "2026-01-01T00:00:00Z").copy(title = "Kenya trip"))
+        assertEquals("School fees", statementPaymentTitle("School fees", "Tithe", "p1", pledges))
+        assertEquals("Tithe", statementPaymentTitle(" ", "Tithe", "p1", pledges))
+        assertEquals("Kenya trip", statementPaymentTitle(null, null, "p1", pledges))
+        assertEquals("Pledge", statementPaymentTitle(null, "", "p9", pledges))
+        val pay = payment(200_000, "p1", "2026-09-05T09:00:00Z")
+        assertEquals("Building Fund · UIKJ2713B5", statementPaymentMeta(pay.copy(fund = "building", fundName = "Building Fund", receiptCode = "UIKJ2713B5", method = "mpesa")))
+        // No server name: the local name for its code; the rail is never shown here.
+        assertEquals("Tithe", statementPaymentMeta(pay.copy(fund = "tithe", fundName = null, receiptCode = null, method = "mpesa")))
+        assertEquals("", statementPaymentMeta(pay.copy(fund = null, fundName = null, receiptCode = " ")))
+    }
+
+    @Test
     fun `pending never enters any total`() {
         val settled = listOf(payment(200_000, "p1", "2026-09-05T09:00:00Z"))
         val without = GivingStatement(year = 2026, payments = settled)
@@ -437,7 +580,7 @@ class PartnersStatementLogicTest {
         assertEquals(partnerStatementSummary(2026, without, pledges), partnerStatementSummary(2026, with, pledges))
         assertEquals(200_000, partnerStatementSummary(2026, with, pledges).paidMinor)
         assertEquals(paymentsByMonth(without.payments), paymentsByMonth(with.payments))
-        assertEquals(200_000, statementYearTotal(paymentsByMonth(with.payments)))
+        assertEquals(listOf(CurrencyAmount("KES", 200_000)), statementYearTotals(paymentsByMonth(with.payments)))
         assertEquals(
             partnerStatementPledges(2026, without, pledges, today),
             partnerStatementPledges(2026, with, pledges, today),

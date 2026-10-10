@@ -22,9 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -42,19 +39,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import org.nuruplace.member.ui.components.NuruDialog
 import androidx.compose.ui.window.DialogProperties
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private val LSNavyTop = Color(0xFF0A1628)
 private val LSNavyBottom = Color(0xFF081020)
 private val LSGold = Color(0xFFE8CA6C)
 private val LSPaper = Color(0xFFFFFDF6)
 private val LSInkOnPaper = Color(0xFF2A3441)
-private val LSBody = NuruType.rowTitle.copy(fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal)
+// Reading on paper — the one 16 sp reading body (§8.2 #21), in Fraunces.
+private val LSBody = NuruType.rowTitle.copy(fontSize = 16.sp, lineHeight = 26.sp, fontWeight = FontWeight.Normal)
 
 @Composable
 fun NuruCoachDialog(moduleId: String, onRetry: () -> Unit, onDismiss: () -> Unit) {
@@ -65,12 +64,12 @@ fun NuruCoachDialog(moduleId: String, onRetry: () -> Unit, onDismiss: () -> Unit
             .onSuccess { text = it.body }
             .onFailure { error = "Couldn't prepare your review — the lesson itself is still the best coach." }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    NuruDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(LSNavyTop, LSNavyBottom)))) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp)) {
                 Spacer(Modifier.height(28.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.AutoAwesome, null, tint = LSGold, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Sparkles, null, tint = LSGold, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("REVIEW WITH NURU", style = NuruType.micro, color = LSGold, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
                     Spacer(Modifier.weight(1f))
@@ -124,7 +123,7 @@ fun ExplainDialog(moduleId: String, initialStyle: String, onDismiss: () -> Unit)
             .onSuccess { text = it.body }
             .onFailure { failed = true; ApiException.message(it) }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    NuruDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(LSNavyTop, LSNavyBottom)))) {
             Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
                 Spacer(Modifier.height(24.dp))
@@ -175,7 +174,7 @@ private fun CloseDot(onDismiss: () -> Unit) {
     Box(
         Modifier.size(30.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.14f)).clickable { onDismiss() },
         contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Filled.Close, "Close", tint = Color.White, modifier = Modifier.size(14.dp)) }
+    ) { Icon(Lucide.X, "Close", tint = Color.White, modifier = Modifier.size(14.dp)) }
 }
 
 @Composable

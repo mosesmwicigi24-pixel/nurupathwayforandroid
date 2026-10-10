@@ -47,16 +47,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -79,6 +72,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.LiveRecordingRow
 import org.nuruplace.member.data.net.MeResponse
@@ -90,6 +84,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * @param onNavigate hands off to MainShell's NavHost — used for the
@@ -246,7 +241,7 @@ private fun BreathingGoLivePill(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Filled.Videocam, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Video, contentDescription = null, tint = Nuru.homeNavy, modifier = Modifier.size(18.dp))
             Text("Go Live", style = NuruType.cardCta, color = Nuru.homeNavy, fontWeight = FontWeight.Bold)
         }
     }
@@ -281,7 +276,7 @@ private fun MyBroadcastsList(onOpenRecording: (LiveRecordingRow) -> Unit, modifi
                 Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            Icons.Filled.Videocam, contentDescription = null,
+                            Lucide.Video, contentDescription = null,
                             tint = Nuru.gold.copy(alpha = 0.5f), modifier = Modifier.size(32.dp),
                         )
                         Spacer(Modifier.height(Spacing.sm))
@@ -318,6 +313,8 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
     var menuOpen by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    val deleteContext = androidx.compose.ui.platform.LocalContext.current
     val displayTitle = row.title.ifBlank { "Nuru Live" }
 
     Row(
@@ -332,12 +329,12 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (row.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
+                if (row.isAudio) Lucide.AudioLines else Lucide.Video,
                 contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp),
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(displayTitle, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(displayTitle, style = NuruType.rowTitle, color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(replayDate(row.startedAt), style = NuruType.micro, color = Nuru.ink600)
@@ -363,18 +360,18 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
                 if (deleting) {
                     CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                 } else {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Broadcast options", tint = Nuru.ink400, modifier = Modifier.size(20.dp))
+                    Icon(Lucide.EllipsisVertical, contentDescription = "Broadcast options", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
                 }
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text("Play") },
-                    leadingIcon = { Icon(Icons.Filled.PlayArrow, null, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Play, null, modifier = Modifier.size(22.dp)) },
                     onClick = { menuOpen = false; onPlay() },
                 )
                 DropdownMenuItem(
                     text = { Text("Share") },
-                    leadingIcon = { Icon(Icons.Filled.Share, null, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Share2, null, modifier = Modifier.size(22.dp)) },
                     onClick = {
                         menuOpen = false
                         // recording_url is a RELATIVE path — resolve to an
@@ -390,7 +387,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
                 )
                 DropdownMenuItem(
                     text = { Text("Delete", color = Nuru.danger) },
-                    leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Nuru.danger, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Trash2, null, tint = Nuru.danger, modifier = Modifier.size(22.dp)) },
                     onClick = { menuOpen = false; showDeleteConfirm = true },
                 )
             }
@@ -398,20 +395,33 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+        NuruAlertDialog(
+            // Open until the server has deleted it (§7.4): a failure stays here
+            // and says why — it used to close first and report nothing.
+            onDismissRequest = { if (!deleting) { showDeleteConfirm = false; deleteError = null } },
             title = { Text("Delete “$displayTitle”?", style = NuruType.cardTitle, color = Nuru.navy) },
-            text = { Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600)
+                    deleteError?.let { Text(it, style = NuruType.body, color = Nuru.danger) }
+                }
+            },
             confirmButton = {
                 Text(
-                    "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable {
-                        showDeleteConfirm = false
+                    if (deleting) "Deleting…" else "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable(enabled = !deleting) {
                         deleting = true
+                        deleteError = null
                         scope.launch {
-                            runCatching { Net.client.api.deleteLiveRecording(row.streamId) }
+                            val failure = runCatching { Net.client.api.deleteLiveRecording(row.streamId) }.exceptionOrNull()
+                            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
                             deleting = false
-                            onDeleted()
+                            if (failure == null) {
+                                showDeleteConfirm = false
+                                onDeleted()
+                            } else {
+                                deleteError = ApiException.failureLine("Couldn't delete it.", failure, deleteContext)
+                            }
                         }
                     }.padding(Spacing.sm),
                 )
@@ -419,7 +429,7 @@ private fun MyBroadcastRow(row: LiveRecordingRow, onPlay: () -> Unit, onDeleted:
             dismissButton = {
                 Text(
                     "Cancel", style = NuruType.cardCta, color = Nuru.ink600,
-                    modifier = Modifier.clickable { showDeleteConfirm = false }.padding(Spacing.sm),
+                    modifier = Modifier.clickable(enabled = !deleting) { showDeleteConfirm = false; deleteError = null }.padding(Spacing.sm),
                 )
             },
         )

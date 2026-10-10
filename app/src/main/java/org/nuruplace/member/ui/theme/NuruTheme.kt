@@ -67,8 +67,6 @@ object Nuru {
     val danger = Color(0xFFDC2626)       // --nuru-danger
     val dangerBg = Color(0xFFFEE2E2)     // --nuru-danger-bg
     val destructive = Color(0xFFD4183D)  // --destructive (destructive-action red)
-    val info = Color(0xFF0EA5E9)         // --nuru-info
-    val infoBg = Color(0xFFE0F2FE)       // --nuru-info-bg
     val verseBg = Color(0xFFFFF8E6)
     val myBubble = Color(0xFFDDF4C6)     // chat outgoing bubble
 
@@ -98,15 +96,9 @@ object Nuru {
     val progressTrack = Color(0xFFEEF0F3)  // progress-bar + video placeholder track
     val dayWord = Color(0xFF475569)        // daily-blessing italic body
     val liveRed = Color(0xFFDC2626)        // LIVE pill / radio dot
-    // Mini-card + Grow-tile + score accents
-    val indigo = Color(0xFF6366F1)         // reading-plan tile
-    val indigoBg = Color(0xFFEEF2FF)
+    // Mini-card accents. The hues that were here (info sky, indigo, calling
+    // purple, the score bars' blue) are gone: §8.1 rule 1 has none of them.
     val answeredText = Color(0xFF92400E)   // "N answered" chip text (bg = warningBg)
-    val callingFg = Color(0xFFA855F7)      // "Your Calling" tile
-    val callingBg = Color(0xFFF5E8FF)
-    val hideWordFg = Color(0xFFB45309)     // "Hide His Word" tile (bg = warningBg)
-    val scoreWord = Color(0xFF2F6FB0)      // Word growth bar
-    val scorePrayer = Color(0xFFC98A3C)    // Prayer growth bar
     // Home dark-card gradient (#0A1628 → #060F1C) and its radial gold glow accent
     val homeNavyGradient = Brush.verticalGradient(listOf(homeNavy, homeNavyDark))
     val headerGradient = Brush.verticalGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
@@ -115,7 +107,9 @@ object Nuru {
     // canonical semantic palette so band chips read the same as every other chip.
     fun bandColor(band: String?): Color = when (band?.lowercase()) {
         "thriving" -> success
-        "steady" -> info
+        // Steady is neither state: navy (§8.1 rule 1 — green, amber, red say
+        // state; sky blue said nothing).
+        "steady" -> navy
         "watch" -> warning
         "at_risk", "at risk" -> danger
         else -> ink600
@@ -176,7 +170,12 @@ object NuruType {
     val display get() = nuruSerif(28, FontWeight.Medium)
     val title get() = nuruSerif(22, FontWeight.Medium)
     val cardTitle get() = nuruSerif(18, FontWeight.SemiBold)
+    // The two row roles (EXPERIENCE.md §8.1 rule 3): a CONTENT row names a
+    // thing — a week row, a pledge, a plan, an event, a notice — in Fraunces
+    // 15 semibold; a CONTROL row names a setting, a profile field or a menu
+    // entry in Inter 14 medium.
     val rowTitle get() = nuruSerif(15, FontWeight.SemiBold)
+    val controlTitle get() = nuruSans(14, FontWeight.Medium)
     val heading get() = nuruSans(16, FontWeight.Medium)
     val body get() = nuruSans(14)
     val bodyLg get() = nuruSans(16)
@@ -206,7 +205,16 @@ object NuruType {
     val actionLabel get() = nuruSans(13, FontWeight.Bold)
 }
 
-private val NuruColorScheme = lightColorScheme(
+/**
+ * Material's roles, each on the brand palette (EXPERIENCE.md §8.1 rule 1).
+ * The ones left unset fell back to Material's lavender baseline: every sheet
+ * drew on #F7F2FA (surfaceContainerLow), every switch's off track was
+ * lavender-grey (surfaceContainerHighest and outline), and menus, dialogs and
+ * the date picker took the same tints (final walk C16, Android #29). A
+ * component that doesn't choose its own colour now draws white surfaces, the
+ * palette's own track (progressTrack) and the app's own greys.
+ */
+internal val NuruColorScheme = lightColorScheme(
     primary = Nuru.navyDeep,
     onPrimary = Nuru.onNavy,
     secondary = Nuru.gold,
@@ -214,7 +222,45 @@ private val NuruColorScheme = lightColorScheme(
     onBackground = Nuru.ink,
     surface = Nuru.white,
     onSurface = Nuru.ink,
+    onSurfaceVariant = Nuru.ink600,
+    surfaceVariant = Nuru.surface,
+    surfaceTint = Nuru.white,
+    surfaceContainerLowest = Nuru.white,
+    surfaceContainerLow = Nuru.white,
+    surfaceContainer = Nuru.white,
+    surfaceContainerHigh = Nuru.white,
+    surfaceContainerHighest = Nuru.progressTrack,
+    secondaryContainer = Nuru.goldTint,
+    onSecondaryContainer = Nuru.navy,
+    outline = Nuru.ink400,
+    outlineVariant = Nuru.ink300,
     error = Nuru.danger,
+)
+
+/**
+ * Material's fifteen type slots, every one in an app face AND on the type
+ * scale (EXPERIENCE.md §8.1 rule 3): a Material component that reads a slot
+ * we never style ourselves — an AlertDialog's title (headlineSmall, the
+ * card title every dialog of ours already uses), the date picker's headline
+ * (headlineLarge) — draws in Fraunces or Inter at a size of the scale, never
+ * Material's 57/45/36/32/24. TypeScaleTest checks all fifteen.
+ */
+fun nuruTypography(): Typography = Typography(
+    displayLarge = NuruType.display,
+    displayMedium = NuruType.display,
+    displaySmall = NuruType.display,
+    headlineLarge = NuruType.display,
+    headlineMedium = NuruType.display,
+    headlineSmall = NuruType.cardTitle, // an AlertDialog's title — the app's dialogs title in the card title
+    titleLarge = NuruType.title,
+    titleMedium = NuruType.cardTitle,
+    titleSmall = NuruType.rowTitle,
+    bodyLarge = NuruType.bodyLg,
+    bodyMedium = NuruType.body,
+    bodySmall = NuruType.caption,
+    labelLarge = NuruType.cardCta,
+    labelMedium = NuruType.label,
+    labelSmall = NuruType.micro,
 )
 
 @Composable
@@ -238,28 +284,9 @@ fun NuruTheme(content: @Composable () -> Unit) {
     // the M3 default, i.e. FontFamily.Default = the device's system face. Those
     // are the "foreign" letters. Every one of the 15 slots is now pinned to an
     // app family — display/headline/title serif (Fraunces), body/label sans
-    // (Inter) — keeping M3's own metrics for the slots we don't otherwise style,
-    // so nothing shifts except the typeface.
-    val typography = remember(org.nuruplace.member.data.AppPrefs.lineSpacing) {
-        val m3 = Typography()
-        Typography(
-            displayLarge = m3.displayLarge.copy(fontFamily = Fraunces),
-            displayMedium = m3.displayMedium.copy(fontFamily = Fraunces),
-            displaySmall = m3.displaySmall.copy(fontFamily = Fraunces),
-            headlineLarge = m3.headlineLarge.copy(fontFamily = Fraunces),
-            headlineMedium = m3.headlineMedium.copy(fontFamily = Fraunces),
-            headlineSmall = m3.headlineSmall.copy(fontFamily = Fraunces),
-            titleLarge = NuruType.title,
-            titleMedium = NuruType.cardTitle,
-            titleSmall = NuruType.rowTitle,
-            bodyLarge = NuruType.bodyLg,
-            bodyMedium = NuruType.body,
-            bodySmall = NuruType.caption,
-            labelLarge = NuruType.cardCta,
-            labelMedium = NuruType.label,
-            labelSmall = NuruType.micro,
-        )
-    }
+    // (Inter) — and, since Cycle 4 (§8.2 #21), to a size of the type scale too:
+    // see nuruTypography() above.
+    val typography = remember(org.nuruplace.member.data.AppPrefs.lineSpacing) { nuruTypography() }
     CompositionLocalProvider(LocalDensity provides scaled) {
         MaterialTheme(
             colorScheme = NuruColorScheme,

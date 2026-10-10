@@ -1,8 +1,10 @@
 // Pathway tab — a faithful port of the iOS PathwayView "PathwayHub" (Features/
 // Pathway/PathwayView.swift): a light cream hero (streak · bell · progress ring ·
 // greeting · active level · progress · navy Continue card), a horizontal journey
-// rail of tappable level nodes, the selected level's real module trail (with a
-// mid-trail "Pause & surrender" image and an exam-gate row), a "Walk with your
+// rail of tappable level nodes ("You" on the member's level, "Next" on the one
+// after), the selected level's real module trail (with a mid-trail "Pause &
+// surrender" image) — folded into "20 of 20 modules done · Show" once the member
+// is past learning it (EXPERIENCE.md §6.3, PathwayTrail.kt) — a "Walk with your
 // discipler" row, a milestones badge rail, and the Summit destination card. The
 // calm all-levels list lives behind the "Map view" link (LevelsMapScreen).
 package org.nuruplace.member.feature.pathway
@@ -21,26 +23,15 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,28 +52,33 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LevelModule
-import org.nuruplace.member.data.net.LevelStatus
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.ModuleStatus
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.data.net.PathwaySummary
-import org.nuruplace.member.ui.components.FitImage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.HomeSkeleton
 import org.nuruplace.member.ui.components.NuruRefreshBox
 import org.nuruplace.member.ui.components.pressScale
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
-import java.time.LocalTime
+import org.nuruplace.member.ui.icons.Lucide
 
 // Exact Figma palette (LevelsOverview.tsx) — local so the page is 1:1 with iOS.
 private object PW {
@@ -99,31 +96,26 @@ private object PW {
     val surface = Color(0xFFFBF8F1)
     val mutedBg = Color(0xFFEEF1F5)
     val border = Color(0x140A2540)
-    val badge = listOf("🪨", "🕊️", "🌿", "🔥", "📖", "👑", "⭐", "🏅")
+    // Each level's milestone mark — Lucide, never colour emoji art (§8.1
+    // rule 7; the Cycle 4 walk's 🪨 🕊️ 🌿 🔥): the same marks as iOS.
+    val badge: List<androidx.compose.ui.graphics.vector.ImageVector> get() = listOf(
+        Lucide.Landmark, Lucide.Leaf, Lucide.Heart, Lucide.Flame,
+        Lucide.BookOpen, Lucide.Award, Lucide.Sparkles, Lucide.BadgeCheck,
+    )
     val navyGrad = Brush.linearGradient(listOf(navy, navyDeep))
     val goldGrad = Brush.linearGradient(listOf(gold, Color(0xFFA87F29)))
     val headerGrad = Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
-    val subtitle = mapOf(
-        1 to "God, His Word, prayer & the Church", 2 to "Who God is — His character and heart",
-        3 to "Grace, repentance, and new life", 4 to "Who you are in Him",
-        5 to "How Scripture forms faith and life", 6 to "Walking in the Spirit's gifts and power",
-    )
     // Type helpers — delegate to the canonical schema (ui/theme/TypeSchema.kt).
     fun over(size: Int, ker: Float = 1.4f) = nuruSans(size, FontWeight.Bold, ker)
     fun t(size: Int, w: FontWeight = FontWeight.Normal, ker: Float = 0f) = nuruSans(size, w, ker.takeIf { it != 0f })
     fun serif(size: Int, w: FontWeight = FontWeight.Medium, ker: Float = 0f) = nuruSerif(size, w, ker.takeIf { it != 0f })
 }
 
-private fun pwShort(t: String): String = t.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: ""
-private fun pwSubtitle(l: PathwayLevel?): String {
-    if (l == null) return ""
-    l.theme?.takeIf { it.isNotBlank() }?.let { return it }
-    l.description?.takeIf { it.isNotBlank() }?.let { return it }
-    return PW.subtitle[l.levelNumber] ?: ""
-}
-private fun pwGreeting(): String = when (LocalTime.now().hour) {
-    in 0..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening"
-}
+/** A level's own short name — the server's `theme` ("Foundations", "Grace",
+ *  "Spirit"…); its first word read "Foundations" for Levels 1 and 3 alike
+ *  (EXPERIENCE.md §9.2 #9). Without a theme, the title itself. */
+internal fun levelShortName(level: PathwayLevel): String =
+    level.theme?.trim()?.takeIf { it.isNotEmpty() } ?: level.title.ifBlank { "Level ${level.levelNumber}" }
 
 @Composable
 fun PathwayHubScreen(
@@ -134,69 +126,116 @@ fun PathwayHubScreen(
     onOpenMentor: () -> Unit,
     onOpenMap: () -> Unit,
     onOpenWalk: () -> Unit,
+    /** The header's bell — the inbox, as on every tab (§7.2 #4). */
+    onOpenNotifications: () -> Unit = {},
 ) {
-    var summary by remember { mutableStateOf<PathwaySummary?>(null) }
-    var streak by remember { mutableIntStateOf(0) }
-    var selected by remember { mutableStateOf<Int?>(null) }
-    var modulesByLevel by remember { mutableStateOf<Map<Int, List<LevelModule>>>(emptyMap()) }
-    // One tick per full load — pull-to-refresh bumps it; `hubLoaded` keeps the
-    // first-paint skeleton from returning once the wire has answered.
+    // The hub's server data is HELD by the "pathway" destination
+    // (rememberHeld): Back from a level, a module or the exam finds the same
+    // hub at the same scroll, refreshed in place — no skeleton, no ring at
+    // "0%" (EXPERIENCE.md §7.2 #8). The level picked on the rail is saved too.
+    var summary by rememberHeld("PathwayHub.summary") { mutableStateOf<PathwaySummary?>(null) }
+    var streak by rememberHeld("PathwayHub.streak") { mutableIntStateOf(0) }
+    // Whether the member has a discipler (GET /growth/mentor) — the hub's
+    // row offers one only to a member who has one (EXPERIENCE.md §9.2 #8).
+    var hasDiscipler by rememberHeld("PathwayHub.hasDiscipler") { mutableStateOf<Boolean?>(null) }
+    var selected by rememberSaveable { mutableStateOf<Int?>(null) }
+    var modulesByLevel by rememberHeld("PathwayHub.modulesByLevel") { mutableStateOf<Map<Int, List<LevelModule>>>(emptyMap()) }
+    // One tick per full load — pull-to-refresh bumps it, and every return to
+    // the hub loads again (the tick starts at 0 while the data is held);
+    // `hubLoaded` keeps the first-paint skeleton from returning once the
+    // wire has answered.
     var refreshTick by remember { mutableIntStateOf(0) }
     var refreshing by remember { mutableStateOf(false) }
-    var hubLoaded by remember { mutableStateOf(false) }
+    var hubLoaded by rememberHeld("PathwayHub.hubLoaded") { mutableStateOf(false) }
+    // A pathway that never loaded says so in the state language (§4) — it
+    // used to render an empty hub ("Level 1 of 1", no trail) as if all was well.
+    var loadError by rememberHeld("PathwayHub.loadError") { mutableStateOf<StateMessage?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(refreshTick) {
-        summary = runCatching { Net.client.api.pathway() }.getOrNull()
-        streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-        // On refresh, drop the module cache — the trail effect below refetches.
-        if (refreshTick > 0) modulesByLevel = emptyMap()
+        try {
+            summary = Net.client.api.pathway()
+            loadError = null
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A failed refresh keeps what the member last saw.
+            if (summary == null) loadError = ApiException.state(e, context)
+        }
+        streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
+        hasDiscipler = runCatching { Net.client.api.mentor().mentor != null }.getOrElse { hasDiscipler }
+        // The trails already on screen refresh in place — a module just
+        // finished reads done on Back — and one that fails keeps its rows.
+        // (They were dropped and re-fetched behind skeleton rows.)
+        for (n in modulesByLevel.keys.toList()) {
+            runCatching { Net.client.api.levelModules(n).data }.onSuccess { modulesByLevel = modulesByLevel + (n to it) }
+        }
         refreshing = false
         hubLoaded = true
     }
 
     val levels = summary?.levels ?: emptyList()
-    val active = levels.firstOrNull { it.status == LevelStatus.ACTIVE }
-        ?: levels.firstOrNull { it.levelNumber == summary?.currentLevel } ?: levels.firstOrNull()
+    // The journey (docs/EXPERIENCE.md §3): the level from the summary first,
+    // then the full step once that level's trail has loaded.
+    val currentNum = JourneyState.derive(summary)?.levelNumber
+    // Never a guessed step while the level's trail is on its way (final walk,
+    // M4's class): the hero holds its loading shape until the trail answers.
+    val trailInFlight = currentNum != null && modulesByLevel[currentNum] == null
+    val journey = journeyToTell(summary, currentNum?.let { modulesByLevel[it] }, trailInFlight)
+    val active = levels.firstOrNull { it.levelNumber == currentNum } ?: levels.firstOrNull()
     val selNum = selected ?: active?.levelNumber
     val selLevel = levels.firstOrNull { it.levelNumber == selNum } ?: active
 
-    LaunchedEffect(selNum, modulesByLevel) {
-        val n = selNum ?: return@LaunchedEffect
-        if (modulesByLevel[n] == null) {
-            val mods = runCatching { Net.client.api.levelModules(n).data }.getOrDefault(emptyList())
-            modulesByLevel = modulesByLevel + (n to mods)
+    // The current level's trail feeds the journey; the selected one feeds the list.
+    LaunchedEffect(currentNum, selNum, modulesByLevel) {
+        for (n in listOfNotNull(currentNum, selNum).distinct()) {
+            if (modulesByLevel[n] == null) {
+                val mods = runCatching { Net.client.api.levelModules(n).data }.getOrDefault(emptyList())
+                modulesByLevel = modulesByLevel + (n to mods)
+            }
         }
     }
 
-    val totalModules = levels.sumOf { it.totalModules }
-    val doneModules = levels.sumOf { it.completedModules }
-    val overallPct = if (totalModules > 0) (doneModules * 100 / totalModules) else 0
     val firstName = me?.profile?.fullName?.substringBefore(' ') ?: "Friend"
-    val activeMods = modulesByLevel[active?.levelNumber]
-    val resume = activeMods?.let { it.firstOrNull { m -> m.status == ModuleStatus.NEXT } ?: it.firstOrNull { m -> !m.completed } ?: it.lastOrNull() }
+    fun go(d: JourneyDestination) = when (d) {
+        is JourneyDestination.Module -> onOpenModule(d.moduleId)
+        is JourneyDestination.Exam -> onOpenExam(d.levelNumber)
+        is JourneyDestination.Level -> onOpenLevel(d.levelNumber)
+        JourneyDestination.Walk -> onOpenWalk()
+    }
 
     // Home-screen Pathway widget (Glance) — mirrors iOS's intended
     // progress-ring/streak/next-module snapshot trigger points. Fires once
     // the active level is known, and again once its module trail resolves
-    // the "resume" module title. Writes only; the widget itself never
+    // the journey's next step. Writes only; the widget itself never
     // touches the network (docs/PARITY_AUDIT.md, widgets entry).
     val widgetContext = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(active?.levelNumber, active?.completedModules, resume?.moduleId, streak) {
+    LaunchedEffect(active?.levelNumber, active?.lessonsDone, journey?.next?.title, streak) {
         val lvl = active ?: return@LaunchedEffect
         org.nuruplace.member.widget.WidgetSnapshotStore.writePathway(
             context = widgetContext,
             currentLevel = summary?.currentLevel ?: lvl.levelNumber,
             levelTitle = lvl.title,
-            completedModules = lvl.completedModules,
-            totalModules = lvl.totalModules,
-            nextModuleTitle = resume?.title,
+            // The widget's "X of Y modules" counts lessons too (§8.2 #4).
+            completedModules = lvl.lessonsDone,
+            totalModules = lvl.lessonCount,
+            // The journey's next step — never a module already finished.
+            nextModuleTitle = journey?.next?.title,
             streak = streak,
         )
     }
 
     NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
         Column(Modifier.fillMaxSize().background(PW.bg).verticalScroll(rememberScrollState())) {
-            HubHeader(firstName, streak, active, levels, overallPct, resume, onOpenModule)
+            val failed = loadError?.takeIf { summary == null }
+            if (failed != null) {
+                // The tab keeps its header — kicker, title and bell — over the
+                // failed state (final walk M4; iOS #36): it stood alone.
+                HubHeader(null, emptyList(), null, ::go, onOpenNotifications)
+                FailedState(failed, onRetry = { refreshTick++ }, modifier = Modifier.padding(20.dp))
+                return@Column
+            }
+            HubHeader(active, levels, journey, ::go, onOpenNotifications, stepLoading = trailInFlight)
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -209,20 +248,26 @@ fun PathwayHubScreen(
                 }
                 // Studying together, apart (Wave 2) — renders nothing when quiet.
                 CellPresenceLine()
-                JourneyRail(levels, selNum ?: -1, onSelect = { selected = it }, onMap = onOpenMap)
+                // A circle opens its level's page (§9.2 #9) — it only changed
+                // the selection, so tapping the member's own "1" did nothing.
+                JourneyRail(levels, selNum ?: -1, current = currentNum, onSelect = onOpenLevel, onMap = onOpenMap)
                 selLevel?.let { lv ->
                     SelectedModules(
                         level = lv,
                         modules = modulesByLevel[lv.levelNumber] ?: emptyList(),
                         loading = modulesByLevel[lv.levelNumber] == null,
+                        journey = journey,
                         onOpenModule = onOpenModule,
                         onOpenExam = onOpenExam,
                     )
                 }
-                DisciplershipRow(onOpenMentor)
+                // "Walk with your discipler" only for a member who has one —
+                // none is offered in five places to members without (§9.2 #8;
+                // Home says "No discipler yet — your leader will pair you" once).
+                if (hasDiscipler == true) DisciplershipRow(onOpenMentor)
                 WalkRow(onOpenWalk)
                 Milestones(levels)
-                SummitCard(overallPct, levels, firstName)
+                SummitCard(journey, levels, firstName)
                 Spacer(Modifier.height(Spacing.tabBarSpace))
             }
         }
@@ -231,19 +276,28 @@ fun PathwayHubScreen(
 
 // ─────────────────────────── Header ───────────────────────────
 
+/** The tab's one header (EXPERIENCE.md §8.1 rule 2, §8.2 #1): the gold
+ *  "PATHWAY" kicker, the level's title, one line — "Level 1 of 6 · 20 of 20
+ *  modules" — and the bell at the right. The greeting belongs to Home alone
+ *  (it used to open this header too, above the title). */
 @Composable
 private fun HubHeader(
-    firstName: String,
-    streak: Int,
     active: PathwayLevel?,
     levels: List<PathwayLevel>,
-    overallPct: Int,
-    resume: LevelModule?,
-    onOpenModule: (String) -> Unit,
+    journey: Journey?,
+    onGo: (JourneyDestination) -> Unit,
+    onBell: () -> Unit,
+    /** The step is on its way: the hero's loading shape (§4), never a guess. */
+    stepLoading: Boolean = false,
 ) {
     val idx = levels.indexOfFirst { it.levelNumber == active?.levelNumber }.coerceAtLeast(0)
-    val pct = active?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
-    val remaining = active?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
+    // One measure (final walk C8, Android #20): the level page's and Map's,
+    // the exam its last step (§9.2 #10) — a full "10/10" bar here stood
+    // against "91%" there. The line above the bar counts the lessons.
+    val pct = active?.let { levelPercent(it, journey) } ?: 0
+    // Modules still to read — only while learning, and once one is done: on a
+    // first day the header line already says "10 modules" (Android #25).
+    val remaining = active?.let { remainingModules(journey?.stage, it.lessonsDone, it.lessonCount) } ?: 0
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 30.dp, bottomEnd = 30.dp))
@@ -252,70 +306,121 @@ private fun HubHeader(
     ) {
         // top bar
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("YOUR PATHWAY", style = PW.over(9, 1.8f), color = PW.eyebrow)
-            if (streak > 0) {
-                Spacer(Modifier.width(Spacing.sm))
-                Row(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.LocalFireDepartment, null, tint = PW.eyebrow, modifier = Modifier.size(9.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("$streak-day streak", style = PW.over(9, 0f), color = PW.eyebrow)
-                }
-            }
+            Text("PATHWAY", style = NuruType.kicker, color = Nuru.eyebrow)
+            // The streak is the rhythm's, said on Home's rhythm card and the
+            // Plans card by one rule (EXPERIENCE.md §9.2 #3) — not a third time
+            // here, by another.
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(999.dp)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Notifications, null, tint = PW.navy, modifier = Modifier.size(17.dp))
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(999.dp)).background(PW.gold).align(Alignment.TopEnd))
+            // Journey progress, counted in levels (§3) — not a share of
+            // published modules, which read 100% at Level 1 of 6. Empty, with
+            // no number, until the journey is known (§7 rule 5).
+            // Shown once there is progress to show — never a "0%" ring on a
+            // first day (§9.2 #4). Left of the bell: the bell is the far
+            // right on every tab (§8.1 rule 2; Cycle 4 walk 08).
+            journey?.percent?.takeIf { it > 0 }?.let {
+                HubRing(it)
+                Spacer(Modifier.width(Spacing.sm))
             }
-            Spacer(Modifier.width(Spacing.sm))
-            HubRing(overallPct)
+            // The one bell (EXPERIENCE.md §7.2 #4) — it used to open nothing,
+            // under a dot that was always there.
+            org.nuruplace.member.ui.components.InboxBell(onClick = onBell)
         }
-        Text("${pwGreeting()}, $firstName · Level ${idx + 1} of ${levels.size.coerceAtLeast(1)}", style = PW.t(10), color = PW.ink2, modifier = Modifier.padding(top = 16.dp))
-        Text(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-        Text(pwSubtitle(active), style = PW.t(12), color = PW.ink2, modifier = Modifier.padding(top = 4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
+        // The level's name whole at the largest text — "Inner Transformation"
+        // broke inside "Transformation" (§9.6 #4; iOS 30b8b15).
+        org.nuruplace.member.ui.components.WholeWordsText(active?.title ?: "Your pathway", style = PW.serif(26, FontWeight.SemiBold, -0.52f), color = PW.navy, modifier = Modifier.padding(top = 12.dp))
+        // One Inter line: where the member is on the road, and how far through
+        // the level — lessons, the exam a step of its own (§8.2 #4).
+        // Nothing known (a failed read), nothing claimed — it said "Level 1 of 1".
+        (journey?.headerLine ?: levels.takeIf { it.isNotEmpty() }?.let { "Level ${idx + 1} of ${it.size}" })?.let { line ->
+            Text(line, style = nuruSans(13), color = PW.ink2, modifier = Modifier.padding(top = 4.dp))
+        }
+        // The level's bar once a lesson is done — not an empty "0/10" on a
+        // first day (§9.2 #4; the line above says "10 modules").
+        if ((active?.lessonsDone ?: 0) > 0) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
             Box(Modifier.weight(1f)) { PWBar(pct, PW.goldGrad, PW.navy.copy(alpha = 0.10f)) }
             Spacer(Modifier.width(Spacing.sm))
-            Text("${active?.completedModules ?: 0}/${active?.totalModules ?: 0}", style = PW.t(10, FontWeight.SemiBold), color = PW.ink2)
+            org.nuruplace.member.ui.components.CappedFontScale(org.nuruplace.member.ui.components.EVERYDAY_MAX_FONT_SCALE) {
+                Text("$pct%", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2, maxLines = 1, softWrap = false)
+            }
         }
         if (remaining > 0) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = PW.eyebrow, modifier = Modifier.size(11.dp))
+                Icon(Lucide.Sparkles, null, tint = PW.eyebrow, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (remaining == 1) "Just 1 module left to level up 🎉" else "Only $remaining modules to complete this level", style = PW.t(10, FontWeight.SemiBold), color = PW.eyebrow)
+                // Body words in ink, not gold, and no emoji (§8.1 rules 1, 7).
+                Text(if (remaining == 1) "Just 1 module left to level up" else "Only $remaining modules to complete this level", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2)
             }
         }
-        // Continue where you left off — navy CTA
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(16.dp)).background(PW.navyGrad)
-                .clickable(enabled = resume != null) { resume?.let { onOpenModule(it.moduleId) } }.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(PW.gold), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, null, tint = PW.navy, modifier = Modifier.size(24.dp))
+        // The member's next step (§3) — the same words Home's continue card says.
+        if (journey != null) NextStepCard(journey, onGo)
+        else if (stepLoading) org.nuruplace.member.ui.components.SkeletonBlock(
+            height = 132.dp, corner = 22.dp, modifier = Modifier.padding(top = 18.dp),
+        )
+    }
+}
+
+/** The hero's navy CTA: the journey's next step — its title, its line and
+ *  its one action. A step with no action (the exam not yet open) is a quiet
+ *  card, not a button. */
+@Composable
+private fun NextStepCard(journey: Journey, onGo: (JourneyDestination) -> Unit) {
+    val step = journey.next
+    val action = step.action
+    Row(
+        Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(16.dp)).background(PW.navyGrad)
+            .clickable(enabled = action != null) { action?.let { onGo(it.destination) } }.padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(16.dp)).background(PW.gold), contentAlignment = Alignment.Center) {
+            Icon(
+                when (journey.stage) {
+                    JourneyStage.LEARNING -> Lucide.Play
+                    JourneyStage.EXAM_READY -> Lucide.Trophy
+                    JourneyStage.EXAM_SOON -> Lucide.Clock4
+                    JourneyStage.AWAITING_USHER -> Lucide.Flag
+                    JourneyStage.FINISHED -> Lucide.Award
+                },
+                null, tint = PW.navy, modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            // The kicker and title wrap at the largest text — "EXAM PASSED ·"
+            // lost "LEVEL 1" (§9.6 #4; iOS 84d2acb).
+            Text(journey.kicker.uppercase(), style = PW.over(11), color = PW.goldLight)
+            // The navy card's title is a card title — Fraunces 18 (§8.1 rule 3; Cycle 4 walk 08).
+            Text(step.title, style = NuruType.cardTitle, color = Color.White, maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
+            Text(step.line, style = PW.t(11), color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(top = 2.dp))
+            if (action != null) {
+                // The primary's shape — radius 14, its words alone; no chevron
+                // inside a button (§8.1 rule 4; final walk C16: "Begin the exam ›"
+                // was a gold capsule with a chevron).
+                Box(
+                    Modifier.padding(top = 8.dp).clip(RoundedCornerShape(14.dp)).background(PW.gold)
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                ) {
+                    Text(action.label, style = PW.t(12, FontWeight.Bold), color = PW.navy, maxLines = 1)
+                }
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("CONTINUE WHERE YOU LEFT OFF", style = PW.over(8, 1.28f), color = PW.goldLight)
-                Text(resume?.title ?: "Level complete", style = PW.t(14, FontWeight.SemiBold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
     }
 }
 
 @Composable
-private fun HubRing(pct: Int) {
+private fun HubRing(pct: Int?) {
     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(40.dp)) {
             val sw = 3.dp.toPx(); val inset = sw / 2
             val arc = Size(size.width - sw, size.height - sw)
             drawArc(PW.navy.copy(alpha = 0.12f), 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(sw))
-            drawArc(PW.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = StrokeCap.Round))
+            if (pct != null && pct > 0) {
+                drawArc(PW.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = StrokeCap.Round))
+            }
         }
-        Text("$pct%", style = PW.over(10, 0f), color = PW.eyebrow)
+        // A ring's figure is Fraunces, as on Home's progress card, Map view
+        // and the score page — one face for one kind of figure (§8.1 rule 3;
+        // Cycle 4 walk: "26" was Fraunces in one ring and Inter in another).
+        pct?.let { org.nuruplace.member.ui.components.CappedFontScale(1f) { Text("$it%", style = PW.serif(12, FontWeight.SemiBold), color = PW.eyebrow) } }
     }
 }
 
@@ -329,24 +434,28 @@ private fun PWBar(pct: Int, fill: Brush, track: Color, height: androidx.compose.
 // ─────────────────────────── Journey rail ───────────────────────────
 
 @Composable
-private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (Int) -> Unit, onMap: () -> Unit) {
+private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, current: Int?, onSelect: (Int) -> Unit, onMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(9, 1.62f), color = PW.goldDeep)
-            Spacer(Modifier.weight(1f))
-            Text("Map view", style = PW.over(9, 0f), color = PW.gold, modifier = Modifier.clickable { onMap() })
+            // The kicker wraps between words; the link stays whole — at the
+            // largest text "Map view" was squeezed to "M / ap / vi / e / w".
+            Text("THE JOURNEY · ${levels.size} LEVELS", style = PW.over(11), color = PW.goldDeep, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Text("Map view", style = PW.over(11, 0f), color = PW.gold, softWrap = false, modifier = Modifier.clickable { onMap() })
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp)) {
-            // "Up next" — the level right after the active one, only while it
-            // is still locked: a gold ring + NEXT marker so the rail reads as a
-            // path with a visible next step, not a row of greys.
-            val activeIdx = levels.indexOfFirst { it.status == LevelStatus.ACTIVE }
-            val upNextIdx = (activeIdx + 1).takeIf { activeIdx >= 0 && it < levels.size && levels[it].status == LevelStatus.LOCKED } ?: -1
+            // "You" on the member's own level — the journey's, whatever its
+            // status (walking it, every module done, its exam passed) — and
+            // "Next" on the level after it while still locked: a gold ring so
+            // the rail reads as a path with a visible next step (§6.3, iOS).
+            // It used to key on status "active" alone, so a member at their
+            // exam saw neither mark.
+            val marks = railMarks(levels, current)
             levels.forEachIndexed { i, lvl ->
-                JourneyNode(lvl, i + 1, lvl.levelNumber == selected, upNext = i == upNextIdx) { onSelect(lvl.levelNumber) }
+                JourneyNode(lvl, i + 1, lvl.levelNumber == selected, isCurrent = i == marks.you, upNext = i == marks.next) { onSelect(lvl.levelNumber) }
                 if (i < levels.size - 1) {
                     // Uncompleted connectors at 28% navy — 12% vanished on cream.
-                    Box(Modifier.padding(top = 40.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.status == LevelStatus.COMPLETED) PW.gold else PW.navy.copy(alpha = 0.28f)))
+                    Box(Modifier.padding(top = 44.dp).width(28.dp).height(3.dp).clip(RoundedCornerShape(999.dp)).background(if (lvl.walked) PW.gold else PW.navy.copy(alpha = 0.28f)))
                 }
             }
         }
@@ -354,17 +463,37 @@ private fun JourneyRail(levels: List<PathwayLevel>, selected: Int, onSelect: (In
 }
 
 @Composable
-private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upNext: Boolean = false, onTap: () -> Unit) {
-    val done = level.status == LevelStatus.COMPLETED
-    val active = level.status == LevelStatus.ACTIVE
+private fun JourneyNode(
+    level: PathwayLevel,
+    number: Int,
+    selected: Boolean,
+    /** The member's own level — "▾ You" and the navy ring. */
+    isCurrent: Boolean = false,
+    /** The locked level after the member's — "▾ Next" and a gold ring. */
+    upNext: Boolean = false,
+    onTap: () -> Unit,
+) {
+    // A passed exam awaiting the usher is walked ground, never a lock.
+    val done = level.walked
+    val active = isCurrent
     val locked = !done && !active
-    Column(Modifier.width(68.dp).clickable { onTap() }, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            when { active -> "▾ You"; upNext -> "▾ NEXT"; else -> " " },
-            style = PW.over(7, 0.7f),
-            color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
-            modifier = Modifier.height(12.dp),
-        )
+    // A walked or current level opens; a locked one is not a button and
+    // doesn't look like one (§9.2 #9) — its lock seal says why.
+    Column(
+        // At least the circle's column; a longer name ("Transformation")
+        // widens it rather than being cut (§8.1 rule 9) — the rail scrolls.
+        Modifier.widthIn(min = 76.dp).then(if (locked) Modifier else Modifier.clickable(onClickLabel = "Open Level $number") { onTap() }),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // A mark in a fixed slot over the circle keeps the everyday size (§9.6 #4).
+        org.nuruplace.member.ui.components.CappedFontScale(1f) {
+            Text(
+                when { active -> "▾ You"; upNext -> "▾ Next"; else -> " " },
+                style = PW.over(11, 0.7f),
+                color = when { active -> PW.gold; upNext -> PW.goldDeep; else -> Color.Transparent },
+                modifier = Modifier.height(16.dp),
+            )
+        }
         // The level NUMBER never leaves the circle — completion becomes a corner
         // check-seal; locked levels keep their number with a lock-seal. Locked
         // circles are surface + a navy hairline (the flat #EEF1F5 fill and its
@@ -393,22 +522,22 @@ private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upN
                             .clip(RoundedCornerShape(999.dp)).background(PW.navy)
                             .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(9.dp)) }
+                    ) { Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                 } else if (!active) {
                     Box(
                         Modifier.offset(x = 3.dp, y = (-2).dp).size(16.dp)
                             .clip(RoundedCornerShape(999.dp)).background(PW.goldTint)
                             .border(1.5.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(9.dp)) }
+                    ) { Icon(Lucide.Lock, null, tint = PW.goldDeep, modifier = Modifier.size(14.dp)) }
                 }
             }
         }
         Text(
-            pwShort(level.title),
-            style = PW.t(9, if (active) FontWeight.Bold else FontWeight.Medium),
+            levelShortName(level),
+            style = PW.t(11, if (active) FontWeight.Bold else FontWeight.Medium),
             color = when { active -> PW.navy; upNext -> PW.goldDeep; else -> PW.ink2 },
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
+            maxLines = 1, softWrap = false, modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
         )
     }
 }
@@ -416,42 +545,70 @@ private fun JourneyNode(level: PathwayLevel, number: Int, selected: Boolean, upN
 // ─────────────────────────── Selected level's module trail ───────────────────────────
 
 @Composable
-private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loading: Boolean, onOpenModule: (String) -> Unit, onOpenExam: (Int) -> Unit) {
+private fun SelectedModules(
+    level: PathwayLevel,
+    modules: List<LevelModule>,
+    loading: Boolean,
+    journey: Journey?,
+    onOpenModule: (String) -> Unit,
+    onOpenExam: (Int) -> Unit,
+) {
     val ordered = remember(modules) {
         fun rank(m: LevelModule) = if (m.status == ModuleStatus.COMPLETED) 0 else if (m.status == ModuleStatus.NEXT) 1 else 2
         modules.sortedWith(compareBy({ rank(it) }, { it.moduleSequenceNumber }))
     }
-    val resume = ordered.firstOrNull { it.status == ModuleStatus.NEXT }
     // When the level owns an exam container it IS the exam entry (a visible,
-    // locked-until-ready row) — the separate gate only serves levels that have
-    // no exam module authored.
+    // locked-until-ready row). A level with none gets the journey's waiting
+    // step at the foot once its exam is passed — the member's own level only
+    // (§3). The open-exam gate that stood there is gone: it showed only while
+    // the hero above already showed the exam step (§6.3).
     val hasExamModule = ordered.any { it.isExam }
-    val examReady = !hasExamModule && ordered.isNotEmpty() && ordered.all { it.completed } &&
-        level.status != LevelStatus.COMPLETED && level.examPublished  // hidden until published
+    val examPassed = journey?.takeIf { !hasExamModule && ordered.isNotEmpty() && it.levelNumber == level.levelNumber }
+        ?.stage == JourneyStage.AWAITING_USHER
+    // §6.3: the trail's own exam row is not shown again while the hero shows
+    // the exam step; and once the member is past learning this level, its
+    // list folds into one row — "20 of 20 modules done · Show" — that expands.
+    val shown = if (examRowHidden(journey, level.levelNumber)) ordered.filter { !it.isExam } else ordered
+    val folds = trailFolds(journey, level.levelNumber, ordered)
+    // "Continue →" goes where the list's open row goes — never to an exam
+    // the hero already offers, nor to one with nothing to ask yet (§7.2 #1).
+    // On the member's own level the hero above already offers this step, and
+    // the header already counts its modules: neither is said again here
+    // (§9.6 rules 1 and 3; final walk C8, Android #25 — "10 modules" four
+    // times and "Start" three ways on a first day).
+    val ownLevel = journey?.levelNumber == level.levelNumber
+    val resume = shown.firstOrNull { it.status == ModuleStatus.NEXT && !it.examOpensSoon }?.takeIf { !ownLevel }
+    var expanded by rememberSaveable(level.levelNumber) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(level.title.uppercase(), style = PW.over(9, 1.62f), color = PW.goldDeep, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${level.completedModules} of ${level.totalModules} done", style = PW.t(11), color = PW.ink2)
+                Text(level.title.uppercase(), style = PW.over(11), color = PW.goldDeep, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Lessons, as the folded row and the header count them (§8.2 #4).
+                // Never a count of nothing: "Level 3 is being prepared", "10 modules", "3 of 10 done".
+                if (!(ownLevel && level.lessonsDone <= 0)) Text(sectionCountLine(level), style = PW.t(11), color = PW.ink2)
             }
-            resume?.let { r -> Text("Continue →", style = PW.over(10, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
+            resume?.let { r -> Text(ModuleWords.trailLink(level.lessonsDone), style = PW.over(11, 0f), color = PW.gold, modifier = Modifier.clickable { if (r.isExam) onOpenExam(level.levelNumber) else onOpenModule(r.moduleId) }) }
         }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(22.dp)),
         ) {
             when {
                 loading -> repeat(3) { ModuleSkeletonRow() }
-                ordered.isEmpty() -> Text("Modules open as you progress.", style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                ordered.isEmpty() -> Text(emptyListLine(level.lessonCount), style = PW.t(13), color = PW.ink3, modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 else -> {
-                    ordered.forEachIndexed { i, m ->
-                        ModuleRow(m, last = (i == ordered.size - 1) && !examReady) {
-                            if (m.status != ModuleStatus.LOCKED) {
-                                if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
+                    if (folds) FoldedTrailRow(foldedTrailLine(ordered), expanded) { expanded = !expanded }
+                    if (!folds || expanded) {
+                        if (folds) Box(Modifier.fillMaxWidth().height(1.dp).background(PW.border))
+                        shown.forEachIndexed { i, m ->
+                            ModuleRow(m, last = (i == shown.size - 1) && !examPassed) {
+                                if (m.status != ModuleStatus.LOCKED && !m.examOpensSoon) {
+                                    if (m.isExam) onOpenExam(level.levelNumber) else onOpenModule(m.moduleId)
+                                }
                             }
+                            if (i == 3 && shown.size > 4) SurrenderFigure()
                         }
-                        if (i == 3 && ordered.size > 4) SurrenderFigure()
+                        if (examPassed) journey?.next?.let { step -> ExamPassedRow(step) }
                     }
-                    if (examReady) ExamGateRow(level.levelNumber) { onOpenExam(level.levelNumber) }
                 }
             }
         }
@@ -461,22 +618,19 @@ private fun SelectedModules(level: PathwayLevel, modules: List<LevelModule>, loa
 @Composable
 private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
     val done = m.status == ModuleStatus.COMPLETED
-    val active = m.status == ModuleStatus.NEXT
+    // An exam with nothing to ask yet is not open: "Opens soon", no tap (§7.2 #1).
+    val soon = m.examOpensSoon
+    val active = m.status == ModuleStatus.NEXT && !soon
     val locked = m.status == ModuleStatus.LOCKED
     val exam = m.isExam
-    val caption = when {
-        exam && done -> "Level exam · passed"
-        exam && active -> "Level exam · ready — tap to begin"
-        exam -> "Finish every module to unlock the exam"
-        done -> "Completed"
-        active -> "In progress · tap to continue"
-        else -> "Locked"
-    }
+    // "Up next" and "Start", never "In progress"/"Resume" — `next` is the next
+    // one to do, not progress (Cycle 3's closing walk, B2).
+    val caption = ModuleWords.trailCaption(m)
     Column {
         Row(
-            Modifier.fillMaxWidth().pressScale(0.98f)
+            Modifier.fillMaxWidth().then(if (soon) Modifier else Modifier.pressScale(0.98f))
                 .background(if (active) PW.gold.copy(alpha = 0.05f) else if (exam) PW.gold.copy(alpha = 0.03f) else Color.Transparent)
-                .clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                .clickable(enabled = !soon) { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The module NUMBER stays put; state moves to a corner seal. The
@@ -492,7 +646,7 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (exam) Icon(Icons.Filled.EmojiEvents, null, tint = if (active) PW.navy else PW.goldDeep, modifier = Modifier.size(15.dp))
+                    if (exam) Icon(Lucide.Trophy, null, tint = if (active) PW.navy else PW.goldDeep, modifier = Modifier.size(14.dp))
                     else Text(
                         "${m.moduleSequenceNumber}",
                         style = PW.t(13, FontWeight.Bold),
@@ -505,24 +659,33 @@ private fun ModuleRow(m: LevelModule, last: Boolean, onTap: () -> Unit) {
                             .clip(RoundedCornerShape(999.dp)).background(PW.navy)
                             .border(1.2.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(7.dp)) }
+                    ) { Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                 } else if (!active) {
                     Box(
                         Modifier.offset(x = 4.dp, y = (-3).dp).size(13.dp)
                             .clip(RoundedCornerShape(999.dp)).background(PW.mutedBg)
                             .border(1.2.dp, Color.White, RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(7.dp)) }
+                    ) { Icon(Lucide.Lock, null, tint = PW.ink3, modifier = Modifier.size(14.dp)) }
                 }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(m.title, style = PW.t(13, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(caption, style = PW.t(9, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
+                // A module's title wraps to two lines — never cut (§8.1 rule 9).
+                // The exam's one name (§9.1 rule 1) — the server titles it "Level 1 Review".
+                // A module is a thing: the content row title, Fraunces 15 — as on
+                // the level page and YOUR WEEK (§8.1 rule 3; Cycle 4 walk 11).
+                Text(ExamWords.rowTitle(m), style = NuruType.rowTitle, color = if (locked && !exam) PW.ink2 else PW.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(caption, style = PW.t(11, if (active || exam) FontWeight.Bold else FontWeight.Medium), color = if (active || (exam && !done)) PW.goldDeep else PW.ink3)
             }
             when {
-                active -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(if (exam) "Start exam" else "Resume", style = PW.over(9, 0f), color = PW.gold) }
-                done -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
+                // The exam keeps its door; a lesson's row says "Up next · tap
+                // to start" and is the tap — its navy "Start" pill was a third
+                // "Start" beside the hero's (Android #25).
+                active && exam -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text(ModuleWords.trailAction(m), style = PW.over(11, 0f), color = PW.gold) }
+                active -> Icon(Lucide.ChevronRight, null, tint = PW.goldDeep, modifier = Modifier.size(18.dp))
+                soon -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.gold.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Opens soon", style = PW.over(11, 0f), color = PW.goldDeep) }
+                done -> Icon(Lucide.ChevronRight, null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(18.dp))
             }
         }
         if (!last) Box(Modifier.fillMaxWidth().height(1.dp).background(PW.border))
@@ -541,36 +704,80 @@ private fun ModuleSkeletonRow() {
     }
 }
 
+/** A finished level's trail, folded (§6.3): "20 of 20 modules done · Show"
+ *  — the whole row opens the list, and folds it again ("· Hide"). */
 @Composable
-private fun ExamGateRow(levelNumber: Int, onTap: () -> Unit) {
+private fun FoldedTrailRow(line: String, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(onClickLabel = if (expanded) "Hide the modules" else "Show the modules") { onToggle() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Check, null, tint = PW.navy, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = PW.navy)) { append("$line · ") }
+                withStyle(SpanStyle(color = PW.gold, fontWeight = FontWeight.Bold)) { append(if (expanded) "Hide" else "Show") }
+            },
+            style = PW.t(13, FontWeight.SemiBold),
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** Where the gate stood, once the exam is passed: the journey's waiting step
+ *  ("Level 2 is next" · "You passed the Level 1 exam…") — nothing to tap; the
+ *  member's leader opens the next level. */
+@Composable
+private fun ExamPassedRow(step: JourneyStep) {
     Column {
         Box(Modifier.fillMaxWidth().height(1.dp).background(PW.gold.copy(alpha = 0.35f)))
         Row(
-            Modifier.fillMaxWidth().background(PW.gold.copy(alpha = 0.10f)).clickable { onTap() }.padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().background(PW.gold.copy(alpha = 0.06f)).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldGrad), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.EmojiEvents, null, tint = PW.navy, modifier = Modifier.size(16.dp))
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
+                Icon(Lucide.Check, null, tint = PW.navy, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Take the Level $levelNumber exam", style = PW.t(13, FontWeight.Bold), color = PW.navy, maxLines = 1)
-                Text("Every module is done — the gate is open", style = PW.t(9, FontWeight.SemiBold), color = PW.goldDeep)
+                Text(step.title, style = NuruType.rowTitle, color = PW.navy, maxLines = 2)
+                Text(step.line, style = PW.t(11, FontWeight.SemiBold), color = PW.goldDeep)
             }
-            Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PW.navy).padding(horizontal = 10.dp, vertical = 5.dp)) { Text("Begin", style = PW.over(9, 0f), color = PW.gold) }
         }
+    }
+}
+
+/** A photograph that fills its card — cropped from the centre, never fitted
+ *  with bands (§8.1 rule 5; Cycle 4 walk 10: the summit photo left a grey band
+ *  at the top and a dark one at the foot, because FitImage sizes itself to the
+ *  picture and these boxes have their own height). Navy behind it while it
+ *  loads, or if it can't. */
+@Composable
+private fun CoverPhoto(url: String, modifier: Modifier = Modifier.fillMaxSize()) {
+    Box(modifier.background(PW.navyGrad)) {
+        coil.compose.AsyncImage(
+            model = url, contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
 @Composable
 private fun SurrenderFigure() {
-    Box(Modifier.fillMaxWidth().height(224.dp)) {
-        FitImage("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x26081424), Color(0x8C081424), Color(0xE6081424)))))
+    // At least the owner's 224 dp, and taller when its words need it (§9.6 #4).
+    Box(Modifier.fillMaxWidth().heightIn(min = 224.dp)) {
+        CoverPhoto("https://images.unsplash.com/photo-1510590337019-5ef8d3d32116?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", Modifier.matchParentSize())
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color(0x26081424), Color(0x8C081424), Color(0xE6081424)))))
         Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-            Text("PAUSE & SURRENDER", style = PW.over(7, 1.54f), color = PW.goldLight)
+            Text("PAUSE & SURRENDER", style = PW.over(11), color = PW.goldLight)
             Text("“Offer yourselves as a living sacrifice, holy and pleasing to God.”", style = PW.serif(12, FontWeight.Medium), color = Color.White)
-            Text("Romans 12:1 · Surrender to His Word", style = PW.t(8, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.65f), modifier = Modifier.padding(top = 2.dp))
+            Text("Romans 12:1 · Surrender to His Word", style = PW.t(11, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.65f), modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
@@ -583,31 +790,35 @@ private fun DisciplershipRow(onTap: () -> Unit) {
         Modifier.fillMaxWidth().pressScale().clip(RoundedCornerShape(20.dp)).background(Color.White).border(1.dp, PW.border, RoundedCornerShape(20.dp)).clickable { onTap() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldGrad), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.VolunteerActivism, null, tint = PW.navy, modifier = Modifier.size(20.dp))
+        // A row's icon on a gold-tint tile (§8.1 rule 7) — it was a solid gold
+        // tile wearing Give's hand-heart; the hub is iOS's heart-handshake.
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.HeartHandshake, null, tint = PW.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("WALK WITH YOUR DISCIPLER", style = PW.over(8, 1.28f), color = PW.goldDeep)
-            Text("Your Discipleship Hub", style = PW.t(14, FontWeight.SemiBold), color = PW.navy, maxLines = 1)
-            Text("Message, feedback & meeting notes", style = PW.t(11), color = PW.ink2, maxLines = 1)
+            Text("WALK WITH YOUR DISCIPLER", style = PW.over(11), color = PW.goldDeep)
+            // Wrap, never cut at the largest text (§8.1 rule 9).
+            Text("Your Discipleship Hub", style = PW.t(14, FontWeight.SemiBold), color = PW.navy)
+            Text("Message, feedback & meeting notes", style = PW.t(11), color = PW.ink2)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color(0xFFB5BDC9), modifier = Modifier.size(18.dp))
+        Icon(Lucide.ChevronRight, null, tint = Color(0xFFB5BDC9), modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun Milestones(levels: List<PathwayLevel>) {
-    val earned = levels.count { it.status == LevelStatus.COMPLETED }
-    val rewardIdx = levels.indexOfFirst { it.status != LevelStatus.COMPLETED }
+    val earned = levels.count { it.walked }
+    val rewardIdx = levels.indexOfFirst { !it.walked }
     val reward = rewardIdx.takeIf { it >= 0 }?.let { levels[it] }
-    val remaining = reward?.let { (it.totalModules - it.completedModules).coerceAtLeast(0) } ?: 0
-    val rewardPct = reward?.let { if (it.totalModules > 0) it.completedModules * 100 / it.totalModules else 0 } ?: 0
+    // Lessons to go — the exam is a step of its own, never "1 to go" (§8.2 #4).
+    val remaining = reward?.let { (it.lessonCount - it.lessonsDone).coerceAtLeast(0) } ?: 0
+    val rewardPct = reward?.let { if (it.lessonCount > 0) it.lessonsDone * 100 / it.lessonCount else 0 } ?: 0
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text("MILESTONES", style = PW.over(9, 1.62f), color = PW.goldDeep)
+            Text("MILESTONES", style = PW.over(11), color = PW.goldDeep)
             Spacer(Modifier.weight(1f))
-            Text("$earned earned", style = PW.over(9, 0f), color = PW.ink3)
+            Text("$earned earned", style = PW.over(11, 0f), color = PW.ink3)
         }
         if (reward != null && remaining > 0) {
             Row(
@@ -615,28 +826,28 @@ private fun Milestones(levels: List<PathwayLevel>) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
-                    Text(PW.badge[rewardIdx % PW.badge.size], style = TextStyle(fontSize = 22.sp))
+                    Icon(PW.badge[rewardIdx % PW.badge.size], null, tint = PW.goldLight, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("NEXT REWARD", style = PW.over(8, 1.28f), color = PW.goldLight)
-                    Text("The “${pwShort(reward.title)}” badge", style = PW.t(13, FontWeight.Bold), color = Color.White, maxLines = 1)
+                    Text("NEXT REWARD", style = PW.over(11), color = PW.goldLight)
+                    Text("The “${levelShortName(reward)}” badge", style = PW.t(13, FontWeight.Bold), color = Color.White, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                         Box(Modifier.weight(1f)) { PWBar(rewardPct, PW.goldGrad, Color.White.copy(alpha = 0.16f)) }
                         Spacer(Modifier.width(8.dp))
-                        Text("$remaining to go", style = PW.t(9, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.7f))
+                        Text("$remaining to go", style = PW.t(11, FontWeight.SemiBold), color = Color.White.copy(alpha = 0.7f))
                     }
                 }
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            levels.forEachIndexed { i, lvl -> RewardBadge(pwShort(lvl.title), PW.badge[i % PW.badge.size], lvl.status == LevelStatus.COMPLETED) }
+            levels.forEachIndexed { i, lvl -> RewardBadge(levelShortName(lvl), PW.badge[i % PW.badge.size], lvl.walked) }
         }
     }
 }
 
 @Composable
-private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
+private fun RewardBadge(name: String, glyph: androidx.compose.ui.graphics.vector.ImageVector, earned: Boolean) {
     Column(
         Modifier.width(84.dp).clip(RoundedCornerShape(16.dp))
             .background(if (earned) Brush.linearGradient(listOf(PW.gold.copy(alpha = 0.14f), PW.gold.copy(alpha = 0.03f))) else Brush.linearGradient(listOf(PW.surface, PW.surface)))
@@ -644,21 +855,26 @@ private fun RewardBadge(name: String, emoji: String, earned: Boolean) {
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(if (earned) Color.White else PW.mutedBg).border(1.dp, if (earned) PW.gold.copy(alpha = 0.33f) else PW.border, RoundedCornerShape(999.dp)).alpha(if (earned) 1f else 0.7f), contentAlignment = Alignment.Center) {
-            Text(emoji, style = TextStyle(fontSize = 20.sp))
+        // Lucide on a gold-tint disc once earned, quiet before (§8.1 rule 7; iOS ea37d94).
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(if (earned) PW.goldTint else PW.mutedBg).border(1.dp, if (earned) PW.gold.copy(alpha = 0.33f) else PW.border, RoundedCornerShape(999.dp)).alpha(if (earned) 1f else 0.7f), contentAlignment = Alignment.Center) {
+            Icon(glyph, null, tint = if (earned) PW.navy else PW.ink3, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(name, style = PW.t(9, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // A level's name, whole — "Foun…", "Trans…" at the largest text (§8.1 rule 9, §9.6 #4).
+        org.nuruplace.member.ui.components.WholeWordsText(name, style = PW.t(11, FontWeight.SemiBold), color = if (earned) PW.navy else PW.ink3, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(2.dp))
-        if (earned) Row { repeat(3) { Icon(Icons.Filled.Star, null, tint = PW.gold, modifier = Modifier.size(8.dp)) } }
-        else Icon(Icons.Filled.Lock, null, tint = PW.ink3, modifier = Modifier.size(9.dp))
+        if (earned) Row { repeat(3) { Icon(Lucide.Star, null, tint = PW.gold, modifier = Modifier.size(14.dp)) } }
+        else Icon(Lucide.Lock, null, tint = PW.ink3, modifier = Modifier.size(14.dp))
     }
 }
 
 @Composable
-private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: String) {
-    val reached = overallPct >= 100
-    val levelsLeft = levels.count { it.status != LevelStatus.COMPLETED }
+private fun SummitCard(journey: Journey?, levels: List<PathwayLevel>, firstName: String) {
+    // Only at the journey's end — the LAST level's exam passed (§3). It used
+    // to be "every published module done", which commissioned Level 1
+    // finishers while Levels 2–6 had no modules yet.
+    val reached = journey?.summitReached == true
+    val levelsLeft = levels.count { !it.walked }
     // First time the summit is truly reached → a real celebration (once ever).
     if (reached) {
         androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -672,28 +888,38 @@ private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: S
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("THE SUMMIT · WHERE THIS ROAD LEADS", style = PW.over(9, 1.62f), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
+        Text("THE SUMMIT · WHERE THIS ROAD LEADS", style = PW.over(11), color = PW.goldDeep, modifier = Modifier.padding(horizontal = 4.dp))
+        // At least the owner's 300 dp, and taller when its words need it — at
+        // the largest text "COMMISSIONED" landed on its seal and the road's
+        // dots fell out of the card (§9.6 #4).
         Box(
-            Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(24.dp))
+            Modifier.fillMaxWidth().heightIn(min = 300.dp).clip(RoundedCornerShape(24.dp))
                 // Reached earns a gold ceremonial ring; the road there stays quiet.
                 .border(if (reached) 1.5.dp else 0.dp, if (reached) PW.gold.copy(alpha = 0.85f) else Color.Transparent, RoundedCornerShape(24.dp)),
         ) {
             // Real sending: a worship gathering, hands raised, JESUS over the stage —
             // visually verified (not picked blind from an ID).
-            FitImage("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", modifier = Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x260A1628), Color(0x730A1628), Color(0xF20A1628)))))
-            // status chip
+            CoverPhoto("https://images.unsplash.com/photo-1507692049790-de58290a4334?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", Modifier.matchParentSize())
+            Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color(0x260A1628), Color(0x730A1628), Color(0xF20A1628)))))
+            // status chip — on a navy scrim, so its white words read on any part
+            // of the photograph (it was white on a light-grey band, §8.1 rule 5)
             Row(
                 Modifier.align(Alignment.TopEnd).padding(12.dp).clip(RoundedCornerShape(999.dp))
-                    .background(if (reached) PW.gold else Color.White.copy(alpha = 0.18f))
+                    .background(if (reached) PW.gold else PW.navy.copy(alpha = 0.62f))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (reached) Icon(Icons.Filled.Star, null, tint = PW.navy, modifier = Modifier.size(10.dp)) else Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                if (reached) Icon(Lucide.Star, null, tint = PW.navy, modifier = Modifier.size(14.dp)) else Icon(Lucide.Lock, null, tint = Color.White, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(9, 1f), color = if (reached) PW.navy else Color.White)
+                Text(if (reached) "SENT" else "AHEAD OF YOU", style = PW.over(11, 1f), color = if (reached) PW.navy else Color.White)
             }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    // Room for the status pill above, once the words fill the card.
+                    .padding(top = if (org.nuruplace.member.ui.components.largeText()) 52.dp else 0.dp)
+                    .padding(horizontal = 20.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 // Ceremonial seal — double gold ring, medal, no emoji.
                 Box(
                     Modifier.size(58.dp).clip(RoundedCornerShape(999.dp))
@@ -706,25 +932,25 @@ private fun SummitCard(overallPct: Int, levels: List<PathwayLevel>, firstName: S
                             .border(1.dp, PW.goldLight.copy(alpha = if (reached) 0.8f else 0.35f), RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.WorkspacePremium, null, tint = if (reached) PW.goldLight else PW.gold.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
+                        Icon(Lucide.Award, null, tint = if (reached) PW.goldLight else PW.gold.copy(alpha = 0.75f), modifier = Modifier.size(24.dp))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("COMMISSIONED", style = PW.over(10, 2.4f), color = PW.goldLight)
+                Text("COMMISSIONED", style = PW.over(11, 2.4f), color = PW.goldLight)
                 // The actual charge, not a caption — the words carry the weight.
                 Text(
                     "\u201CGo therefore and make disciples of all nations\u2026\u201D",
-                    style = PW.serif(19, FontWeight.SemiBold, -0.2f).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, lineHeight = 26.sp),
+                    style = PW.serif(18, FontWeight.SemiBold, -0.2f).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, lineHeight = 25.sp),
                     color = Color.White,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.padding(top = 6.dp),
                 )
-                Text("MATTHEW 28:19", style = PW.over(9, 1.8f), color = Color.White.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp))
+                Text("MATTHEW 28:19", style = PW.over(11, 1.8f), color = Color.White.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(14.dp))
                 // The road itself: one dot per level, gold when walked.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     levels.forEach { lv ->
-                        val done = lv.status == LevelStatus.COMPLETED
+                        val done = reached || lv.walked
                         Box(
                             Modifier.size(if (done) 9.dp else 7.dp).clip(RoundedCornerShape(999.dp))
                                 .background(if (done) PW.gold else Color.White.copy(alpha = 0.28f))
@@ -756,19 +982,20 @@ private fun WalkRow(onTap: () -> Unit) {
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A row's icon on a gold-tint tile (§8.1 rule 7) — it sat on navy (iOS the same).
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
-                .background(Brush.linearGradient(listOf(PW.navy, Color(0xFF1B3A5C)))),
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PW.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Flag, contentDescription = null, tint = PW.gold, modifier = Modifier.size(20.dp))
+            Icon(Lucide.Flag, contentDescription = null, tint = PW.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("EVERY STEP, REMEMBERED", style = NuruType.micro.copy(fontSize = 8.sp), color = PW.goldDeep, fontWeight = FontWeight.Bold, letterSpacing = 1.28.sp)
-            Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2, maxLines = 1)
+            Text("EVERY STEP, REMEMBERED", style = NuruType.kicker, color = PW.goldDeep)
+            // Wrap, never cut at the largest text — "Your whole journey on" (§8.1 rule 9).
+            Text("Your Walk", style = NuruType.body, color = PW.navy, fontWeight = FontWeight.SemiBold)
+            Text("Your whole journey on one gold thread", style = NuruType.micro, color = PW.ink2)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = PW.ink3, modifier = Modifier.size(18.dp))
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = PW.ink3, modifier = Modifier.size(18.dp))
     }
 }

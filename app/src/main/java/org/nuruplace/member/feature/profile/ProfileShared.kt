@@ -9,13 +9,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
+import org.nuruplace.member.ui.icons.Lucide
 
 /** iOS Profile palette — global Nuru tokens + the inline literals used across profile/settings. */
 object PROF {
@@ -74,25 +68,33 @@ object PROF {
 /** Per-category badge visuals (iOS `PBadgeItem.style`). */
 data class BadgeStyle(val icon: ImageVector, val color: Color, val tint: Color)
 
+// One badge look (§8.1 rules 1 and 7): the category's icon, navy on gold tint
+// — they wore green, sky and purple by category, hues that say nothing.
 fun badgeStyle(category: String?): BadgeStyle = when (category?.lowercase()?.trim()) {
-    "journey" -> BadgeStyle(Icons.Filled.AutoAwesome, Color(0xFFC89B3C), Color(0xFFFFF4DA))
-    "consistency" -> BadgeStyle(Icons.Filled.LocalFireDepartment, Color(0xFF16A34A), Color(0xFFDCFCE7))
-    "community" -> BadgeStyle(Icons.Filled.Group, Color(0xFF0EA5E9), Color(0xFFE0F2FE))
-    "service" -> BadgeStyle(Icons.Filled.VolunteerActivism, Color(0xFFA855F7), Color(0xFFF3E8FF))
-    else -> BadgeStyle(Icons.Filled.Verified, Color(0xFFC89B3C), Color(0xFFFFF4C7))
+    "journey" -> BadgeStyle(Lucide.Sparkles, PROF.navy, PROF.goldTint)
+    "consistency" -> BadgeStyle(Lucide.Flame, PROF.navy, PROF.goldTint)
+    "community" -> BadgeStyle(Lucide.Users, PROF.navy, PROF.goldTint)
+    // Serving's handshake — Give's hand-heart means giving (§8.1 rule 7).
+    "service" -> BadgeStyle(Lucide.Handshake, PROF.navy, PROF.goldTint)
+    else -> BadgeStyle(Lucide.BadgeCheck, PROF.navy, PROF.goldTint)
 }
 
 /** Settings row icon tile tint (bg, fg). */
 data class RowTint(val bg: Color, val fg: Color)
 
-val TINT_PASSWORD = RowTint(Color(0xFFEEF2FF), Color(0xFF6366F1))
-val TINT_2FA_OFF = RowTint(Color(0xFFFEF3C7), Color(0xFFD97706))
-val TINT_2FA_ON = RowTint(Color(0x2216A34A), Color(0xFF16A34A))
-val TINT_SESSIONS = RowTint(Color(0xFFFCE7F3), Color(0xFFDB2777))
-val TINT_NOTIF = RowTint(PROF.gold.copy(alpha = 0.08f), Color(0xFFA8861C))
-val TINT_LANGUAGE = RowTint(Color(0xFFE0F2FE), Color(0xFF0EA5E9))
-val TINT_HELP = RowTint(Color(0xFFDCFCE7), Color(0xFF16A34A))
-val TINT_PRIVACY = RowTint(Color(0xFFEEF2FF), Color(0xFF6366F1))
+// Row icons sit on the gold-tint tile, navy (EXPERIENCE.md §8.1 rules 1 and
+// 7) — they were indigo, pink, sky and green: hues that said nothing. The
+// two-factor tile too, as iOS: its state is in its words ("Active · …",
+// "Not enabled · recommended").
+private val TINT_GOLD = RowTint(PROF.goldTint, PROF.navy)
+val TINT_PASSWORD = TINT_GOLD
+val TINT_2FA_OFF = TINT_GOLD
+val TINT_2FA_ON = TINT_GOLD
+val TINT_SESSIONS = TINT_GOLD
+val TINT_NOTIF = TINT_GOLD
+val TINT_LANGUAGE = TINT_GOLD
+val TINT_HELP = TINT_GOLD
+val TINT_PRIVACY = TINT_GOLD
 
 // Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
 fun pInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
@@ -126,4 +128,55 @@ fun ProfCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
     }
 }
 
-val FingerprintIcon: ImageVector = Icons.Filled.Fingerprint
+val FingerprintIcon: ImageVector = Lucide.FingerprintPattern
+
+/** An email address that wraps only after its "@" — a zero-width space
+ *  there gives the line its one break (final walk C3, Android #10: it wrapped
+ *  "student1@dev / .local"). Nothing else in it is a break. */
+internal fun emailBreaks(email: String): String = email.replaceFirst("@", "@\u200B")
+
+/** A badge's name with its hyphens held — "Seven‑Day Faithful" breaks
+ *  between its words, never at "Seven-" (final walk C3; the iOS rule). */
+internal fun badgeLabel(name: String): String = name.replace('-', '\u2011')
+
+// ── Values that look like data never leak (EXPERIENCE.md §8.1 rule 8) ──────
+
+/** An empty profile value, said plainly — never "—" or a blank row. */
+internal const val NOT_SET = "Not set"
+
+/** The calendar date a date-only value carries: its leading "YYYY-MM-DD".
+ *  The server sends a birthday as midnight UTC ("1990-01-01T00:00:00.000Z");
+ *  reading it as an instant in the phone's zone would shift it a day (and
+ *  printed raw it read "1989-12-31T21:00:00.000Z"). Null when there is none. */
+internal fun calendarDateOf(raw: String?): java.time.LocalDate? {
+    val m = Regex("""^\s*(\d{4})-(\d{2})-(\d{2})""").find(raw.orEmpty()) ?: return null
+    val (y, mo, d) = m.destructured
+    return runCatching { java.time.LocalDate.of(y.toInt(), mo.toInt(), d.toInt()) }.getOrNull()
+}
+
+/** A birthday as a member reads it: "1 Jan 1990"; "Not set" when empty. */
+internal fun profileDateLabel(raw: String?): String =
+    calendarDateOf(raw)?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH))
+        ?: NOT_SET
+
+/** The edit sheet's starting value for a birthday: "1990-01-01" — the form
+ *  it asks for, so an unchanged birthday still saves. Empty when unset. */
+internal fun profileDateEditValue(raw: String?): String = calendarDateOf(raw)?.toString().orEmpty()
+
+/** The gender choices, as a member reads them and as the server stores them. */
+internal val GENDER_OPTIONS = listOf(
+    "Male" to "male",
+    "Female" to "female",
+    "Prefer not to say" to "prefer_not_to_say",
+)
+
+/** "Prefer not to say", never "prefer_not_to_say"; "Not set" when empty. */
+internal fun profileGenderLabel(raw: String?): String {
+    val v = raw?.trim().orEmpty()
+    if (v.isEmpty()) return NOT_SET
+    return GENDER_OPTIONS.firstOrNull { it.second == v.lowercase() }?.first
+        ?: v.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+/** Any other text value: itself, or "Not set" when empty. */
+internal fun profileValue(raw: String?): String = raw?.trim()?.takeIf { it.isNotEmpty() } ?: NOT_SET

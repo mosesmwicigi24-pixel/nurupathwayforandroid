@@ -25,14 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -57,13 +49,14 @@ import org.nuruplace.member.data.net.BroadcastDetailRes
 import org.nuruplace.member.data.net.BroadcastRecipientRow
 import org.nuruplace.member.data.net.BroadcastResponseRow
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
 /** WhatsApp's own blue — one tick "delivered" (a server-side fact: a
  *  broadcast is written into every recipient's thread in one transaction), two
  *  ticks "seen" (they opened it). */
-private val TickBlue = Color(0xFF2F80ED)
+private val TickBlue = CHAT.tickBlue   // the ticks are gold (§8.1 rule 1)
 
 @Composable
 fun BroadcastDetailScreen(broadcastId: String, onBack: () -> Unit, onOpenThread: (String) -> Unit) {
@@ -99,8 +92,8 @@ fun BroadcastDetailScreen(broadcastId: String, onBack: () -> Unit, onOpenThread:
                 Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                     .clickable { onBack() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
-            Text("Broadcast", style = cSerif(20, FontWeight.SemiBold), color = Color.White)
+            ) { Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
+            Text("Broadcast", style = cSerif(22, FontWeight.SemiBold), color = Color.White)
         }
 
         Column(
@@ -145,7 +138,7 @@ private fun PinnedBroadcastCard(body: String, createdAt: String?) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Campaign, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Megaphone, contentDescription = null, tint = CHAT.goldLight, modifier = Modifier.size(14.dp))
             Text(
                 "TO EVERY MEMBER",
                 style = cInter(11, FontWeight.Bold, 1.4f),
@@ -156,7 +149,7 @@ private fun PinnedBroadcastCard(body: String, createdAt: String?) {
         }
         Text(
             body.ifBlank { "…" },
-            style = cSerif(17),
+            style = cSerif(16),
             color = Color.White,
             lineHeight = 24.sp,
         )
@@ -190,7 +183,7 @@ private fun TicksSummaryRow(deliveredCount: Int, seenCount: Int, repliedCount: I
 private fun Tick(one: Boolean, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         Icon(
-            if (one) Icons.Filled.Done else Icons.Filled.DoneAll,
+            if (one) Lucide.Check else Lucide.CheckCheck,
             contentDescription = null,
             tint = TickBlue,
             modifier = Modifier.size(14.dp),
@@ -245,7 +238,7 @@ private fun ResponsesWall(responses: List<BroadcastResponseRow>, onOpenThread: (
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = CHAT.gold, modifier = Modifier.size(22.dp))
+                Icon(Lucide.MessageCircle, contentDescription = null, tint = CHAT.gold, modifier = Modifier.size(22.dp))
                 Text(
                     "When someone writes back, their words gather here — and only you see them.",
                     style = cInter(12),
@@ -291,13 +284,13 @@ private fun ResponseRow(r: BroadcastResponseRow, onOpenThread: () -> Unit) {
             if (r.fromThem > 1) {
                 Text(
                     "${r.fromThem} messages in your conversation",
-                    style = cInter(10, FontWeight.SemiBold),
+                    style = cInter(11, FontWeight.SemiBold),
                     color = CHAT.goldDeep,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
         }
-        Icon(Icons.Filled.ChevronRight, contentDescription = "Open thread", tint = CHAT.ink600.copy(alpha = 0.5f), modifier = Modifier.padding(top = 10.dp).size(14.dp))
+        Icon(Lucide.ChevronRight, contentDescription = "Open thread", tint = CHAT.ink600.copy(alpha = 0.5f), modifier = Modifier.padding(top = 10.dp).size(14.dp))
     }
 }
 
@@ -310,7 +303,7 @@ private fun RecipientsList(recipients: List<BroadcastRecipientRow>) {
                 .padding(vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(Icons.Filled.Groups, contentDescription = null, tint = CHAT.ink600, modifier = Modifier.size(20.dp))
+            Icon(Lucide.Users, contentDescription = null, tint = CHAT.ink600, modifier = Modifier.size(22.dp))
             Text("No recipients recorded.", style = cInter(12), color = CHAT.ink600, modifier = Modifier.padding(top = 8.dp))
         }
         return
@@ -336,7 +329,7 @@ private fun RecipientRow(r: BroadcastRecipientRow) {
         ChatCircleAvatar(r.fullName, size = 30.dp, avatarUrl = r.avatarUrl)
         Text(r.fullName, style = cInter(13, FontWeight.Medium), color = CHAT.navy, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Icon(
-            if (r.seen) Icons.Filled.DoneAll else Icons.Filled.Done,
+            if (r.seen) Lucide.CheckCheck else Lucide.Check,
             contentDescription = if (r.seen) "Seen" else "Delivered",
             tint = TickBlue,
             modifier = Modifier.size(14.dp),

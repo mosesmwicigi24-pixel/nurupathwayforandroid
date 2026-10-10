@@ -19,12 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,13 +42,13 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.AssistantChatBody
 import org.nuruplace.member.data.net.AssistantMessage
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.ui.icons.Lucide
 
-// AI-card palette (must match CHAT.aiOrb / CHAT.aiPurpleGlow / CHAT.gold in ChatShared).
-private val AiPurple = Color(0xFF7C3AED)
-private val AiPurpleLight = Color(0xFFC4B5FD)
-private val AiPurpleDeep = Color(0xFF2A1259)
+// The AI's mark is navy with gold, like Quick help (EXPERIENCE.md §8.1 rule
+// 1, §8.2 #3): the gold orb with a navy spark (CHAT.aiOrb) — it was purple.
 private val AiGold = Color(0xFFC89B3C)
-private val AiOrb = Brush.radialGradient(listOf(AiPurpleLight, AiPurple, AiPurpleDeep))
+private val AiOrb = org.nuruplace.member.ui.theme.Nuru.goldGradient
+private val AiMark = org.nuruplace.member.ui.theme.Nuru.navy
 private val GoldGrad = Brush.verticalGradient(listOf(Color(0xFFE5BC3A), Color(0xFFC9A227), Color(0xFFA8861C)))
 private val Pill = RoundedCornerShape(999.dp)
 
@@ -108,23 +105,23 @@ fun AiDraftButton(
         contentAlignment = Alignment.Center,
     ) {
         if (busy) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 1.5.dp, modifier = Modifier.size(13.dp))
+            CircularProgressIndicator(color = AiMark, strokeWidth = 1.5.dp, modifier = Modifier.size(13.dp))
         } else {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = "Draft a reply with Nuru", tint = Color.White, modifier = Modifier.size(15.dp))
+            Icon(Lucide.Sparkles, contentDescription = "Draft a reply with Nuru", tint = AiMark, modifier = Modifier.size(14.dp))
         }
     }
 
     if (sheetOpen) {
-        ModalBottomSheet(onDismissRequest = { sheetOpen = false }, containerColor = GrowPal.white) {
+        NuruModalBottomSheet(onDismissRequest = { sheetOpen = false }, containerColor = GrowPal.white, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(22.dp).clip(CircleShape).background(AiOrb), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                        Icon(Lucide.Sparkles, contentDescription = null, tint = AiMark, modifier = Modifier.size(14.dp))
                     }
-                    Text("NURU SUGGESTS", style = gInter(10, FontWeight.Bold, 1.6f), color = GrowPal.eyebrow)
+                    Text("NURU SUGGESTS", style = gInter(11, FontWeight.Bold, 1.6f), color = GrowPal.eyebrow)
                 }
                 Text(
                     if (failed) "Nuru couldn't reach the assistant just now — you can still write your own reply below." else summary ?: "Here's a reply you could send.",

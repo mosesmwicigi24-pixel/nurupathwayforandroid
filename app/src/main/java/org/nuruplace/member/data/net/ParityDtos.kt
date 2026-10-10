@@ -21,6 +21,9 @@ data class ForgotRes(val sent: Boolean = false, val devToken: String? = null)
 data class ResetBody(val token: String, val newPassword: String)
 
 // --- Recurring giving schedules ---
+// POST /giving/schedules answers with the id, status and next_run_at only —
+// the rest default here, so a created schedule is shown from what the member
+// confirmed (GivingScreen), never from these defaults.
 @Serializable
 data class GivingSchedule(
     val scheduleId: String,
@@ -29,9 +32,34 @@ data class GivingSchedule(
     val currency: String = "KES",
     val frequency: String = "monthly",   // weekly | monthly
     val method: String = "",
-    val status: String = "active",       // active | cancelled
+    val status: String = "active",       // active | paused | cancelled
     val nextRunAt: String = "",
     val createdAt: String = "",
+    // Giving Cycle 1 — all null from an older server.
+    /** The schedule's own number; null = every cycle prompts the profile's. */
+    val phoneNumber: String? = null,
+    /** A retry of the current cycle, when one is armed. */
+    val retryAt: String? = null,
+    /** The last charge's reason while the schedule is failing, else null. */
+    val lastFailure: GiftFailure? = null,
+    // Giving Cycle 4.
+    /** Why it is paused: failures (three strikes) | member | pledge; null otherwise. */
+    val pauseReason: String? = null,
+    /** A member's pause ends on this Nairobi date (YYYY-MM-DD); null = until resumed. */
+    val resumeOn: String? = null,
+    /** A push minutes before each prompt. */
+    val headsUp: Boolean = true,
+    /** A monthly gift's own day of the month (1–31, clamped to short months). */
+    val anchorDay: Int? = null,
+    /** Prompts in a row that did not go through. */
+    val consecutiveFailures: Int = 0,
+    // Giving Cycle 5 — null from an older server.
+    /** The pledge this gift collects ({pledge_id, title}); null = none. */
+    val pledge: IntentPledge? = null,
+    /** What the next prompt will ask: the amount, or — collecting a pledge —
+     *  only what the pledge still owes (0 when it is already paid); null
+     *  when no prompt is coming (paused, cancelled, stopping with its pledge). */
+    val nextAmountMinor: Long? = null,
 )
 
 // --- Announcements ---
@@ -158,11 +186,16 @@ data class Moment(
 )
 
 // --- Profile: notification prefs + MFA ---
+// GET/PUT /me/notification-preferences — the PUT sends all four. Settings'
+// "Sound and vibration" is `sound_enabled` (owner request 2026-09-28; server
+// migration 223): on unless the member turns it off, so a GET that predates
+// it — or omits it — reads as on.
 @Serializable
 data class NotificationPreferences(
     val pushEnabled: Boolean = true,
     val emailEnabled: Boolean = true,
     val smsEnabled: Boolean = false,
+    val soundEnabled: Boolean = true,
 )
 
 @Serializable
@@ -231,7 +264,16 @@ data class CellSummary(val cell: Cell? = null) {
     data class Leader(val name: String = "", val role: String? = null, val avatarUrl: String? = null)
 
     @Serializable
-    data class Attendance(val attended: Int = 0, val expected: Int = 0)
+    data class Attendance(
+        val attended: Int = 0,
+        /** A scoring baseline (expected check-ins), never a schedule — not shown (EXPERIENCE.md §7.4 #16). */
+        val expected: Int = 0,
+        /** The member's part in the cell's real recent meetings; absent on an older server, null before any. */
+        val you: You? = null,
+    )
+
+    @Serializable
+    data class You(val attended: Int = 0, val meetings: Int = 0)
 
     @Serializable
     data class Next(

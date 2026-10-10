@@ -79,6 +79,46 @@ data class NotifPayload(
     val departmentId: String? = null,
     val needId: String? = null,
     val department: String? = null,
+    // Giving (feature/give/GivingRoutes.kt, GivingNotificationCopy.kt):
+    // giving_gift_failed carries the gift and why it failed; the schedule
+    // notices the schedule (the heads-up its prompt time); the pledge
+    // notices the pledge — `title` is then the PLEDGE's name — and what the
+    // push said is rebuilt from these (Giving Cycles 3–5).
+    val transactionId: String? = null,
+    val failureCode: String? = null,
+    val scheduleId: String? = null,
+    val promptAt: String? = null,
+    val pledgeId: String? = null,
+    val amountMinor: Long? = null,
+    val targetMinor: Long? = null,
+    val currency: String? = null,
+    val reason: String? = null,
+    val hint: String? = null,
+    val frequency: String? = null,
+    val fundName: String? = null,
+    val pledgeTitle: String? = null,
+    val partial: Boolean? = null,
+    val coveredThrough: String? = null,
+    val untilOn: String? = null,
+    val dueOn: String? = null,
+    val daysAway: Int? = null,
+    val retryAt: String? = null,
+    val scheduleStopped: Boolean? = null,
+    val message: String? = null,
+    // The church office changed a recurring gift at the member's request
+    // (Giving Cycle 7, giving_schedule_office_change): pause · resume ·
+    // cancel, and the day a pause ends (YYYY-MM-DD) when it has one.
+    val action: String? = null,
+    val resumeOn: String? = null,
+    // A department need's notices (department_need_*): the office's note
+    // when it was not approved. Their `title` is the NEED's name.
+    val note: String? = null,
+    // The keys the push router reads beside the ones above (EXPERIENCE.md
+    // §7.2 #3 — the inbox and a tapped push share one router): a Live
+    // notice's stream (live_stream_started / live_guest_invite, live/
+    // service.ts) and a Read-with-a-Friend invite's token (plan_group_*).
+    val streamId: String? = null,
+    val inviteToken: String? = null,
 )
 
 @Serializable

@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
@@ -45,7 +48,8 @@ fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
     val gold = Color(0xFFC9A227)
 
     Column(
-        Modifier.fillMaxSize().background(navy).padding(horizontal = 24.dp).padding(top = 64.dp, bottom = 28.dp),
+        // Clear of the system's navigation bar, gesture or 3-button (§7.1 rule 3).
+        Modifier.fillMaxSize().background(navy).navigationBarsPadding().padding(horizontal = 24.dp).padding(top = 64.dp, bottom = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(Modifier.weight(1f).fillMaxWidth().alpha(t), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -54,7 +58,7 @@ fun PlanKeepsakeScreen(planTitle: String, days: Int, onContinue: () -> Unit) {
                 Box(Modifier.size(150.dp).clip(CircleShape).border(1.dp, gold.copy(alpha = 0.15f), CircleShape))
                 Box(Modifier.size(122.dp).clip(CircleShape).border(1.dp, gold.copy(alpha = 0.3f), CircleShape))
                 Box(Modifier.size(96.dp).clip(CircleShape).background(gold.copy(alpha = 0.10f)).border(2.dp, gold, CircleShape), contentAlignment = Alignment.Center) {
-                    Text("✦", style = rSerif(40), color = gold)
+                    Icon(Lucide.Check, contentDescription = null, tint = gold, modifier = Modifier.size(40.dp))
                 }
             }
             Spacer(Modifier.height(24.dp))

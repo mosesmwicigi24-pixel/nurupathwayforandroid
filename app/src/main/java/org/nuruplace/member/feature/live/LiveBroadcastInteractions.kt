@@ -12,6 +12,7 @@
 // and LiveBroadcastScreen.kt for where chat lives now.
 package org.nuruplace.member.feature.live
 
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,11 +28,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,10 +50,12 @@ import org.nuruplace.member.data.net.LiveHandRow
 import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.minutesSince
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /** L6 cap — mirrors the pinned wire contract (docs/LIVE_INTERACTIVE.md:
  *  "broadcaster invites up to 6 viewers as guests") and the iOS port's
@@ -100,12 +100,13 @@ fun LiveHandsGuestsSheet(
     val hands = (pulse?.hands ?: emptyList()).filter { it.userId !in dismissedHandIds }
     val guests = (pulse?.guests ?: emptyList()).filter { it.isActive }
     val atGuestCap = guests.size >= MAX_GUESTS
+    val guestContext = androidx.compose.ui.platform.LocalContext.current
 
     fun invite(userId: String) {
         if (actioningUserId != null) return
         actioningUserId = userId
         scope.launch {
-            runCatching { Net.client.api.postLiveGuestInvite(streamId, userId) }
+            noticeOnFailure(guestContext, lead = "Couldn't invite them to the stage.") { Net.client.api.postLiveGuestInvite(streamId, userId) }
             onRefreshPulse()
             actioningUserId = null
         }
@@ -115,13 +116,13 @@ fun LiveHandsGuestsSheet(
         if (actioningUserId != null) return
         actioningUserId = userId
         scope.launch {
-            runCatching { Net.client.api.deleteLiveGuest(streamId, userId) }
+            noticeOnFailure(guestContext, lead = "Couldn't take them off the stage.") { Net.client.api.deleteLiveGuest(streamId, userId) }
             onRefreshPulse()
             actioningUserId = null
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.padding(horizontal = Spacing.screen).padding(bottom = Spacing.lg)
                 .heightIn(max = 560.dp),
@@ -133,7 +134,7 @@ fun LiveHandsGuestsSheet(
             }
             Spacer(Modifier.height(Spacing.md))
 
-            Text("RAISED HANDS · ${hands.size}".uppercase(), style = NuruType.sectionLabel, color = Nuru.goldLo)
+            Text(org.nuruplace.member.util.ZeroCounts.labelled("RAISED HANDS", hands.size), style = NuruType.sectionLabel, color = Nuru.goldLo)
             Spacer(Modifier.height(Spacing.sm))
             if (hands.isEmpty()) {
                 Text(
@@ -251,7 +252,7 @@ private fun SheetCloseChip(onDismiss: () -> Unit) {
     Box(
         Modifier.size(30.dp).clip(CircleShape).background(Nuru.white).clickable { onDismiss() },
         contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(14.dp)) }
+    ) { Icon(Lucide.X, contentDescription = "Close", tint = Nuru.ink600, modifier = Modifier.size(14.dp)) }
 }
 
 @Composable

@@ -11,15 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Percent
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
+import org.nuruplace.member.ui.icons.Lucide
 
 /** iOS Give palette — global Nuru tokens + the inline literals used across the give files. */
 object GIVE {
@@ -87,18 +79,27 @@ object GIVE {
 /** A fund designation with its icon + tints (iOS `Fund`). */
 data class GiveFund(val id: String, val name: String, val tagline: String, val icon: ImageVector, val tint: Color, val fg: Color)
 
+/** Every tile is the same: a gold-tint tile with a navy icon (EXPERIENCE.md
+ *  §8.1 rules 1 and 7). The funds wore red, purple, sky and green — hues that
+ *  say state elsewhere, or nothing at all. */
+internal val TILE_TINT = org.nuruplace.member.ui.theme.Nuru.goldTint
+internal val TILE_ICON = org.nuruplace.member.ui.theme.Nuru.navy
+
 val GIVE_FUNDS = listOf(
-    GiveFund("tithe", "Tithe", "A faithful portion", Icons.Filled.Percent, Color(0xFFFFF4DA), Color(0xFFC89B3C)),
-    GiveFund("offering", "Offering", "Freewill worship", Icons.Filled.VolunteerActivism, Color(0xFFFEE2E2), Color(0xFFDC2626)),
-    GiveFund("gift", "Gift", "A special gift", Icons.Filled.CardGiftcard, Color(0xFFF3E8FF), Color(0xFFA855F7)),
-    GiveFund("mission", "Mission", "Reaching the lost", Icons.Filled.Public, Color(0xFFE0F2FE), Color(0xFF0EA5E9)),
-    GiveFund("discipleship", "Discipleship", "Making disciples", Icons.Filled.MenuBook, Color(0xFFDCFCE7), Color(0xFF16A34A)),
+    GiveFund("tithe", "Tithe", "A faithful portion", Lucide.Percent, TILE_TINT, TILE_ICON),
+    GiveFund("offering", "Offering", "Freewill worship", Lucide.HandHeart, TILE_TINT, TILE_ICON),
+    GiveFund("gift", "Gift", "A special gift", Lucide.Gift, TILE_TINT, TILE_ICON),
+    GiveFund("mission", "Mission", "Beyond our walls", Lucide.Globe, TILE_TINT, TILE_ICON),
+    GiveFund("discipleship", "Discipleship", "Growing the Pathway", Lucide.BookOpen, TILE_TINT, TILE_ICON),
 )
 
 fun giveFund(id: String?): GiveFund = GIVE_FUNDS.firstOrNull { it.id.equals(id?.trim(), true) }
-    ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Icons.Filled.CardGiftcard, Color(0xFFF3E8FF), Color(0xFFA855F7))
+    ?: GiveFund(id ?: "", (id ?: "Gift").replaceFirstChar { it.uppercase() }, "", Lucide.Gift, TILE_TINT, TILE_ICON)
 
-/** A payment method (iOS `PayMethod`). `provider == null` → "SOON" (disabled). */
+/** A payment method (iOS `PayMethod`). `provider == null` → "SOON" (disabled).
+ *  Only rails GET /giving/methods can list have a row (Giving Cycle 5): the
+ *  Equity Bank and device-wallet rows were never returned by the server, so
+ *  they only ever showed as "SOON" — iOS dropped them, and so does this. */
 data class GiveMethod(
     val id: String, val label: String, val sub: String,
     val badgeBg: Color, val badgeFg: Color, val badgeText: String?, val badgeIcon: ImageVector?,
@@ -106,12 +107,14 @@ data class GiveMethod(
 )
 
 val GIVE_METHODS = listOf(
-    GiveMethod("mpesa", "Pay with M-Pesa", "STK push to your phone", Color(0xFF16A34A), Color.White, "M-PESA", null, "mpesa"),
-    GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", Color(0xFFDC2626), Color.White, "AIRTEL", null, "airtel"),
-    GiveMethod("equity", "Pay with Equity Bank", "Bank account", Color(0xFFA6093D), Color.White, null, Icons.Filled.AccountBalance, null),
-    GiveMethod("card", "Pay with Card", "Visa · Mastercard", Color(0xFFEEF2FF), Color(0xFF6366F1), null, Icons.Filled.CreditCard, "card"),
-    GiveMethod("wallet", "Apple / Google Pay", "Device wallet", Color(0xFFEEF2FF), Color(0xFF6366F1), null, Icons.Filled.Wallet, null),
-    GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", Color(0xFFE8F1FB), Color(0xFF0070BA), "PP", null, "paypal"),
+    // "STK push" is the provider's word, not the member's (§8.1 rule 8;
+    // Cycle 3 close walk E7) — the card below already says "prompt".
+    // The rails' badges are tiles too (rule 7): their names in navy on gold
+    // tint — M-Pesa green and Airtel red read as "on track" and "failed".
+    GiveMethod("mpesa", "Pay with M-Pesa", "A prompt on your phone", TILE_TINT, TILE_ICON, "M-PESA", null, "mpesa"),
+    GiveMethod("airtel", "Pay with Airtel Money", "Mobile money", TILE_TINT, TILE_ICON, "AIRTEL", null, "airtel"),
+    GiveMethod("card", "Pay with Card", "Visa · Mastercard", TILE_TINT, TILE_ICON, null, Lucide.CreditCard, "card"),
+    GiveMethod("paypal", "Pay with PayPal", "PayPal balance / linked", TILE_TINT, TILE_ICON, "PP", null, "paypal"),
 )
 
 val GIVE_PRESETS = listOf(200, 500, 1000, 2500, 5000)
@@ -134,10 +137,17 @@ fun ksh(minor: Int): String = "KSh " + "%,d".format(minor / 100)
 
 /** Currency-AWARE amount — statement/receipt rows carry a real `currency`
  *  (PayPal settles in USD server-side); rendering everything as "KSh" printed
- *  the wrong symbol on USD gifts while the Currency detail row said USD. */
-fun money(minor: Int, currency: String?): String = when (currency?.uppercase()) {
-    null, "", "KES" -> ksh(minor)
-    "USD" -> "$" + "%,.2f".format(minor / 100.0)
+ *  the wrong symbol on USD gifts while the Currency detail row said USD.
+ *  Dollars read "US$ 12.50" everywhere (Giving Cycle 2) — the Give form's
+ *  dollar entry, the ceremony, the statement's "+ US$ …" and the receipt say
+ *  it the same way, and never as a bare "$" a reader might take for another
+ *  dollar. */
+fun money(minor: Int, currency: String?): String = money(minor.toLong(), currency)
+
+/** [money] for a sum that may pass Int (a year's totals). */
+fun money(minor: Long, currency: String?): String = when (currency?.uppercase()) {
+    null, "", "KES" -> "KSh " + "%,d".format(minor / 100)
+    "USD" -> "US$ " + "%,.2f".format(minor / 100.0)
     else -> currency.uppercase() + " " + "%,.2f".format(minor / 100.0)
 }
 
@@ -177,13 +187,19 @@ fun GiveCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxSc
     }
 }
 
-/** Status → (label, bg, fg) for a giving record/receipt (iOS `statusChip`). */
-fun giveStatus(status: String?): Triple<String, Color, Color> = when (status?.lowercase()?.trim()) {
-    "succeeded", "settled", "completed" -> Triple("Succeeded", GIVE.successBg, GIVE.successText)
-    "processing", "pending" -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
-    "failed" -> Triple("Failed", GIVE.danger.copy(alpha = 0.12f), GIVE.danger)
-    "refunded", "cancelled" -> Triple("Refunded", GIVE.mutedBg, GIVE.ink600)
-    else -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
+/** Status → (label, bg, fg) for a statement row (iOS `statusChip`): the four
+ *  it names in its colours; any other status by its own name, quietly —
+ *  "Pending", "Cancelled", "Requires action" (iOS capitalises the raw word;
+ *  the underscore is read as a space here). */
+fun giveStatus(status: String?): Triple<String, Color, Color> = when (val s = status?.lowercase()?.trim().orEmpty()) {
+    // A member's word, not the server's status (§8.1 rule 8; final walk
+    // C16): "Received", as iOS — it read "Succeeded".
+    "succeeded", "settled", "completed" -> Triple("Received", GIVE.successBg, GIVE.successText)
+    "processing", "pending", "initiated" -> Triple("Processing", GIVE.goldChipBg, GIVE.goldChipText)
+    "requires_action" -> Triple("Waiting for you", GIVE.goldChipBg, GIVE.goldChipText)
+    "failed", "cancelled", "canceled", "expired" -> Triple("Failed", GIVE.danger.copy(alpha = 0.12f), GIVE.danger)
+    "refunded" -> Triple("Refunded", GIVE.mutedBg, GIVE.ink600)
+    else -> Triple(s.replace('_', ' ').replaceFirstChar { it.uppercase() }, GIVE.mutedBg, GIVE.ink600)
 }
 
 /** What a pledge's "Pay now" — or a department need's "Give to this need" —
@@ -203,6 +219,12 @@ data class GivePreset(
     /** The pledge's terms, "KSh 1,000 monthly · due on the 25th"
      *  (GiveTargetCopy.pledgeTermsLine); null when unknown. */
     val terms: String? = null,
+    /** The pledge's or need's currency — it decides the rails and the
+     *  amount's money (Giving Cycle 5): a KES promise is paid with M-Pesa, a
+     *  USD one with PayPal; the server refuses any other (CURRENCY_MISMATCH).
+     *  Null = shillings, as every bound gift was before. [amountMinor] is in
+     *  this currency's minor units. */
+    val currency: String? = null,
 ) {
     /** The gift is bound to a target and should land on One-time. */
     val isTargeted: Boolean get() = pledgeId != null || needId != null
@@ -214,6 +236,9 @@ data class GivePreset(
 const val NEED_GIFT_FUND = "gift"
 
 /** MainShell route that opens the Give tab preset for a need (see
- *  GIVE_NEED_ROUTE there). Title is URL-encoded; amount is minor units. */
+ *  GIVE_NEED_ROUTE there). Title is URL-encoded; amount is minor units of the
+ *  need's currency, which travels too when it is not shillings (Giving
+ *  Cycle 5 — it decides the rails). */
 fun giveToNeedRoute(preset: GivePreset): String =
-    "give-need/${preset.needId}?amount=${preset.amountMinor ?: 0}&title=${android.net.Uri.encode(preset.title ?: "")}"
+    "give-need/${preset.needId}?amount=${preset.amountMinor ?: 0}&title=${android.net.Uri.encode(preset.title ?: "")}" +
+        (preset.currency?.let { currencyCode(it) }?.takeIf { it != GIVE_FORM_CURRENCY }?.let { "&currency=$it" } ?: "")

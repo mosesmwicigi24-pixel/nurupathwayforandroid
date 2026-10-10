@@ -1,0 +1,173 @@
+// A total pledge's pace (Giving Cycle 9, pathway docs/GIVING.md §12), kept
+// pure so PledgePaceTest pins it. The server sends `pace` on an ACTIVE TOTAL
+// pledge with money still owed and its date not passed: what is still owed
+// spread over the monthly collections left — one today, then the same day
+// each month through the date — rounded up to whole shillings so the last is
+// never short. The pledge says it:
+//
+//   To reach KSh 20,000 by 31 Dec: KSh 5,000 a month — 4 collections
+//
+// and, in shillings with M-Pesa on and nothing collecting it yet, offers
+// "Collect it automatically at this pace": a monthly M-Pesa gift bound to the
+// pledge at that amount, its first prompt today (the pace counts today's
+// collection). A gift bound to a pledge asks only what is left (Cycle 5), so
+// it lands exactly on the target and stops there. A recurring gift already
+// collecting the pledge is shown instead — never a second one — and it is
+// shown on EVERY pledge it collects, a monthly one included
+// (pledgeCollection): a member must be able to see that a pledge is paid
+// automatically.
+package org.nuruplace.member.feature.give
+
+import org.nuruplace.member.data.net.PledgeClaim
+import org.nuruplace.member.data.net.CreateScheduleBody
+import org.nuruplace.member.data.net.GivingMethodsRes
+import org.nuruplace.member.data.net.GivingSchedule
+import org.nuruplace.member.data.net.Pledge
+import java.time.LocalDate
+
+/** Said under "Collect it automatically at this pace". */
+const val PACE_OFFER_NOTE = "Each month asks only what's left, and stops when you reach it."
+
+/** "To reach KSh 20,000 by 31 Dec: KSh 5,000 a month — 4 collections" ("1
+ *  collection"; the year added when it is not this one; dollars with their
+ *  cents). Null when the pledge has no pace. */
+fun paceLine(pl: Pledge, today: LocalDate): String? {
+    val pace = pl.pace?.takeIf { it.perMonthMinor > 0 && it.collectionsLeft >= 1 } ?: return null
+    val by = partnerDate(pace.by) ?: partnerDate(pl.dueOn)
+    val byText = by?.let { d -> if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d) }
+    val n = pace.collectionsLeft
+    val target = money(pl.targetMinor ?: 0, pl.currency) + (byText?.let { " by $it" } ?: "")
+    return "To reach $target: ${money(pace.perMonthMinor, pl.currency)} a month — $n collection${if (n == 1) "" else "s"}"
+}
+
+/** The recurring gift already collecting this pledge — bound to it
+ *  (`pledge.pledge_id`, or the pledge's own `schedule_id` on an older row),
+ *  running or paused (a paused one still collects once resumed) — the
+ *  running one first. Null when none does. */
+fun pledgeCollector(pl: Pledge, schedules: List<GivingSchedule>): GivingSchedule? =
+    schedules
+        .filter { s ->
+            scheduleCancellable(s.status) &&
+                (s.pledge?.pledgeId == pl.pledgeId || (!pl.scheduleId.isNullOrBlank() && s.scheduleId == pl.scheduleId))
+        }
+        .minByOrNull { if (scheduleRunning(it.status)) 0 else 1 }
+
+/** "Collect it automatically at this pace" is offered (iOS PledgePace.offer):
+ *  an ACTIVE TOTAL pledge with a pace, in shillings (M-Pesa's currency), that
+ *  says where its money goes (`pays_to` — the gift is booked there); the
+ *  server says M-Pesa takes money AND recurring gifts here (GET
+ *  /giving/methods); and no recurring gift already collects it (GET
+ *  /giving/schedules). Either answer missing — not loaded, or it failed — is
+ *  no offer: never a second collector for a pledge on a guess. */
+fun paceOfferAvailable(pl: Pledge, methods: GivingMethodsRes?, schedules: List<GivingSchedule>?): Boolean {
+    val pace = pl.pace ?: return false
+    if (pace.perMonthMinor <= 0 || pace.collectionsLeft < 1) return false
+    if (pl.status != "active" || pl.shape != "total") return false
+    if (currencyCode(pl.currency) != GIVE_FORM_CURRENCY) return false
+    if (pl.paysTo?.code.isNullOrBlank()) return false
+    if (methods == null || methods.methods.none { it.key == "mpesa" && it.enabled && it.recurring }) return false
+    if (schedules == null) return false
+    return pledgeCollector(pl, schedules) == null
+}
+
+/** What a pledge says about collecting it automatically (iOS
+ *  PledgePace.Offer): the recurring gift that already collects it — ANY
+ *  pledge, a monthly one as much as a total one ("Collected automatically —
+ *  next KSh 5,000 on 5 Oct") — else "Collect it automatically at this pace"
+ *  when [paceOfferAvailable], else nothing. */
+sealed interface PledgeCollection {
+    data class Collected(val schedule: GivingSchedule) : PledgeCollection
+    data object Offer : PledgeCollection
+    data object None : PledgeCollection
+}
+
+/** [PledgeCollection] from what the server said. Nothing while the recurring
+ *  gifts are not known (not read yet, or the read failed): a collector is
+ *  never guessed at, and neither is the offer. The collector needs only the
+ *  gifts; the offer needs the methods too. */
+fun pledgeCollection(pl: Pledge, methods: GivingMethodsRes?, schedules: List<GivingSchedule>?): PledgeCollection {
+    val known = schedules ?: return PledgeCollection.None
+    pledgeCollector(pl, known)?.let { return PledgeCollection.Collected(it) }
+    return if (paceOfferAvailable(pl, methods, known)) PledgeCollection.Offer else PledgeCollection.None
+}
+
+/** The pledge page's pay button — its words and its weight. */
+data class PledgePayButton(val label: String, val primary: Boolean)
+
+/** EXPERIENCE.md §7 rule 6 — the primary action is the member's real next
+ *  step: when a running recurring gift collects the pledge ("Collected
+ *  automatically — next …"), paying by hand is a choice, not the call to
+ *  action — "Pay early", secondary, beside Pause. With none, or a paused one
+ *  (it collects nothing until resumed), "Pay now" stays the page's one gold
+ *  button. Only the words and the weight: the tap is the same. */
+fun pledgePayButton(collection: PledgeCollection, pendingClaimMinor: Int = 0): PledgePayButton = when {
+    // A claim the office is still checking covers it (EXPERIENCE.md §9.7 M1):
+    // paying by hand must never be the call to action — the member could pay
+    // twice. Still there, secondary.
+    pendingClaimMinor > 0 -> PledgePayButton("Pay now", primary = false)
+    collection is PledgeCollection.Collected && scheduleRunning(collection.schedule.status) -> PledgePayButton("Pay early", primary = false)
+    else -> PledgePayButton("Pay now", primary = true)
+}
+
+/** What a pledge's row and page lead with while the office checks a claim
+ *  toward it (EXPERIENCE.md §9.3 rule 1, §9.7 M1): "US$ 50.00 is being
+ *  checked by the office" — in the pledge's own currency and the app's money
+ *  format; said, never subtracted. Null with none. */
+fun pledgeClaimLine(pl: Pledge): String? = pledgeCheckingLine(pl.pendingClaimMinor, pl.currency)
+
+/** "US$ 50.00 is being checked by the office" for [minor] in [currency]; null at 0. */
+fun pledgeCheckingLine(minor: Int, currency: String): String? =
+    minor.takeIf { it > 0 }?.let { "${money(it, currency)} is being checked by the office" }
+
+/** What the office is still checking toward one pledge (final walk M1),
+ *  whichever read knows it: the pledge rows' `pending_claim_minor` (the list,
+ *  Partners and now the single read carry it) or the pledge page's own
+ *  pending claims in the pledge's currency — the most any of them says.
+ *  Shown, never subtracted. iOS PledgeChecking.minor, the same rule. */
+fun pledgeCheckingMinor(rows: List<Int?>, claims: List<PledgeClaim>?, currency: String): Int {
+    val fromRows = rows.filterNotNull().maxOrNull() ?: 0
+    val code = currency.uppercase()
+    val fromClaims = claims.orEmpty()
+        .filter { it.status == "pending" && it.currency.uppercase() == code }
+        .sumOf { maxOf(0L, it.amountMinor) }
+        .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    return maxOf(fromRows, fromClaims, 0)
+}
+
+/** Under the claim on the pledge page (iOS PledgeClaimLead.counts). */
+const val PLEDGE_CLAIM_COUNTS = "It counts toward this pledge once the office confirms it — no need to pay it again."
+
+/** POST /giving/schedules for "Collect it automatically at this pace": the
+ *  pledge's pace, monthly, on M-Pesa, bound to the pledge, its first prompt
+ *  now. The fund is where the pledge's money goes (`pays_to` — the server
+ *  books a bound gift there whatever is sent). Every cycle prompts the
+ *  profile's number. The key is [newGivingKey]'s. Null without a pace, or
+ *  without a `pays_to` to book it to — never a guessed fund (iOS). */
+fun paceScheduleBody(pl: Pledge, key: String = newGivingKey()): CreateScheduleBody? {
+    val pace = pl.pace?.takeIf { it.perMonthMinor > 0 } ?: return null
+    val fund = pl.paysTo?.code?.takeIf { it.isNotBlank() } ?: return null
+    return CreateScheduleBody(
+        fund = fund,
+        amountMinor = pace.perMonthMinor,
+        currency = GIVE_FORM_CURRENCY,
+        frequency = "monthly",
+        method = "mpesa",
+        idempotencyKey = key,
+        pledgeId = pl.pledgeId,
+        firstCharge = "now",
+    )
+}
+
+/** The row shown instead of the offer: "Collected automatically — next KSh
+ *  3,000 on 5 Oct" (what its next prompt asks, Cycle 5); "— nothing to pay
+ *  next time" when the pledge is paid ahead; "— paused" while paused; just
+ *  "Collected automatically" when no prompt is coming. */
+fun collectedLine(s: GivingSchedule, today: LocalDate): String {
+    val base = "Collected automatically"
+    if (!scheduleRunning(s.status)) return if (s.status.trim().equals("paused", ignoreCase = true)) "$base — paused" else base
+    val next = s.nextAmountMinor ?: return base
+    if (next <= 0L) return "$base — nothing to pay next time"
+    val day = parseNairobi(s.nextRunAt)?.toLocalDate()
+        ?.let { d -> if (d.year == today.year) PartnerFormat.dayMonth(d) else PartnerFormat.dayMonthYear(d) }
+    return "$base — next ${money(next, s.currency)}" + (day?.let { " on $it" } ?: "")
+}

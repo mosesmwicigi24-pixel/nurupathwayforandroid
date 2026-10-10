@@ -27,11 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Diversity3
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,13 +45,16 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import org.nuruplace.member.data.net.Department
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.feature.profile.ProfCreamHeaderBox
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import org.nuruplace.member.util.relTime
+import org.nuruplace.member.ui.icons.Lucide
 
 private val CardShape = RoundedCornerShape(16.dp)
 
@@ -67,24 +65,25 @@ fun DepartmentsSegment(onOpen: (String) -> Unit) {
     AsyncContent(
         load = { Net.client.api.departments().data },
         refreshable = true,
+        // Held by the tab (EXPERIENCE.md §7.2 #8): Back from a department
+        // finds the same list at the same scroll, refreshed in place.
+        heldAs = "Departments",
+        // The header stands over the loading and failed states too.
+        header = { DepartmentsHeader() },
     ) { departments, _ ->
         if (departments.isEmpty()) {
             DepartmentsEmpty()
         } else {
             LazyColumn(
                 Modifier.fillMaxSize().background(Nuru.paper),
-                contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.md),
+                contentPadding = PaddingValues(bottom = Spacing.md),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                item {
-                    Text(
-                        "WHERE TO SERVE",
-                        style = NuruType.sectionLabel, color = Nuru.eyebrow,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-                    )
-                }
+                // The title says "Where to serve" — the list needs no label
+                // repeating it (the old "WHERE TO SERVE" over the cards).
+                item { DepartmentsHeader() }
                 items(departments, key = { it.departmentId }) { d ->
-                    DepartmentCard(d) { onOpen(d.departmentId) }
+                    Box(Modifier.padding(horizontal = Spacing.screen)) { DepartmentCard(d) { onOpen(d.departmentId) } }
                 }
                 item { Spacer(Modifier.height(Spacing.lg)) }
             }
@@ -92,16 +91,44 @@ fun DepartmentsSegment(onOpen: (String) -> Unit) {
     }
 }
 
+/** The segment's one header (EXPERIENCE.md §8.1 rule 2; final walk C14,
+ *  Android #26): kicker · Fraunces title · one line, in the cream band the
+ *  You tab's Community and Settings wear — the same words as iOS. */
+@Composable
+private fun DepartmentsHeader() {
+    ProfCreamHeaderBox {
+        Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
+            Text("DEPARTMENTS", style = NuruType.kicker, color = Nuru.eyebrow)
+            Text(
+                "Where to serve",
+                style = nuruSerif(28, FontWeight.SemiBold),
+                color = Nuru.navy,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                DEPARTMENTS_LINE,
+                style = nuruSans(13, FontWeight.Normal),
+                color = Nuru.ink600,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+internal const val DEPARTMENTS_LINE =
+    "The teams that carry this church — what they do, what they need, and where you'd fit."
+
 @Composable
 private fun DepartmentsEmpty() {
     // A scrollable so pull-to-refresh still works on the empty state.
     LazyColumn(
         Modifier.fillMaxSize().background(Nuru.paper),
-        contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.lg),
+        contentPadding = PaddingValues(bottom = Spacing.lg),
     ) {
+        item { DepartmentsHeader() }
         item {
             Column(
-                Modifier.fillMaxWidth()
+                Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.lg).fillMaxWidth()
                     .clip(CardShape).background(Nuru.white)
                     .border(1.dp, Nuru.border, CardShape)
                     .padding(22.dp),
@@ -109,15 +136,17 @@ private fun DepartmentsEmpty() {
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Box(
-                    Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldChipBg),
+                    Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldTint),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Diversity3, contentDescription = null, tint = Nuru.goldChipText, modifier = Modifier.size(26.dp))
+                    Icon(Lucide.Users2, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.height(Spacing.xs))
                 Text("No departments yet", style = NuruType.cardTitle, color = Nuru.ink, textAlign = TextAlign.Center)
                 Text(
-                    "When your church sets up its teams they'll appear here — what each one does, who leads it, and where you'd be a good fit.",
+                    // The header above says what a team is for; this says only
+                    // what's true now (§9.6 rule 1: no line said twice).
+                    "When your church sets up its teams, they'll appear here.",
                     style = NuruType.body, color = Nuru.ink600, textAlign = TextAlign.Center,
                 )
             }
@@ -141,7 +170,7 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
             }
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(d.name, style = nuruSerif(18, FontWeight.SemiBold), color = Nuru.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(d.name, style = nuruSerif(18, FontWeight.SemiBold), color = Nuru.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (d.purpose.isNotBlank()) {
                 Text(d.purpose, style = NuruType.body, color = Nuru.ink600, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -154,8 +183,8 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
                 Text(servingCount(d.memberCount), style = NuruType.caption, color = Nuru.ink600)
             }
             val chips = buildList {
-                if (d.fit) add(Triple("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText) to Icons.Filled.AutoAwesome)
-                if (d.openNeeds > 0) add(Triple(if (d.openNeeds == 1) "1 open need" else "${d.openNeeds} open needs", Nuru.infoBg, Nuru.info) to Icons.Filled.VolunteerActivism)
+                if (d.fit) add(Triple("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText) to Lucide.Sparkles)
+                if (d.openNeeds > 0) add(Triple(if (d.openNeeds == 1) "1 open need" else "${d.openNeeds} open needs", Nuru.goldChipBg, Nuru.goldChipText) to Lucide.HandHeart)
             }
             if (chips.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -168,7 +197,7 @@ private fun DepartmentCard(d: Department, onOpen: () -> Unit) {
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Filled.FormatQuote, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.Quote, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                     Text(post, style = NuruType.caption, color = Nuru.ink600, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     relTime(d.latestPostAt).takeIf { it.isNotBlank() }?.let {
                         Text(it, style = NuruType.micro, color = Nuru.ink400)
@@ -189,7 +218,7 @@ internal fun DepartmentPhoto(url: String?, modifier: Modifier = Modifier, shape:
             AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
             Icon(
-                Icons.Filled.Diversity3, contentDescription = null,
+                Lucide.Users2, contentDescription = null,
                 tint = Nuru.navyDeep.copy(alpha = 0.55f), modifier = Modifier.size(44.dp),
             )
         }
@@ -205,7 +234,7 @@ internal fun PersonAvatar(url: String?, name: String?, size: Dp) {
         Box(Modifier.size(size).clip(CircleShape).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
             Text(
                 name?.trim()?.firstOrNull()?.uppercase() ?: "?",
-                style = nuruSans((size.value * 0.42f).toInt().coerceAtLeast(9), FontWeight.SemiBold),
+                style = nuruSans(TypeScale.initials(size.value), FontWeight.SemiBold),
                 color = Nuru.goldLo,
             )
         }
@@ -219,7 +248,7 @@ internal fun DeptChip(text: String, bg: Color, fg: Color, icon: ImageVector? = n
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(11.dp))
+        if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
         Text(text, style = nuruSans(11, FontWeight.SemiBold), color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

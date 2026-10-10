@@ -1,5 +1,5 @@
 // Event detail — port of iOS EventDetailView. Hero + meta card + about + roster +
-// RSVP + "Who's coming" buzz feed + live check-in. Uses the shared `EV` palette /
+// RSVP + "The wall" buzz feed + live check-in. Uses the shared `EV` palette /
 // primitives from EventsShared.kt (same package, no import). Server-authoritative
 // data via MemberApi; RSVP is an offline-queued write, buzz posts/reactions go
 // straight through. The hero shows the full image un-cropped (height follows the
@@ -18,10 +18,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
@@ -52,21 +51,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -95,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.EventAttendee
 import org.nuruplace.member.data.net.EventDetail
 import org.nuruplace.member.data.net.EventPost
@@ -106,6 +91,9 @@ import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.ui.components.AsyncContent
 import java.time.Instant
 import java.util.UUID
+import org.nuruplace.member.ui.components.noticeOnFailure
+import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Pill / capsule corner. */
 private val Capsule = RoundedCornerShape(999.dp)
@@ -116,6 +104,27 @@ private fun isEventLive(occursAt: String?): Boolean {
     val now = Instant.now()
     return !now.isBefore(start.minusSeconds(3600)) && !now.isAfter(start.plusSeconds(4 * 3600))
 }
+
+/** What one RSVP came to (EXPERIENCE.md §4): sent, waiting in the offline
+ *  queue, or refused — never an exception out of the tap. */
+internal sealed interface RsvpOutcome {
+    object Sent : RsvpOutcome
+    data class Queued(val status: String) : RsvpOutcome
+    data class Failed(val line: String) : RsvpOutcome
+}
+
+/** Send one RSVP. [send] returns null when the write went to the offline
+ *  queue (§1.7); a refusal (422 "RSVP is not enabled for this event", a 404,
+ *  a 5xx) becomes [RsvpOutcome.Failed] in [failureLine]'s words. A cancel
+ *  (the member left) is not a failure. */
+internal suspend fun submitRsvp(status: String, send: suspend () -> Unit?, failureLine: (Throwable) -> String): RsvpOutcome =
+    try {
+        if (send() == null) RsvpOutcome.Queued(status) else RsvpOutcome.Sent
+    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+        throw c
+    } catch (e: Exception) {
+        RsvpOutcome.Failed(failureLine(e))
+    }
 
 /** First letters of up to two words, uppercase. */
 private fun initials(name: String): String =
@@ -156,16 +165,35 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 context.startActivity(insert)
             }
         }
+        // An RSVP (EXPERIENCE.md §4, §7.4): one at a time; a refusal — "RSVP is
+        // not enabled for this event", a 404, a 5xx — is said under the
+        // choices in the server's own words (it used to escape the launch and
+        // crash the app); offline, the choice waits in the queue (§1.7) and
+        // the card says so instead of looking ignored.
+        var rsvpBusy by remember(eventId) { mutableStateOf(false) }
+        var rsvpQueued by remember(eventId) { mutableStateOf<String?>(null) }
+        var rsvpError by remember(eventId) { mutableStateOf<String?>(null) }
         val setRsvp: (String) -> Unit = { status ->
-            scope.launch {
-                val payload = kotlinx.serialization.json.buildJsonObject {
-                    put("event_id", kotlinx.serialization.json.JsonPrimitive(eventId))
-                    put("status", kotlinx.serialization.json.JsonPrimitive(status))
+            if (!rsvpBusy) {
+                rsvpBusy = true
+                rsvpError = null
+                scope.launch {
+                    val payload = kotlinx.serialization.json.buildJsonObject {
+                        put("event_id", kotlinx.serialization.json.JsonPrimitive(eventId))
+                        put("status", kotlinx.serialization.json.JsonPrimitive(status))
+                    }
+                    val outcome = submitRsvp(
+                        status,
+                        send = { Net.client.offline.runOrQueue("event_rsvps", "set", payload) { Net.client.api.rsvp(eventId, RsvpBody(status)) } },
+                        failureLine = { ApiException.saveFailureLine(it, context) },
+                    )
+                    rsvpBusy = false
+                    when (outcome) {
+                        RsvpOutcome.Sent -> { rsvpQueued = null; reload() }
+                        is RsvpOutcome.Queued -> rsvpQueued = outcome.status
+                        is RsvpOutcome.Failed -> rsvpError = outcome.line
+                    }
                 }
-                Net.client.offline.runOrQueue("event_rsvps", "set", payload) {
-                    Net.client.api.rsvp(eventId, RsvpBody(status))
-                }
-                reload()
             }
         }
 
@@ -176,7 +204,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 .imePadding()
                 .verticalScroll(rememberScrollState()).imePadding(),
         ) {
-            EventHero(e, onBack, shareIntent)
+            EventHero(e, onBack)
 
             Column(
                 Modifier
@@ -185,7 +213,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                     .padding(top = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                MetaCard(e, endAt, onAddToCalendar = addToCalendar, onShare = shareIntent)
+                MetaCard(e, endAt, mineGoing = (rsvpQueued ?: e.myRsvp) == "going", onAddToCalendar = addToCalendar, onShare = shareIntent)
 
                 e.description?.takeIf { it.isNotBlank() }?.let { AboutCard(it) }
 
@@ -193,9 +221,9 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
                 // already shows images[0], so only extra shots earn the strip.
                 e.images.drop(1).takeIf { it.isNotEmpty() }?.let { GalleryStrip(it) }
 
-                e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it) }
+                e.attendees?.takeIf { it.isNotEmpty() }?.let { RosterCard(it, mineGoing = e.myRsvp == "going") }
 
-                RsvpCard(e, setRsvp)
+                RsvpCard(e, setRsvp, queued = rsvpQueued, busy = rsvpBusy, error = rsvpError)
 
                 BuzzCard(eventId)
 
@@ -210,7 +238,7 @@ fun EventDetailScreen(eventId: String, endAt: String? = null, onBack: () -> Unit
 // ── Hero ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
+private fun EventHero(e: EventDetail, onBack: () -> Unit) {
     // Natural aspect (w/h) of the loaded hero image — null until Coil reports it.
     // Once known, the hero grows to show the FULL image un-cropped: height follows
     // the intrinsic aspect, capped at 60% of the screen for very tall posters
@@ -266,6 +294,7 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // One back control on every pushed page: the arrow (Cycle 4 walk 36).
                 Box(
                     Modifier
                         .size(40.dp)
@@ -273,15 +302,10 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         .background(Color.White.copy(alpha = 0.15f))
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.ChevronLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .clickable { onShare() },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Share, "Share", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                ) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                // One way to share: the "Share" button under the details, as on
+                // iOS — the photo's share icon said it a second time (§9.6 #3;
+                // Cycle 4 walk 36).
             }
             // Bottom overlay
             Column(
@@ -295,9 +319,9 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                         Box(
                             Modifier
                                 .clip(Capsule)
-                                .background(evCategory(c).copy(alpha = 0.9f))
+                                .background(EV.white)
                                 .padding(horizontal = 8.dp, vertical = 2.dp),
-                        ) { Text(c.uppercase(), style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White) }
+                        ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1.4f), color = EV.navy) }
                     }
                     if (isEventLive(e.occursAt)) {
                         Box(
@@ -311,12 +335,12 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Box(Modifier.size(4.dp).clip(Capsule).background(Color.White))
-                                Text("LIVE", style = evInter(10, FontWeight.Bold, 1.4f), color = Color.White)
+                                Text("LIVE", style = evInter(11, FontWeight.Bold, 1.4f), color = Color.White)
                             }
                         }
                     }
                 }
-                Text(e.title, style = evSerif(24, FontWeight.SemiBold, -0.72f), color = Color.White)
+                Text(e.title, style = evSerif(26, FontWeight.SemiBold, -0.72f), color = Color.White)
             }
         }
     }
@@ -325,9 +349,11 @@ private fun EventHero(e: EventDetail, onBack: () -> Unit, onShare: () -> Unit) {
 // ── Meta card ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
+private fun MetaCard(e: EventDetail, endAt: String?, mineGoing: Boolean, onAddToCalendar: () -> Unit, onShare: () -> Unit) {
     val accent = evCategory(e.category)
-    val peopleLabel = (e.rsvpCounts.going ?: 0).let { if (it == 1) "1 person" else "$it people" }
+    // The member's own RSVP is theirs (final walk C5, Android #12): "GOING ·
+    // You", not "GOING · 1 person".
+    val peopleLabel = evGoingTile(e.rsvpCounts.going ?: 0, mineGoing)
     Column(
         Modifier
             .fillMaxWidth()
@@ -339,8 +365,8 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetaTile(Modifier.weight(1f), Icons.Filled.CalendarMonth, "DATE", evDateFull(e.occursAt), accent)
-                MetaTile(Modifier.weight(1f), Icons.Filled.Schedule, "TIME", if (endAt != null) evTimeRange(e.occursAt, endAt) else evTime(e.occursAt), accent)
+                MetaTile(Modifier.weight(1f), Lucide.CalendarDays, "DATE", evDateFull(e.occursAt), accent)
+                MetaTile(Modifier.weight(1f), Lucide.Clock4, "TIME", if (endAt != null) evTimeRange(e.occursAt, endAt) else evTime(e.occursAt), accent)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // The venue is a DOOR, not a caption (owner, 2026-08-24):
@@ -358,14 +384,16 @@ private fun MetaCard(e: EventDetail, endAt: String?, onAddToCalendar: () -> Unit
                             }
                         } ?: Modifier,
                     ),
-                    Icons.Filled.Place, "WHERE", e.location ?: "—", accent,
+                    Lucide.MapPin, "WHERE", e.location?.takeIf { it.isNotBlank() } ?: "Not set", accent,
                 )
-                MetaTile(Modifier.weight(1f), Icons.Filled.Person, "GOING", peopleLabel, accent)
+                // No zero counts (EXPERIENCE.md §7.4 #9): nobody going yet
+                // leaves WHERE the row — the RSVP card below asks.
+                if (peopleLabel != null) MetaTile(Modifier.weight(1f), Lucide.User, "GOING", peopleLabel, accent)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton(Modifier.weight(1f), Icons.Filled.CalendarMonth, "Add to calendar", onAddToCalendar)
-            ActionButton(Modifier.weight(1f), Icons.Filled.Share, "Share", onShare)
+            ActionButton(Modifier.weight(1f), Lucide.CalendarDays, "Add to calendar", onAddToCalendar)
+            ActionButton(Modifier.weight(1f), Lucide.Share2, "Share", onShare)
         }
     }
 }
@@ -385,12 +413,16 @@ private fun MetaTile(modifier: Modifier, icon: ImageVector, label: String, value
             Modifier
                 .size(32.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(accent.copy(alpha = 0.12f)),
+                // A row icon: navy on gold tint (rule 7) — it took the
+                // category's hue.
+                .background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, null, tint = accent, modifier = Modifier.size(15.dp)) }
+        ) { Icon(icon, null, tint = EV.navy, modifier = Modifier.size(14.dp)) }
         Column {
-            Text(label, style = evInter(9, FontWeight.Bold, 1.3f), color = EV.tertiary)
-            Text(value, style = evInter(11, FontWeight.SemiBold), color = EV.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, style = evInter(11, FontWeight.Bold, 1.3f), color = EV.tertiary)
+            // Wraps rather than cuts (§8.1 rule 9): "The Good News Mi…" was the
+            // venue a newcomer needed to find.
+            Text(value, style = evInter(11, FontWeight.SemiBold), color = EV.ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -465,7 +497,7 @@ private fun GalleryStrip(urls: List<String>) {
 // ── Roster card ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun RosterCard(attendees: List<EventAttendee>) {
+private fun RosterCard(attendees: List<EventAttendee>, mineGoing: Boolean) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -480,7 +512,7 @@ private fun RosterCard(attendees: List<EventAttendee>) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             EVOverline("Who's going")
-            Text("${attendees.size} going", style = evInter(11, FontWeight.Bold), color = EV.ink)
+            Text(evGoingLine(attendees.size, mineGoing) ?: "", style = evInter(11, FontWeight.Bold), color = EV.ink)
         }
         Spacer(Modifier.height(12.dp))
         Row(
@@ -518,7 +550,7 @@ private fun RosterCard(attendees: List<EventAttendee>) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         a.fullName.substringBefore(' '),
-                        style = evInter(10, FontWeight.SemiBold),
+                        style = evInter(11, FontWeight.SemiBold),
                         color = EV.body,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -532,7 +564,10 @@ private fun RosterCard(attendees: List<EventAttendee>) {
 // ── RSVP card ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit) {
+private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit, queued: String? = null, busy: Boolean = false, error: String? = null) {
+    // A choice waiting in the offline queue shows as chosen; the server's own
+    // answer otherwise.
+    val mine = queued ?: e.myRsvp
     Column(
         Modifier
             .fillMaxWidth()
@@ -543,18 +578,25 @@ private fun RsvpCard(e: EventDetail, setRsvp: (String) -> Unit) {
     ) {
         EVOverline("Will you be there?")
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            RsvpOption(Modifier.weight(1f), "Going", "going", EV.going, e.myRsvp, setRsvp)
-            RsvpOption(Modifier.weight(1f), "Maybe", "maybe", EV.maybe, e.myRsvp, setRsvp)
-            RsvpOption(Modifier.weight(1f), "Can't", "declined", EV.declined, e.myRsvp, setRsvp)
+        Row(Modifier.alpha(if (busy) 0.6f else 1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            RsvpOption(Modifier.weight(1f), "Going", "going", mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Maybe", "maybe", mine, setRsvp)
+            RsvpOption(Modifier.weight(1f), "Can't", "declined", mine, setRsvp)
         }
-        if (e.myRsvp == "going") {
+        if (error != null) {
+            Text(error, style = evInter(12), color = Nuru.danger, modifier = Modifier.padding(top = 10.dp))
+        } else if (queued != null) {
+            Text(
+                "You're offline — we'll send this when you're back.",
+                style = evInter(12), color = EV.secondary, modifier = Modifier.padding(top = 10.dp),
+            )
+        } else if (e.myRsvp == "going") {
             Row(
                 Modifier.padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Check, null, tint = EV.goingText, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Check, null, tint = EV.goingText, modifier = Modifier.size(14.dp))
                 Text("Saved · we'll remind you the day before.", style = evInter(11, FontWeight.SemiBold), color = EV.goingText)
             }
         }
@@ -566,15 +608,16 @@ private fun RsvpOption(
     modifier: Modifier,
     label: String,
     status: String,
-    tint: Color,
     myRsvp: String?,
     setRsvp: (String) -> Unit,
 ) {
     val on = myRsvp == status
+    // Selected is navy, for every choice (§8.1 rule 6) — the chosen "Going"
+    // was green (final walk C16, Android #29).
     Box(
         modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(if (on) tint else Color.Transparent)
+            .background(if (on) EV.navy else Color.Transparent)
             .then(if (on) Modifier else Modifier.border(1.dp, EV.border, RoundedCornerShape(16.dp)))
             .clickable { setRsvp(status) }
             .padding(vertical = 10.dp),
@@ -584,7 +627,7 @@ private fun RsvpOption(
     }
 }
 
-// ── Buzz card ("Who's coming") ────────────────────────────────────────────────
+// ── Buzz card ("The wall") ────────────────────────────────────────────────────
 
 @Composable
 private fun BuzzCard(eventId: String) {
@@ -603,12 +646,19 @@ private fun BuzzCard(eventId: String) {
             var pickedBytes by remember { mutableStateOf<ByteArray?>(null) }
             var pickedPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
             var attachMenu by remember { mutableStateOf(false) }
+            // A post that didn't reach the wall keeps its words and photo and
+            // says why (§7.4); its ids and an uploaded photo's address stay
+            // with it, so posting again can't post it twice or upload twice.
+            var postError by remember { mutableStateOf<String?>(null) }
+            var postIds by remember { mutableStateOf<Pair<String, String>?>(null) }
+            var uploadedUrl by remember { mutableStateOf<String?>(null) }
 
             fun setPicked(raw: ByteArray?) {
                 if (raw == null) return
                 downscaleJpeg(raw, 1600)?.let { (jpeg, bmp) ->
                     pickedBytes = jpeg
                     pickedPreview = bmp.asImageBitmap()
+                    uploadedUrl = null
                 }
             }
             val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
@@ -635,57 +685,75 @@ private fun BuzzCard(eventId: String) {
             val post: () -> Unit = {
                 if ((draft.isNotBlank() || pickedBytes != null) && !busy) {
                     busy = true
+                    postError = null
                     val bodyText = draft.trim()
                     val bytes = pickedBytes
+                    val ids = postIds ?: (UUID.randomUUID().toString() to UUID.randomUUID().toString()).also { postIds = it }
                     scope.launch {
-                        runCatching {
-                            var imageUrl: String? = null
-                            if (bytes != null) {
+                        try {
+                            var imageUrl: String? = uploadedUrl
+                            if (bytes != null && imageUrl == null) {
                                 val part = MultipartBody.Part.createFormData(
                                     "file", "post.jpg", bytes.toRequestBody("image/jpeg".toMediaTypeOrNull()),
                                 )
                                 imageUrl = Net.client.api.uploadPostImage(part).url.ifBlank { null }
+                                uploadedUrl = imageUrl
                             }
-                            Net.client.api.createEventPost(
+                            // This call answers with a Response, so a refusal
+                            // never throws — it read as posted and the words
+                            // were wiped. Its status decides now.
+                            val res = Net.client.api.createEventPost(
                                 eventId,
-                                EventPostBody(UUID.randomUUID().toString(), bodyText.ifBlank { null }, imageUrl, UUID.randomUUID().toString()),
+                                EventPostBody(ids.first, bodyText.ifBlank { null }, imageUrl, ids.second),
                             )
+                            if (!res.isSuccessful) throw retrofit2.HttpException(res)
+                            if (draft.trim() == bodyText) draft = ""
+                            pickedBytes = null; pickedPreview = null; uploadedUrl = null; postIds = null
+                            reloadBuzz()
+                        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                            throw c
+                        } catch (e: Exception) {
+                            postError = ApiException.failureLine("Couldn't post that.", e, context)
+                        } finally {
+                            busy = false
                         }
-                        draft = ""; pickedBytes = null; pickedPreview = null; busy = false
-                        reloadBuzz()
                     }
                 }
             }
             val react: (String, String) -> Unit = { postId, kind ->
                 scope.launch {
-                    runCatching { Net.client.api.reactToEventPost(eventId, postId, EventReactBody(kind)) }
-                    reloadBuzz()
+                    noticeOnFailure(context) { Net.client.api.reactToEventPost(eventId, postId, EventReactBody(kind)) }
+                        ?.let { reloadBuzz() }
                 }
             }
 
-            // Header
+            // Header — "The wall" (it was "Who's coming", beside the roster's
+            // "Who's going"), and "Buzzing" only when someone has posted
+            // (EXPERIENCE.md §7.4 #9): an empty wall isn't buzzing.
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.Group, null, tint = EV.overline, modifier = Modifier.size(12.dp))
-                    EVOverline("Who's coming")
+                    Icon(Lucide.Users, null, tint = EV.overline, modifier = Modifier.size(14.dp))
+                    EVOverline("The wall")
                 }
-                Box(
-                    Modifier
-                        .clip(Capsule)
-                        .background(EV.buzzing)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(Modifier.size(6.dp).clip(Capsule).background(Color.White))
-                        Text(
-                            if (posts.isEmpty()) "Buzzing" else "Buzzing · ${posts.size}",
-                            style = evInter(10, FontWeight.Bold),
-                            color = Color.White,
-                        )
+                if (posts.isNotEmpty()) {
+                    Box(
+                        Modifier
+                            .clip(Capsule)
+                            .background(EV.buzzing)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(Modifier.size(6.dp).clip(Capsule).background(Color.White))
+                            Text(
+                                "Buzzing · ${posts.size}",
+                                style = evInter(11, FontWeight.Bold),
+                                color = Color.White,
+                            )
+                        }
                     }
                 }
             }
@@ -727,6 +795,7 @@ private fun BuzzCard(eventId: String) {
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                postError?.let { Text(it, style = evInter(12), color = Nuru.danger) }
                 pickedPreview?.let { bmp ->
                     Box(Modifier.fillMaxWidth()) {
                         Image(
@@ -736,9 +805,9 @@ private fun BuzzCard(eventId: String) {
                         Box(
                             Modifier.align(Alignment.TopEnd).padding(8.dp).size(28.dp).clip(RoundedCornerShape(999.dp))
                                 .background(Color.Black.copy(alpha = 0.55f))
-                                .clickable { pickedBytes = null; pickedPreview = null },
+                                .clickable { pickedBytes = null; pickedPreview = null; uploadedUrl = null },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Close, "Remove photo", tint = Color.White, modifier = Modifier.size(15.dp)) }
+                        ) { Icon(Lucide.X, "Remove photo", tint = Color.White, modifier = Modifier.size(14.dp)) }
                     }
                 }
 
@@ -749,11 +818,11 @@ private fun BuzzCard(eventId: String) {
                                 .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
                                 .clickable { attachMenu = true },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Add, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
-                        DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                        ) { Icon(Lucide.Plus, "Add a photo", tint = EV.navyInk, modifier = Modifier.size(18.dp)) }
+                        NuruDropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("Take photo") },
-                                leadingIcon = { Icon(Icons.Filled.PhotoCamera, null, modifier = Modifier.size(20.dp)) },
+                                leadingIcon = { Icon(Lucide.Camera, null, modifier = Modifier.size(22.dp)) },
                                 onClick = {
                                     attachMenu = false
                                     if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
@@ -763,7 +832,7 @@ private fun BuzzCard(eventId: String) {
                             )
                             DropdownMenuItem(
                                 text = { Text("Choose photo") },
-                                leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null, modifier = Modifier.size(20.dp)) },
+                                leadingIcon = { Icon(Lucide.Images, null, modifier = Modifier.size(22.dp)) },
                                 onClick = {
                                     attachMenu = false
                                     galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -793,7 +862,7 @@ private fun BuzzCard(eventId: String) {
                             .border(1.dp, EV.navyBase.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
                             .clickable { draft += "🔥" },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.LocalFireDepartment, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(17.dp)) }
+                    ) { Icon(Lucide.Flame, "Add fire", tint = EV.goldDetail, modifier = Modifier.size(18.dp)) }
                     val faded = (draft.isBlank() && pickedBytes == null) || busy
                     Box(
                         Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(EV.goldCta)
@@ -801,9 +870,9 @@ private fun BuzzCard(eventId: String) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.Send, "Post",
+                            Lucide.Send, "Post",
                             tint = EV.ink.copy(alpha = if (faded) 0.55f else 1f),
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
@@ -842,7 +911,7 @@ private fun PostRow(p: EventPost, onReact: (String) -> Unit) {
                             .clip(Capsule)
                             .background(EV.going.copy(alpha = 0.12f))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) { Text("GOING", style = evInter(8, FontWeight.Bold, 1f), color = EV.goingText) }
+                    ) { Text("GOING", style = evInter(11, FontWeight.Bold, 1f), color = EV.goingText) }
                 }
             }
             p.body?.let { Text(it, style = evInter(13), color = EV.body) }
@@ -881,7 +950,9 @@ private fun ReactChip(emoji: String, count: Int, on: Boolean, onClick: () -> Uni
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(emoji, fontSize = 12.sp)
-        Text(count.toString(), style = evInter(10, FontWeight.Bold), color = if (on) EV.goldDeep else EV.secondary)
+        // The chip is the way to react; its count only once there is one
+        // (no zero chips, EXPERIENCE.md §7.4 #9).
+        if (count > 0) Text(count.toString(), style = evInter(11, FontWeight.Bold), color = if (on) EV.goldDeep else EV.secondary)
     }
 }
 
@@ -900,7 +971,7 @@ private fun CheckInFooter(occursAt: String, eventId: String, onCheckIn: (String)
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.QrCodeScanner, null, tint = EV.ink, modifier = Modifier.size(16.dp))
+            Icon(Lucide.ScanQrCode, null, tint = EV.ink, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Check in", style = evInter(13, FontWeight.Bold), color = EV.ink)
         }
@@ -924,7 +995,7 @@ private fun CheckInFooter(occursAt: String, eventId: String, onCheckIn: (String)
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Lock, null, tint = EV.gold, modifier = Modifier.size(14.dp))
+            Icon(Lucide.Lock, null, tint = EV.gold, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(8.dp))
             Text("Check-in opens when the event is live", style = evInter(13, FontWeight.SemiBold), color = Color(0xFF6A7686))
         }

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import java.time.Instant
@@ -75,10 +76,10 @@ object CHAT {
     val activeBg = Color(0x1716A34A)    // #16A34A @ 9%
     val online = Color(0xFF25D366)
     val doubleCheck = Color(0xFFBCC4CE)
-    // The broadcast tick rule, everywhere (iOS build 84 parity): ONE blue tick
-    // = delivered, TWO blue ticks = seen. WhatsApp-blue on every surface — no
-    // gold, no gray states — DM, discipler, and pastoral bubbles alike.
-    val tickBlue = Color(0xFF2F80ED)
+    // The broadcast tick rule, everywhere (iOS build 84 parity): ONE tick =
+    // delivered, TWO ticks = seen — in gold, the accent (EXPERIENCE.md §8.1
+    // rule 1: no other hues; they were WhatsApp blue).
+    val tickBlue = Color(0xFFC89B3C)
     val tintBlue = Color(0xFFE8EEF7)
     val navyMid = Color(0xFF315F8C)
 
@@ -97,39 +98,34 @@ object CHAT {
     val bubbleInk = Brush.linearGradient(listOf(navyInk, navyInk2))
     val threadBg = Brush.linearGradient(listOf(Color(0xFFF6F4EE), Color(0xFFF1ECE1)))
 
-    // AI "Quick help from Nuru" card
-    val aiCard = Brush.linearGradient(listOf(Color(0xFF2A1259), Color(0xFF0A1628), Color(0xFF053F30)))
-    val aiBadge = Brush.linearGradient(listOf(Color(0xFFA78BFA), Color(0xFF34D399)))
-    val aiOrb = Brush.radialGradient(listOf(Color(0xFFC4B5FD), Color(0xFF7C3AED), Color(0xFF2A1259)))
-    val aiBorderRing = Brush.linearGradient(listOf(Color(0xFFA78BFA), Color(0xFFC89B3C), Color(0xFF34D399)))
-    val aiDot = Color(0xFF34D399)
-    val aiPurpleGlow = Color(0xFF7C3AED)
-    val aiGreenGlow = Color(0xFF10B981)
+    // AI "Quick help from Nuru" card — navy with gold accents, the brand's
+    // one dark card (EXPERIENCE.md §8.1 rule 1, §8.2 #3). It was a purple and
+    // green gradient: hues the visual language does not have.
+    val aiCard = Brush.linearGradient(listOf(Nuru.navy700, Nuru.navyCeremony))
+    val aiOrb = Nuru.goldGradient
 
-    // Per-space / per-person tile palette (index-cycled)
-    val rowTints = listOf(
-        Color(0xFFC89B3C), Color(0xFF6366F1), Color(0xFF0EA5E9),
-        Color(0xFF16A34A), Color(0xFFDB2777), Color(0xFF0D9488),
-    )
-    // Colored sender-name accents inside incoming space bubbles (hash % 8)
-    val senderPalette = listOf(
-        Color(0xFF4F46E5), Color(0xFF0284C7), Color(0xFF0D9488), Color(0xFF059669),
-        Color(0xFFDB2777), Color(0xFFC2410C), Color(0xFF7C3AED), Color(0xFFB45309),
-    )
+    // Per-space / per-person tile palette (index-cycled): navy or gold only
+    // (§8.1 rule 1) — six hues before (indigo, sky, green, pink, teal). The
+    // gold is the deep one, so the white initials on it stay legible.
+    val rowTints = listOf(Nuru.navy, Color(0xFFA87F2E))
+    // Sender names inside incoming space bubbles (hash % 2): navy tones — they
+    // were eight hues.
+    val senderPalette = listOf(Nuru.navy, navyMid)
 }
 
 /** Tile gradient for a "#"/initials squircle (tint → tint@71%). */
 fun chatTileBrush(tint: Color): Brush = Brush.linearGradient(listOf(tint, tint.copy(alpha = 0.71f)))
 
 /** Row tint cycled by index (space/dm/group/person offsets applied by caller). */
-fun chatRowTint(index: Int): Color = CHAT.rowTints[((index % 6) + 6) % 6]
+fun chatRowTint(index: Int): Color = CHAT.rowTints[((index % CHAT.rowTints.size) + CHAT.rowTints.size) % CHAT.rowTints.size]
 
 /** Colored sender accent — self is always gold; others hashed into senderPalette. */
 fun chatSenderAccent(name: String, mine: Boolean): Color {
     if (mine) return CHAT.gold
     var h = 0
     for (c in name) h = h * 31 + c.code
-    return CHAT.senderPalette[((h % 8) + 8) % 8]
+    val n = CHAT.senderPalette.size
+    return CHAT.senderPalette[((h % n) + n) % n]
 }
 
 // Delegates to the canonical schema (ui/theme/TypeSchema.kt) — edit rhythm there.
@@ -189,7 +185,9 @@ fun ChatSquircleAvatar(
     }
 }
 
-/** Circular avatar (DM rows + story rail) — tintBlue disc + navyMid initials, or a photo. */
+/** Circular avatar (DM rows + story rail) — the palette's gold-chip tint and
+ *  navy initials, or a photo. It was a pale blue with blue letters, a second
+ *  blue the palette doesn't have (§8.1 rule 1; final walk C16). */
 @Composable
 fun ChatCircleAvatar(
     name: String,
@@ -198,11 +196,11 @@ fun ChatCircleAvatar(
     avatarUrl: String? = null,
     textSize: Int = 16,
 ) {
-    Box(modifier.size(size).clip(CircleShape).background(CHAT.tintBlue), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).clip(CircleShape).background(Nuru.goldChipBg), contentAlignment = Alignment.Center) {
         if (!avatarUrl.isNullOrBlank()) {
             AsyncImage(model = avatarUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
         } else {
-            Text(chatInitials(name), style = cInter(textSize, FontWeight.SemiBold), color = CHAT.navyMid)
+            Text(chatInitials(name), style = cInter(textSize, FontWeight.SemiBold), color = Nuru.navy)
         }
     }
 }
@@ -220,25 +218,23 @@ fun chatZdt(iso: String?): ZonedDateTime? {
 
 private val T_TIME = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 private val T_WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
-private val T_DAYMON = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 private val T_FULLDAY = DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)
-private val T_MONDAY = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
-/** Inbox-row timestamp: today→time, this week→weekday, older→"d MMM". */
+/** Inbox-row timestamp: today→time, this week→weekday, older→"Mon 5 Oct" (the one date form). */
 fun chatRowTime(iso: String?): String {
     val z = chatZdt(iso) ?: return ""
     val days = ChronoUnit.DAYS.between(z.toLocalDate(), LocalDate.now(CHAT_ZONE))
     return when {
         days <= 0L -> z.format(T_TIME)
         days in 1..6 -> z.format(T_WEEKDAY)
-        else -> z.format(T_DAYMON)
+        else -> org.nuruplace.member.util.NuruDates.day(z.toLocalDate(), LocalDate.now(CHAT_ZONE))
     }
 }
 
 /** Message bubble timestamp "5:07 PM". */
 fun chatMsgTime(iso: String?): String = chatZdt(iso)?.format(T_TIME).orEmpty()
 
-/** Thread day divider: TODAY / YESTERDAY / weekday (this week) / "MMM d" (older), uppercased. */
+/** Thread day divider: TODAY / YESTERDAY / weekday (this week) / "MON 5 OCT" (older). */
 fun chatDayDivider(iso: String?): String {
     val z = chatZdt(iso) ?: return ""
     val days = ChronoUnit.DAYS.between(z.toLocalDate(), LocalDate.now(CHAT_ZONE))
@@ -246,7 +242,7 @@ fun chatDayDivider(iso: String?): String {
         0L -> "TODAY"
         1L -> "YESTERDAY"
         in 2..6 -> z.format(T_FULLDAY).uppercase()
-        else -> z.format(T_MONDAY).uppercase()
+        else -> org.nuruplace.member.util.NuruDates.day(z.toLocalDate(), LocalDate.now(CHAT_ZONE)).uppercase()
     }
 }
 
@@ -321,4 +317,22 @@ fun connectionStateFor(
     outgoing.firstOrNull { it.userId == userId }?.let { return ConnectionState.RequestSent(it.requestId) }
     incoming.firstOrNull { it.userId == userId }?.let { return ConnectionState.RequestReceived(it.requestId) }
     return ConnectionState.NotConnected
+}
+
+/** Your spaces' words when there are none (final walk C4): "follow one
+ *  below" only while there is one below to follow. iOS SpaceWords.none. */
+internal fun spacesNoneWords(canFollow: Boolean): String =
+    if (canFollow) "No spaces yet — follow one below to get started."
+    else "No spaces yet. When the church opens one, you can follow it here."
+
+/** A room's name as a member reads it (§8.1 rule 8; final walk C4): the
+ *  server names a cell's room "<cell> cell", which read "Dev Cell A cell"
+ *  for a cell already called a Cell — the doubled word goes. iOS
+ *  ChatConversation.shownTitle, the same rule. */
+internal fun roomShownTitle(raw: String): String {
+    val t = raw.trim()
+    if (!t.lowercase().endsWith(" cell")) return t
+    val head = t.dropLast(5)
+    val words = head.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+    return if ("cell" in words) head else t
 }

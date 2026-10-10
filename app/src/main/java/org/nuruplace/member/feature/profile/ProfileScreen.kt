@@ -1,8 +1,9 @@
 // Profile — the iOS "Account" tab. Identity header (avatar + level), personal
 // information card, achievements, growth scores, milestones, and certificates.
 // Ported 1:1 from the iOS Profile RootView. Uses the shared PROF palette + primitives
-// from ProfileShared.kt (same package). The gear opens Settings (which owns sign-out);
-// the old menu rows + body sign-out button are dropped to match iOS.
+// from ProfileShared.kt (same package). Settings (which owns sign-out) is the You
+// tab's own segment — its gear is the tab's one (EXPERIENCE.md §6.2); the old menu
+// rows + body sign-out button are dropped to match iOS.
 package org.nuruplace.member.feature.profile
 
 import android.content.Intent
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,39 +34,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Diversity3
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.TrackChanges
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
+import org.nuruplace.member.ui.components.largeText
+import org.nuruplace.member.ui.components.WholeWordsText
+import org.nuruplace.member.ui.components.CappedFontScale
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -100,7 +76,11 @@ import kotlinx.serialization.json.buildJsonObject
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.data.net.Achievements
+import org.nuruplace.member.ui.components.rememberHeld
+import org.nuruplace.member.ui.components.loadingLabel
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Badge
 import org.nuruplace.member.data.net.Certificate
@@ -109,6 +89,7 @@ import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ScoresSummary
 import org.nuruplace.member.data.net.UserProfile
+import org.nuruplace.member.feature.give.kenyanMobileDisplay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -118,25 +99,44 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.delay
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Unit) {
-    var scores by remember { mutableStateOf<ScoresSummary?>(null) }
-    var achievements by remember { mutableStateOf<Achievements?>(null) }
-    var badgeGallery by remember { mutableStateOf<List<Badge>>(emptyList()) }
-    var certs by remember { mutableStateOf<List<Certificate>>(emptyList()) }
+    // Held by the destination (rememberHeld, EXPERIENCE.md §7.2 #8): Back
+    // from a score, Settings or a certificate finds the same page, refreshed
+    // in place — never back to zeros. A part that fails keeps what is shown.
+    var scores by rememberHeld("Profile.scores") { mutableStateOf<ScoresSummary?>(null) }
+    var achievements by rememberHeld("Profile.achievements") { mutableStateOf<Achievements?>(null) }
+    var badgeGallery by rememberHeld("Profile.badgeGallery") { mutableStateOf<List<Badge>>(emptyList()) }
+    var certs by rememberHeld("Profile.certs") { mutableStateOf<List<Certificate>>(emptyList()) }
+    // Whether each read has answered once: until then the section holds its
+    // loading shape — never "Your certificates will appear here…" or an empty
+    // badge while the read is in flight (final walk M4's class; iOS).
+    var badgesAnswered by rememberHeld("Profile.badgesAnswered") { mutableStateOf(false) }
+    var certsAnswered by rememberHeld("Profile.certsAnswered") { mutableStateOf(false) }
     // Departments I actively serve in (GET /me/departments, spec §4) — the
     // "Serving in" card below; requests-in-waiting live on the Departments
     // segment, not here.
-    var serving by remember { mutableStateOf<List<Department>>(emptyList()) }
+    var serving by rememberHeld("Profile.serving") { mutableStateOf<List<Department>>(emptyList()) }
+    // The member's journey (§3), derived as Home and Map view derive it (the
+    // summary, then the current level's trail): the milestones speak its words.
+    var journey by rememberHeld("Profile.journey") { mutableStateOf<org.nuruplace.member.feature.pathway.Journey?>(null) }
     LaunchedEffect(Unit) {
-        scores = runCatching { Net.client.api.scores() }.getOrNull()
-        achievements = runCatching { Net.client.api.achievements() }.getOrNull()
-        certs = runCatching { Net.client.api.certificates().data }.getOrDefault(emptyList())
-        serving = runCatching { Net.client.api.myDepartments().data.filter { it.isActive } }.getOrDefault(emptyList())
+        journey = runCatching {
+            val summary = Net.client.api.pathway()
+            val trail = org.nuruplace.member.feature.pathway.JourneyState.derive(summary)?.levelNumber
+                ?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
+            org.nuruplace.member.feature.pathway.JourneyState.derive(summary, trail)
+        }.getOrElse { journey }
+        scores = runCatching { Net.client.api.scores() }.getOrElse { scores }
+        achievements = runCatching { Net.client.api.achievements() }.getOrElse { achievements }
+        certs = runCatching { Net.client.api.certificates().data }.getOrElse { certs }
+        certsAnswered = true
+        serving = runCatching { Net.client.api.myDepartments().data.filter { it.isActive } }.getOrElse { serving }
         // GET /badges catalogue merged with earned awards (iOS ProfileView.loadExtras):
         // earned first (with awarded_at), then locked — so the rail shows what's
         // still ahead, not just trophies already won.
@@ -147,6 +147,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                 .map { c -> earnedByCode[c.code] ?: c }
                 .sortedByDescending { it.awardedAt != null }
         }
+        badgesAnswered = true
     }
 
     val context = LocalContext.current
@@ -159,20 +160,28 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
     var profile by remember(me) { mutableStateOf(me?.profile) }
     var editing by remember { mutableStateOf<EditField?>(null) }
 
+    // A new photo: made upright and small (≤ 512 px, as iOS) so it fits the
+    // server's 5 MB cap, then sent; a photo that didn't save says so — it
+    // failed in silence, and a full-size camera picture always did.
+    var avatarUploading by remember { mutableStateOf(false) }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch {
+        if (uri != null && !avatarUploading) scope.launch {
+            avatarUploading = true
             val part = withContext(Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let { bytes ->
-                    MultipartBody.Part.createFormData(
-                        "file",
-                        "avatar.jpg",
-                        bytes.toRequestBody("image/*".toMediaTypeOrNull()),
-                    )
-                }
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?.let { org.nuruplace.member.util.PhotoShrink.jpeg(it, maxDim = 512) }
+                    ?.let { jpeg ->
+                        MultipartBody.Part.createFormData("file", "avatar.jpg", jpeg.toRequestBody("image/jpeg".toMediaTypeOrNull()))
+                    }
             }
-            if (part != null) {
-                runCatching { Net.client.api.uploadAvatar(part).avatarUrl }.getOrNull()?.let { avatarUrl = it }
+            if (part == null) {
+                org.nuruplace.member.ui.components.QuickNotice.show("Couldn't change your photo. That file isn't a picture we can use.")
+            } else {
+                org.nuruplace.member.ui.components.noticeOnFailure(context, lead = "Couldn't change your photo.") {
+                    Net.client.api.uploadAvatar(part).avatarUrl
+                }?.let { avatarUrl = it }
             }
+            avatarUploading = false
         }
     }
     fun pickAvatar() =
@@ -196,21 +205,10 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
         // ── Header ──────────────────────────────────────────────────────────
         ProfCreamHeaderBox {
             Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("ACCOUNT", style = pInter(11, FontWeight.Bold, 1.98f), color = PROF.eyebrow)
-                    Spacer(Modifier.weight(1f))
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(PROF.white)
-                            .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
-                            .clickable { onOpen("settings") },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = PROF.navy, modifier = Modifier.size(18.dp))
-                    }
-                }
+                // One settings gear on the You tab (EXPERIENCE.md §6.2): the
+                // segment bar's. Profile's own gear, a second door to the
+                // same Settings, is gone.
+                Text("ACCOUNT", style = NuruType.kicker, color = PROF.eyebrow)
                 Row(
                     Modifier.padding(top = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -221,7 +219,10 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                             Modifier
                                 .size(72.dp)
                                 .clip(CircleShape)
-                                .background(PROF.tintBlue)
+                                // The palette's gold-chip tint, navy initials —
+                                // it was a pale blue with blue letters, a second
+                                // blue (§8.1 rule 1; final walk C16).
+                                .background(Nuru.goldChipBg)
                                 .border(2.dp, PROF.gold, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -233,12 +234,24 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                     modifier = Modifier.matchParentSize().clip(CircleShape),
                                 )
                             } else {
-                                Text(
-                                    initials(fullName),
-                                    style = pInter(28, FontWeight.SemiBold),
-                                    color = PROF.navyMid,
-                                    textAlign = TextAlign.Center,
-                                )
+                                // Letters inside a fixed circle keep the everyday
+                                // size (§9.6 #4, as iOS): at the largest text
+                                // "AT" showed only "A". The name beside it grows.
+                                CappedFontScale(1f) {
+                                    Text(
+                                        initials(fullName),
+                                        style = pInter(28, FontWeight.SemiBold),
+                                        color = PROF.navy,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1, softWrap = false,
+                                    )
+                                }
+                            }
+                            // The new photo on its way.
+                            if (avatarUploading) {
+                                Box(Modifier.matchParentSize().clip(CircleShape).background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
+                                    androidx.compose.material3.CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                                }
                             }
                         }
                         Box(
@@ -251,12 +264,14 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                 .clickable { pickAvatar() },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Change photo", tint = PROF.navy, modifier = Modifier.size(11.dp))
+                            Icon(Lucide.Pencil, contentDescription = "Change photo", tint = PROF.navy, modifier = Modifier.size(14.dp))
                         }
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(fullName, style = pSerif(22, FontWeight.Medium, -0.44f), color = PROF.navy)
-                        Text(email, style = pInter(13), color = PROF.ink600)
+                        // An address breaks only after its "@" (final walk C3,
+                        // Android #10: "student1@dev / .local" at the largest).
+                        Text(emailBreaks(email), style = pInter(13), color = PROF.ink600)
                         if (level != null) {
                             Row(
                                 Modifier
@@ -267,7 +282,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(11.dp))
+                                Icon(Lucide.Award, contentDescription = null, tint = PROF.eyebrow, modifier = Modifier.size(14.dp))
                                 Text("Level $level", style = pInter(11, FontWeight.SemiBold), color = PROF.eyebrow)
                             }
                         }
@@ -288,12 +303,13 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                 DisciplesEntryCard { onOpen("disciples") }
             }
             if (serving.isNotEmpty()) ServingInCard(serving) { onOpen("department/$it") }
-            AchievementsSection(achievements, badgeGallery) { sheetBadge = it }
+            AchievementsSection(achievements, badgeGallery, loading = !badgesAnswered) { sheetBadge = it }
             GrowthScoresCard(scores, onOpen)
             AiConsentCard()
-            MilestonesCard(me)
+            MilestonesCard(me, journey)
             CertificatesCard(
                 certs = certs,
+                loading = !certsAnswered,
                 copiedCode = copiedCode,
                 onCopy = { code ->
                     clipboard.setText(AnnotatedString(code))
@@ -325,12 +341,18 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     }
                 },
             )
+            // The member's ID, at the page's foot as an action (as iOS): it
+            // still copies whole, for the office or support, but is never shown
+            // as a fact to read (§8.1 rule 8 — it was a raw 36-character row).
+            p?.userId?.takeIf { it.isNotBlank() }?.let { uid ->
+                MemberIdFoot(onCopy = { clipboard.setText(AnnotatedString(uid)) })
+            }
         }
     }
 
     // ── Badge detail sheet ──────────────────────────────────────────────────
     sheetBadge?.let { b ->
-        ModalBottomSheet(onDismissRequest = { sheetBadge = null }) {
+        NuruModalBottomSheet(onDismissRequest = { sheetBadge = null }) {
             val st = badgeStyle(b.category)
             val earned = b.awardedAt != null
             Column(
@@ -360,14 +382,14 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(
-                                if (earned) Icons.Filled.Check else Icons.Filled.Lock,
+                                if (earned) Lucide.Check else Lucide.Lock,
                                 contentDescription = null,
                                 tint = if (earned) PROF.success else PROF.rowLabel,
-                                modifier = Modifier.size(11.dp),
+                                modifier = Modifier.size(14.dp),
                             )
                             Text(
                                 if (earned) "Earned ${certDate(b.awardedAt)}" else "Locked",
-                                style = pInter(10, FontWeight.Bold),
+                                style = pInter(11, FontWeight.Bold),
                                 color = if (earned) PROF.success else PROF.rowLabel,
                             )
                         }
@@ -380,7 +402,7 @@ fun ProfileScreen(me: MeResponse?, onOpen: (String) -> Unit, onSignOut: () -> Un
                     ) {
                         Text(
                             (b.category ?: "").replaceFirstChar { it.uppercase() },
-                            style = pInter(10, FontWeight.Bold),
+                            style = pInter(11, FontWeight.Bold),
                             color = st.color,
                         )
                     }
@@ -440,11 +462,6 @@ private enum class EditField(
 
 private val DOB_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
 private val EMAIL_SHAPE = Regex("""^[^@\s]+@[^@\s]+\.[^@\s]+$""")
-private val GENDER_OPTIONS = listOf(
-    "Male" to "male",
-    "Female" to "female",
-    "Prefer not to say" to "prefer_not_to_say",
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -461,7 +478,9 @@ private fun EditFieldSheet(
                 EditField.EMAIL -> profile?.email ?: ""
                 EditField.NAME -> profile?.fullName ?: ""
                 EditField.PHONE -> profile?.phoneNumber ?: ""
-                EditField.DOB -> profile?.dateOfBirth ?: ""
+                // "1990-01-01" — the form the field asks for (the server
+                // sends midnight UTC, which never matched it).
+                EditField.DOB -> profileDateEditValue(profile?.dateOfBirth)
                 EditField.GENDER -> profile?.gender ?: ""
                 EditField.COUNTRY -> profile?.countryCode ?: ""
                 EditField.CITY -> profile?.city ?: ""
@@ -511,7 +530,13 @@ private fun EditFieldSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = PROF.white) {
+    // Open to its content, never half-way (the keyboard used to drop it to
+    // the half state), with a visible way out (Cycle 3's closing walk: "Save"
+    // was the only control; the other sheets have ✕).
+    NuruModalBottomSheet(
+        onDismissRequest = onDismiss, containerColor = PROF.white,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -520,7 +545,15 @@ private fun EditFieldSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(field.title, style = pSerif(20, FontWeight.SemiBold), color = PROF.navy)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(field.title, style = pSerif(18, FontWeight.SemiBold), color = PROF.navy, modifier = Modifier.weight(1f))
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape).background(PROF.surface).clickable { onDismiss() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Lucide.X, contentDescription = "Close", tint = PROF.navy, modifier = Modifier.size(18.dp))
+                }
+            }
             field.helper?.let { helper ->
                 Text(helper, style = pInter(11), color = PROF.sub)
             }
@@ -550,7 +583,7 @@ private fun EditFieldSheet(
                             modifier = Modifier.weight(1f),
                         )
                         if (selected) {
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(15.dp))
+                            Icon(Lucide.Check, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -618,7 +651,7 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 @Composable
 private fun SectionTitle(icon: ImageVector, title: String, trailing: (@Composable () -> Unit)? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(15.dp))
+        Icon(icon, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
         Text(title, style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.kicker)
         if (trailing != null) {
@@ -636,87 +669,37 @@ private fun HairlineDivider() {
 // ── Personal information ────────────────────────────────────────────────────
 @Composable
 private fun PersonalInformationCard(p: UserProfile?, onEdit: (EditField) -> Unit) {
-    val userId = p?.userId ?: ""
-    // The member's user_id, in full. This used to render "NRU-" + the LAST eight
-    // characters + a hardcoded "2026" — while iOS built its own variant from the
-    // FIRST eight plus the real join year, so one member saw two different
-    // "member IDs" depending on which phone they opened. Neither string existed
-    // anywhere in the system: unpasteable, unsearchable, and useless to quote.
-    // A UUID is not pretty, but it is the one thing about a member that cannot
-    // change, which is what a padlocked row labelled MEMBER ID should hold.
-    val memberId = userId.ifBlank { "—" }
-    val clipboard = LocalClipboardManager.current
-    val haptics = LocalHapticFeedback.current
-    var justCopied by remember { mutableStateOf(false) }
-    LaunchedEffect(justCopied) {
-        if (justCopied) { delay(1600); justCopied = false }
-    }
     SectionCard {
-        SectionTitle(Icons.Filled.Person, "PERSONAL INFORMATION")
+        SectionTitle(Lucide.User, "PERSONAL INFORMATION")
 
-        // Member ID row
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Brush.linearGradient(listOf(PROF.gold.copy(alpha = 0.08f), PROF.surface)))
-                .border(1.dp, PROF.gold.copy(alpha = 0.23f), RoundedCornerShape(16.dp))
-                .clickable(enabled = userId.isNotBlank()) {
-                    clipboard.setText(AnnotatedString(userId))
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    justCopied = true
-                }
-                .semantics { contentDescription = "Member ID, permanent. Double tap to copy." }
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(PROF.white)
-                    .border(1.dp, PROF.gold.copy(alpha = 0.33f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(FingerprintIcon, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(16.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("MEMBER ID", style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(10.dp))
-                }
-                Text(
-                    memberId,
-                    // App fonts only (owner, 2026-08-26): Inter with wide tracking, not the
-                    // device's Monospace face — the tracking is what makes an id
-                    // scannable, and the foreign typeface was the only thing it added.
-                    style = pInter(11, FontWeight.Medium, 0.8f),
-                    color = PROF.navy,
-                    maxLines = 2,
-                )
-            }
-            Text(
-                if (justCopied) "COPIED" else "PERMANENT",
-                style = pInter(9, FontWeight.SemiBold, 0.9f),
-                color = if (justCopied) PROF.kicker else PROF.rowLabel,
-            )
-        }
+        // No raw Member ID (§8.1 rule 8; Cycle 3's closing walk): the row
+        // showed the 36-character user_id — data, not a word for a member.
 
-        InfoRow(Icons.Filled.MailOutline, "EMAIL", p?.email ?: "—", onEdit = { onEdit(EditField.EMAIL) })
+        // Words, never data (§8.1 rule 8, §8.2 #8): an empty value reads
+        // "Not set" (it read "—"), a birthday "1 Jan 1990" — the calendar date
+        // sent, never shifted by the phone's zone (it read the raw
+        // "1989-12-31T21:00:00.000Z") — and a gender its own words.
+        // The address breaks only after its "@" (final walk C3, Android #10:
+        // "student1@dev / .local" in this row at the largest text).
+        InfoRow(Lucide.Mail, "EMAIL", emailBreaks(profileValue(p?.email)), onEdit = { onEdit(EditField.EMAIL) })
         HairlineDivider()
-        InfoRow(Icons.Filled.Person, "FULL NAME", p?.fullName ?: "—", onEdit = { onEdit(EditField.NAME) })
-        InfoRow(Icons.Filled.Call, "PHONE", p?.phoneNumber ?: "—", onEdit = { onEdit(EditField.PHONE) })
-        InfoRow(Icons.Filled.CalendarToday, "DATE OF BIRTH", p?.dateOfBirth ?: "Not set", onEdit = { onEdit(EditField.DOB) })
-        InfoRow(Icons.Filled.Group, "GENDER", p?.gender ?: "—", onEdit = { onEdit(EditField.GENDER) })
+        InfoRow(Lucide.User, "FULL NAME", profileValue(p?.fullName), onEdit = { onEdit(EditField.NAME) })
+        // Read the Kenyan way, as Give shows it ("0700 000 000", not "+254700000000");
+        // the edit sheet still starts from the stored number.
         InfoRow(
-            Icons.Filled.Public,
+            Lucide.Phone, "PHONE",
+            p?.phoneNumber?.takeIf { it.isNotBlank() }?.let(::kenyanMobileDisplay) ?: NOT_SET,
+            onEdit = { onEdit(EditField.PHONE) },
+        )
+        InfoRow(Lucide.Calendar, "DATE OF BIRTH", profileDateLabel(p?.dateOfBirth), onEdit = { onEdit(EditField.DOB) })
+        InfoRow(Lucide.Users, "GENDER", profileGenderLabel(p?.gender), onEdit = { onEdit(EditField.GENDER) })
+        InfoRow(
+            Lucide.Globe,
             "COUNTRY",
-            (flagEmoji(p?.countryCode) + " " + countryName(p?.countryCode)).trim(),
+            (flagEmoji(p?.countryCode) + " " + countryName(p?.countryCode)).trim().ifEmpty { NOT_SET },
             onEdit = { onEdit(EditField.COUNTRY) },
         )
-        InfoRow(Icons.Filled.LocationOn, "CITY", p?.city ?: "—", onEdit = { onEdit(EditField.CITY) })
+        InfoRow(Lucide.MapPin, "CITY", profileValue(p?.city), onEdit = { onEdit(EditField.CITY) })
         HairlineDivider()
         LanguagesRow()
     }
@@ -734,15 +717,15 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
                 Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(PROF.surface)
-                    .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+                    .background(PROF.goldTint),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
+                Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(18.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text(label, style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
-                Text(value, style = pInter(13, FontWeight.Medium), color = PROF.navy)
+                Text(label, style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
+                // A profile field is a control row (§8.1 rule 3): Inter 14 medium.
+                Text(value, style = NuruType.controlTitle, color = PROF.navy)
             }
             if (onEdit != null) {
                 Box(
@@ -752,7 +735,7 @@ private fun InfoRow(icon: ImageVector, label: String, value: String, onEdit: (()
                         .clickable { onEdit() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit $label", tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
+                    Icon(Lucide.Pencil, contentDescription = "Edit $label", tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -770,14 +753,13 @@ private fun LanguagesRow() {
             Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(PROF.surface)
-                .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+                .background(PROF.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Translate, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
+            Icon(Lucide.Languages, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text("LANGUAGES SPOKEN", style = pInter(10, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
+            Text("LANGUAGES SPOKEN", style = pInter(11, FontWeight.SemiBold, 1.2f), color = PROF.rowLabel)
             Box(Modifier.padding(top = 2.dp)) {
                 Box(
                     Modifier
@@ -788,7 +770,7 @@ private fun LanguagesRow() {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("English", style = pInter(12, FontWeight.Medium), color = PROF.verify)
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(11.dp))
+                        Icon(Lucide.Check, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -804,7 +786,7 @@ private fun LanguagesRow() {
 @Composable
 private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.Diversity3, "SERVING IN")
+        SectionTitle(Lucide.Users2, "SERVING IN")
         Column(Modifier.padding(top = 4.dp)) {
             serving.forEachIndexed { index, d ->
                 Row(
@@ -822,7 +804,7 @@ private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
                                 modifier = Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)),
                             )
                         } else {
-                            Icon(Icons.Filled.Diversity3, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.Users2, contentDescription = null, tint = PROF.kicker, modifier = Modifier.size(18.dp))
                         }
                     }
                     Column(Modifier.weight(1f)) {
@@ -832,7 +814,7 @@ private fun ServingInCard(serving: List<Department>, onOpen: (String) -> Unit) {
                             style = pInter(11), color = PROF.sub,
                         )
                     }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.ChevronRight, null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
                 }
                 if (index != serving.lastIndex) HairlineDivider()
             }
@@ -855,27 +837,33 @@ private fun DisciplesEntryCard(onOpen: () -> Unit) {
         Box(
             Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PROF.gold),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Groups, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(20.dp)) }
+        ) { Icon(Lucide.Users, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(22.dp)) }
         Column(Modifier.weight(1f)) {
-            Text("SHEPHERD THE FLOCK", style = pInter(8, FontWeight.Bold, 1.28f), color = PROF.gold)
+            Text("SHEPHERD THE FLOCK", style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.gold)
             Text("Your disciples", style = pInter(14, FontWeight.SemiBold), color = Color.White)
             Text("Roster, journeys & pending reflections", style = pInter(11), color = Color.White.copy(alpha = 0.7f))
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+        Icon(Lucide.ChevronRight, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
     }
 }
 
 // ── Achievements ────────────────────────────────────────────────────────────
 @Composable
-private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, onBadge: (Badge) -> Unit) {
+private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge>, loading: Boolean, onBadge: (Badge) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.AutoAwesome, "ACHIEVEMENTS") {
-            Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.navy)
+        SectionTitle(Lucide.Sparkles, "ACHIEVEMENTS") {
+            // A text action is gold (§8.1 rule 4).
+            Text("See all", style = pInter(11, FontWeight.SemiBold), color = PROF.gold)
         }
         // Catalogue merge (GET /badges): earned first, locked after — the rail
         // shows what's ahead. Falls back to earned-only while the catalogue loads.
         val badges = gallery.ifEmpty { achievements?.badges.orEmpty() }
-        if (badges.isEmpty()) {
+        if (badges.isEmpty() && loading) {
+            org.nuruplace.member.ui.components.SkeletonBlock(
+                height = 92.dp, corner = 16.dp,
+                modifier = Modifier.padding(top = 12.dp).loadingLabel(org.nuruplace.member.ui.components.SkeletonWords.BADGES),
+            )
+        } else if (badges.isEmpty()) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.Center,
@@ -888,19 +876,25 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                         .border(1.dp, PROF.border, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Verified, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(20.dp))
+                    Icon(Lucide.BadgeCheck, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(22.dp))
                 }
             }
-        } else {
+        } else androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            val large = largeText()
+            // A deliberate peek (§8.1 rule 9; final walk C16: the fifth badge
+            // was cut wherever the row happened to end): four and a half tiles
+            // at the everyday sizes, two and a half past them — the half says
+            // the rail goes on.
+            val tile = badgeTileWidth(maxWidth, count = badges.size, large = large)
             Row(
-                Modifier.fillMaxWidth().padding(top = 12.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(BADGE_GAP),
             ) {
                 badges.forEach { b ->
                     val st = badgeStyle(b.category)
                     val earned = b.awardedAt != null
                     Column(
-                        Modifier.width(66.dp).clickable { onBadge(b) },
+                        Modifier.width(tile).clickable { onBadge(b) },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Box(
@@ -914,13 +908,17 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(st.icon, contentDescription = null, tint = if (earned) st.color else PROF.rowLabel, modifier = Modifier.size(20.dp))
+                            Icon(st.icon, contentDescription = null, tint = if (earned) st.color else PROF.rowLabel, modifier = Modifier.size(22.dp))
                         }
-                        Text(
-                            b.name,
-                            style = pInter(9, if (earned) FontWeight.SemiBold else FontWeight.Medium),
+                        // Whole words, never cut (final walk C3, Android #10:
+                        // "Thirt / y-Da", "Sever / y Fait"): the name never
+                        // breaks at its hyphen, steps its size down only until
+                        // its longest word fits, and the tile widens at the
+                        // largest text.
+                        WholeWordsText(
+                            badgeLabel(b.name),
+                            style = pInter(11, if (earned) FontWeight.SemiBold else FontWeight.Medium),
                             color = if (earned) PROF.navy else PROF.rowLabel,
-                            maxLines = 2,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp),
                         )
@@ -942,7 +940,7 @@ private fun AchievementsSection(achievements: Achievements?, gallery: List<Badge
 @Composable
 private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
     SectionCard {
-        SectionTitle(Icons.Filled.TrendingUp, "GROWTH SCORES")
+        SectionTitle(Lucide.TrendingUp, "GROWTH SCORES")
 
         Row(
             Modifier.padding(vertical = 6.dp),
@@ -957,12 +955,16 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
                     .border(1.5.dp, PROF.gold.copy(alpha = 0.5f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    (scores?.overall?.score ?: 0).toString(),
-                    style = pSerif(16, FontWeight.SemiBold),
-                    color = PROF.navy,
-                    textAlign = TextAlign.Center,
-                )
+                // Unknown until the scores answer: "—", never a "0" (§7 rule 5).
+                // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+                org.nuruplace.member.ui.components.CappedFontScale(1f) {
+                    Text(
+                        scores?.overall?.score?.toString() ?: "—",
+                        style = pSerif(16, FontWeight.SemiBold),
+                        color = PROF.navy,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
             Column {
                 Text("Overall", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
@@ -974,15 +976,15 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
             }
         }
         HairlineDivider()
-        ScoreRow("Word", scores?.word?.score ?: 0, "word", Icons.Filled.MenuBook, onOpen)
+        ScoreRow("Word", scores?.word?.score, "word", Lucide.BookOpen, onOpen)
         HairlineDivider()
-        ScoreRow("Prayer", scores?.prayer?.score ?: 0, "prayer", Icons.Filled.FavoriteBorder, onOpen)
+        ScoreRow("Prayer", scores?.prayer?.score, "prayer", Lucide.Heart, onOpen)
         HairlineDivider()
-        ScoreRow("Habits", scores?.habits?.score ?: 0, "habits", Icons.Filled.LocalFireDepartment, onOpen)
+        ScoreRow("Habits", scores?.habits?.score, "habits", Lucide.Flame, onOpen)
         HairlineDivider()
-        ScoreRow("Curriculum", scores?.curriculum?.score ?: 0, "curriculum", Icons.Filled.School, onOpen)
+        ScoreRow("Curriculum", scores?.curriculum?.score, "curriculum", Lucide.GraduationCap, onOpen)
         HairlineDivider()
-        ScoreRow("Attendance", scores?.attendance?.score ?: 0, "attendance", Icons.Filled.Group, onOpen)
+        ScoreRow("Attendance", scores?.attendance?.score, "attendance", Lucide.Users, onOpen)
 
         Text(
             "Tap a score to see why — scores are formative, never a leaderboard.",
@@ -994,7 +996,7 @@ private fun GrowthScoresCard(scores: ScoresSummary?, onOpen: (String) -> Unit) {
 }
 
 @Composable
-private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector, onOpen: (String) -> Unit) {
+private fun ScoreRow(name: String, value: Int?, pillar: String, icon: ImageVector, onOpen: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -1007,17 +1009,16 @@ private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector
             Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(PROF.surface)
-                .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+                .background(PROF.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(15.dp))
+            Icon(icon, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
                 Spacer(Modifier.weight(1f))
-                Text(value.toString(), style = pInter(13, FontWeight.Bold), color = PROF.kicker)
+                Text(value?.toString() ?: "—", style = pInter(13, FontWeight.Bold), color = PROF.kicker)
             }
             Box(
                 Modifier
@@ -1027,7 +1028,7 @@ private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector
                     .clip(Capsule)
                     .background(PROF.surface),
             ) {
-                if (value > 0) {
+                if (value != null && value > 0) {
                     Box(
                         Modifier
                             .fillMaxWidth(fraction = value.coerceIn(0, 100) / 100f)
@@ -1038,16 +1039,23 @@ private fun ScoreRow(name: String, value: Int, pillar: String, icon: ImageVector
                 }
             }
         }
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(18.dp))
     }
 }
 
 // ── Milestones ──────────────────────────────────────────────────────────────
+/** The member's own level on Profile's milestones, in the journey's words (§3)
+ *  — the pill Home and Pathway show, over the next step: ("Level 1 · Exam
+ *  ready", "Take the Level 1 exam"). Null until the journey is known, or when
+ *  it is about another level: the row waits rather than tell a second story
+ *  (iOS ProfileMilestoneWords, 3137194). */
+internal fun profileMilestoneWords(level: Int, journey: org.nuruplace.member.feature.pathway.Journey?): Pair<String, String>? =
+    journey?.takeIf { it.levelNumber == level }?.let { "Level $level · ${it.pill}" to it.next.title }
 private enum class MilestoneState { DONE, ACTIVE, FUTURE }
 private data class MilestoneItem(val title: String, val subtitle: String, val state: MilestoneState)
 
 @Composable
-private fun MilestonesCard(me: MeResponse?) {
+private fun MilestonesCard(me: MeResponse?, journey: org.nuruplace.member.feature.pathway.Journey?) {
     val isBaptized = me?.profile?.isBaptized == true
     val level = me?.enrollment?.currentLevel
     val items = listOf(
@@ -1060,15 +1068,19 @@ private fun MilestonesCard(me: MeResponse?) {
         // printed "Level 1 · in progress · Keep going" to members who had never
         // been placed on the pathway — encouragement to keep doing something
         // they had never been able to start.
+        // The member's own level in the journey's words — "Level 1 · Exam
+        // ready · Take the Level 1 exam" — never "in progress · Keep going"
+        // beside every other screen's "Exam ready" (Cycle 3 E13, Cycle 4).
+        // Until the journey is known the row waits: no second story.
         if (level != null) {
-            MilestoneItem("Level $level · in progress", "Keep going", MilestoneState.ACTIVE)
+            profileMilestoneWords(level, journey)?.let { (label, meta) -> MilestoneItem(label, meta, MilestoneState.ACTIVE) }
         } else {
             MilestoneItem("Your pathway", "Starting soon — your leader is setting you up", MilestoneState.FUTURE)
         },
         MilestoneItem("Pathway completion", "Your journey continues", MilestoneState.FUTURE),
-    )
+    ).filterNotNull()
     SectionCard {
-        SectionTitle(Icons.Filled.TrackChanges, "MILESTONES")
+        SectionTitle(Lucide.Target, "MILESTONES")
         Column(Modifier.padding(top = 8.dp)) {
             items.forEachIndexed { index, item ->
                 val last = index == items.lastIndex
@@ -1093,9 +1105,9 @@ private fun MilestonesCard(me: MeResponse?) {
                         ) {
                             Icon(
                                 when (item.state) {
-                                    MilestoneState.DONE -> Icons.Filled.Check
-                                    MilestoneState.ACTIVE -> Icons.Filled.CalendarToday
-                                    MilestoneState.FUTURE -> Icons.Filled.FavoriteBorder
+                                    MilestoneState.DONE -> Lucide.Check
+                                    MilestoneState.ACTIVE -> Lucide.Calendar
+                                    MilestoneState.FUTURE -> Lucide.Heart
                                 },
                                 contentDescription = null,
                                 tint = when (item.state) {
@@ -1103,7 +1115,7 @@ private fun MilestonesCard(me: MeResponse?) {
                                     MilestoneState.ACTIVE -> PROF.gold
                                     MilestoneState.FUTURE -> PROF.rowLabel
                                 },
-                                modifier = Modifier.size(if (item.state == MilestoneState.DONE) 14.dp else 13.dp),
+                                modifier = Modifier.size(14.dp),
                             )
                         }
                         if (!last) {
@@ -1133,12 +1145,20 @@ private fun MilestonesCard(me: MeResponse?) {
 @Composable
 private fun CertificatesCard(
     certs: List<Certificate>,
+    loading: Boolean,
     copiedCode: String?,
     onCopy: (String) -> Unit,
     onDownload: (Certificate) -> Unit,
 ) {
     SectionCard {
-        SectionTitle(Icons.Filled.Verified, "CERTIFICATES")
+        SectionTitle(Lucide.BadgeCheck, "CERTIFICATES")
+        if (certs.isEmpty() && loading) {
+            org.nuruplace.member.ui.components.SkeletonBlock(
+                height = 120.dp, corner = 16.dp,
+                modifier = Modifier.padding(top = 12.dp).loadingLabel(org.nuruplace.member.ui.components.SkeletonWords.CERTIFICATES),
+            )
+            return@SectionCard
+        }
         if (certs.isEmpty()) {
             Text(
                 "Your certificates will appear here as you complete each Pathway level.",
@@ -1190,7 +1210,7 @@ private fun CertificateCard(
                     .border(1.dp, PROF.gold.copy(alpha = 0.33f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(20.dp))
+                Icon(Lucide.Award, contentDescription = null, tint = PROF.gold, modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text("Pathway Level $levelLabel".trim(), style = pInter(14, FontWeight.SemiBold, -0.14f), color = PROF.navy)
@@ -1209,7 +1229,7 @@ private fun CertificateCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(FingerprintIcon, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(13.dp))
+            Icon(FingerprintIcon, contentDescription = null, tint = PROF.rowLabel, modifier = Modifier.size(14.dp))
             Text(
                 c.verificationCode,
                 style = pInter(12, FontWeight.SemiBold, 1.1f),   // Inter + tracking, never system Monospace
@@ -1224,14 +1244,14 @@ private fun CertificateCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Icon(
-                    if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                    if (copied) Lucide.Check else Lucide.Copy,
                     contentDescription = null,
                     tint = if (copied) PROF.success else PROF.gold,
                     modifier = Modifier.size(14.dp),
                 )
                 Text(
                     if (copied) "Copied" else "Copy",
-                    style = pInter(10, FontWeight.Bold),
+                    style = pInter(11, FontWeight.Bold),
                     color = if (copied) PROF.success else PROF.gold,
                 )
             }
@@ -1250,8 +1270,8 @@ private fun CertificateCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Spacer(Modifier.weight(1f))
-                Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(13.dp))
-                Text("Signed · Verify", style = pInter(10, FontWeight.Bold), color = PROF.verify)
+                Icon(Lucide.ShieldCheck, contentDescription = null, tint = PROF.verify, modifier = Modifier.size(14.dp))
+                Text("Signed · Verify", style = pInter(11, FontWeight.Bold), color = PROF.verify)
                 Spacer(Modifier.weight(1f))
             }
             Row(
@@ -1265,8 +1285,8 @@ private fun CertificateCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Spacer(Modifier.weight(1f))
-                Icon(Icons.Filled.Download, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(13.dp))
-                Text("Download PDF", style = pInter(10, FontWeight.Bold), color = PROF.navy)
+                Icon(Lucide.Download, contentDescription = null, tint = PROF.navy, modifier = Modifier.size(14.dp))
+                Text("Download PDF", style = pInter(11, FontWeight.Bold), color = PROF.navy)
                 Spacer(Modifier.weight(1f))
             }
         }
@@ -1299,24 +1319,19 @@ private fun countryName(code: String?): String = when (code?.trim()?.uppercase()
     else -> code.trim().uppercase()
 }
 
-private val CERT_DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
-
-private fun certDate(iso: String?): String {
-    if (iso.isNullOrBlank()) return ""
-    return runCatching {
-        Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate().format(CERT_DATE_FMT)
-    }.recoverCatching {
-        // Fall back to date-only ISO (yyyy-MM-dd)
-        java.time.LocalDate.parse(iso.take(10)).format(CERT_DATE_FMT)
-    }.getOrDefault(iso)
-}
+// One date form (§8.1 rule 8): "Mon 5 Oct" (the year when it isn't this
+// year) — it read "Oct 5, 2026", and the raw value when it couldn't be read.
+private fun certDate(iso: String?): String = org.nuruplace.member.util.NuruDates.day(iso).orEmpty()
 
 
 // --- Nuru Intelligence: the personalization covenant (one switch) ---
 @androidx.compose.runtime.Composable
 private fun AiConsentCard() {
     var optOut by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var consentSaveFailed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Why the last change didn't land (§4) — "check your connection" was
+    // wrong whenever the server itself refused.
+    var consentSaveFailed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val consentContext = androidx.compose.ui.platform.LocalContext.current
     var loaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -1324,7 +1339,7 @@ private fun AiConsentCard() {
         loaded = true
     }
     SectionCard {
-        SectionTitle(androidx.compose.material.icons.Icons.Filled.AutoAwesome, "NURU INTELLIGENCE")
+        SectionTitle(Lucide.Sparkles, "NURU INTELLIGENCE")
         androidx.compose.foundation.layout.Row(
             androidx.compose.ui.Modifier.fillMaxWidth(),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -1332,7 +1347,8 @@ private fun AiConsentCard() {
             androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.weight(1f)) {
                 androidx.compose.material3.Text(
                     "Personal companion & Sunday Letter",
-                    style = org.nuruplace.member.ui.theme.NuruType.rowTitle,
+                    // A card's title (§8.1 rule 3; iOS: Fraunces 18 semibold).
+                    style = org.nuruplace.member.ui.theme.NuruType.cardTitle,
                     color = org.nuruplace.member.ui.theme.Nuru.navy,
                 )
                 androidx.compose.material3.Text(
@@ -1348,7 +1364,7 @@ private fun AiConsentCard() {
                 onCheckedChange = { on ->
                     val previous = optOut
                     optOut = !on
-                    consentSaveFailed = false
+                    consentSaveFailed = null
                     scope.launch {
                         // Consent must never lie: if the server didn't record
                         // it, don't display it.
@@ -1358,7 +1374,7 @@ private fun AiConsentCard() {
                             )
                         }.onFailure {
                             optOut = previous
-                            consentSaveFailed = true
+                            consentSaveFailed = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, consentContext)
                         }
                     }
                 },
@@ -1367,13 +1383,51 @@ private fun AiConsentCard() {
                 ),
             )
         }
-        if (consentSaveFailed) {
+        consentSaveFailed?.let { line ->
             androidx.compose.material3.Text(
-                "Couldn't save that — check your connection and try again.",
+                line,
                 style = org.nuruplace.member.ui.theme.NuruType.micro,
                 color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
+}
+
+/** "Copy member ID" — a quiet text action; "Member ID copied" for a moment. */
+@Composable
+private fun MemberIdFoot(onCopy: () -> Unit) {
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) { kotlinx.coroutines.delay(1_600); copied = false }
+    }
+    val label = if (copied) "Member ID copied" else "Copy member ID"
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 44.dp)
+            .clickable(onClickLabel = label) { onCopy(); copied = true },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (copied) Lucide.Check else Lucide.FingerprintPattern, contentDescription = null,
+            tint = org.nuruplace.member.ui.theme.Nuru.goldChipText, modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = pInter(13, FontWeight.SemiBold), color = org.nuruplace.member.ui.theme.Nuru.goldChipText)
+    }
+}
+
+private val BADGE_GAP = 10.dp
+
+/** A badge tile's width on the rail: its everyday 66 dp (104 past the
+ *  everyday sizes) while the badges fit; when they don't, the width at which
+ *  four and a half (two and a half) show, so the rail ends on a deliberate
+ *  half tile — never wherever a badge happens to be cut. */
+internal fun badgeTileWidth(available: androidx.compose.ui.unit.Dp, count: Int, large: Boolean): androidx.compose.ui.unit.Dp {
+    val natural = if (large) 104.dp else 66.dp
+    val shown = if (large) 2.5f else 4.5f
+    val whole = shown.toInt()
+    val fits = natural * count + BADGE_GAP * (count - 1) <= available
+    if (fits) return natural
+    return ((available - BADGE_GAP * whole) / shown).coerceAtLeast(56.dp)
 }

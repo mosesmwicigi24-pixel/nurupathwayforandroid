@@ -87,7 +87,10 @@ class ServiceQrParseTest {
 
     @Test
     fun `short time pulls HH mm out of an ISO instant`() {
-        assertEquals("09:14", shortTime("2026-03-01T09:14:22.000Z"))
-        assertEquals("not-a-date", shortTime("not-a-date"))
+        // The phone's own zone and a 12-hour time — never the raw UTC "09:14".
+        assertEquals(org.nuruplace.member.util.NuruDates.time(java.time.Instant.parse("2026-03-01T09:14:22.000Z")), shortTime("2026-03-01T09:14:22.000Z"))
+        assertEquals("12:14 PM", org.nuruplace.member.util.NuruDates.time(java.time.Instant.parse("2026-03-01T09:14:22.000Z"), java.time.ZoneId.of("Africa/Nairobi")))
+        // Unreadable: nothing, never the raw text.
+        assertEquals("", shortTime("not-a-date"))
     }
 }

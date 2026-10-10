@@ -19,6 +19,12 @@ object AppPrefs {
     private const val KEY_READER_TEXT_SCALE = "nuru.readerTextScale"
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
+    // The notification permission has been asked on this install (data/
+    // firebase/NotificationAsk.kt) — tells "never asked" from "refused for good".
+    private const val KEY_NOTIFICATIONS_ASKED = "nuru.notificationsAsked"
+    // When Home's "Turn on notifications" card was last put off ("Not now",
+    // EXPERIENCE.md §7.3) — it stays hidden for 14 days after.
+    private const val KEY_NOTIFICATIONS_CARD_SNOOZED_AT = "nuru.notificationsCard.snoozedAt"
     private const val KEY_RADIO_REMIND_PREFIX = "nuru.radio.remind."
     private const val KEY_DISCIPLER_REMINDER_DISMISSED_PREFIX = "nuru.discipler.reminder.dismissedAt.level."
     // Broadcast fingerprint unlock (§5.3 step-up, data/BroadcastLock.kt): the
@@ -39,6 +45,10 @@ object AppPrefs {
     // member typed/picked, so the next custom gift preselects it subtly
     // (iOS @AppStorage "giving.lastAccountName" parity).
     private const val KEY_GIVING_LAST_ACCOUNT_NAME = "nuru.giving.lastAccountName"
+    // The number the last gift's M-Pesa prompt went to (Giving Cycle 1), as
+    // E.164 — the Give screen's prefill before the profile's number. Per
+    // account: cleared on sign-out so it never prompts someone else's phone.
+    private const val KEY_GIVING_LAST_PHONE = "nuru.giving.lastPhone"
     // Play Install Referrer read once per install (MainActivity) — the
     // store-then-plan path for Read with a Friend join links.
     private const val KEY_INSTALL_REFERRER_CHECKED = "install_referrer_checked"
@@ -46,6 +56,15 @@ object AppPrefs {
     // to "KSh •••• given this year" (a phone shown around in church). Visible
     // by default; persisted so the choice survives restarts.
     private const val KEY_GIVE_HIDE_YEAR_TOTAL = "give.hideYearTotal"
+    // The Nairobi day (epoch day) on which this phone last saw the server seal
+    // a plan day — the Plans streak card ticks today only then (EXPERIENCE.md
+    // §7.4 #4; feature/grow/PlanDayParts.kt PlanDayLog; iOS's
+    // "nuru.plans.daySealedOn"). Per account: forgotten at sign-out.
+    private const val KEY_PLAN_DAY_SEALED_ON = "nuru.plans.daySealedOn"
+    // A video's own shape (width ÷ height as the player reported it), per
+    // media_asset_id — Home's featured card paints its frame right the first
+    // time (owner, 2026-10-06). Not personal: kept across sign-outs.
+    private const val KEY_VIDEO_RATIO_PREFIX = "nuru.video.ratio."
 
     private lateinit var prefs: SharedPreferences
 
@@ -122,6 +141,19 @@ object AppPrefs {
         get() = ::prefs.isInitialized && prefs.getBoolean(KEY_INSTALL_REFERRER_CHECKED, false)
         set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_INSTALL_REFERRER_CHECKED, v).apply() }
 
+    /** The notification permission's system prompt has been shown on this
+     *  install (EXPERIENCE.md §7.2 #12) — so a refusal for good is told apart
+     *  from never having asked. */
+    var notificationsAsked: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean(KEY_NOTIFICATIONS_ASKED, false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_NOTIFICATIONS_ASKED, v).apply() }
+
+    /** When Home's "Turn on notifications" card was last put off — epoch
+     *  millis, 0 never (EXPERIENCE.md §7.3: hidden for 14 days after). */
+    var notificationsCardSnoozedAt: Long
+        get() = if (::prefs.isInitialized) prefs.getLong(KEY_NOTIFICATIONS_CARD_SNOOZED_AT, 0L) else 0L
+        set(v) { if (::prefs.isInitialized) prefs.edit().putLong(KEY_NOTIFICATIONS_CARD_SNOOZED_AT, v).apply() }
+
     /** One-time location-first onboarding invite (shown right after first login). */
     var locationInviteShown: Boolean
         get() = ::prefs.isInitialized && prefs.getBoolean(KEY_LOCATION_INVITE, false)
@@ -197,6 +229,37 @@ object AppPrefs {
     var lastGivingAccountName: String
         get() = if (::prefs.isInitialized) prefs.getString(KEY_GIVING_LAST_ACCOUNT_NAME, "") ?: "" else ""
         set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_GIVING_LAST_ACCOUNT_NAME, v).apply() }
+
+    /** The number the last successful gift prompted (E.164) — empty means none yet. */
+    var lastGivingPhone: String
+        get() = if (::prefs.isInitialized) prefs.getString(KEY_GIVING_LAST_PHONE, "") ?: "" else ""
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString(KEY_GIVING_LAST_PHONE, v).apply() }
+
+    /** Sign-out: the last prompt number belongs to the account that used it. */
+    fun clearGivingPhone() {
+        if (::prefs.isInitialized) prefs.edit().remove(KEY_GIVING_LAST_PHONE).apply()
+    }
+
+    /** The Nairobi epoch day of the last plan day the server sealed while
+     *  this phone watched; null when none (or since sign-out). */
+    var planDaySealedOn: Long?
+        get() = if (::prefs.isInitialized && prefs.contains(KEY_PLAN_DAY_SEALED_ON)) prefs.getLong(KEY_PLAN_DAY_SEALED_ON, 0L) else null
+        set(v) {
+            if (!::prefs.isInitialized) return
+            prefs.edit().apply { if (v == null) remove(KEY_PLAN_DAY_SEALED_ON) else putLong(KEY_PLAN_DAY_SEALED_ON, v) }.apply()
+        }
+
+    /** The shape the player last reported for this video, or null when it has
+     *  never played here (ui/components/VideoShape.kt). */
+    fun videoRatio(mediaAssetId: String): Float? {
+        if (!::prefs.isInitialized || mediaAssetId.isBlank()) return null
+        return prefs.getFloat(KEY_VIDEO_RATIO_PREFIX + mediaAssetId, 0f).takeIf { it > 0f && it.isFinite() }
+    }
+
+    fun rememberVideoRatio(mediaAssetId: String, ratio: Float) {
+        if (!::prefs.isInitialized || mediaAssetId.isBlank() || !ratio.isFinite() || ratio <= 0f) return
+        prefs.edit().putFloat(KEY_VIDEO_RATIO_PREFIX + mediaAssetId, ratio).apply()
+    }
 
     /** Account sign-out — these are per-device but keyed to whoever is signed
      *  in right now; never let a pastoral cache/flag from account A leak into

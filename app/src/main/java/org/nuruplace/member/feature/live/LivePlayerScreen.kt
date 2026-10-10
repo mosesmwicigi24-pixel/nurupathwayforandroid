@@ -82,8 +82,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -122,6 +120,7 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LiveGuestRespondBody
 import org.nuruplace.member.data.net.LiveHandBody
 import org.nuruplace.member.data.net.LiveMessageRow
@@ -129,11 +128,13 @@ import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.LiveReactionBody
 import org.nuruplace.member.data.net.LiveSendMessageBody
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.webrtc.SurfaceViewRenderer
 import kotlin.math.PI
 import kotlin.math.sin
+import org.nuruplace.member.ui.icons.Lucide
 
 /** How long the viewer stays on the direct-origin fallback URL before
  *  swapping to the CDN one — long enough for R2's mirror to have almost
@@ -363,7 +364,9 @@ fun LivePlayerScreen(
         }
         if (!reduceMotion) particles.spawn(reactionEmoji(emoji))
         if (streamId != null) {
-            scope.launch { runCatching { Net.client.api.postLiveReaction(streamId, LiveReactionBody(emoji)) } }
+            // The count and the hearts fly at once; a reaction the server didn't
+            // record says so (§7.4) and the next pulse sets the count right.
+            scope.launch { noticeOnFailure(context) { Net.client.api.postLiveReaction(streamId, LiveReactionBody(emoji)) } }
         }
     }
 
@@ -373,13 +376,24 @@ fun LivePlayerScreen(
         handOverride = next
         if (streamId != null) {
             scope.launch {
-                runCatching { Net.client.api.postLiveHand(streamId, LiveHandBody(next)) }
+                noticeOnFailure(context, lead = if (next) "Couldn't raise your hand." else "Couldn't lower your hand.") {
+                    Net.client.api.postLiveHand(streamId, LiveHandBody(next))
+                }
                 handOverride = null // let the next pulse reconcile the authoritative state
             }
         }
     }
 
     val myGuestState = myGuestStatus(pulse?.guests ?: emptyList(), myUserId)
+    // An invite to this stream that this member has accepted — here, from its
+    // ring, or on another of their phones — clears from the tray too, ringing
+    // or quiet. (The pulse lists only invited and accepted guests; a decline
+    // clears its own notification wherever it is made.)
+    LaunchedEffect(streamId, myGuestState) {
+        if (streamId != null && myGuestState != null && myGuestState != "invited") {
+            LiveInviteNotifications.cancel(context, streamId)
+        }
+    }
 
     // ── L6b — real guest video (docs/LIVE_INTERACTIVE.md): the moment
     // `myGuestState` reports "accepted", this device checks camera/mic
@@ -438,7 +452,7 @@ fun LivePlayerScreen(
         guestStageState = GuestStageState.Idle
         scope.launch { runCatching { whipPublisher.stop() } }
         if (leaveServerSide && streamId != null && myUserId != null) {
-            scope.launch { runCatching { Net.client.api.deleteLiveGuest(streamId, myUserId) } }
+            scope.launch { noticeOnFailure(context, lead = "Couldn't leave the stage.") { Net.client.api.deleteLiveGuest(streamId, myUserId) } }
         }
     }
 
@@ -577,8 +591,24 @@ fun LivePlayerScreen(
             ) {
                 GuestStageBanner(
                     status = myGuestState,
-                    onAccept = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true)) } } },
-                    onDecline = { scope.launch { runCatching { Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false)) } } },
+                    // Answered here, the same invite stops ringing on the
+                    // phone at once (LiveInviteNotifications).
+                    onAccept = {
+                        LiveInviteNotifications.cancel(context, streamId)
+                        scope.launch {
+                            noticeOnFailure(context, lead = "Couldn't accept the invitation.") {
+                                Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(true))
+                            }
+                        }
+                    },
+                    onDecline = {
+                        LiveInviteNotifications.cancel(context, streamId)
+                        scope.launch {
+                            noticeOnFailure(context, lead = "Couldn't decline the invitation.") {
+                                Net.client.api.postLiveGuestRespond(streamId, LiveGuestRespondBody(false))
+                            }
+                        }
+                    },
                 )
                 when (val s = guestStageState) {
                     is GuestStageState.Connecting -> GuestConnectingChip("Joining the stage…", Modifier.padding(top = 8.dp))
@@ -649,10 +679,12 @@ fun LivePlayerScreen(
                         body = body,
                         sentAt = java.time.Instant.now().toString(),
                     )
-                    scope.launch {
-                        runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
-                            .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
-                        pendingMessages = pendingMessages.filterNot { it.messageId == localId }
+                    val sent = runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
+                        .onSuccess { messages = (messages + it).takeLast(60); messageCursor = it.sentAt }
+                    pendingMessages = pendingMessages.filterNot { it.messageId == localId }
+                    sent.exceptionOrNull()?.let { e ->
+                        if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+                        ApiException.failureLine(ApiException.SEND_FAILED, e, context)
                     }
                 },
             )
@@ -697,9 +729,10 @@ private fun BigHeartPop(at: Offset, reduceMotion: Boolean, onExpire: () -> Unit)
         alpha.animateTo(0f, tween(420))
         onExpire()
     }
-    Text(
-        "❤️", fontSize = 64.sp,
-        modifier = Modifier.graphicsLayer {
+    // A picture, not words: the heart is an icon (64 dp), never a 64 sp emoji.
+    Icon(
+        Lucide.Heart, contentDescription = null, tint = Nuru.gold,
+        modifier = Modifier.size(64.dp).graphicsLayer {
             translationX = at.x - 32.dp.toPx()
             translationY = at.y - 32.dp.toPx()
             scaleX = scale.value; scaleY = scale.value
@@ -714,7 +747,7 @@ private fun BigHeartPop(at: Offset, reduceMotion: Boolean, onExpire: () -> Unit)
 private fun EndedState(onOpenReplays: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
+            Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(16.dp))
             Text("The stream has ended", style = NuruType.title, color = Color.White, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
@@ -737,7 +770,7 @@ private fun AudioBackdrop(title: String) {
             Box(
                 Modifier.size(96.dp).clip(RoundedCornerShape(28.dp)).background(Color.White.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
+            ) { Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
             Spacer(Modifier.height(20.dp))
             Text(title.ifBlank { "Nuru Live" }, style = NuruType.title, color = Color.White, textAlign = TextAlign.Center)
             Spacer(Modifier.height(20.dp))

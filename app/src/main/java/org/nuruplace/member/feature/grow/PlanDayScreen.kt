@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -37,19 +38,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,12 +78,15 @@ import android.media.SoundPool
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.R
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CompleteDayBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
 import kotlin.math.PI
@@ -103,6 +94,7 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * Reading-plan DAY reader. Loads the plan detail, isolates [dayNumber], and
@@ -128,6 +120,12 @@ fun PlanDayScreen(
     var dayCompleted by remember { mutableStateOf(false) }
     var justDone by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var sealError by remember { mutableStateOf<String?>(null) }
+    val sealContext = androidx.compose.ui.platform.LocalContext.current
+    // A day that did not load, in the state language (§4).
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val loadContext = LocalContext.current
 
     // Reflection state (server-backed; GET pre-fills, POST upserts).
     var reflectionText by remember { mutableStateOf("") }
@@ -136,8 +134,11 @@ fun PlanDayScreen(
     var reflectionJustSaved by remember { mutableStateOf(false) }
 
     // Load the plan + isolate this day, then pre-fill the reflection.
-    LaunchedEffect(planId, dayNumber) {
-        val detail: ReadingPlanDetail? = runCatching { Net.client.api.plan(planId) }.getOrNull()
+    LaunchedEffect(planId, dayNumber, attempt) {
+        val loaded = runCatching { Net.client.api.plan(planId) }
+        loaded.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+        loadError = loaded.exceptionOrNull()?.let { ApiException.state(it, loadContext) }
+        val detail: ReadingPlanDetail? = loaded.getOrNull()
         val d = detail?.days?.firstOrNull { it.dayNumber == dayNumber }
         day = d
         val segs = d?.segments ?: emptyList()
@@ -198,8 +199,10 @@ fun PlanDayScreen(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text(
-                        "TODAY'S JOURNEY · ${parts.size} PART${if (parts.size == 1) "" else "S"}",
+                    val failed = loadError?.takeIf { day == null }
+                    if (failed != null) FailedState(failed, onRetry = { attempt++ })
+                    else Text(
+                        PlanDayWords.hubKicker(parts.size),
                         style = plInter(11, Bold, 1.8f), color = PL.catText,
                     )
                     parts.forEach { p ->
@@ -211,9 +214,10 @@ fun PlanDayScreen(
                 }
             }
 
-            FooterBar(
+            if (day != null) FooterBar(
                 complete = dayCompleted || justDone,
                 busy = busy,
+                failure = sealError,
                 nextPartLabel = nextPart?.label,
                 onOpenNext = {
                     nextPart?.let { p -> if (p.tag == "talk") onTalkItOver() else onOpenPart(p.tag, p.firstIndex) }
@@ -221,12 +225,21 @@ fun PlanDayScreen(
                 onComplete = {
                     if (!busy) {
                         busy = true
+                        sealError = null
                         scope.launch {
-                            val ok = runCatching { Net.client.api.completePlanDay(planId, CompleteDayBody(dayNumber)) }.isSuccess
+                            val sealed = runCatching { Net.client.api.completePlanDay(planId, CompleteDayBody(dayNumber)) }
+                            val failure = sealed.exceptionOrNull()
+                            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
                             busy = false
-                            if (ok) {
+                            // A seal the server didn't take says so above the button
+                            // (§7.4, §4) — it used to just stop spinning.
+                            failure?.let { sealError = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, sealContext) }
+                            if (failure == null) {
                                 dayCompleted = true
                                 justDone = true
+                                // The server's 200 sealed it: today counts on
+                                // the Plans streak card (§7.4 #4).
+                                PlanDayLog.noteSealed()
                                 // If this sealed the WHOLE plan, open the keepsake.
                                 val allDone = runCatching { Net.client.api.plan(planId).days.all { it.completed == true } }.getOrDefault(false)
                                 if (allDone) { delay(900); onPlanComplete() }
@@ -276,10 +289,10 @@ private fun DayHeader(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.weight(1f))
-            Text("DAY $dayNumber", style = plInter(10, Bold, 1.8f), color = PL.gold)
+            Text("DAY $dayNumber", style = plInter(11, Bold, 1.8f), color = PL.gold)
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.size(36.dp))
         }
@@ -291,9 +304,9 @@ private fun DayHeader(
         )
         Text(
             title,
-            style = plSerif(23, SemiBold, -0.46f),
+            style = plSerif(22, SemiBold, -0.46f),
             color = Color.White,
-            maxLines = 2,
+            maxLines = 3,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp),
         )
@@ -332,7 +345,7 @@ private fun VerseBlock(reference: String, content: String?) {
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Icons.Filled.MenuBook, null, tint = PL.refInk, modifier = Modifier.size(12.dp))
+            Icon(Lucide.BookOpen, null, tint = PL.refInk, modifier = Modifier.size(14.dp))
             Text(
                 reference.uppercase(),
                 style = plInter(11, Bold, 1.4f),
@@ -342,7 +355,7 @@ private fun VerseBlock(reference: String, content: String?) {
         if (!content.isNullOrEmpty()) {
             Text(
                 content,
-                style = plSerif(17, Normal, -0.17f, italic = true)
+                style = plSerif(16, Normal, -0.17f, italic = true)
                     .copy(lineHeight = org.nuruplace.member.ui.theme.scaledLineHeight(25)),
                 color = PL.navy,
                 modifier = Modifier.padding(top = 8.dp),
@@ -415,9 +428,9 @@ private fun PLSegmentRow(
             contentAlignment = Alignment.Center,
         ) {
             if (done) {
-                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
             } else {
-                Icon(segmentIcon(segment.kind), null, tint = PL.gold, modifier = Modifier.size(15.dp))
+                Icon(segmentIcon(segment.kind), null, tint = PL.gold, modifier = Modifier.size(14.dp))
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -443,22 +456,22 @@ private fun PLSegmentRow(
                     .background(PL.gold)
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             ) {
-                Text("Start", style = plInter(9, Bold), color = PL.navy)
+                Text("Start", style = plInter(11, Bold), color = PL.navy)
             }
         } else {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
+            Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         }
     }
 }
 
 /** kind → glyph, mirroring iOS `segmentIcon` (883-892). */
 private fun segmentIcon(kind: String): ImageVector = when (kind.lowercase()) {
-    "video" -> Icons.Filled.PlayArrow
-    "reading" -> Icons.Filled.MenuBook
-    "devotional" -> Icons.Filled.WbSunny
-    "talk" -> Icons.Filled.ChatBubbleOutline
-    "scripture" -> Icons.Filled.FormatQuote
-    else -> Icons.Filled.MenuBook
+    "video" -> Lucide.Play
+    "reading" -> Lucide.BookOpen
+    "devotional" -> Lucide.Sun
+    "talk" -> Lucide.MessageCircle
+    "scripture" -> Lucide.Quote
+    else -> Lucide.BookOpen
 }
 
 // MARK: reflection — the Figma textarea, backed by the real endpoint — 898-962
@@ -485,8 +498,8 @@ private fun ReflectionCard(
             Spacer(Modifier.weight(1f))
             AnimatedVisibility(visible = justSaved, enter = fadeIn(), exit = fadeOut()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
-                    Text("Saved", style = plInter(10, Bold), color = Color(0xFF15803D))
+                    Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                    Text("Saved", style = plInter(11, Bold), color = Color(0xFF15803D))
                 }
             }
         }
@@ -532,7 +545,7 @@ private fun ReflectionCard(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Edit, null, tint = PL.refInk, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Pencil, null, tint = PL.refInk, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             Text(
                 if (hasSaved) "Update" else "Save reflection",
@@ -549,6 +562,8 @@ private fun ReflectionCard(
 private fun FooterBar(
     complete: Boolean,
     busy: Boolean,
+    /** Why the last "Seal the day" didn't save — above the button. */
+    failure: String? = null,
     /** The part still to do, if any — while one remains, the gold button is the
      *  way INTO it. A day is finished by DOING it, not by declaring it, so the
      *  button no longer offers to seal a day nobody has walked. (The server
@@ -558,17 +573,23 @@ private fun FooterBar(
     onComplete: () -> Unit,
     onBack: () -> Unit,
 ) {
+    // Clear of the system's gesture bar, and no more (§7.1 rule 3): it
+    // reserved 96dp (Spacing.tabBarSpace) for a tab bar this page doesn't show.
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.White),
+            .background(Color.White)
+            .navigationBarsPadding(),
     ) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
+        failure?.let {
+            Text(it, style = plInter(12), color = Color(0xFFB91C1C), modifier = Modifier.padding(horizontal = 20.dp).padding(top = 10.dp))
+        }
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(top = 12.dp, bottom = Spacing.tabBarSpace)
+                .padding(top = 12.dp, bottom = 12.dp)
                 .shadow(10.dp, RoundedCornerShape(16.dp), spotColor = PL.gold.copy(alpha = 0.45f), ambientColor = PL.gold.copy(alpha = 0.45f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(PL.goldCtaGrad)
@@ -588,10 +609,10 @@ private fun FooterBar(
                 nextPartLabel != null -> {
                     Text("Continue · $nextPartLabel", style = plInter(14, Bold), color = PL.navy)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.ArrowRight, null, tint = PL.navy, modifier = Modifier.size(14.dp))
                 }
                 else -> {
-                    Icon(Icons.Filled.Check, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                    Icon(Lucide.Check, null, tint = PL.navy, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Seal the day", style = plInter(14, Bold), color = PL.navy)
                 }
@@ -880,14 +901,14 @@ private fun TalkItOverEntry(onClick: () -> Unit) {
             .clickable { onClick() }.padding(16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(PL.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.ChatBubbleOutline, null, tint = PL.goldDeep, modifier = Modifier.size(18.dp))
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.MessageCircle, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("Talk it Over", style = plSerif(16, Medium), color = PL.navy)
             Text("Share what God is showing you with the family", style = plInter(12), color = PL.blurb)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev)
+        Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -897,10 +918,20 @@ internal data class HubPart(
     val id: String,
     val tag: String,          // "media" | "word" | "respond" | "talk"
     val label: String,
-    val icon: ImageVector,
     val segs: List<PlanSegment>,
     val firstIndex: Int,
-)
+) {
+    /** The row's icon, by part. Computed, so the grouping itself stays pure —
+     *  the plan's page and the Plans streak card count parts with it too
+     *  ([dayParts]), and PlanDayPartsTest pins it on the JVM. */
+    val icon: ImageVector get() = when (tag) {
+        "media" -> Lucide.Play
+        "word" -> Lucide.BookOpen
+        // Prayer's heart, not Give's hand-heart (§8.1 rule 7; final walk C16).
+        "respond" -> Lucide.Heart
+        else -> Lucide.MessageCircle
+    }
+}
 
 private fun rankHub(s: PlanSegment): Int = when (s.kind.lowercase()) {
     "video", "audio" -> 0
@@ -919,17 +950,17 @@ internal fun hubParts(segments: List<PlanSegment>): List<HubPart> {
     sorted.forEachIndexed { i, s ->
         if (rankHub(s) == 0) {
             val audio = s.kind.lowercase() == "audio"
-            parts += HubPart(s.segmentId, "media", if (audio) "Listen" else "Watch", Icons.Filled.PlayArrow, listOf(s), i)
+            parts += HubPart(s.segmentId, "media", if (audio) "Listen" else "Watch", listOf(s), i)
         }
     }
     sorted.filter { rankHub(it) in listOf(1, 2, 5) }.let { word ->
-        if (word.isNotEmpty()) parts += HubPart("word", "word", "The Word", Icons.Filled.MenuBook, word, sorted.indexOf(word.first()))
+        if (word.isNotEmpty()) parts += HubPart("word", "word", "The Word", word, sorted.indexOf(word.first()))
     }
     sorted.filter { rankHub(it) == 4 }.let { respond ->
-        if (respond.isNotEmpty()) parts += HubPart("respond", "respond", "Respond", Icons.Filled.VolunteerActivism, respond, sorted.indexOf(respond.first()))
+        if (respond.isNotEmpty()) parts += HubPart("respond", "respond", "Respond", respond, sorted.indexOf(respond.first()))
     }
     sorted.filter { rankHub(it) == 3 }.let { talk ->
-        if (talk.isNotEmpty()) parts += HubPart("talk", "talk", "Talk it Over", Icons.Filled.ChatBubbleOutline, talk, sorted.indexOf(talk.first()))
+        if (talk.isNotEmpty()) parts += HubPart("talk", "talk", "Talk it Over", talk, sorted.indexOf(talk.first()))
     }
     return parts
 }
@@ -959,18 +990,23 @@ private fun HubRow(part: HubPart, done: Boolean, isNext: Boolean, onClick: () ->
                 .border(1.dp, if (done) PL.gold.copy(alpha = 0.5f) else if (isNext) PL.gold.copy(alpha = 0.4f) else PL.border, RoundedCornerShape(999.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(part.icon, null, tint = if (warm) PL.goldDeep else PL.blurb, modifier = Modifier.size(16.dp))
+            Icon(part.icon, null, tint = if (warm) PL.goldDeep else PL.blurb, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(part.label, style = plInter(14, SemiBold), color = PL.navy)
-            Text(hubSub(part, done), style = plInter(11), color = if (done) PL.goldDeep else PL.blurb, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // A day's part is a content row (§8.1 rule 3: Fraunces 15
+            // semibold — it was Inter), and its line wraps rather than cut
+            // (rule 9). iOS's plan day, the same.
+            Text(part.label, style = plSerif(15, SemiBold), color = PL.navy)
+            Text(hubSub(part, done), style = plInter(11), color = if (done) PL.goldDeep else PL.blurb, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         when {
-            done -> Icon(Icons.Filled.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
-            isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text("Next", style = plInter(10, Bold), color = PL.navy)
+            done -> Icon(Lucide.CheckCircle, null, tint = PL.gold, modifier = Modifier.size(22.dp))
+            // A status chip, not a second primary beside the gold button
+            // (§8.1 rules 4 and 6; final walk C16: gold-filled). iOS, the same.
+            isNext -> Box(Modifier.clip(RoundedCornerShape(999.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldChipBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Text("Next", style = plInter(11, Bold), color = org.nuruplace.member.ui.theme.Nuru.goldChipText)
             }
-            else -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(20.dp))
+            else -> Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(22.dp))
         }
     }
 }

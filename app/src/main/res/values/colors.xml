@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="nuru_paper">#F6F4EE</color>
+    <!-- Nuru.homeNavy: the ringing Live invite's window, before Compose draws. -->
+    <color name="nuru_live_navy">#0A1628</color>
 </resources>

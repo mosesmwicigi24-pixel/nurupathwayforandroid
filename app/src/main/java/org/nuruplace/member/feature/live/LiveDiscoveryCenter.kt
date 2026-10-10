@@ -1,9 +1,10 @@
 // Nuru Live discovery — "invite loudly, never hijack" (owner-approved design).
 // The ONE app-wide source of truth for "what's watchable right now", feeding:
-//   1. A tapped live_stream_started push — MainShell's "live-now" route
-//      re-checks GET /live/now and forwards to the newest watchable stream
-//      (falling back to Home, which shows its own banner, if it already
-//      ended by the time the tap lands).
+//   1. A tapped Live notice — a push, or its row in the inbox (one router,
+//      EXPERIENCE.md §7.2 #3) — MainShell's "live-now" route re-checks GET
+//      /live/now and forwards to the stream the notice names (§7.3), or says
+//      "This Live has ended" with its name (LiveEndedState) once it is over;
+//      a notice naming none forwards to the newest watchable stream.
 //   2. Home's mini-window pop-up for a stream this session hasn't seen yet.
 //   3. The app-wide LIVE bar shown on every screen but Home while the player
 //      isn't already open.
@@ -33,6 +34,16 @@ import org.nuruplace.member.data.net.Net
 internal fun filterOutSelfStream(rows: List<LiveNowRow>, selfStreamId: String?): List<LiveNowRow> =
     if (selfStreamId == null) rows else rows.filterNot { it.streamId == selfStreamId }
 
+/** Where MainShell's "live-now" forwarder goes, over the (already
+ *  self-filtered) `/live/now` rows: exactly [wantedStreamId] when a stream
+ *  was named (a Live notice — a stream starting, an invite, its Join;
+ *  LiveInvite.kt) — never some OTHER stream in its place — and the newest
+ *  watchable stream when none was (the Radio widget's LIVE line, a notice
+ *  without its stream): null (→ "This Live has ended") when the named one
+ *  has ended, or nothing is watchable. */
+internal fun liveForwardTarget(rows: List<LiveNowRow>, wantedStreamId: String?): LiveNowRow? =
+    if (wantedStreamId.isNullOrBlank()) rows.firstOrNull() else rows.firstOrNull { it.streamId == wantedStreamId }
+
 object LiveDiscoveryCenter {
     private val _streams = MutableStateFlow<List<LiveNowRow>>(emptyList())
     val streams: StateFlow<List<LiveNowRow>> = _streams.asStateFlow()
@@ -54,10 +65,19 @@ object LiveDiscoveryCenter {
     val newestWatchable: LiveNowRow? get() = _streams.value.firstOrNull()
 
     /** Re-fetch GET /live/now and fold the result in. Best-effort: a failed
-     *  fetch leaves the previous rows in place rather than clearing them. */
-    suspend fun refresh() {
-        val rows = runCatching { Net.client.api.getLiveNow().data }.getOrNull() ?: return
+     *  fetch leaves the previous rows in place rather than clearing them —
+     *  and says so: null once the server answered, else what went wrong (the
+     *  forwarder never calls a Live ended on a fetch that failed). */
+    suspend fun refresh(): Throwable? {
+        val rows = try {
+            Net.client.api.getLiveNow().data
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return e
+        }
         ingest(rows)
+        return null
     }
 
     /** Fold a fresh `/live/now` result (however it was fetched — Home's own

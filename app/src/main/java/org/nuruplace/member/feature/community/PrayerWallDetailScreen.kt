@@ -15,16 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerCommentBody
 import org.nuruplace.member.data.net.PrayerWallDetail
@@ -52,18 +49,23 @@ import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.components.voiceClock
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.relTime
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
 fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(GrowPal.coolPaper).imePadding()) {
+    // Warm paper (§8.1 rule 1; final walk C16), as the wall itself.
+    Column(Modifier.fillMaxSize().background(GrowPal.paper).imePadding()) {
         AsyncContent(key = postId, load = { Net.client.api.prayerWallGet(postId) }) { detail: PrayerWallDetail, reload ->
             val scope = rememberCoroutineScope()
+            val context = androidx.compose.ui.platform.LocalContext.current
             val player = remember { VoicePlayer() }
             DisposableEffect(Unit) { onDispose { player.release() } }
             val p = detail.post
@@ -79,8 +81,8 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                     Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                Text("Prayer", style = gSerif(20, FontWeight.SemiBold), color = Color.White)
+                ) { Icon(Lucide.ArrowLeft, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                Text("Prayer", style = gSerif(22, FontWeight.SemiBold), color = Color.White)
             }
 
             // Content
@@ -131,9 +133,8 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                                         .border(1.dp, if (mine) GrowPal.gold else GrowPal.border, Capsule)
                                         .clickable {
                                             scope.launch {
-                                                try {
-                                                    Net.client.api.prayerWallReact(p.postId, ReactBody(emoji)); reload()
-                                                } catch (_: Exception) {}
+                                                noticeOnFailure(context) { Net.client.api.prayerWallReact(p.postId, ReactBody(emoji)) }
+                                                    ?.let { reload() }
                                             }
                                         }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -181,10 +182,23 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                 }
             }
 
-            // Composer bar
+            // Composer bar — the screen's imePadding lifts it over the
+            // keyboard; with the keyboard down it clears the gesture bar.
+            // What the member wrote stays until the server has it (§7.4): a
+            // failed comment keeps its words — and its ids, so sending again
+            // can't post it twice — and says why above the field.
             var text by remember { mutableStateOf("") }
+            var sending by remember { mutableStateOf(false) }
+            var commentError by remember { mutableStateOf<String?>(null) }
+            var commentIds by remember { mutableStateOf<Pair<String, String>?>(null) }
+            commentError?.let {
+                Text(
+                    it, style = gInter(12), color = Nuru.danger,
+                    modifier = Modifier.fillMaxWidth().background(GrowPal.paper).padding(horizontal = 16.dp).padding(top = 8.dp),
+                )
+            }
             Row(
-                Modifier.fillMaxWidth().background(GrowPal.coolPaper)
+                Modifier.fillMaxWidth().background(GrowPal.paper).navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -198,7 +212,7 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                 ) {
                     if (text.isBlank()) Text("Encourage them…", style = gInter(14), color = GrowPal.ink400)
                     BasicTextField(
-                        text, { text = it },
+                        text, { text = it; commentError = null },
                         textStyle = gInter(14).copy(color = GrowPal.ink),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -216,24 +230,31 @@ fun PrayerWallDetailScreen(postId: String, onBack: () -> Unit) {
                 ) { t -> text = t }
                 Box(
                     Modifier.size(44.dp).clip(CircleShape).background(GrowPal.navy)
-                        .clickable {
+                        .clickable(enabled = !sending) {
                             if (text.isNotBlank()) {
                                 val body = text
+                                val ids = commentIds ?: (UUID.randomUUID().toString() to UUID.randomUUID().toString()).also { commentIds = it }
+                                sending = true
+                                commentError = null
                                 scope.launch {
                                     try {
-                                        Net.client.api.prayerWallComment(
-                                            postId,
-                                            PrayerCommentBody(UUID.randomUUID().toString(), body.trim(), UUID.randomUUID().toString()),
-                                        )
+                                        Net.client.api.prayerWallComment(postId, PrayerCommentBody(ids.first, body.trim(), ids.second))
+                                        if (text == body) text = ""
+                                        commentIds = null
                                         reload()
-                                    } catch (_: Exception) {}
+                                    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                                        throw c
+                                    } catch (e: Exception) {
+                                        commentError = ApiException.failureLine(ApiException.SEND_FAILED, e, context)
+                                    } finally {
+                                        sending = false
+                                    }
                                 }
-                                text = ""
                             }
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(17.dp))
+                    Icon(Lucide.Send, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -254,7 +275,7 @@ private fun VoicePrayerRow(id: String, url: String, wave: List<Int>, player: Voi
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) Lucide.Pause else Lucide.Play,
             if (playing) "Pause voice prayer" else "Play voice prayer",
             tint = GrowPal.navyDeep,
             modifier = Modifier.size(18.dp),
@@ -267,7 +288,7 @@ private fun VoicePrayerRow(id: String, url: String, wave: List<Int>, player: Voi
             maxBarHeight = 20.dp,
         )
         if (playing && player.durationSec > 0) {
-            Text(voiceClock(player.durationSec), style = gInter(10, FontWeight.Bold), color = GrowPal.ink400)
+            Text(voiceClock(player.durationSec), style = gInter(11, FontWeight.Bold), color = GrowPal.ink400)
         }
     }
 }

@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -195,7 +195,7 @@ fun rememberBroadcastStepUp(): BroadcastStepUp {
 @Composable
 fun BroadcastStepUpDialog(stepUp: BroadcastStepUp, reason: String) {
     if (!stepUp.asking) return
-    AlertDialog(
+    NuruAlertDialog(
         onDismissRequest = { stepUp.cancel() },
         containerColor = CHAT.white,
         title = { Text("Confirm it's you", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },

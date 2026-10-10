@@ -12,19 +12,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -39,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,11 +60,9 @@ import org.nuruplace.member.feature.grow.GrowHubScreen
 import org.nuruplace.member.feature.grow.MemoryVerseScreen
 import org.nuruplace.member.feature.grow.PlanDayScreen
 import org.nuruplace.member.feature.grow.PlanDetailScreen
-import org.nuruplace.member.feature.grow.PlanSegmentScreen
 import org.nuruplace.member.feature.grow.ReadingPlansScreen
 import org.nuruplace.member.feature.grow.VerseLibraryScreen
 import org.nuruplace.member.feature.community.ChatThreadScreen
-import org.nuruplace.member.feature.community.CommunityHubScreen
 import org.nuruplace.member.feature.community.PrayerWallDetailScreen
 import org.nuruplace.member.feature.events.AllEventsCalendarScreen
 import org.nuruplace.member.feature.events.EventDetailScreen
@@ -88,6 +86,7 @@ import org.nuruplace.member.ui.components.CelebrationHost
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
@@ -96,18 +95,37 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
  *  each pre-selecting its segment in the SAME [YouScreen]; "Give" is "give"
  *  (opens on Give) plus "partners" (opens on Partners) in the SAME
  *  [GiveTabScreen]. Every nav call site that targets one of these by name —
- *  FCM pushes, NotificationsScreen.routeFor, Home's onSelectTab/onOpenGive,
- *  CommunityHubScreen — keeps landing correctly with zero edits, and the
+ *  FCM pushes, NotificationsScreen.routeFor, Home's onSelectTab/onOpenGive —
+ *  keeps landing correctly with zero edits, and the
  *  bottom bar must recognize every alias as "that tab is active". */
 private const val YOU_TAB_ROUTE = "you"
 private const val GIVE_TAB_ROUTE = "give"
 private const val EVENTS_TAB_ROUTE = "events"
 /** The Give tab opened on Give with a department need preset (docs/
  *  PARTNERS_PROGRAMME.md §4) — built by feature/give/GiveShared.giveToNeedRoute. */
-private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={title}"
+private const val GIVE_NEED_ROUTE = "give-need/{needId}?amount={amount}&title={title}&currency={currency}"
+/** The Give tab on one gift's result — a giving_gift_failed push (Giving
+ *  Cycle 3), built by feature/give/GivingRoutes.giftRoute. */
+private const val GIVE_GIFT_ROUTE = "give-gift/{id}"
+/** The Give tab on Partners with one pledge open — a Partners notice, a
+ *  pledge's collector saying "Change it on the pledge", or a pledge made
+ *  without its automatic collection (Giving Cycle 5); built by
+ *  feature/give/GivingRoutes.pledgeRoute. */
+private const val PARTNERS_PLEDGE_ROUTE = "partners-pledge/{pledgeId}"
 private val YOU_ALIAS_ROUTES = setOf(YOU_TAB_ROUTE, "chat", "profile", "departments")
-private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE)
+private val GIVE_ALIAS_ROUTES = setOf(GIVE_TAB_ROUTE, "partners", GIVE_NEED_ROUTE, GIVE_GIFT_ROUTE, PARTNERS_PLEDGE_ROUTE)
 private val EVENTS_ALIAS_ROUTES = setOf(EVENTS_TAB_ROUTE)
+
+/** The Live forwarder a tapped Live notice lands on (see its composable). */
+private const val LIVE_NOW_ROUTE = "live-now?streamId={streamId}&title={title}"
+
+/** Where the Live forwarder stopped short of the player. */
+private sealed interface LiveNowOutcome {
+    /** The stream is over (or nothing is live): "This Live has ended". */
+    data object Ended : LiveNowOutcome
+    /** GET /live/now didn't answer — said in the state language (§4). */
+    data class Failed(val message: org.nuruplace.member.data.net.StateMessage) : LiveNowOutcome
+}
 
 /** The partners statement for one year (docs/PARTNERS_PROGRAMME.md §3; owner
  *  2026-09-25) — built by feature/give/PartnersStatementScreen.partnersStatementRoute. */
@@ -115,7 +133,11 @@ private const val PARTNERS_STATEMENT_ROUTE = "partners-statement?year={year}"
 
 /** Pushed sub-routes that belong to a tab for HIGHLIGHTING (they carry their
  *  own back button and no bottom bar, exactly as before — see `onTab`). */
-private val GIVE_SUB_ROUTES = setOf("statement", "schedules", "receipt/{id}", PARTNERS_STATEMENT_ROUTE)
+/** The recurring-gifts list, optionally with one schedule open (a schedule
+ *  push, Giving Cycle 4) — built by feature/give/GivingRoutes.scheduleRoute;
+ *  a plain nav.navigate("schedules") still matches. */
+private const val SCHEDULES_ROUTE = "schedules?open={open}"
+private val GIVE_SUB_ROUTES = setOf("statement", SCHEDULES_ROUTE, "receipt/{id}", PARTNERS_STATEMENT_ROUTE)
 private val EVENTS_SUB_ROUTES = setOf("events-calendar", "event/{id}?end={end}", "checkin/{id}", "announcements", "announcement/{id}", "attendance", "service-checkin")
 
 /** Which bottom tab a NavHost route belongs to, or null for none. */
@@ -127,16 +149,29 @@ private fun tabRouteFor(route: String?): String? = when {
     else -> route
 }
 
-/** Tab-LEVEL routes — the ones the bottom bar shows on. */
-private val TAB_LEVEL_ROUTES = YOU_ALIAS_ROUTES + GIVE_ALIAS_ROUTES + EVENTS_ALIAS_ROUTES
+/** A tab's own top-level pages (its segments): re-tapping the tab there
+ *  leaves them be. */
+private val TAB_SEGMENT_ROUTES = YOU_ALIAS_ROUTES + setOf("partners")
+
+/** The pages inside a tab that are flows or ceremonies — they cover the tab
+ *  bar (the QR scanner, the check-in ceremony); the new pledge and the M-Pesa
+ *  stages cover it themselves (TabBarCover). */
+private val TAB_FLOW_ROUTES = setOf("checkin/{id}", "service-checkin")
+
+/** Tab-LEVEL routes — the ones the bottom bar shows on. One rule for the pages
+ *  inside a tab (Cycle 3 close walk E25): a detail page keeps the tab bar — the
+ *  pledge page had it while the receipt and the statements didn't — and a
+ *  flow or a ceremony covers it. */
+private val TAB_LEVEL_ROUTES = YOU_ALIAS_ROUTES + GIVE_ALIAS_ROUTES + EVENTS_ALIAS_ROUTES +
+    GIVE_SUB_ROUTES + (EVENTS_SUB_ROUTES - TAB_FLOW_ROUTES)
 
 private val BASE_TABS = listOf(
-    Tab("home", "Home", Icons.Filled.Home),
-    Tab("pathway", "Pathway", Icons.Filled.MenuBook),
-    Tab("plans", "Plans", Icons.Filled.Bookmark),
-    Tab(EVENTS_TAB_ROUTE, "Events", Icons.Filled.Event),
-    Tab(GIVE_TAB_ROUTE, "Give", Icons.Filled.VolunteerActivism),
-    Tab(YOU_TAB_ROUTE, "You", Icons.Filled.Person),
+    Tab("home", "Home", Lucide.Home),
+    Tab("pathway", "Pathway", Lucide.BookOpen),
+    Tab("plans", "Plans", Lucide.BookMarked),
+    Tab(EVENTS_TAB_ROUTE, "Events", Lucide.Calendar),
+    Tab(GIVE_TAB_ROUTE, "Give", Lucide.HandHeart),
+    Tab(YOU_TAB_ROUTE, "You", Lucide.User),
 )
 
 @Composable
@@ -184,6 +219,14 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
         org.nuruplace.member.data.ScreenTracker.appDidEnterBackground()
     }
+    // The bells' one count (InboxUnread, EXPERIENCE.md §7.2 #4): asked every
+    // time the app comes to the foreground — and nobody's once signed out.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) {
+        org.nuruplace.member.ui.components.InboxUnread.refreshSoon()
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { org.nuruplace.member.ui.components.InboxUnread.clear() }
+    }
 
     // Launcher-shortcut / notification destination (long-press icon → Radio,
     // Pathway, Prayer Wall, Give; nuru://join/{token} deep links). Keyed off
@@ -193,7 +236,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
     // Consumed once per value so recompositions don't re-navigate.
     LaunchedEffect(org.nuruplace.member.PendingDest.route) {
         org.nuruplace.member.PendingDest.consume()?.let { dest ->
-            nav.navigate(dest) { launchSingleTop = true }
+            // A destination this build doesn't have — a stale pinned shortcut,
+            // another app's intent naming a route that's gone — is logged and
+            // dropped, and the member stays where they are. It crashed the app
+            // ("Navigation destination that matches route … cannot be found").
+            try {
+                nav.navigate(dest) { launchSingleTop = true }
+            } catch (e: IllegalArgumentException) {
+                android.util.Log.w("MainShell", "No destination \"$dest\" in this build — ignored", e)
+            }
         }
     }
 
@@ -253,13 +304,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
         }
     }
 
+    // A full-screen flow over the tab bar (TabBarCover — the new pledge,
+    // EXPERIENCE.md §7.3): no bottom chrome at all while it is open.
+    val covered = org.nuruplace.member.ui.components.TabBarCover.active
     Scaffold(
         containerColor = Nuru.paper,
         bottomBar = {
             // Both bars sit ABOVE the bottom nav (when the bottom nav is
             // even showing — they also float on non-tab screens like a
             // module reader, since "not on Home" is the only scope rule).
-            Column {
+            if (!covered) Column {
                 if (showBroadcastBar) {
                     org.nuruplace.member.feature.live.BroadcastReturnBar(
                         session = activeBroadcast!!, elapsedSec = broadcastElapsed,
@@ -274,6 +328,17 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         nav.navigate(liveNowRoute(stream))
                     }
                 }
+                // On a page with no tab bar the bottom-most strip sat on the
+                // screen's edge — under the gesture handle, or behind the
+                // three buttons (§7.1 rule 3). Its colour runs on under the
+                // system bar, so its words sit clear of it.
+                if (!onTab && (showAppLiveBar || showBroadcastBar)) {
+                    Spacer(
+                        Modifier.fillMaxWidth()
+                            .background(if (showAppLiveBar) Nuru.navy else Nuru.danger.copy(alpha = 0.92f))
+                            .windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars),
+                    )
+                }
                 if (onTab) {
                     NavigationBar(containerColor = Nuru.white) {
                         tabs.forEach { tab ->
@@ -283,7 +348,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                             NavigationBarItem(
                                 selected = isSelected,
                                 onClick = {
-                                    if (!isSelected) {
+                                    // Another tab — or this tab from one of its
+                                    // detail pages (they keep the bar now): back
+                                    // to the tab's own page.
+                                    if (!isSelected || route != tab.route && route !in TAB_SEGMENT_ROUTES) {
                                         org.nuruplace.member.ui.components.Haptics.tick(rootView)
                                         nav.navigate(tab.route) {
                                             popUpTo("home"); launchSingleTop = true
@@ -308,7 +376,10 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                                         Icon(tab.icon, tab.label, modifier = Modifier.size(22.dp))
                                     }
                                 },
-                                label = { Text(tab.label, style = NuruType.micro.copy(fontSize = 10.sp), maxLines = 1, softWrap = false) },
+                                // Six tabs keep the standard size, as the system's own
+                                // bars do — at the largest text they read "Hom",
+                                // "Pathw" (§9.6 #4; iOS 84d2acb).
+                                label = { org.nuruplace.member.ui.components.CappedFontScale(1f) { Text(tab.label, style = NuruType.micro, maxLines = 1, softWrap = false) } },
                                 alwaysShowLabel = true,
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Nuru.navyDeep,
@@ -331,11 +402,38 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // LiveHudOverlay) rather than being pre-inset by Scaffold's padding
             // the way every other destination is.
             val contentPadding = if (onLiveBroadcast) androidx.compose.foundation.layout.PaddingValues(0.dp) else pad
-            // While the server is away and screens show their last good copies, say so once, here.
+            // While the server is away and screens show their last good copies,
+            // say so once, here — ABOVE the page, never over its header: the
+            // page is inset by the banner's height (EXPERIENCE.md §9.7 M3; on
+            // the final walk it hid Home's date, scan and bell, every tab's
+            // kicker and bell, and pushed pages' back buttons).
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            var bannerHeight by remember { mutableStateOf(0.dp) }
             org.nuruplace.member.ui.components.ServerReachBanner(
-                Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding()).zIndex(1f),
+                Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding()).zIndex(1f)
+                    .onSizeChanged { bannerHeight = with(density) { it.height.toDp() } },
             )
-            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding)) {
+            // A new page in front: nothing it shows is a saved copy until a
+            // read is served from one.
+            LaunchedEffect(backStack?.destination?.route, backStack?.arguments?.toString()) {
+                org.nuruplace.member.data.net.ServerReach.newPage()
+            }
+            // A quick action the server didn't record says so here, once
+            // (EXPERIENCE.md §7.4) — above the bars, clear of the gesture bar.
+            val navBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
+                .asPaddingValues().calculateBottomPadding()
+            org.nuruplace.member.ui.components.QuickNoticeHost(
+                Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = maxOf(contentPadding.calculateBottomPadding(), navBottom) + 12.dp)
+                    .zIndex(2f),
+            )
+            // The bars below already take the system bar's room: a page that
+            // pads for the system bar itself (a composer, a reader's button)
+            // isn't lifted twice over a live strip, and a keyboard lifts a
+            // page only as far as the bars don't already (consumeWindowInsets,
+            // the bottom edge only — the top is the pages' own business).
+            val shellBottom = androidx.compose.foundation.layout.PaddingValues(bottom = contentPadding.calculateBottomPadding())
+            NavHost(nav, startDestination = "home", modifier = Modifier.padding(contentPadding).padding(top = bannerHeight).consumeWindowInsets(shellBottom)) {
             composable("home") {
                 HomeScreen(
                     me,
@@ -359,6 +457,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenMentor = { nav.navigate("discipleship") },
                     onOpenMap = { nav.navigate("pathway-map") },
                     onOpenWalk = { nav.navigate("your-walk") },
+                    onOpenNotifications = { nav.navigate("notifications") },
                 )
             }
             composable("your-walk") {
@@ -474,15 +573,6 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     }
                 }
             }
-            composable(
-                "plan/{id}/day/{n}/seg/{i}",
-                arguments = listOf(navArgument("id") { type = NavType.StringType }, navArgument("n") { type = NavType.IntType }, navArgument("i") { type = NavType.IntType }),
-            ) { entry ->
-                val id = entry.arguments?.getString("id") ?: ""
-                val n = entry.arguments?.getInt("n") ?: 1
-                val i = entry.arguments?.getInt("i") ?: 0
-                PlanSegmentScreen(planId = id, dayNumber = n, index = i, onBack = { nav.popBackStack() }, onContinue = { next -> nav.navigate("plan/$id/day/$n/seg/$next") })
-            }
             composable("discipleship") {
                 org.nuruplace.member.feature.discipleship.DiscipleshipHubScreen(
                     onBack = { nav.popBackStack() },
@@ -510,7 +600,6 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 )
             }
             composable("verses") { VerseLibraryScreen(onBack = { nav.popBackStack() }) }
-            composable("community") { CommunityHubScreen(onOpen = { nav.navigate(it) }) }
             // My Prayer Room — the single destination that replaced the separate
             // "prayers" (journal) and "prayer-wall" (wall) routes; ?tab picks
             // which of its two tabs opens first. A specific post still opens
@@ -544,7 +633,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             // default) plus the old standalone "chat"/"profile" routes, each
             // pre-selecting its own segment so every existing
             // nav.navigate("chat"/"profile") call site (FCM pushes,
-            // NotificationsScreen, Home's onSelectTab, CommunityHubScreen)
+            // NotificationsScreen, Home's onSelectTab)
             // keeps landing correctly. isStaff/pastoralEligible mirror the
             // OLD "chat" composable's gating exactly (product decision,
             // 2026-07 / Chat Redesign C4).
@@ -711,7 +800,16 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNavigate = { nav.navigate(it) },
                 )
             }
-            composable("schedules") { org.nuruplace.member.feature.give.SchedulesScreen(onBack = { nav.popBackStack() }) }
+            composable(
+                SCHEDULES_ROUTE,
+                arguments = listOf(navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.SchedulesScreen(
+                    onBack = { nav.popBackStack() },
+                    openScheduleId = entry.arguments?.getString("open")?.takeIf { it.isNotBlank() },
+                    onOpenPledge = { nav.navigate(org.nuruplace.member.feature.give.pledgeRoute(it)) },
+                )
+            }
             composable("announcements") {
                 org.nuruplace.member.feature.events.AnnouncementsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate("announcement/$it") })
             }
@@ -748,6 +846,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     initialYear = entry.arguments?.getInt("year")?.takeIf { it > 0 },
                     onBack = { nav.popBackStack() },
                     onOpenReceipt = { nav.navigate("receipt/$it") },
+                    // A COMMITMENTS row → that pledge's own page (iOS).
+                    onOpenPledge = { nav.navigate(org.nuruplace.member.feature.give.pledgeRoute(it)) },
                     onOpenGivingStatement = { nav.navigate("statement") },
                     memberName = me?.profile?.fullName,
                 )
@@ -761,6 +861,18 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onNavigate = { nav.navigate(it) },
                 )
             }
+            // Partners with one pledge open (Giving Cycle 5): its payments,
+            // what the member told the office, and its actions.
+            composable(
+                PARTNERS_PLEDGE_ROUTE,
+                arguments = listOf(navArgument("pledgeId") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Partners,
+                    onNavigate = { nav.navigate(it) },
+                    openPledgeId = entry.arguments?.getString("pledgeId")?.takeIf { it.isNotBlank() },
+                )
+            }
             // Give, preset for a department need (spec §4): fund "gift", the
             // need's remaining amount, and need_id carried into the intent.
             composable(
@@ -769,6 +881,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     navArgument("needId") { type = NavType.StringType },
                     navArgument("amount") { type = NavType.IntType; defaultValue = 0 },
                     navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    // The need's currency (Giving Cycle 5) — absent = shillings.
+                    navArgument("currency") { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { entry ->
                 val needId = entry.arguments?.getString("needId") ?: ""
@@ -780,7 +894,21 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                         amountMinor = entry.arguments?.getInt("amount")?.takeIf { it > 0 },
                         needId = needId.ifBlank { null },
                         title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() },
+                        currency = entry.arguments?.getString("currency")?.takeIf { it.isNotBlank() },
                     ),
+                )
+            }
+            // Give, opened on one gift's result (Giving Cycle 3): a
+            // giving_gift_failed push lands here — the reason, the hint and
+            // Try again — and the member stays on the Give tab after.
+            composable(
+                GIVE_GIFT_ROUTE,
+                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            ) { entry ->
+                org.nuruplace.member.feature.give.GiveTabScreen(
+                    initial = org.nuruplace.member.feature.give.GiveSegment.Give,
+                    onNavigate = { nav.navigate(it) },
+                    followTransactionId = entry.arguments?.getString("id")?.takeIf { it.isNotBlank() },
                 )
             }
             composable(
@@ -794,6 +922,8 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     // below us (one of its rows opened this receipt), else push
                     // it — never two statements on the stack.
                     onOpenStatement = { nav.navigate("statement") { popUpTo("statement"); launchSingleTop = true } },
+                    // The Pledge row opens that pledge's own page (iOS pledgeRow).
+                    onOpenPledge = { nav.navigate(org.nuruplace.member.feature.give.pledgeRoute(it)) },
                 )
             }
             composable("profile") {
@@ -817,26 +947,72 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 org.nuruplace.member.feature.live.LiveTabScreen(me = me, onNavigate = { nav.navigate(it) })
             }
             // Nuru Live discovery — the lightweight forwarding destination a
-            // routed live_stream_started notification tap lands on (see
-            // NuruMessagingService.destFor). The push payload alone lacks
-            // kind/viewers/startedAt, so this re-fetches GET /live/now itself
-            // and forwards straight into the newest watchable stream's player
-            // (never rendered long enough to need its own back-stack entry —
-            // it immediately replaces itself), or back to Home (which shows
-            // its own banner/mini-window) if nothing is watchable anymore.
-            composable("live-now") {
-                androidx.compose.runtime.LaunchedEffect(Unit) {
-                    LiveDiscoveryCenter.refresh()
-                    val newest = LiveDiscoveryCenter.newestWatchable
-                    if (newest != null) {
-                        LiveDiscoveryCenter.markSeen(newest.streamId)
-                        nav.navigate(liveNowRoute(newest)) { popUpTo("home") }
+            // tapped Live notice lands on: a push, or its row in the inbox —
+            // one router (NuruMessagingService.destFor, EXPERIENCE.md §7.2
+            // #3). A notice alone lacks kind/viewers/startedAt, so this
+            // re-fetches GET /live/now itself and forwards straight into the
+            // player — replacing itself, so Back returns to wherever the tap
+            // came from (the inbox, Home) — or, once the stream is over, says
+            // so calmly: "This Live has ended" and its name (LiveEndedState),
+            // never a bounce to Home. `?streamId=` names the stream to open —
+            // a Live notice's own stream (`&title=` its name), or a ringing
+            // invite's Join (LiveInvite.kt),
+            // which has already accepted by the time it lands here, so the
+            // player's first pulse finds this member on the stage; without it,
+            // the newest watchable one. A named stream that has ended is never
+            // swapped for some other stream. A fetch that fails says what
+            // happened (§4) — never "ended" on a guess.
+            composable(
+                LIVE_NOW_ROUTE,
+                arguments = listOf(
+                    navArgument("streamId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    // The Live's name, from the notice — said if it has ended.
+                    navArgument("title") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { entry ->
+                val wanted = entry.arguments?.getString("streamId")
+                val wantedName = entry.arguments?.getString("title")
+                val context = androidx.compose.ui.platform.LocalContext.current
+                // null while looking; then the Live has ended, or the fetch failed.
+                var outcome by remember { androidx.compose.runtime.mutableStateOf<LiveNowOutcome?>(null) }
+                var attempt by remember { mutableIntStateOf(0) }
+                androidx.compose.runtime.LaunchedEffect(wanted, attempt) {
+                    outcome = null
+                    // Already watching the invited stream: go back to THAT
+                    // player, whose own pulse picks the accept up. Opening a
+                    // second one would dispose the first — and a player that
+                    // had already started for the stage leaves it as it goes.
+                    val below = nav.previousBackStackEntry
+                    if (!wanted.isNullOrBlank() && below?.destination?.route?.startsWith("live-player") == true &&
+                        below.arguments?.getString("streamId") == wanted
+                    ) {
+                        nav.popBackStack()
+                        return@LaunchedEffect
+                    }
+                    val failed = LiveDiscoveryCenter.refresh()
+                    if (failed != null) {
+                        outcome = LiveNowOutcome.Failed(org.nuruplace.member.data.net.ApiException.state(failed, context))
+                        return@LaunchedEffect
+                    }
+                    val target = org.nuruplace.member.feature.live.liveForwardTarget(LiveDiscoveryCenter.streams.value, wanted)
+                    if (target != null) {
+                        LiveDiscoveryCenter.markSeen(target.streamId)
+                        nav.navigate(liveNowRoute(target)) { popUpTo(LIVE_NOW_ROUTE) { inclusive = true } }
                     } else {
-                        nav.navigate("home") { popUpTo("home") { inclusive = true } }
+                        outcome = LiveNowOutcome.Ended
                     }
                 }
-                Box(Modifier.fillMaxSize().background(Nuru.paper), contentAlignment = Alignment.Center) {
-                    androidx.compose.material3.CircularProgressIndicator(color = Nuru.gold)
+                when (val o = outcome) {
+                    LiveNowOutcome.Ended -> org.nuruplace.member.feature.live.LiveEndedState(name = wantedName, onBack = { nav.popBackStack() })
+                    is LiveNowOutcome.Failed -> Box(
+                        Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        org.nuruplace.member.ui.components.FailedState(o.message, onRetry = { attempt++ }, onBack = { nav.popBackStack() })
+                    }
+                    null -> Box(Modifier.fillMaxSize().background(Nuru.paper), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.CircularProgressIndicator(color = Nuru.gold)
+                    }
                 }
             }
             composable(
@@ -853,8 +1029,29 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             composable("resources") { ResourcesScreen(onBack = { nav.popBackStack() }) }
             composable("assistant") { AssistantScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { org.nuruplace.member.feature.profile.SettingsScreen(onBack = { nav.popBackStack() }, onOpen = { nav.navigate(it) }) }
-            composable("firebase-account") { org.nuruplace.member.feature.profile.FirebaseAccountScreen(onBack = { nav.popBackStack() }) }
             composable("mentor") { org.nuruplace.member.feature.profile.MentorScreen(onBack = { nav.popBackStack() }) }
+            // The letters archive (the editorial Sunday Letter's "Last week: …",
+            // owner 2026-10-07) — opened on one letter when `open` names it.
+            composable(
+                org.nuruplace.member.feature.home.LETTERS_ROUTE,
+                arguments = listOf(navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                org.nuruplace.member.feature.home.LettersArchiveScreen(
+                    openLetterId = entry.arguments?.getString("open"),
+                    onBack = { nav.popBackStack() },
+                    onNavigate = { nav.navigate(it) },
+                    onSelectTab = { r -> nav.navigate(r) { popUpTo("home"); launchSingleTop = true } },
+                )
+            }
+            // "Ask to be connected" (EXPERIENCE.md §9.2 #12) — YOUR WEEK's
+            // Cell row for a member with no cell. Already in one: the cell page.
+            composable("cell-connect") {
+                org.nuruplace.member.feature.home.CellConnectScreen(
+                    onBack = { nav.popBackStack() },
+                    onInCell = { nav.navigate("cell-info") { popUpTo("cell-connect") { inclusive = true } } },
+                    onOpenThread = { nav.navigate("chat/$it?ctx=pastoral") },
+                )
+            }
             composable("cell-info") {
                 org.nuruplace.member.feature.home.CellInfoScreen(
                     me = me,
@@ -912,10 +1109,23 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onOpenReplays = { nav.navigate("live-replays") { popUpTo("home") } },
                 )
             }
-            composable("live-replays") {
+            // Optional scope: the cell page opens its own cell's replays
+            // ("live-replays?scope=cell&cellId=…", EXPERIENCE.md §7.4 #16, as
+            // iOS); a bare "live-replays" is every replay, as before.
+            composable(
+                "live-replays?scope={scope}&cellId={cellId}&cellName={cellName}",
+                arguments = listOf(
+                    navArgument("scope") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("cellId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("cellName") { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { entry ->
                 org.nuruplace.member.feature.live.LiveReplaysScreen(
                     onBack = { nav.popBackStack() },
                     onOpenRecording = { row -> nav.navigate(org.nuruplace.member.feature.live.liveRecordingRoute(row)) },
+                    scope = entry.arguments?.getString("scope"),
+                    cellId = entry.arguments?.getString("cellId"),
+                    cellName = entry.arguments?.getString("cellName"),
                 )
             }
             // Nuru Live (L3, broadcaster) — the setup sheet (Home/CellInfo)
@@ -981,6 +1191,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                     onBack = { nav.popBackStack() },
                     onTakeQuiz = { nav.navigate("quiz/$it") },
                     onCompleted = { nav.popBackStack() },
+                    onOpenExam = { nav.navigate("exam/$it") },
                 )
             }
             composable(
@@ -990,7 +1201,7 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
                 val id = entry.arguments?.getString("moduleId") ?: ""
                 QuizScreen(
                     title = "Quiz",
-                    loadQuestions = { Net.client.api.quiz(id).questions },
+                    load = { org.nuruplace.member.feature.pathway.QuizSet(Net.client.api.quiz(id).questions) },
                     submit = { answers, mut ->
                         val r = Net.client.api.submitQuiz(id, SubmitBody(mut, answers))
                         QuizVerdict(r.scoreAchieved, r.passMark, r.isPassed, r.requiresManualReview)
@@ -1006,8 +1217,15 @@ fun MainShell(auth: AuthStore, me: MeResponse?) {
             ) { entry ->
                 val n = entry.arguments?.getInt("n") ?: 1
                 QuizScreen(
-                    title = "Level $n exam",
-                    loadQuestions = { Net.client.api.levelExam(n).questions },
+                    // One name (EXPERIENCE.md §9.1 rule 1); its front door
+                    // names the count and the pass mark the server sends (rule 2).
+                    title = org.nuruplace.member.feature.pathway.ExamWords.name(n),
+                    load = {
+                        Net.client.api.levelExam(n).let { e ->
+                            org.nuruplace.member.feature.pathway.QuizSet(e.questions, e.questionCount, e.passMark)
+                        }
+                    },
+                    examLevel = n,
                     submit = { answers, mut ->
                         val r = Net.client.api.submitLevelExam(n, SubmitBody(mut, answers))
                         QuizVerdict(r.scoreAchieved, r.passMark, r.isPassed, r.requiresManualReview)

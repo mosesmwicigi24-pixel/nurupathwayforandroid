@@ -22,20 +22,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -74,6 +67,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // FORGOT requests the email; RESET is the "check your email" step (code + new
 // password) that follows it — same flow, same screen, per the login mockup.
@@ -102,13 +96,17 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         if (busy) return
         busy = true; error = null; info = null
         scope.launch {
-            try { block() } catch (e: Exception) { error = ApiException.message(e, context) } finally { busy = false }
+            // Every call here carries what the member typed: a 401 is "Invalid
+            // email or password", in the server's words — not an ended session.
+            try { block() } catch (e: Exception) { error = ApiException.message(e, context, credentials = true) } finally { busy = false }
         }
     }
 
     Column(
+        // Clear of the navigation bar, gesture or 3-button (§7.1 rule 3); the
+        // keyboard's inset includes it, so the two never add up.
         Modifier.fillMaxSize().background(Nuru.navyCeremony)
-            .imePadding().padding(horizontal = Spacing.lg),
+            .navigationBarsPadding().imePadding().padding(horizontal = Spacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // ── Upper third — brand (Nuru Place · missionary caption) ──
@@ -116,7 +114,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         CrossMark()
         Text(
             "Nuru Place",
-            style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 36.sp, letterSpacing = (-1.08).sp),
+            style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, letterSpacing = (-0.84).sp),
             color = Color.White,
             modifier = Modifier.padding(top = Spacing.base),
         )
@@ -131,7 +129,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
         }
         Text(
             "A MISSIONARY SENDING CHURCH",
-            style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 10.sp, letterSpacing = 1.8.sp),
+            style = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 1.8.sp),
             color = Color.White.copy(alpha = 0.45f),
             modifier = Modifier.padding(top = 12.dp),
         )
@@ -163,13 +161,13 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
 
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
             when {
-                mfaToken != null -> DarkField("VERIFICATION CODE", code, { code = it }, Icons.Outlined.Lock, "123456", keyboardType = KeyboardType.Number)
+                mfaToken != null -> DarkField("VERIFICATION CODE", code, { code = it }, Lucide.Lock, "123456", keyboardType = KeyboardType.Number)
                 mode == Mode.REGISTER -> {
-                    DarkField("FULL NAME", fullName, { fullName = it }, Icons.Outlined.Person, "Your name")
-                    DarkField("EMAIL ADDRESS", email, { email = it }, Icons.Outlined.MailOutline, "name@email.com", keyboardType = KeyboardType.Email)
-                    DarkField("PASSWORD", password, { password = it }, Icons.Outlined.Lock, "At least 8 characters", isPassword = true, showPw = showPw, onTogglePw = { showPw = !showPw })
+                    DarkField("FULL NAME", fullName, { fullName = it }, Lucide.User, "Your name")
+                    DarkField("EMAIL ADDRESS", email, { email = it }, Lucide.Mail, "name@email.com", keyboardType = KeyboardType.Email)
+                    DarkField("PASSWORD", password, { password = it }, Lucide.Lock, "At least 8 characters", isPassword = true, showPw = showPw, onTogglePw = { showPw = !showPw })
                 }
-                mode == Mode.FORGOT -> DarkField("EMAIL ADDRESS", email, { email = it }, Icons.Outlined.MailOutline, "name@email.com", keyboardType = KeyboardType.Email)
+                mode == Mode.FORGOT -> DarkField("EMAIL ADDRESS", email, { email = it }, Lucide.Mail, "name@email.com", keyboardType = KeyboardType.Email)
                 mode == Mode.RESET -> {
                     // Accepts a pasted "XXXX-XXXX" straight from the email — strips
                     // whatever punctuation/case came along and re-inserts the dash,
@@ -180,18 +178,18 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                             val cleaned = input.uppercase().filter { it.isLetterOrDigit() }.take(8)
                             resetCode = if (cleaned.length > 4) "${cleaned.take(4)}-${cleaned.substring(4)}" else cleaned
                         },
-                        Icons.Outlined.Lock, "XXXX-XXXX",
+                        Lucide.Lock, "XXXX-XXXX",
                         monospace = true, capitalizeChars = true,
                     )
                     DarkField(
-                        "NEW PASSWORD", newPassword, { newPassword = it }, Icons.Outlined.Lock,
+                        "NEW PASSWORD", newPassword, { newPassword = it }, Lucide.Lock,
                         "At least 8 characters", isPassword = true, showPw = showNewPw,
                         onTogglePw = { showNewPw = !showNewPw },
                     )
                 }
                 else -> {
-                    DarkField("EMAIL ADDRESS", email, { email = it }, Icons.Outlined.MailOutline, "name@email.com", keyboardType = KeyboardType.Email)
-                    DarkField("PASSWORD", password, { password = it }, Icons.Outlined.Lock, "••••••••", isPassword = true, showPw = showPw, onTogglePw = { showPw = !showPw })
+                    DarkField("EMAIL ADDRESS", email, { email = it }, Lucide.Mail, "name@email.com", keyboardType = KeyboardType.Email)
+                    DarkField("PASSWORD", password, { password = it }, Lucide.Lock, "••••••••", isPassword = true, showPw = showPw, onTogglePw = { showPw = !showPw })
                 }
             }
 
@@ -206,7 +204,7 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                                 .background(if (remember_) Nuru.gold else Color.Transparent)
                                 .border(1.5.dp, if (remember_) Nuru.gold else Color.White.copy(alpha = 0.30f), RoundedCornerShape(6.dp)),
                             contentAlignment = Alignment.Center,
-                        ) { if (remember_) Icon(Icons.Filled.Check, null, tint = Nuru.navy, modifier = Modifier.size(13.dp)) }
+                        ) { if (remember_) Icon(Lucide.Check, null, tint = Nuru.navy, modifier = Modifier.size(14.dp)) }
                         Spacer(Modifier.width(Spacing.sm))
                         Text("Remember me", style = NuruType.caption, color = Nuru.onNavyDim)
                     }
@@ -296,7 +294,9 @@ fun LoginScreen(onAuthenticated: () -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(44.dp))
+        // 20dp above the navigation bar: the same 44dp from the bottom as
+        // before on a gesture-bar phone, and clear of a 3-button bar.
+        Spacer(Modifier.height(20.dp))
     }
 }
 
@@ -325,7 +325,7 @@ private fun SecondaryHeader(heading: String, subhead: String, onBack: () -> Unit
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.clickable { onBack() }.padding(bottom = Spacing.md),
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(14.dp))
+            Icon(Lucide.ArrowLeft, null, tint = Color.White, modifier = Modifier.size(14.dp))
             Text("Back", style = NuruType.caption, color = Color.White)
         }
         Text(heading, style = TextStyle(fontFamily = Fraunces, fontWeight = FontWeight.Bold, fontSize = 26.sp), color = Color.White, textAlign = TextAlign.Center)
@@ -398,7 +398,7 @@ private fun DarkField(
             }
             if (isPassword && onTogglePw != null) {
                 Box(Modifier.size(36.dp).clickable { onTogglePw() }, contentAlignment = Alignment.Center) {
-                    Icon(if (showPw) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle password", tint = Color.White.copy(alpha = 0.40f), modifier = Modifier.size(17.dp))
+                    Icon(if (showPw) Lucide.EyeOff else Lucide.Eye, "Toggle password", tint = Color.White.copy(alpha = 0.40f), modifier = Modifier.size(18.dp))
                 }
             }
         }

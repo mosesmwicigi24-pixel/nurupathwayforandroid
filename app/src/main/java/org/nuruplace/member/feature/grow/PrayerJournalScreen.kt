@@ -25,17 +25,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruAlertDialog
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -78,12 +69,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Active = still-open private prayers; Answered = resolved ones. Public so
  *  PrayerRoomScreen can pin its "Answered" tab straight to this filter. */
 enum class PrayerTab { Active, Answered }
 
-private val ShareOrange = Color(0xFFF97316)
+// On the Corporate wall reads navy — orange is no colour of ours (§8.1 rule 1).
+private val ShareOrange = Color(0xFF0B1F33)
 private val PrayerGold = Color(0xFFC9A227)
 
 @Composable
@@ -97,6 +90,10 @@ fun PrayerJournalScreen(
         var tab by remember { mutableStateOf(forcedTab ?: PrayerTab.Active) }
         var editing by remember { mutableStateOf<PrayerEntry?>(null) }
         var showComposer by remember { mutableStateOf(false) }
+        var composerSaving by remember { mutableStateOf(false) }
+        var composerError by remember { mutableStateOf<String?>(null) }
+        var composerIds by remember { mutableStateOf<Pair<String, String>?>(null) }
+        val journalContext = androidx.compose.ui.platform.LocalContext.current
         // Entry ids shared to Corporate Prayer during this session — session-
         // local exactly like iOS's `sharedToWall` (the server has no separate
         // "is this shared" flag on the entry; re-sharing is idempotent).
@@ -126,11 +123,12 @@ fun PrayerJournalScreen(
                     // surface in a single place (iOS build 80 parity).
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         if (forcedTab == null) {
-                            PrayerChip("Active (${active.size})", tab == PrayerTab.Active) { tab = PrayerTab.Active }
-                            PrayerChip("Answered (${answered.size})", tab == PrayerTab.Answered) { tab = PrayerTab.Answered }
+                            // No zero counts (§7.4 #9): "Answered", not "Answered (0)".
+                            PrayerChip(org.nuruplace.member.util.ZeroCounts.labelled("Active", active.size) { l, n -> "$l ($n)" }, tab == PrayerTab.Active) { tab = PrayerTab.Active }
+                            PrayerChip(org.nuruplace.member.util.ZeroCounts.labelled("Answered", answered.size) { l, n -> "$l ($n)" }, tab == PrayerTab.Answered) { tab = PrayerTab.Answered }
                         }
                         Spacer(Modifier.weight(1f))
-                        AddPrayerPill { editing = null; showComposer = true }
+                        AddPrayerPill { editing = null; composerIds = null; composerError = null; showComposer = true }
                     }
                 }
                 if (visible.isEmpty()) {
@@ -144,24 +142,29 @@ fun PrayerJournalScreen(
                             onReopenOrAnswer = {
                                 scope.launch {
                                     val dto = PrayerUpsertBody(entryId = e.entryId, title = e.title, body = e.body, isAnswered = !e.isAnswered, clientMutationId = UUID.randomUUID().toString())
-                                    runCatching { Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) } }
+                                    org.nuruplace.member.ui.components.noticeOnFailure(journalContext) {
+                                        Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) }
+                                    }
                                     reload()
                                 }
                             },
-                            onEdit = { editing = e; showComposer = true },
+                            onEdit = { editing = e; composerIds = null; composerError = null; showComposer = true },
                             onPublish = {
                                 scope.launch {
-                                    runCatching {
+                                    org.nuruplace.member.ui.components.noticeOnFailure(journalContext, lead = "Couldn't share that prayer.") {
                                         Net.client.api.sharePrayerToWall(e.entryId)
+                                    }?.let {
                                         sharedToWall = sharedToWall + e.entryId
-                                        CelebrationCenter.fire(Moment("prayer-share-${e.entryId}", "Shared to Corporate Prayer", "Your cell is standing with you 🙏", confetti = false))
+                                        CelebrationCenter.fire(Moment("prayer-share-${e.entryId}", "Shared to Corporate", org.nuruplace.member.feature.community.PrayerWallWords.POSTED, confetti = false))
                                     }
                                 }
                             },
                             onDelete = {
                                 scope.launch {
                                     val payload = kotlinx.serialization.json.buildJsonObject { put("entry_id", kotlinx.serialization.json.JsonPrimitive(e.entryId)) }
-                                    runCatching { Net.client.offline.runOrQueue("prayer_entries", "delete", payload) { Net.client.api.deletePrayer(e.entryId) } }
+                                    org.nuruplace.member.ui.components.noticeOnFailure(journalContext, lead = "Couldn't delete that prayer.") {
+                                        Net.client.offline.runOrQueue("prayer_entries", "delete", payload) { Net.client.api.deletePrayer(e.entryId) }
+                                    }
                                     reload()
                                 }
                             },
@@ -172,21 +175,38 @@ fun PrayerJournalScreen(
         }
 
         if (showComposer) {
+            // Closes once the server — or, offline, the queue (§1.7) — has the
+            // prayer; a refusal keeps the words in the dialog and says why
+            // (§7.4, §4). It used to close and lose the prayer.
             PrayerComposerDialog(
                 draft = editing,
-                onDismiss = { showComposer = false },
+                onDismiss = { showComposer = false; composerError = null },
+                saving = composerSaving,
+                error = composerError,
                 onSave = { title, body, answered2 ->
+                    composerSaving = true
+                    composerError = null
                     scope.launch {
+                        val ids = composerIds ?: ((editing?.entryId ?: UUID.randomUUID().toString()) to UUID.randomUUID().toString()).also { composerIds = it }
                         val dto = PrayerUpsertBody(
-                            entryId = editing?.entryId ?: UUID.randomUUID().toString(),
+                            entryId = ids.first,
                             title = title.trim().ifBlank { null },
                             body = body.trim(),
                             isAnswered = answered2,
-                            clientMutationId = UUID.randomUUID().toString(),
+                            clientMutationId = ids.second,
                         )
-                        runCatching { Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) } }
-                        showComposer = false
-                        reload()
+                        val outcome = org.nuruplace.member.data.offline.queuedWrite(
+                            send = { Net.client.offline.runOrQueue("prayer_entries", "upsert", queuePayload(dto)) { Net.client.api.upsertPrayer(dto) } },
+                            failureLine = { org.nuruplace.member.data.net.ApiException.saveFailureLine(it, journalContext) },
+                        )
+                        composerSaving = false
+                        if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
+                            composerError = outcome.line
+                        } else {
+                            composerIds = null
+                            showComposer = false
+                            reload()
+                        }
                     }
                 },
             )
@@ -217,15 +237,19 @@ private fun AddPrayerPill(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.Add, null, tint = Color.White, modifier = Modifier.size(14.dp))
-        Text("Add Prayer", style = NuruType.actionLabel, color = Color.White)
+        // Navy words on gold (§8.1 rule 4) — they were white.
+        Icon(Lucide.Plus, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
+        Text("Add Prayer", style = NuruType.actionLabel, color = Nuru.navy)
     }
 }
 
 @Composable
 private fun EmptyPrayers(tab: PrayerTab) {
     Column(Modifier.fillMaxWidth().padding(vertical = Spacing.xl), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(if (tab == PrayerTab.Active) "🤍" else "🙏", style = NuruType.display)
+        // A Lucide glyph on a gold-tint tile, not an emoji (§8.1 rule 7; final walk C16).
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(if (tab == PrayerTab.Active) Lucide.Heart else Lucide.CheckCircle, contentDescription = null, tint = Nuru.navy, modifier = Modifier.size(22.dp))
+        }
         Spacer(Modifier.height(Spacing.sm))
         Text(
             if (tab == PrayerTab.Active) "No active prayers yet" else "No answered prayers yet",
@@ -252,8 +276,10 @@ private fun JournalCard(
     val view = LocalView.current
     var menuOpen by remember { mutableStateOf(false) }
     var confirmShare by remember { mutableStateOf(false) }
+    // Deleting a prayer is for good — asked first, as iOS (§9.7 M8).
+    var confirmDelete by remember { mutableStateOf(false) }
 
-    // Green answered · orange on-the-wall · gold private — ONLY the avatar,
+    // Green answered · navy on-the-wall · gold private — ONLY the avatar,
     // name and timestamp carry this color; title/body stay neutral (iOS
     // build 80 parity).
     val statusColor = when {
@@ -291,37 +317,38 @@ private fun JournalCard(
                 Modifier.size(36.dp).clip(CircleShape).clickable { menuOpen = true },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "Prayer options", tint = Nuru.ink400, modifier = Modifier.size(20.dp))
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                Icon(Lucide.EllipsisVertical, contentDescription = "Prayer options", tint = Nuru.ink400, modifier = Modifier.size(22.dp))
+                NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (entry.isAnswered) {
                         DropdownMenuItem(
                             text = { Text("Reopen prayer") },
-                            leadingIcon = { Icon(Icons.Filled.Replay, null, modifier = Modifier.size(20.dp)) },
+                            leadingIcon = { Icon(Lucide.RotateCcw, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; Haptics.tap(view); onReopenOrAnswer() },
                         )
                     } else {
                         DropdownMenuItem(
                             text = { Text("Mark answered") },
-                            leadingIcon = { Icon(Icons.Filled.Check, null, modifier = Modifier.size(20.dp)) },
+                            leadingIcon = { Icon(Lucide.Check, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; Haptics.confirm(view); onReopenOrAnswer() },
                         )
                     }
                     if (!shared) {
                         DropdownMenuItem(
-                            text = { Text("Publish to Corporate") },
-                            leadingIcon = { Icon(Icons.Filled.Campaign, null, modifier = Modifier.size(20.dp)) },
+                            // One name for the step everywhere (§9.1 rule 1, §9.7 M8).
+                            text = { Text("Share to Corporate") },
+                            leadingIcon = { Icon(Lucide.Megaphone, null, modifier = Modifier.size(22.dp)) },
                             onClick = { menuOpen = false; confirmShare = true },
                         )
                     }
                     DropdownMenuItem(
                         text = { Text("Edit") },
-                        leadingIcon = { Icon(Icons.Filled.Edit, null, modifier = Modifier.size(20.dp)) },
+                        leadingIcon = { Icon(Lucide.Pencil, null, modifier = Modifier.size(22.dp)) },
                         onClick = { menuOpen = false; onEdit() },
                     )
                     DropdownMenuItem(
                         text = { Text("Delete") },
-                        leadingIcon = { Icon(Icons.Filled.Delete, null, modifier = Modifier.size(20.dp)) },
-                        onClick = { menuOpen = false; onDelete() },
+                        leadingIcon = { Icon(Lucide.Trash2, null, modifier = Modifier.size(22.dp)) },
+                        onClick = { menuOpen = false; confirmDelete = true },
                     )
                 }
             }
@@ -338,14 +365,14 @@ private fun JournalCard(
                     .background(Nuru.successBg).padding(vertical = 10.dp, horizontal = Spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Favorite, null, tint = Nuru.successText, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Heart, null, tint = Nuru.successText, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Answered${entry.answeredNote?.let { " · $it" } ?: ""} 🙏", style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold), color = Nuru.successText)
             }
         } else if (shared) {
             Spacer(Modifier.height(Spacing.sm))
             Row(Modifier.padding(horizontal = Spacing.base), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Campaign, null, tint = ShareOrange, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Megaphone, null, tint = ShareOrange, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("On the Corporate wall", style = NuruType.micro, color = ShareOrange)
             }
@@ -354,13 +381,13 @@ private fun JournalCard(
     }
 
     if (confirmShare) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { confirmShare = false },
-            title = { Text("Share to the prayer wall?", style = NuruType.rowTitle, color = Nuru.ink) },
-            text = { Text("Your cell will see this and pray with you.", style = NuruType.body, color = Nuru.ink600) },
+            title = { Text("Share to Corporate?", style = NuruType.rowTitle, color = Nuru.ink) },
+            text = { Text("Everyone in your congregation will see this and can pray with you.", style = NuruType.body, color = Nuru.ink600) },
             confirmButton = {
                 TextButton(onClick = { confirmShare = false; Haptics.confirm(view); onPublish() }) {
-                    Text("Share to wall", style = NuruType.cardCta, color = Nuru.eyebrow)
+                    Text("Share", style = NuruType.cardCta, color = Nuru.eyebrow)
                 }
             },
             dismissButton = {
@@ -369,16 +396,40 @@ private fun JournalCard(
             containerColor = Nuru.white,
         )
     }
+
+    if (confirmDelete) {
+        NuruAlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this prayer?", style = NuruType.rowTitle, color = Nuru.ink) },
+            text = { Text("It will be removed from your journal on every device.", style = NuruType.body, color = Nuru.ink600) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; Haptics.confirm(view); onDelete() }) {
+                    Text("Delete prayer", style = NuruType.cardCta, color = Nuru.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Keep it", style = NuruType.cardCta, color = Nuru.ink600) }
+            },
+            containerColor = Nuru.white,
+        )
+    }
 }
 
 @Composable
-private fun PrayerComposerDialog(draft: PrayerEntry?, onDismiss: () -> Unit, onSave: (String, String, Boolean) -> Unit) {
+private fun PrayerComposerDialog(
+    draft: PrayerEntry?,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Boolean) -> Unit,
+    saving: Boolean = false,
+    /** Why the last save didn't land — the words stay in the fields. */
+    error: String? = null,
+) {
     var title by remember { mutableStateOf(draft?.title ?: "") }
     var body by remember { mutableStateOf(draft?.body ?: "") }
     var answered by remember { mutableStateOf(draft?.isAnswered ?: false) }
     val bodyEmpty = body.isBlank()
 
-    AlertDialog(
+    org.nuruplace.member.ui.components.NuruAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (draft == null) "New prayer" else "Edit prayer", style = NuruType.cardTitle, color = Nuru.navy) },
         text = {
@@ -391,11 +442,15 @@ private fun PrayerComposerDialog(draft: PrayerEntry?, onDismiss: () -> Unit, onS
                     Text("Answered", style = NuruType.cardCta, color = Nuru.navy, modifier = Modifier.weight(1f))
                     Switch(checked = answered, onCheckedChange = { answered = it }, colors = SwitchDefaults.colors(checkedTrackColor = PrayerGold))
                 }
+                error?.let {
+                    Spacer(Modifier.height(Spacing.sm))
+                    Text(it, style = NuruType.caption, color = Nuru.danger)
+                }
             }
         },
         confirmButton = {
-            TextButton(enabled = !bodyEmpty, onClick = { onSave(title, body, answered) }) {
-                Text(if (draft == null) "Save prayer" else "Save changes", style = NuruType.cardCta, color = if (bodyEmpty) Nuru.ink400 else PrayerGold)
+            TextButton(enabled = !bodyEmpty && !saving, onClick = { onSave(title, body, answered) }) {
+                Text(if (saving) "Saving…" else if (draft == null) "Save prayer" else "Save changes", style = NuruType.cardCta, color = if (bodyEmpty) Nuru.ink400 else PrayerGold)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = NuruType.cardCta, color = Nuru.ink600) } },
@@ -415,6 +470,6 @@ private fun relativeLabel(iso: String?): String {
         days < 7 -> "$days days ago"
         days < 14 -> "1 week ago"
         days < 31 -> "${days / 7} weeks ago"
-        else -> instant.atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("MMM d"))
+        else -> org.nuruplace.member.util.NuruDates.day(instant)
     }
 }

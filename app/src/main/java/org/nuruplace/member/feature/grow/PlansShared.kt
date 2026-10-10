@@ -61,7 +61,7 @@ fun plSerif(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 
 /** Uppercased gold section overline (Inter 9 bold, tracked). */
 @Composable
 fun PLOverline(text: String, color: Color = PL.goldDeep, kerning: Float = 1.62f, modifier: Modifier = Modifier) =
-    Text(text.uppercase(), style = plInter(9, FontWeight.Bold, kerning), color = color, modifier = modifier)
+    Text(text.uppercase(), style = plInter(11, FontWeight.Bold, kerning), color = color, modifier = modifier)
 
 /**
  * Plan cover image — FIXED-box crop (the caller sizes the Box). Fills with
@@ -83,6 +83,6 @@ fun PLDaysBadge(days: Int, modifier: Modifier = Modifier) {
     Box(
         modifier.padding(8.dp).clip(RoundedCornerShape(999.dp)).background(Color.White.copy(alpha = 0.9f)).padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
-        Text("$days DAYS", style = plInter(8, FontWeight.Bold, 0.96f), color = PL.navy)
+        Text("$days DAYS", style = plInter(11, FontWeight.Bold, 0.96f), color = PL.navy)
     }
 }

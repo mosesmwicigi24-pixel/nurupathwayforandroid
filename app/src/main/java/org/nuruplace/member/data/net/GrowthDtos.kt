@@ -50,6 +50,12 @@ data class ReadingPlanRow(
     val completedDays: List<Int>? = null,
     val enrolled: Boolean = false,
     val completedAt: String? = null,
+    /** When the member last finished a day of this plan — the moment the last
+     *  part of a fully-read day was read (ISO-8601), null until one is. The
+     *  Plans streak card ticks today from it, so a day finished on another
+     *  phone is ticked here too (EXPERIENCE.md §7.4 #4). Absent on an older
+     *  server. */
+    val lastDayFinishedAt: String? = null,
 )
 
 @Serializable
@@ -161,6 +167,13 @@ data class ScripturePassage(
 
 @Serializable
 data class SaveReflectionBody(val body: String, val clientMutationId: String)
+
+/** GET modules/{id}/reflection → `{ data: { body, created_at } | null }`. */
+@Serializable
+data class ModuleReflectionEnv(val data: SavedModuleReflection? = null)
+
+@Serializable
+data class SavedModuleReflection(val body: String = "", val createdAt: String? = null)
 
 /**
  * POST growth/segments/{id}/complete → tells us if finishing this segment

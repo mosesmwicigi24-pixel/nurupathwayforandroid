@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,19 +42,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -62,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,15 +60,24 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanPromo as PlanPromoDto
 import org.nuruplace.member.data.net.ReadingPlanRow
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.EmptyState
+import org.nuruplace.member.ui.components.FailedState
+import org.nuruplace.member.ui.components.InboxBell
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import org.nuruplace.member.ui.theme.NuruType
 import java.util.Calendar
+import org.nuruplace.member.ui.icons.Lucide
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -91,26 +89,58 @@ fun ReadingPlansScreen(
     onOpenNotifications: () -> Unit = {},
     onOpenReadWithFriend: () -> Unit = {},
 ) {
-    var plans by remember { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
-    var promos by remember { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
-    var streak by remember { mutableStateOf(0) }
-    var todayWordDone by remember { mutableStateOf(false) }
+    // Held by the tab (rememberHeld, EXPERIENCE.md §7.2 #8): Back from a plan
+    // finds the same library at the same scroll, refreshed in place.
+    var plans by rememberHeld("Plans.plans") { mutableStateOf<List<ReadingPlanRow>>(emptyList()) }
+    var promos by rememberHeld("Plans.promos") { mutableStateOf<List<PlanPromoDto>>(emptyList()) }
+    var streak by rememberHeld("Plans.streak") { mutableStateOf(0) }
+    // Today on the streak card (§7.4 #4): ticked only once the server has
+    // sealed a plan day today — seen by this phone (PlanDayLog) or any other
+    // (the plan rows' last_day_finished_at). It was the rhythm's `word`, so
+    // reading one part ticked today beside "0-day streak".
+    var todaySealed by rememberHeld("Plans.todaySealed") { mutableStateOf(false) }
+    // Any of the rhythm done today — the one streak counts today then, here
+    // as on Home (EXPERIENCE.md §9.2 #3).
+    var activeToday by rememberHeld("Plans.activeToday") { mutableStateOf(false) }
+    // The day the member is on in the plan in progress, as parts — the streak
+    // card says "Today: 2 of 3 parts" while it's under way.
+    var todayPlanParts by rememberHeld("Plans.todayPlanParts") { mutableStateOf<DayParts?>(null) }
     var loading by remember { mutableStateOf(true) }
+    // Plans that never loaded say so (§4) — they used to read as a library
+    // with no plans in it.
+    var loadError by rememberHeld("Plans.loadError") { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(attempt) {
+        loading = true
         // Plans is the blocking load; achievements + rhythm are non-fatal accents.
-        plans = runCatching { Net.client.api.plans().data }.getOrDefault(emptyList())
+        try {
+            plans = Net.client.api.plans().data
+            loadError = null
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (plans.isEmpty()) loadError = ApiException.state(e, context)
+        }
         // The personalized promos are strictly an upgrade: if the route is
         // missing, slow or angry, the page falls back to the local choices
         // below and the member never learns anything went wrong.
-        promos = runCatching { Net.client.api.planPromos().data }.getOrNull().orEmpty()
-        streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-        todayWordDone = runCatching { Net.client.api.rhythmToday().word }.getOrDefault(false)
+        // A part that fails keeps what is on screen.
+        promos = runCatching { Net.client.api.planPromos().data }.getOrElse { promos }
+        streak = runCatching { Net.client.api.achievements().streak.current }.getOrElse { streak }
+        activeToday = runCatching { Net.client.api.rhythmToday().doneCount > 0 }.getOrElse { activeToday }
+        todaySealed = PlanDayLog.sealedToday() || planDayFinishedToday(plans)
+        // The plan in progress (the one CONTINUE READING and the header name):
+        // how far the day the member is on stands. No plan, no parts.
+        todayPlanParts = activePlan(plans)?.let { p ->
+            runCatching { todayParts(Net.client.api.plan(p.planId)) }.getOrElse { todayPlanParts }
+        }
         loading = false
     }
 
-    var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("all") }
+    var query by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("all") }
 
     val q = query.trim().lowercase()
     val searching = q.isNotEmpty() || category != "all"
@@ -119,8 +149,10 @@ fun ReadingPlansScreen(
         (category == "all" || p.category == category) &&
             (q.isEmpty() || p.title.lowercase().contains(q) || (p.category ?: "").lowercase().contains(q))
     }
-    val continueReading = plans.filter { it.enrolled && it.completedAt == null }
-    val planOfDay = plans.firstOrNull { !it.enrolled } ?: plans.firstOrNull()
+    // The plans being read — their one card each (§7.4 #3); the same predicate
+    // keeps them out of the promos ([resolvePromos]).
+    val continueReading = plans.filter(::isBeingRead)
+    val planOfDay = planOfTheDay(plans)
     val categories = buildList {
         val seen = HashSet<String>()
         for (p in plans) {
@@ -128,13 +160,39 @@ fun ReadingPlansScreen(
             if (!c.isNullOrEmpty() && seen.add(c)) add(c)
         }
     }
+    // The server's promos, joined to the plans we actually hold — never a plan
+    // being read. When it returns nothing (or failed), `resolved` is empty and
+    // the page keeps its exact local behaviour: plan-of-the-day at the top, one
+    // promo woven in mid-page.
+    val resolved = remember(promos, plans) { resolvePromos(promos, plans) }
+    // The featured plan: the server's first promo, with its kicker — the same
+    // pick on both apps, since the server's page stands all day (EXPERIENCE.md
+    // §7.4; featuredPlan). The rest are woven into the browse in its order.
+    val featured = featuredPlan(plans, resolved)
+    val restPromos = resolved.drop(1)
+    // A second plan to promote further down the page — only when the server
+    // had no promo to give (iOS the same): never the one already at the top,
+    // never one already being read, turning every second Nairobi day.
+    val midPromo = if (resolved.isEmpty()) midPromoPlan(plans, planOfDay?.planId, nairobiEpochDay()) else null
     // Every plan, grouped by the commitment it asks for — and every one VISIBLE
     // (owner, 2026-08-26: "make sure all plans are not hidden"). The old browse
     // put 17 plans in a sideways rail where ~14 lived off-screen behind a gesture
     // most members never make, and each plan appeared twice (once under
     // "Featured for you", once in its length bucket). "Featured" is gone: one
     // vertical grid per section, each plan exactly once.
+    // Each plan once on the page (Cycle 3's closing walk): a plan featured or
+    // promoted above or between the sections, or being read in CONTINUE
+    // READING, isn't repeated in the grid — "Where Did I Come From?" sat in a
+    // promo and as a grid card on one screen.
+    val shownElsewhere = buildSet {
+        featured?.plan?.planId?.let(::add)
+        restPromos.forEach { add(it.plan.planId) }
+        midPromo?.planId?.let(::add)
+        continueReading.forEach { add(it.planId) }
+    }
+    val browse = plans.filter { it.planId !in shownElsewhere }
     val collections = buildList {
+        val plans = browse
         val short = plans.filter { it.dayCount <= 7 }
         if (short.isNotEmpty()) add(Triple("short", "Short reads · 7 days or less", short))
         // Mid-length (8–13 days) — most study plans are 10-day, so without this
@@ -144,15 +202,6 @@ fun ReadingPlansScreen(
         val long = plans.filter { it.dayCount >= 14 }
         if (long.isNotEmpty()) add(Triple("long", "Longer journeys · 2 weeks and up", long))
     }
-    // The server's promos, joined to the plans we actually hold. When it returns
-    // nothing (or failed), `resolved` is empty and the page keeps its exact local
-    // behaviour: plan-of-the-day at the top, one promo woven in mid-page.
-    val resolved = remember(promos, plans) { resolvePromos(promos, plans) }
-    val heroPromo = resolved.firstOrNull()
-    val restPromos = if (resolved.isEmpty()) emptyList() else resolved.drop(1)
-    // A second plan to promote further down the page — never the one already at
-    // the top, and never one already being read.
-    val midPromo = midPromoPlan(plans, planOfDay?.planId, System.currentTimeMillis() / 86_400_000L)
 
     Column(
         Modifier
@@ -165,6 +214,9 @@ fun ReadingPlansScreen(
             query = query,
             onQuery = { query = it },
             onOpenNotifications = onOpenNotifications,
+            // One header on every tab (EXPERIENCE.md §6.2): its line is the
+            // plan being read — the same plan and day Home's week row says.
+            line = activePlanLine(plans) ?: "A little every day — with the whole family of God.",
         )
 
         Column(
@@ -174,12 +226,18 @@ fun ReadingPlansScreen(
                 .padding(top = 20.dp, bottom = Spacing.tabBarSpace + 20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
+            val failed = loadError?.takeIf { plans.isEmpty() }
             if (loading && plans.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = PL.gold)
                 }
+            } else if (failed != null) {
+                FailedState(failed, onRetry = { attempt++ })
+            } else if (plans.isEmpty()) {
+                // Nothing published yet — the shared empty card, iOS's words.
+                EmptyState("Plans are being prepared — check back soon.")
             } else {
-                if (!searching) StreakStrip(count = streak, todayDone = todayWordDone)
+                if (!searching) StreakStrip(streakView(count = streak, todayDone = todaySealed, today = todayPlanParts, activeToday = activeToday))
                 if (!searching && continueReading.isNotEmpty()) {
                     ContinueSection(plans = continueReading, onOpenPlan = onOpenPlan)
                 }
@@ -187,20 +245,16 @@ fun ReadingPlansScreen(
                 // subtitle + a reason + a CTA. The most personal promo the server
                 // could earn takes this slot; without one it is the plan of the day.
                 if (!searching) {
-                    if (heroPromo != null) {
+                    featured?.let { f ->
                         PlanPromo(
-                            plan = heroPromo.plan,
-                            kicker = heroPromo.kicker,
-                            reason = heroPromo.reason,
+                            plan = f.plan,
+                            kicker = f.kicker,
+                            reason = f.reason,
                             shimmer = true,
                             onOpenPlan = onOpenPlan,
-                        )
-                    } else if (planOfDay != null) {
-                        PlanPromo(
-                            plan = planOfDay,
-                            kicker = "PLAN OF THE DAY",
-                            shimmer = true,
-                            onOpenPlan = onOpenPlan,
+                            // The tab's one gold primary only while no plan is
+                            // being read; else the continue row holds it (as iOS).
+                            primary = continueReading.isEmpty(),
                         )
                     }
                 }
@@ -230,7 +284,7 @@ fun ReadingPlansScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications: () -> Unit) {
+private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications: () -> Unit, line: String) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -243,7 +297,8 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
     ) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                PLOverline("PLANS", color = PL.catText, kerning = 1.8f)
+                // The kicker (§8.1 rule 3): Inter 11 bold, tracking 1.4, gold.
+                Text("PLANS", style = NuruType.kicker, color = PL.catText)
                 Text(
                     "Grow in the Word",
                     style = plSerif(26, FontWeight.SemiBold, -0.52f),
@@ -251,43 +306,18 @@ private fun Header(query: String, onQuery: (String) -> Unit, onOpenNotifications
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Text(
-                    "A little every day — with the whole family of God.",
-                    style = plInter(12),
+                    line,
+                    style = plInter(13),
                     color = PL.ink2,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
             Spacer(Modifier.width(8.dp))
-            BellButton(onClick = onOpenNotifications)
+            // The one bell (EXPERIENCE.md §7.2 #4): a dot only while something is unread.
+            InboxBell(onClick = onOpenNotifications)
         }
         Spacer(Modifier.height(16.dp))
         SearchBar(query = query, onQuery = onQuery)
-    }
-}
-
-@Composable
-private fun BellButton(onClick: () -> Unit) {
-    Box(Modifier.size(40.dp)) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
-                .border(1.dp, PL.border, RoundedCornerShape(16.dp))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = PL.navy, modifier = Modifier.size(18.dp))
-        }
-        // Gold unread dot, 8dp, inset 8dp from the top-trailing corner.
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp)
-                .size(8.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(PL.gold),
-        )
     }
 }
 
@@ -302,7 +332,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(16.dp))
+        Icon(Lucide.Search, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) {
@@ -320,10 +350,10 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
         if (query.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
             Icon(
-                Icons.Filled.Close,
+                Lucide.X,
                 contentDescription = "Clear search",
                 tint = PL.ink3,
-                modifier = Modifier.size(15.dp).clickable { onQuery("") },
+                modifier = Modifier.size(14.dp).clickable { onQuery("") },
             )
         }
     }
@@ -337,7 +367,12 @@ private val WEEK = listOf("S", "M", "T", "W", "T", "F", "S")
 private const val STREAK_GOAL = 7
 
 @Composable
-private fun StreakStrip(count: Int, todayDone: Boolean) {
+private fun StreakStrip(view: StreakView) {
+    // Today's mark and the words come from [streakView] (§7.4 #4): today is
+    // ticked only once the server has sealed a plan day today, and a ticked
+    // today never sits beside "0-day streak".
+    val count = view.count
+    val todayDone = view.todayMarked
     val todayIdx = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1 // Sun=0
     val toReward = (STREAK_GOAL - count).coerceAtLeast(0)
     val pct = (count.toFloat() / STREAK_GOAL).coerceIn(0f, 1f)
@@ -367,28 +402,33 @@ private fun StreakStrip(count: Int, todayDone: Boolean) {
                     .background(Brush.linearGradient(listOf(PL.gold.copy(alpha = 0.15f), PL.gold.copy(alpha = 0.05f)))),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.LocalFireDepartment, contentDescription = null, tint = PL.gold, modifier = Modifier.size(20.dp))
+                Icon(Lucide.Flame, contentDescription = null, tint = PL.gold, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
+                // Never cut (EXPERIENCE.md §8.2 #5, §8.1 rule 9): both lines wrap
+                // at any text size — iOS adopts these words ("0 days wi…" was cut).
+                // The words take the card's width: beside the seven week dots
+                // they had about a third of it and broke over three lines.
+                // A card title is Fraunces (§8.1 rule 3; final walk C16: Inter bold).
                 Text(
-                    "$count-day streak",
-                    style = plInter(14, FontWeight.Bold, -0.14f),
+                    StreakWords.label(count),
+                    style = plSerif(18, FontWeight.SemiBold, -0.2f),
                     color = PL.navy,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    if (count > 0) "Read today to keep it alive 🔥" else "Read today to start your streak 🔥",
+                    view.line,
                     style = plInter(12),
                     color = PL.ink2,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (i in 0 until 7) WeekDot(label = WEEK[i], done = isDone(i), today = i == todayIdx)
+        }
+        // The week has its own row, spread across the card (as iOS).
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            for (i in 0 until 7) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    WeekDot(label = WEEK[i], done = isDone(i), today = i == todayIdx)
+                }
             }
         }
         // Progress bar + gift chip
@@ -413,11 +453,11 @@ private fun StreakStrip(count: Int, todayDone: Boolean) {
             }
             Spacer(Modifier.width(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = PL.catText, modifier = Modifier.size(12.dp))
+                Icon(Lucide.Gift, contentDescription = null, tint = PL.catText, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(
                     if (toReward == 0) "Reward ready!" else "$toReward day${if (toReward == 1) "" else "s"} to a badge",
-                    style = plInter(10, FontWeight.Bold),
+                    style = plInter(11, FontWeight.Bold),
                     color = PL.catText,
                     maxLines = 1,
                 )
@@ -429,13 +469,13 @@ private fun StreakStrip(count: Int, todayDone: Boolean) {
 @Composable
 private fun WeekDot(label: String, done: Boolean, today: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = plInter(8, FontWeight.Bold), color = PL.ink3)
+        Text(label, style = plInter(11, FontWeight.Bold), color = PL.ink3)
         Spacer(Modifier.height(4.dp))
         Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
             when {
                 done -> {
                     Box(Modifier.matchParentSize().clip(RoundedCornerShape(999.dp)).background(PL.gold))
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                 }
                 today -> {
                     Box(
@@ -460,78 +500,126 @@ private fun WeekDot(label: String, done: Boolean, today: Boolean) {
 private fun ContinueSection(plans: List<ReadingPlanRow>, onOpenPlan: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PLOverline("CONTINUE READING")
-        for (plan in plans) ContinueRow(plan = plan, onOpenPlan = onOpenPlan)
+        val active = activePlan(plans)
+        for (plan in plans) {
+            ContinueRow(
+                plan = plan,
+                readToday = planReadToday(plan, sealedHere = plan == active && PlanDayLog.sealedToday()),
+                onOpenPlan = onOpenPlan,
+                primary = plan == active,
+            )
+        }
     }
 }
 
 @Composable
-private fun ContinueRow(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit) {
+private fun ContinueRow(plan: ReadingPlanRow, readToday: Boolean, onOpenPlan: (String) -> Unit, primary: Boolean = false) {
     val total = plan.dayCount.coerceAtLeast(1)
-    val day = plan.currentDay ?: ((plan.completedDays?.size ?: 0) + 1)
+    val day = planDay(plan)
     val pct = (day.toFloat() / total).coerceIn(0f, 1f)
 
     val shape = RoundedCornerShape(20.dp)
-    Row(
+    // The plan being read is the tab's next step, in navy — "navy for your
+    // next step" (owner, 2026-10-07: colour option A); other plans stay white.
+    val ink = if (primary) Color.White else PL.navy
+    val meta = if (primary) Color(0xFFB9C4D4) else PL.ink2
+    Column(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Color.White)
-            .border(1.dp, PL.border, shape)
+            .then(
+                if (primary) Modifier.background(Brush.linearGradient(listOf(Color(0xFF11253F), Color(0xFF0A1628))))
+                else Modifier.background(Color.White).border(1.dp, PL.border, shape),
+            )
             .clickable { onOpenPlan(plan.planId) }
             .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        PLCover(url = plan.imageUrl, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                plan.title,
-                style = plInter(14, FontWeight.Bold, -0.14f),
-                color = PL.navy,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // On navy the cover keeps a gold hairline, so a dark photograph's
+            // edge never meets the dark card.
+            PLCover(
+                url = plan.imageUrl,
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))
+                    .then(if (primary) Modifier.border(1.dp, Color(0xFFE8CA6C).copy(alpha = 0.35f), RoundedCornerShape(12.dp)) else Modifier),
             )
-            Text(
-                "Today · ${plan.subtitle ?: "Day $day of $total"}",
-                style = plInter(12),
-                color = PL.ink2,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            Row(
-                Modifier.padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(PL.navy.copy(alpha = 0.08f)),
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                // A plan is a content row (§8.1 rule 3): Fraunces 15 semibold,
+                // wrapping to two lines rather than cut (rule 9).
+                Text(
+                    plan.title,
+                    style = NuruType.rowTitle,
+                    color = ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // "Today ·" only while today's reading is still to do — the same
+                // story as the streak card and Home (Cycle 3's closing walk, B6):
+                // "Day 3 done today · Day 4 next" once it's read (§9.2 #3), and
+                // a pause named kindly (§9.1 rule 5).
+                Text(
+                    planCardLine(plan, readToday),
+                    style = plInter(12),
+                    color = meta,
+                    // Wraps, never cut (rule 9).
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Row(
+                    Modifier.padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(fraction = pct.coerceAtLeast(0.05f))
+                            .weight(1f)
                             .height(6.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(PL.gold),
-                    )
+                            .background(if (primary) Color.White.copy(alpha = 0.16f) else PL.navy.copy(alpha = 0.08f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(fraction = pct.coerceAtLeast(0.05f))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(PL.gold),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text("Day $day/$total", style = plInter(11, FontWeight.SemiBold), color = meta)
                 }
-                Spacer(Modifier.width(8.dp))
-                Text("Day $day/$total", style = plInter(9, FontWeight.SemiBold), color = PL.ink2)
+            }
+            if (!primary) {
+                Spacer(Modifier.width(12.dp))
+                // Gold play button
+                Box(
+                    Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(PL.gold.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Lucide.Play, contentDescription = null, tint = PL.gold, modifier = Modifier.size(18.dp))
+                }
             }
         }
-        Spacer(Modifier.width(12.dp))
-        // Gold play button
-        Box(
-            Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(PL.gold.copy(alpha = 0.10f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = PL.gold, modifier = Modifier.size(18.dp))
+        // The tab's one gold primary (§8.1 rule 4; Cycle 3 close walk E3, as
+        // iOS): the plan being read — four gold "Begin the journey" promos sat
+        // here while the member's real next step was to continue.
+        if (primary) {
+            Row(
+                Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(PL.gold).padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Continue · Day $day", style = NuruType.cardCta, color = PL.navy, maxLines = 2)
+                Spacer(Modifier.width(6.dp))
+                Icon(Lucide.ArrowRight, contentDescription = null, tint = PL.navy, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }
+
+/** A promo opens its plan, and says so (as iOS's PlanPromoWords). */
+internal const val PLAN_PROMO_CTA = "See the plan"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The plan promo ("an ad, beautifully done") — port of iOS PLPlanPromo
@@ -576,11 +664,47 @@ internal fun planPromoHook(description: String?): String? {
     return if (d.length > 170) d.take(167).trimEnd() + "…" else d
 }
 
+/** The plan of the day: the first plan in the server's own order (never
+ *  re-sorted here) the member has not started — else the first plan. */
+internal fun planOfTheDay(plans: List<ReadingPlanRow>): ReadingPlanRow? =
+    plans.firstOrNull { !it.enrolled } ?: plans.firstOrNull()
+
+/** The calendar day in Nairobi, counted from 1970-01-01 — the day the
+ *  rotation turns on, the same on both apps. (It was UTC millis / 86 400 000,
+ *  a different day from midnight to 3 a.m. in Nairobi.) */
+internal fun nairobiEpochDay(now: java.time.Instant = java.time.Instant.now()): Long =
+    now.atZone(java.time.ZoneId.of("Africa/Nairobi")).toLocalDate().toEpochDay()
+
+/** The plan featured at the top of Plans: which plan, its pill and its line. */
+internal data class FeaturedPlan(val plan: ReadingPlanRow, val kicker: String, val reason: String?)
+
+/**
+ * The featured plan — the server's first promo, with its own kicker and
+ * reason: the same pick on both apps, because the server is the source of
+ * truth and its promo page now stands all day, fillers included (EXPERIENCE.md
+ * §7.4 #5). A plan being read is never promoted ([resolvePromos]) — CONTINUE
+ * READING is its one card (§7.4 #3). Only when the server has no promo to
+ * show (none, or the call failed) does the page pick for itself: the plan of
+ * the day ([planOfTheDay]) — the first plan not started, else the first plan.
+ *
+ * (Android used to feature its own pick — the server's "continue" promo, else
+ * the plan of the day — while the server's page still turned from one request
+ * to the next: iOS showed "Rooted: 10 Days in the Psalms" and Android "Who Am
+ * I?", both "FROM THE LIBRARY", for the same member a minute apart.)
+ */
+internal fun featuredPlan(plans: List<ReadingPlanRow>, promos: List<ResolvedPromo>): FeaturedPlan? {
+    promos.firstOrNull()?.let { return FeaturedPlan(it.plan, it.kicker, it.reason) }
+    return planOfTheDay(plans)?.let { FeaturedPlan(it, "PLAN OF THE DAY", null) }
+}
+
+/** Being read: started and not finished — CONTINUE READING's plans (§7.4 #3). */
+internal fun isBeingRead(plan: ReadingPlanRow): Boolean = plan.enrolled && plan.completedAt == null
+
 /**
  * The second plan promoted further down the browse: never the one already
  * featured at the top, never one already being read, and only plans whose own
- * words can carry a promo. Rotates with `epochDay` so browsing feels edited
- * rather than random (iOS: `(epochDay / 2) % pool.count`).
+ * words can carry a promo — in the server's order, turning every second day:
+ * `pool[(epochDay / 2) % pool.size]` with [nairobiEpochDay] (iOS the same).
  */
 internal fun midPromoPlan(
     plans: List<ReadingPlanRow>,
@@ -599,13 +723,16 @@ internal fun midPromoPlan(
  * The server chooses the plan, the kicker and the reason; the client only has to
  * find the plan in the list it already holds. A promo naming a plan this member
  * cannot see (gated, retired, or simply not in this page's payload) is dropped
- * rather than rendered half-empty, and a plan is promoted at most once so one
- * plan cannot own the shelf.
+ * rather than rendered half-empty, a plan being read is dropped (its card is
+ * CONTINUE READING, §7.4 #3), and a plan is promoted at most once so one plan
+ * cannot own the shelf. iOS's PlanPicks.resolve is the same rule.
  */
 internal data class ResolvedPromo(
     val plan: ReadingPlanRow,
     val kicker: String,
     val reason: String?,
+    /** The server's slot: continue · next_step · carrying · cell · fresh. */
+    val slot: String = "",
 )
 
 /** Join the server's promos to the loaded plans, in the server's order. */
@@ -618,12 +745,14 @@ internal fun resolvePromos(
     val seen = HashSet<String>()
     return promos.mapNotNull { p ->
         val plan = byId[p.planId] ?: return@mapNotNull null
+        if (isBeingRead(plan)) return@mapNotNull null
         if (!seen.add(plan.planId)) return@mapNotNull null
         ResolvedPromo(
             plan = plan,
             // The kicker is the pill's whole content — never leave it blank.
             kicker = p.kicker.trim().ifEmpty { "FOR YOU" },
             reason = p.reason.trim().ifEmpty { null },
+            slot = p.slot.trim().lowercase(),
         )
     }
 }
@@ -642,6 +771,9 @@ private fun PlanPromo(
     onOpenPlan: (String) -> Unit,
     reason: String? = null,
     shimmer: Boolean = false,
+    /** The page's one primary (§8.1 rule 4): the featured plan at the top,
+     *  only while no plan is being read. Every other promo is a secondary. */
+    primary: Boolean = false,
 ) {
     // When the server has a reason THIS member is being shown THIS plan, it
     // speaks instead of the plan's own opening line — it knows more than we do.
@@ -671,9 +803,11 @@ private fun PlanPromo(
             Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(plan.title, style = plSerif(19, FontWeight.Medium, -0.3f), color = PL.navy)
+            Text(plan.title, style = plSerif(18, FontWeight.Medium, -0.3f), color = PL.navy)
+            // Words in ink, not gold (§8.1 rule 1; final walk C16: the
+            // tagline was gold body text).
             plan.subtitle?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = plInter(12, FontWeight.SemiBold), color = PL.gold)
+                Text(it, style = plInter(12, FontWeight.SemiBold), color = PL.ink2)
             }
             hook?.let {
                 Text(
@@ -685,30 +819,33 @@ private fun PlanPromo(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            // Gold CTA capsule — the whole card is tappable; this says where to.
+            // The CTA capsule — the whole card is tappable; this says where to.
+            // Gold only on the page's one primary (the featured plan); a woven
+            // promo's is white with a hairline (rule 4) — the tab carried four
+            // gold "Begin the journey".
             Row(
                 Modifier
                     .padding(top = 6.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(PL.gold)
+                    .then(
+                        if (primary) Modifier.background(PL.gold)
+                        else Modifier.background(Color.White).border(1.dp, PL.border, RoundedCornerShape(999.dp)),
+                    )
                     .padding(horizontal = 14.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // It opens the plan, so it says so (as iOS); the one way to start
+                // a plan is the plan page's "Begin Day 1" — it said "Begin the
+                // journey" here, a second name for the same start.
+                // Its words alone — no arrow inside a button (§8.1 rule 4).
                 Text(
-                    if (plan.enrolled) "Continue the journey" else "Begin the journey",
+                    PLAN_PROMO_CTA,
                     style = plInter(12, FontWeight.Bold),
                     color = PL.navy,
                 )
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = PL.navy,
-                    modifier = Modifier.size(13.dp),
-                )
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Schedule, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(11.dp))
+                Icon(Lucide.Clock4, contentDescription = null, tint = PL.ink3, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("${plan.dayCount} days · a few minutes a day", style = plInter(11), color = PL.ink3)
             }
@@ -718,19 +855,21 @@ private fun PlanPromo(
 
 @Composable
 private fun PromoKicker(label: String, shimmer: Boolean) {
+    // A label pill is white with navy words (§8.1 rule 6; final walk C16:
+    // "WORTH YOUR WEEK" was gold-filled); the sparkle keeps its gold.
     Box(
         Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(PL.gold)
+            .background(Color.White)
             .clipToBounds(),
     ) {
         Row(
             Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = PL.navy, modifier = Modifier.size(9.dp))
+            Icon(Lucide.Sparkles, contentDescription = null, tint = PL.gold, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
-            Text(label, style = plInter(9, FontWeight.Bold, 1.26f), color = PL.navy)
+            Text(label, style = plInter(11, FontWeight.Bold, 1.26f), color = PL.navy)
         }
         // A slow white sweep across the pill — the iOS PLShimmer.
         if (shimmer) ShimmerSweep(Modifier.matchParentSize())
@@ -837,18 +976,18 @@ private fun CollectionsSections(
             }
             if (promos.isEmpty()) {
                 if (i == 0 && midPromo != null) {
-                    PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan)
+                    PlanPromo(plan = midPromo, kicker = "WORTH YOUR WEEK", onOpenPlan = onOpenPlan, primary = false)
                 }
             } else if (i < gaps) {
                 promos.getOrNull(i)?.let { p ->
-                    PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan)
+                    PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan, primary = false)
                 }
             }
         }
         // More promos than gaps (or no sections at all) — the remainder closes
         // the page rather than being silently dropped.
         for (p in promos.drop(gaps)) {
-            PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan)
+            PlanPromo(plan = p.plan, kicker = p.kicker, reason = p.reason, onOpenPlan = onOpenPlan, primary = false)
         }
     }
 }
@@ -882,11 +1021,10 @@ private fun FilteredResults(category: String, plans: List<ReadingPlanRow>, onOpe
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             PLOverline(if (category == "all") "RESULTS" else category, modifier = Modifier.weight(1f))
-            Text(
-                "${plans.size} plan${if (plans.size == 1) "" else "s"}",
-                style = plInter(10, FontWeight.SemiBold),
-                color = PL.ink3,
-            )
+            // No zero counts (§7.4 #9): the empty state below says it.
+            org.nuruplace.member.util.ZeroCounts.count(plans.size, "plan", "plans")?.let {
+                Text(it, style = plInter(11, FontWeight.SemiBold), color = PL.ink3)
+            }
         }
         if (plans.isEmpty()) {
             val shape = RoundedCornerShape(22.dp)
@@ -903,7 +1041,7 @@ private fun FilteredResults(category: String, plans: List<ReadingPlanRow>, onOpe
                     Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(PL.gold.copy(alpha = 0.08f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Search, contentDescription = null, tint = PL.gold, modifier = Modifier.size(22.dp))
+                    Icon(Lucide.Search, contentDescription = null, tint = PL.gold, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.height(12.dp))
                 Text("No plans found", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
@@ -940,7 +1078,7 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
                         .background(PL.gold),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                 }
             }
             // Progress rail for a plan already in progress — the browse grid now
@@ -963,9 +1101,11 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
             Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            // A plan is a content row: its title Fraunces (§8.1 rule 3; final
+            // walk C16: Inter bold).
             Text(
                 plan.title,
-                style = plInter(12, FontWeight.Bold),
+                style = plSerif(15, FontWeight.SemiBold),
                 color = PL.navy,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -973,15 +1113,15 @@ private fun PlanTile(plan: ReadingPlanRow, onOpenPlan: (String) -> Unit, modifie
             when {
                 reading -> Text(
                     "Day ${plan.currentDay ?: 1} of ${plan.dayCount}",
-                    style = plInter(9, FontWeight.Bold, 0.5f),
+                    style = plInter(11, FontWeight.Bold, 0.5f),
                     color = PL.goldDeep,
                     maxLines = 1,
                 )
-                done -> Text("COMPLETED", style = plInter(9, FontWeight.Bold, 0.9f), color = PL.goldDeep, maxLines = 1)
+                done -> Text("COMPLETED", style = plInter(11, FontWeight.Bold, 0.9f), color = PL.goldDeep, maxLines = 1)
                 else -> plan.category?.takeIf { it.isNotEmpty() }?.let {
                     Text(
                         it.uppercase(),
-                        style = plInter(9, FontWeight.Bold, 0.9f),
+                        style = plInter(11, FontWeight.Bold, 0.9f),
                         color = PL.catText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1011,18 +1151,18 @@ private fun InvitationCard(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(PL.gold.copy(alpha = 0.12f)),
+            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(org.nuruplace.member.ui.theme.Nuru.goldTint),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Groups, null, tint = PL.gold, modifier = Modifier.size(19.dp))
+            Icon(Lucide.Users, null, tint = PL.navy, modifier = Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text("Read with a friend", style = plInter(13, FontWeight.Bold), color = PL.navy)
+            Text("Read with a friend", style = plSerif(15, FontWeight.SemiBold), color = PL.navy)
             Text(
                 "Invite your cell to a plan and keep each other going.",
                 style = plInter(11), color = PL.ink2,
             )
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.ink3, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ChevronRight, null, tint = PL.ink3, modifier = Modifier.size(18.dp))
     }
 }

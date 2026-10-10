@@ -5,8 +5,6 @@ package org.nuruplace.member.feature.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +46,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun AssistantScreen(onBack: () -> Unit) {
@@ -90,7 +90,8 @@ fun AssistantScreen(onBack: () -> Unit) {
                 items(messages.size) { i -> Bubble(messages[i]) }
             }
         }
-        Row(Modifier.fillMaxWidth().background(Nuru.white).padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+        // Clear of the gesture bar with the keyboard down (§7.1 rule 3).
+        Row(Modifier.fillMaxWidth().background(Nuru.white).navigationBarsPadding().padding(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(draft, { draft = it }, placeholder = { Text("Ask Nuru…") }, shape = RoundedCornerShape(Radii.pill), modifier = Modifier.weight(1f))
             Spacer(Modifier.width(Spacing.sm))
             PrimaryButton("Ask", loading = busy, enabled = draft.isNotBlank(), modifier = Modifier.width(84.dp), onClick = { send(draft) })
@@ -98,10 +99,10 @@ fun AssistantScreen(onBack: () -> Unit) {
     }
 }
 
-private val NuruPurple = androidx.compose.ui.graphics.Color(0xFF7C3AED)
-private val NuruGreen = androidx.compose.ui.graphics.Color(0xFF10B981)
-private val NuruOrb = androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.Color(0xFFA78BFA), NuruPurple, androidx.compose.ui.graphics.Color(0xFF2A1259)))
-private val NuruHeaderGradient = androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.Color(0xFF2A1259), Nuru.navyDeep, androidx.compose.ui.graphics.Color(0xFF053F30)))
+// Navy with gold, like Quick help (EXPERIENCE.md §8.1 rule 1, §8.2 #3): the
+// header was purple into green, the orb purple, the chips four hues.
+private val NuruOrb = Nuru.goldGradient
+private val NuruHeaderGradient = androidx.compose.ui.graphics.Brush.linearGradient(listOf(Nuru.navy700, Nuru.navyCeremony))
 
 @Composable
 private fun NuruHeader(onBack: () -> Unit) {
@@ -112,18 +113,18 @@ private fun NuruHeader(onBack: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         androidx.compose.material3.IconButton(onClick = onBack) {
-            androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.onNavy)
+            androidx.compose.material3.Icon(Lucide.ArrowLeft, "Back", tint = Nuru.onNavy)
         }
         androidx.compose.foundation.layout.Box(
             Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(NuruOrb),
             contentAlignment = Alignment.Center,
-        ) { Text("✨", style = NuruType.title) }
+        ) { androidx.compose.material3.Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Nuru", style = NuruType.cardTitle, color = Nuru.onNavy)
                 Spacer(Modifier.width(Spacing.xs))
-                androidx.compose.foundation.layout.Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(NuruGreen).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                androidx.compose.foundation.layout.Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold).padding(horizontal = 6.dp, vertical = 1.dp)) {
                     Text("AI", style = NuruType.micro, color = Nuru.navy)
                 }
             }
@@ -139,9 +140,9 @@ private data class Suggestion(val label: String, val color: androidx.compose.ui.
 private fun SuggestionChips(onPick: (String) -> Unit) {
     val suggestions = listOf(
         Suggestion("Summarize my week", Nuru.gold),
-        Suggestion("Draft an encouragement", NuruPurple),
-        Suggestion("Find a prayer to pray", NuruGreen),
-        Suggestion("Plan my quiet time", Nuru.info),
+        Suggestion("Draft an encouragement", Nuru.gold),
+        Suggestion("Find a prayer to pray", Nuru.gold),
+        Suggestion("Plan my quiet time", Nuru.gold),
     )
     androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         suggestions.forEach { s ->
@@ -167,7 +168,7 @@ private fun Bubble(m: AssistantMessage) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
         if (!mine) {
             androidx.compose.foundation.layout.Box(Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(NuruOrb), contentAlignment = Alignment.Center) {
-                Text("✨", style = NuruType.caption)
+                androidx.compose.material3.Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.width(Spacing.sm))
         }

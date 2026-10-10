@@ -4,8 +4,11 @@
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.nuruplace.member.data.net.GiftFailure
 import org.nuruplace.member.data.net.GivingDetail
 import org.nuruplace.member.data.net.IntentPledge
 import org.nuruplace.member.data.net.ReceiptNeed
@@ -46,6 +49,20 @@ class GiveReceiptCopyTest {
     }
 
     @Test
+    fun `a pledge or fund name that already ends in the word is not doubled`() {
+        listOf("Building pledge", "Building Pledge", "BUILDING PLEDGE").forEach { name ->
+            assertEquals(name, "toward your $name", receiptDestinationLine(base.copy(pledge = IntentPledge("p1", name))))
+        }
+        assertEquals("to the Building Fund", receiptDestinationLine(base.copy(fundName = "Building Fund")))
+        assertEquals("to the BUILDING FUND", receiptDestinationLine(base.copy(fundName = "BUILDING FUND")))
+        assertEquals("100% of this gift reaches the Building Fund.", receiptWhereItWent(base.copy(fundName = "Building Fund")))
+        assertEquals(
+            "KSh 500 toward your Building Pledge · M-Pesa UIPJ27PBO3 · 25 Sep 2026",
+            receiptShareText(base.copy(pledge = IntentPledge("p1", "Building Pledge"))),
+        )
+    }
+
+    @Test
     fun `share text is amount, destination, method with reference, day`() {
         assertEquals("KSh 500 to the Discipleship fund · M-Pesa UIPJ27PBO3 · 25 Sep 2026", receiptShareText(base))
         assertEquals(
@@ -63,21 +80,22 @@ class GiveReceiptCopyTest {
         )
         // Older server: no method_label → the local label; USD keeps its symbol.
         assertEquals(
-            "$12.50 to the Discipleship fund · PayPal 9AB · 25 Sep 2026",
+            "US$ 12.50 to the Discipleship fund · PayPal 9AB · 25 Sep 2026",
             receiptShareText(base.copy(methodLabel = null, method = "paypal", currency = "USD", amountMinor = 1_250, receiptCode = null, providerRef = "9AB")),
         )
-        // No method at all and no dates → nothing dangling.
+        // No method at all reads M-Pesa (iOS); no dates → nothing dangling.
         assertEquals(
-            "KSh 500 to the Discipleship fund",
+            "KSh 500 to the Discipleship fund · M-Pesa",
             receiptShareText(base.copy(methodLabel = null, method = null, receiptCode = null, providerRef = null, createdAt = "", settledAt = null)),
         )
     }
 
     @Test
     fun `receipt is dated by settled_at, else created_at, in Nairobi`() {
-        assertEquals("Fri 25 Sep 2026 · 8:11 PM", receiptWhen(base))
-        assertEquals("Fri 25 Sep 2026 · 7:40 PM", receiptWhen(base.copy(settledAt = null)))
-        assertEquals("Fri 25 Sep 2026 · 7:40 PM", receiptWhen(base.copy(settledAt = "")))
+        assertEquals("Fri 25 Sep · 8:11 PM", receiptWhen(base, java.time.LocalDate.of(2026, 10, 5)))
+        assertEquals("Fri 25 Sep 2026 · 8:11 PM", receiptWhen(base, java.time.LocalDate.of(2027, 1, 5)))
+        assertEquals("Fri 25 Sep · 7:40 PM", receiptWhen(base.copy(settledAt = null), java.time.LocalDate.of(2026, 10, 5)))
+        assertEquals("Fri 25 Sep · 7:40 PM", receiptWhen(base.copy(settledAt = ""), java.time.LocalDate.of(2026, 10, 5)))
         assertEquals("—", receiptWhen(base.copy(settledAt = null, createdAt = "")))
         assertEquals("25 Sep 2026", receiptDay(base))
         assertEquals("", receiptDay(base.copy(settledAt = null, createdAt = "not a date")))
@@ -93,13 +111,49 @@ class GiveReceiptCopyTest {
             ReceiptChip("Waiting for Airtel Money", ReceiptTone.Waiting),
             receiptStatusChip(base.copy(status = "processing", method = "airtel", methodLabel = null)),
         )
-        // Card / PayPal have no PIN prompt to wait on.
-        assertEquals(ReceiptChip("Processing", ReceiptTone.Waiting), receiptStatusChip(base.copy(status = "pending", method = "card", methodLabel = "Card")))
-        // An unknown status is still pending — never shown as received.
-        assertEquals(ReceiptTone.Waiting, receiptStatusChip(base.copy(status = "weird"))?.tone)
+        // Card / PayPal have no PIN prompt to wait on — say what is true (iOS).
+        assertEquals(
+            ReceiptChip("Waiting for confirmation", ReceiptTone.Waiting),
+            receiptStatusChip(base.copy(status = "pending", method = "card", methodLabel = "Card")),
+        )
+        // The wire's other waiting spellings wait too.
+        assertEquals(ReceiptTone.Waiting, receiptStatusChip(base.copy(status = "requires_action"))?.tone)
+        assertEquals(ReceiptTone.Waiting, receiptStatusChip(base.copy(status = "initiated"))?.tone)
+        // Mobile money by its label when the code is missing.
+        assertEquals(
+            ReceiptChip("Waiting for M-Pesa", ReceiptTone.Waiting),
+            receiptStatusChip(base.copy(status = "processing", method = null, methodLabel = "M-Pesa")),
+        )
         assertEquals(ReceiptChip("Not completed", ReceiptTone.NotCompleted), receiptStatusChip(base.copy(status = "failed")))
         assertEquals(ReceiptChip("Not completed", ReceiptTone.NotCompleted), receiptStatusChip(base.copy(status = "cancelled")))
+        assertEquals(ReceiptChip("Not completed", ReceiptTone.NotCompleted), receiptStatusChip(base.copy(status = "expired")))
         assertEquals(ReceiptChip("Refunded", ReceiptTone.Refunded), receiptStatusChip(base.copy(status = "refunded")))
+        // A status this app does not know is said as sent — never shown as received.
+        assertEquals(ReceiptChip("Weird", ReceiptTone.Other), receiptStatusChip(base.copy(status = "weird")))
+        assertEquals(ReceiptChip("On Hold", ReceiptTone.Other), receiptStatusChip(base.copy(status = "ON_HOLD")))
+        assertEquals(ReceiptChip("", ReceiptTone.Other), receiptStatusChip(base.copy(status = "")))
+    }
+
+    @Test
+    fun `thanks and where it went only for money that arrived or is on its way`() {
+        assertTrue(receiptThanks(null))
+        assertTrue(receiptThanks(ReceiptChip("Waiting for M-Pesa", ReceiptTone.Waiting)))
+        assertTrue(receiptThanks(ReceiptChip("On Hold", ReceiptTone.Other)))
+        assertFalse(receiptThanks(ReceiptChip("Not completed", ReceiptTone.NotCompleted)))
+        assertFalse(receiptThanks(ReceiptChip("Refunded", ReceiptTone.Refunded)))
+        assertTrue(receiptReachesFund(null))
+        assertFalse(receiptReachesFund(ReceiptChip("Refunded", ReceiptTone.Refunded)))
+        assertFalse(receiptReachesFund(ReceiptChip("Not completed", ReceiptTone.NotCompleted)))
+    }
+
+    @Test
+    fun `the failure is said only for a gift that did not complete and a reason the server gave`() {
+        val why = GiftFailure(code = "insufficient_funds", reason = "Not enough in M-Pesa", hint = "No money moved.")
+        assertEquals(why, receiptFailure(base.copy(status = "failed", failure = why)))
+        assertEquals(why, receiptFailure(base.copy(status = "expired", failure = why)))
+        assertNull(receiptFailure(base.copy(status = "succeeded", failure = why)))
+        assertNull(receiptFailure(base.copy(status = "failed", failure = why.copy(reason = " "))))
+        assertNull(receiptFailure(base.copy(status = "failed")))
     }
 
     @Test
@@ -108,6 +162,7 @@ class GiveReceiptCopyTest {
         assertEquals("GIFT PENDING", receiptEyebrow(ReceiptChip("Waiting for M-Pesa", ReceiptTone.Waiting)))
         assertEquals("GIFT NOT COMPLETED", receiptEyebrow(ReceiptChip("Not completed", ReceiptTone.NotCompleted)))
         assertEquals("GIFT REFUNDED", receiptEyebrow(ReceiptChip("Refunded", ReceiptTone.Refunded)))
+        assertEquals("GIFT", receiptEyebrow(ReceiptChip("On Hold", ReceiptTone.Other)))
     }
 
     @Test
@@ -124,31 +179,15 @@ class GiveReceiptCopyTest {
         assertEquals("M-Pesa", receiptMethodLabel(base))
         assertEquals("Airtel Money", receiptMethodLabel(base.copy(methodLabel = null, method = "airtel")))
         assertEquals("Manual", receiptMethodLabel(base.copy(methodLabel = "Manual", method = null)))
-        assertEquals("—", receiptMethodLabel(base.copy(methodLabel = null, method = null)))
+        // No method at all reads M-Pesa, as iOS (givingMethodName).
+        assertEquals("M-Pesa", receiptMethodLabel(base.copy(methodLabel = null, method = null)))
         assertEquals("M-Pesa receipt", receiptReferenceLabel(base))
         assertEquals("Airtel receipt", receiptReferenceLabel(base.copy(methodLabel = "Airtel Money", method = "airtel")))
         assertEquals("Reference", receiptReferenceLabel(base.copy(methodLabel = "Card", method = "card")))
-        assertEquals("Reference", receiptReferenceLabel(base.copy(methodLabel = null, method = null)))
+        assertEquals("M-Pesa receipt", receiptReferenceLabel(base.copy(methodLabel = null, method = null)))
         assertEquals("UIPJ27PBO3", receiptProviderRef(base))
         assertEquals("ord_1", receiptProviderRef(base.copy(receiptCode = " ", providerRef = "ord_1")))
         assertNull(receiptProviderRef(base.copy(receiptCode = null, providerRef = null)))
-    }
-
-    @Test
-    fun `where it went names the fund and, on a pledge, says so`() {
-        assertEquals("100% of this gift reaches the Discipleship fund.", receiptWhereItWent(base))
-        assertEquals(
-            "100% of this gift reaches the Discipleship fund. · counts toward your pledge",
-            receiptWhereItWent(base.copy(pledge = pledge)),
-        )
-        assertEquals("100% of this gift reaches the Tithe fund.", receiptWhereItWent(base.copy(fundName = null, fund = "tithe")))
-    }
-
-    @Test
-    fun `amount splits into a currency mark and a number`() {
-        assertEquals("KSh" to "500", receiptAmountParts(50_000, "KES"))
-        assertEquals("KSh" to "1,000", receiptAmountParts(100_000, null))
-        assertEquals("$" to "12.50", receiptAmountParts(1_250, "USD"))
     }
 
     @Test
@@ -158,7 +197,6 @@ class GiveReceiptCopyTest {
         assertEquals("nuru-receipt-AB12.pdf", receiptFileName(base.copy(receiptCode = "AB/12 ../")))
         assertEquals("nuru-receipt-UIP_J27-PBO3.pdf", receiptFileName(base.copy(receiptCode = "UIP_J27-PBO3")))
         assertEquals("nuru-receipt-gift.pdf", receiptFileName(base.copy(receiptCode = "///", transactionId = "")))
-        assertEquals("3f2a9c1e…", receiptShortId(base))
     }
 }
 
@@ -166,7 +204,7 @@ class MoneyFormatTest {
     @org.junit.Test
     fun `money prints the ISO code for currencies other than KES and USD, never a template`() {
         org.junit.Assert.assertEquals("KSh 1,000", money(100_000, "KES"))
-        org.junit.Assert.assertEquals("$1,000.00", money(100_000, "USD"))
+        org.junit.Assert.assertEquals("US$ 1,000.00", money(100_000, "USD"))
         org.junit.Assert.assertEquals("EUR 12.50", money(1_250, "eur"))
         org.junit.Assert.assertFalse(money(1_250, "eur").contains("{"))
     }

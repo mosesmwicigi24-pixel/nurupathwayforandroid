@@ -1,8 +1,8 @@
 // Settings — iOS-parity layout (PREFERENCES header + carded sections). Preserves
-// all functional wiring: notification prefs (push/email/sms), text-size via
+// all functional wiring: notification prefs (push/sound/email/sms), text-size via
 // AppPrefs, approximate-location sharing, change-password, two-factor enroll/
-// verify/disable, sign-out, and the Firebase account link. Port of the iOS
-// SettingsView. Shared palette + primitives live in ProfileShared.kt (same package).
+// verify/disable and sign-out. Port of the iOS SettingsView. Shared palette +
+// primitives live in ProfileShared.kt (same package).
 package org.nuruplace.member.feature.profile
 
 import android.content.Intent
@@ -22,30 +22,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Help
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MailOutline
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -77,34 +60,36 @@ import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ChangePasswordBody
-import org.nuruplace.member.data.net.LocationBody
 import org.nuruplace.member.data.net.MfaCodeBody
 import org.nuruplace.member.data.net.MfaEnrollment
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationPreferences
+import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * @param embedded true when hosted as the You tab's Settings segment
- *   (YouScreen, docs/PARTNERS_PROGRAMME.md §0) — the capsule above is the
- *   chrome, so the cream header with its back button is skipped. The pushed
- *   "settings" route (Profile's gear) still renders the full header.
+ *   (YouScreen, docs/PARTNERS_PROGRAMME.md §0) — the segment capsule sits
+ *   above the header, so the header has no back button. The pushed
+ *   "settings" route (kept for links) has its back button.
  */
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: Boolean = false) {
     val scope = rememberCoroutineScope()
     var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
-    var saveFailed by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { prefs = runCatching { Net.client.api.notificationPreferences() }.getOrNull() }
 
     fun save(p: NotificationPreferences) {
         val previous = prefs
         prefs = p
-        saveFailed = false
+        saveError = null
         scope.launch {
             // A toggle that shows a state the server never recorded is a lie —
             // revert and say so instead.
             runCatching { Net.client.api.updateNotificationPreferences(p) }
-                .onFailure { prefs = previous; saveFailed = true }
+                .onFailure { prefs = previous; saveError = "Couldn't save your preferences. ${ApiException.message(it)}" }
         }
     }
 
@@ -116,21 +101,29 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
             .verticalScroll(rememberScrollState()),
     ) {
         // ── Header ──────────────────────────────────────────────────────────
-        if (!embedded) ProfCreamHeaderBox {
+        // One header on every tab (EXPERIENCE.md §8.1 rule 2, §8.2 #1):
+        // "PREFERENCES · Settings", as iOS — the You tab's Settings segment
+        // had none. Embedded, the segment capsule sits above it, so no back.
+        ProfCreamHeaderBox {
             Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PROF.white)
-                        .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
-                        .clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, PROF.navy, 18.dp)
+                if (!embedded) {
+                    Box(
+                        Modifier
+                            .padding(bottom = 16.dp)
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(PROF.white)
+                            .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Lucide.ArrowLeft, PROF.navy, 18.dp)
+                    }
                 }
-                Text("PREFERENCES", style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.eyebrow, modifier = Modifier.padding(top = 16.dp))
-                Text("Settings", style = pSerif(26, FontWeight.SemiBold), color = PROF.navy)
+                Text("PREFERENCES", style = NuruType.kicker, color = PROF.eyebrow)
+                Text("Settings", style = pSerif(26, FontWeight.SemiBold), color = PROF.navy, modifier = Modifier.padding(top = 4.dp))
+                // The header's one line (§8.1 rule 2; final walk C16: none).
+                Text(SETTINGS_LINE, style = pInter(13), color = PROF.ink600, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
@@ -139,11 +132,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
             Modifier.padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SecurityCard(onOpenFirebase = { onOpen("firebase-account") })
+            SecurityCard()
             NotificationsCard(prefs = prefs, onSave = ::save)
-        if (saveFailed) {
+        saveError?.let { err ->
             Text(
-                "Couldn't save your preferences — check your connection and try again.",
+                err,
                 style = pInter(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
@@ -153,8 +146,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
             PrivacyCard()
             HelpCard()
             ActionsRow()
+            // The build this phone runs (Cycle 3's closing walk, B12) — "v1.0"
+            // was written in while the build was 2.59.0 (84), so support heard
+            // the wrong version.
             Text(
-                "Nuru Pathway · v1.0",
+                appVersionLine(org.nuruplace.member.BuildConfig.VERSION_NAME, org.nuruplace.member.BuildConfig.VERSION_CODE),
                 style = pInter(11),
                 color = PROF.rowLabel,
                 modifier = Modifier.fillMaxWidth(),
@@ -169,12 +165,12 @@ fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, embedded: 
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SecurityCard(onOpenFirebase: () -> Unit) {
+private fun SecurityCard() {
     var showPassword by remember { mutableStateOf(false) }
     SectionCard {
-        SectionTitle(Icons.Filled.Lock, "SECURITY & LOGIN")
+        SectionTitle(Lucide.Lock, "SECURITY & LOGIN")
         ActionRow(
-            tile = { IconTile(Icons.Filled.VpnKey, TINT_PASSWORD) },
+            tile = { IconTile(Lucide.Key, TINT_PASSWORD) },
             title = "Change password",
             subtitle = "Keep your account secure",
             onClick = { showPassword = !showPassword },
@@ -186,38 +182,59 @@ private fun SecurityCard(onOpenFirebase: () -> Unit) {
         TwoFactorRow()
         RowDivider()
         ActionRow(
-            tile = { IconTile(Icons.Filled.Smartphone, TINT_SESSIONS) },
+            tile = { IconTile(Lucide.Smartphone, TINT_SESSIONS) },
             title = "Active sessions",
             subtitle = "This device",
             onClick = {},
         )
-        RowDivider()
-        // Firebase account (email/password add-alongside sign-in) — reachable via onOpen.
-        ActionRow(
-            tile = { IconTile(Icons.Filled.MailOutline, TINT_PASSWORD) },
-            title = "Firebase account",
-            subtitle = "Email / password sign-in (add-alongside)",
-            onClick = onOpenFirebase,
-        )
+        // No "Firebase account" row (EXPERIENCE.md §8.2 #9): it signed in to a
+        // second, Firebase-only email account that nothing reads — the app's
+        // session is the church's own sign-in, and Firebase carries push only.
+        // No internal name reaches a member (§8.1 rule 8).
     }
 }
 
 @Composable
 private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (NotificationPreferences) -> Unit) {
     val context = LocalContext.current
+    // Turned on, push notifications need this phone's permission too — asked
+    // now, with why, never cold on launch (EXPERIENCE.md §7.2 #12).
+    val notifyAsk = org.nuruplace.member.data.firebase.rememberNotificationAsk()
     SectionCard {
-        SectionTitle(Icons.Filled.Notifications, "NOTIFICATIONS")
+        SectionTitle(Lucide.Bell, "NOTIFICATIONS")
         if (prefs != null) {
             ToggleRow(
-                tile = { NeutralTile(Icons.Filled.Notifications) },
+                tile = { NeutralTile(Lucide.Bell) },
                 title = "Push notifications",
                 subtitle = "Devotionals, events, reminders",
                 checked = prefs.pushEnabled,
-                onCheckedChange = { onSave(prefs.copy(pushEnabled = it)) },
+                onCheckedChange = { on ->
+                    onSave(prefs.copy(pushEnabled = on))
+                    if (on) notifyAsk.ask(org.nuruplace.member.data.firebase.NotificationWhy.SETTINGS_PUSH)
+                },
+            )
+            RowDivider()
+            // Owner request 2026-09-28: a sound and a buzz on everything that
+            // arrives, and a place to mute it. Server-side
+            // (`sound_enabled`), so every push the member's phones get says
+            // whether to sound — the app shows a muted one quietly, and a
+            // Live invite stops ringing. Off still delivers everything.
+            ToggleRow(
+                tile = {
+                    NeutralTile(if (prefs.soundEnabled) Lucide.Volume2 else Lucide.VolumeX)
+                },
+                title = "Sound and vibration",
+                subtitle = if (prefs.soundEnabled) {
+                    "A sound and a buzz when a message or notification arrives."
+                } else {
+                    "Notifications arrive quietly."
+                },
+                checked = prefs.soundEnabled,
+                onCheckedChange = { onSave(prefs.copy(soundEnabled = it)) },
             )
             RowDivider()
             ToggleRow(
-                tile = { NeutralTile(Icons.Filled.MailOutline) },
+                tile = { NeutralTile(Lucide.Mail) },
                 title = "Email",
                 subtitle = "Weekly summary & receipts",
                 checked = prefs.emailEnabled,
@@ -225,7 +242,7 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
             )
             RowDivider()
             ToggleRow(
-                tile = { NeutralTile(Icons.Filled.Call) },
+                tile = { NeutralTile(Lucide.Phone) },
                 title = "SMS",
                 subtitle = "Critical updates only",
                 checked = prefs.smsEnabled,
@@ -233,8 +250,11 @@ private fun NotificationsCard(prefs: NotificationPreferences?, onSave: (Notifica
             )
             RowDivider()
         }
+        // The phone's own page for this app's notifications: each channel
+        // (Messages, Updates and reminders, Live invites, Quiet) keeps its
+        // own sound and vibration there, which the member may change.
         ActionRow(
-            tile = { IconTile(Icons.Filled.Notifications, TINT_NOTIF) },
+            tile = { IconTile(Lucide.Bell, TINT_NOTIF) },
             title = "Notification settings",
             subtitle = "Manage sounds & toggles in phone settings",
             onClick = {
@@ -264,8 +284,8 @@ private val LINE_SPACINGS = listOf("Compact" to 0.85f, "Default" to 1.0f, "Relax
 @Composable
 private fun DisplayCard() {
     SectionCard {
-        SectionTitle(Icons.Filled.LightMode, "DISPLAY")
-        Text("Text size", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+        SectionTitle(Lucide.Sun, "DISPLAY")
+        Text("Text size", style = NuruType.controlTitle, color = PROF.navy)
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -298,7 +318,7 @@ private fun DisplayCard() {
         Text("Adjusts text size across the whole app.", style = pInter(11), color = PROF.sub)
 
         Spacer(Modifier.height(16.dp))
-        Text("Line spacing", style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+        Text("Line spacing", style = NuruType.controlTitle, color = PROF.navy)
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -335,9 +355,9 @@ private fun DisplayCard() {
 @Composable
 private fun LanguageCard() {
     SectionCard {
-        SectionTitle(Icons.Filled.Translate, "LANGUAGE")
+        SectionTitle(Lucide.Languages, "LANGUAGE")
         ActionRow(
-            tile = { IconTile(Icons.Filled.Translate, TINT_LANGUAGE) },
+            tile = { IconTile(Lucide.Languages, TINT_LANGUAGE) },
             title = "Language",
             subtitle = "App language · English",
             onClick = {},
@@ -346,46 +366,50 @@ private fun LanguageCard() {
 }
 
 @Composable
-@Suppress("MissingPermission")
 private fun PrivacyCard() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Server first (EXPERIENCE.md §7.4, owner 2026-10-05): the switch shows
+    // what the server holds. It moves once the server has the change; on a
+    // failure it stays as it was and the line under it says why.
+    var saving by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<String?>(null) }
 
-    fun pushFix() {
+    fun change(want: Boolean) {
+        if (saving) return
+        saving = true
+        failure = null
         scope.launch {
-            val client = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
-            val loc = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    com.google.android.gms.tasks.Tasks.await(
-                        client.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_BALANCED_POWER_ACCURACY, null),
-                    )
-                }.getOrNull()
+            when (val r = org.nuruplace.member.feature.shell.LocationSharing.change(context, want)) {
+                is org.nuruplace.member.feature.shell.LocationShareResult.Saved -> AppPrefs.updateShareLocation(r.sharing)
+                is org.nuruplace.member.feature.shell.LocationShareResult.Failed -> failure = r.line
             }
-            if (loc != null) runCatching { Net.client.api.shareLocation(LocationBody(loc.latitude, loc.longitude)) }
+            saving = false
         }
     }
 
     val askPerm = rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) { AppPrefs.updateShareLocation(true); pushFix() }
+        if (granted) change(true)
     }
 
     SectionCard {
-        SectionTitle(Icons.Filled.LocationOn, "PRIVACY")
+        SectionTitle(Lucide.MapPin, "PRIVACY")
         ToggleRow(
-            tile = { NeutralTile(Icons.Filled.LocationOn) },
+            tile = { NeutralTile(Lucide.MapPin) },
             title = "Share my approximate location",
             subtitle = "Helps you connect with believers near you. Approximate only; you can turn this off anytime.",
             checked = AppPrefs.shareLocation,
+            enabled = !saving,
+            failure = failure,
             onCheckedChange = { want ->
                 if (want) {
                     val granted = androidx.core.content.ContextCompat.checkSelfPermission(
                         context,
                         android.Manifest.permission.ACCESS_COARSE_LOCATION,
                     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    if (granted) { AppPrefs.updateShareLocation(true); pushFix() } else askPerm.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (granted) change(true) else askPerm.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 } else {
-                    AppPrefs.updateShareLocation(false)
-                    scope.launch { runCatching { Net.client.api.stopSharingLocation() } }
+                    change(false)
                 }
             },
         )
@@ -395,16 +419,16 @@ private fun PrivacyCard() {
 @Composable
 private fun HelpCard() {
     SectionCard {
-        SectionTitle(Icons.Filled.Help, "HELP & PRIVACY")
+        SectionTitle(Lucide.CircleHelp, "HELP & PRIVACY")
         ActionRow(
-            tile = { IconTile(Icons.Filled.Help, TINT_HELP) },
+            tile = { IconTile(Lucide.CircleHelp, TINT_HELP) },
             title = "Help & support",
             subtitle = "FAQs, contact us",
             onClick = {},
         )
         RowDivider()
         ActionRow(
-            tile = { IconTile(Icons.Filled.Shield, TINT_PRIVACY) },
+            tile = { IconTile(Lucide.Shield, TINT_PRIVACY) },
             title = "Privacy policy",
             subtitle = "How we handle your data",
             onClick = {},
@@ -415,45 +439,85 @@ private fun HelpCard() {
 @Composable
 private fun ActionsRow() {
     var confirmDelete by remember { mutableStateOf(false) }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    var confirmSignOut by remember { mutableStateOf(false) }
+    // At least 56 dp, and as tall as a wrapped label needs — at the largest
+    // text size "Delete account" takes two lines and was cut at 56 (§9.6 #4);
+    // the two stay one height.
+    Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(
             Modifier
                 .weight(1f)
-                .height(56.dp)
+                .fillMaxHeight()
+                .heightIn(min = 56.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(PROF.white)
                 .border(1.dp, PROF.border, RoundedCornerShape(16.dp))
-                .clickable {
-                    // Full sign-out: clear the token vault + drive AuthStore back to /login
-                    // via the wired onSessionExpired callback (identical to AuthStore.signOut()).
-                    Net.client.signOutLocally()
-                    Net.client.onSessionExpired?.invoke()
-                },
+                // Asked first, as on iOS: the answer that ends the session wears
+                // the destructive role (EXPERIENCE.md §8.1 rule 4, §8.2 #19).
+                .clickable { confirmSignOut = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Logout, PROF.navy, 18.dp)
+                Icon(Lucide.LogOut, PROF.navy, 18.dp)
                 Text("Sign out", style = pInter(14, FontWeight.SemiBold), color = PROF.navy)
             }
         }
         Box(
             Modifier
                 .weight(1f)
-                .height(56.dp)
+                .fillMaxHeight()
+                .heightIn(min = 56.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFFFEF2F2))
                 .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(16.dp))
-                .clickable { confirmDelete = true },
+                .clickable { confirmDelete = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.DeleteOutline, PROF.danger, 18.dp)
+                Icon(Lucide.Trash2, PROF.danger, 18.dp)
                 Text("Delete account", style = pInter(14, FontWeight.SemiBold), color = PROF.danger)
             }
         }
     }
+    if (confirmSignOut) {
+        org.nuruplace.member.ui.components.NuruAlertDialog(
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text("Sign out of Nuru Pathway?", style = pInter(16, FontWeight.SemiBold), color = PROF.navy) },
+            text = {
+                Text("Your progress is saved — you can pick up right where you left off.", style = pInter(13), color = PROF.sub)
+            },
+            confirmButton = {
+                Text(
+                    "Sign out",
+                    style = pInter(14, FontWeight.SemiBold),
+                    color = PROF.danger,
+                    modifier = Modifier.clickable {
+                        confirmSignOut = false
+                        // AuthStore.signOut() through the wired callback: it reads
+                        // the refresh token FIRST, revokes it on the server
+                        // (POST /auth/logout), then clears this phone. Clearing
+                        // the vault here first — as this button did — left
+                        // nothing to revoke, so the session lived on server-side.
+                        // (No AuthStore yet — never so in a signed-in shell — still
+                        // clears this phone.)
+                        Net.client.onSessionExpired?.invoke() ?: Net.client.signOutLocally()
+                    }.padding(12.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Stay signed in",
+                    style = pInter(14, FontWeight.SemiBold),
+                    color = PROF.navy,
+                    modifier = Modifier.clickable { confirmSignOut = false }.padding(12.dp),
+                )
+            },
+        )
+    }
     if (confirmDelete) {
-        androidx.compose.material3.AlertDialog(
+        org.nuruplace.member.ui.components.NuruAlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete account", style = pInter(16, FontWeight.SemiBold), color = PROF.navy) },
             text = {
@@ -493,6 +557,7 @@ private fun TwoFactorRow() {
     var code by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
+    val mfaContext = androidx.compose.ui.platform.LocalContext.current
 
     ToggleRow(
         tile = { IconTile(FingerprintIcon, if (twoFAon) TINT_2FA_ON else TINT_2FA_OFF) },
@@ -507,8 +572,13 @@ private fun TwoFactorRow() {
                 if (enrollment == null && !busy) {
                     busy = true
                     scope.launch {
-                        enrollment = runCatching { Net.client.api.enrollMfa() }.getOrNull()
-                        if (enrollment == null) { expanded = false; msg = "Couldn't start 2FA. Try again." }
+                        val started = runCatching { Net.client.api.enrollMfa() }
+                        enrollment = started.getOrNull()
+                        // Why it didn't start (§4), not a bare "Try again".
+                        started.exceptionOrNull()?.let {
+                            expanded = false
+                            msg = ApiException.failureLine("Couldn't start two-factor authentication.", it, mfaContext)
+                        }
                         busy = false
                     }
                 }
@@ -553,7 +623,8 @@ private fun TwoFactorRow() {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (code.length >= 6 && !busy) PROF.navy else PROF.surface)
+                    // The panel's one primary (§8.1 rule 4): gold, navy words.
+                    .background(if (code.length >= 6 && !busy) PROF.gold else PROF.surface)
                     .border(1.dp, PROF.border, RoundedCornerShape(14.dp))
                     .clickable(enabled = code.length >= 6 && !busy) {
                         busy = true
@@ -567,7 +638,8 @@ private fun TwoFactorRow() {
                                     twoFAon = true; msg = "2FA is now on."; expanded = false; enrollment = null; code = ""
                                 }
                             } catch (ex: Exception) {
-                                msg = ApiException.message(ex)
+                                // A wrong code is a 401 in the server's words ("Invalid MFA code").
+                                msg = ApiException.message(ex, credentials = true)
                             } finally {
                                 busy = false
                             }
@@ -579,7 +651,7 @@ private fun TwoFactorRow() {
                 Text(
                     if (twoFAon) "Verify & disable" else "Verify & enable",
                     style = pInter(14, FontWeight.SemiBold),
-                    color = if (code.length >= 6 && !busy) Color.White else PROF.sub,
+                    color = if (code.length >= 6 && !busy) PROF.navy else PROF.sub,
                 )
             }
         }
@@ -615,7 +687,7 @@ private fun ChangePasswordSection() {
                 Modifier.size(44.dp).clip(RoundedCornerShape(22.dp)).background(PROF.successBg),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.CheckCircle, PROF.success, 26.dp)
+                Icon(Lucide.CheckCircle, PROF.success, 26.dp)
             }
             Text(
                 "Your password has been changed.",
@@ -670,7 +742,7 @@ private fun ChangePasswordSection() {
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (enabled) PROF.navy else PROF.surface)
+                .background(if (enabled) PROF.gold else PROF.surface)
                 .border(1.dp, PROF.border, RoundedCornerShape(14.dp))
                 .clickable(enabled = enabled) {
                     when {
@@ -686,7 +758,7 @@ private fun ChangePasswordSection() {
                                     Net.client.api.changePassword(ChangePasswordBody(current.trim(), next))
                                     success = true
                                 } catch (ex: Exception) {
-                                    error = ApiException.message(ex)
+                                    error = ApiException.message(ex, credentials = true)
                                 } finally {
                                     busy = false
                                 }
@@ -698,12 +770,12 @@ private fun ChangePasswordSection() {
             contentAlignment = Alignment.Center,
         ) {
             if (busy) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                CircularProgressIndicator(color = PROF.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
             } else {
                 Text(
                     "Change password",
                     style = pInter(14, FontWeight.SemiBold),
-                    color = if (enabled) Color.White else PROF.sub,
+                    color = if (enabled) PROF.navy else PROF.sub,
                 )
             }
         }
@@ -724,7 +796,7 @@ private fun PasswordField(value: String, onValueChange: (String) -> Unit, label:
         trailingIcon = {
             IconButton(onClick = { visible = !visible }) {
                 Icon(
-                    if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    if (visible) Lucide.EyeOff else Lucide.Eye,
                     PROF.sub,
                     22.dp,
                 )
@@ -765,7 +837,7 @@ private fun SectionTitle(icon: ImageVector, label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, PROF.kicker, 15.dp)
+        Icon(icon, PROF.kicker, 14.dp)
         Text(label, style = pInter(11, FontWeight.Bold, 1.4f), color = PROF.kicker)
     }
 }
@@ -776,21 +848,22 @@ private fun IconTile(icon: ImageVector, tint: RowTint) {
         Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(tint.bg),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, tint.fg, 16.dp)
+        Icon(icon, tint.fg, 18.dp)
     }
 }
 
+/** Every Settings row icon is the same tile (§8.1 rule 7, as iOS): navy on
+ *  gold tint — these were cream with a hairline. */
 @Composable
 private fun NeutralTile(icon: ImageVector) {
     Box(
         Modifier
             .size(36.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(PROF.surface)
-            .border(1.dp, PROF.border, RoundedCornerShape(12.dp)),
+            .background(PROF.goldTint),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, PROF.navy, 16.dp)
+        Icon(icon, PROF.navy, 18.dp)
     }
 }
 
@@ -808,10 +881,11 @@ private fun ActionRow(
     ) {
         tile()
         Column(Modifier.weight(1f)) {
-            Text(title, style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
+            // A control row's title (§8.1 rule 3): Inter 14 medium.
+            Text(title, style = NuruType.controlTitle, color = PROF.navy)
             Text(subtitle, style = pInter(11), color = PROF.sub)
         }
-        Icon(Icons.Filled.ChevronRight, PROF.rowLabel, 16.dp)
+        Icon(Lucide.ChevronRight, PROF.rowLabel, 18.dp)
     }
 }
 
@@ -822,22 +896,31 @@ private fun ToggleRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    /** False while the change is on its way to the server. */
+    enabled: Boolean = true,
+    /** Why the last change didn't save (§4's words) — shown under the row. */
+    failure: String? = null,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        tile()
-        Column(Modifier.weight(1f)) {
-            Text(title, style = pInter(13, FontWeight.SemiBold), color = PROF.navy)
-            Text(subtitle, style = pInter(11), color = PROF.sub)
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            tile()
+            Column(Modifier.weight(1f)) {
+                // A control row's title (§8.1 rule 3): Inter 14 medium.
+                Text(title, style = NuruType.controlTitle, color = PROF.navy)
+                Text(subtitle, style = pInter(11), color = PROF.sub)
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled,
+                colors = SwitchDefaults.colors(checkedTrackColor = PROF.gold, checkedThumbColor = Color.White),
+            )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = PROF.gold, checkedThumbColor = Color.White),
-        )
+        failure?.let { Text(it, style = pInter(12), color = Nuru.danger, modifier = Modifier.padding(bottom = 8.dp)) }
     }
 }
 
@@ -856,3 +939,9 @@ private fun Icon(icon: ImageVector, tint: Color, size: androidx.compose.ui.unit.
         modifier = Modifier.size(size),
     )
 }
+
+/** "Nuru Pathway · version 2.59.0 (84)" — the name and build this phone runs. */
+internal fun appVersionLine(versionName: String, versionCode: Int): String = "Nuru Pathway · version $versionName ($versionCode)"
+
+/** Settings' header line (§8.1 rule 2) — what lives here. */
+internal const val SETTINGS_LINE = "Your account, your notifications, and how the app looks."

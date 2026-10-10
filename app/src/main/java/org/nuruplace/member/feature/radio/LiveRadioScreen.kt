@@ -1,5 +1,5 @@
 // Live radio — the immersive member player (GET /radio/now-playing + /radio/programs).
-// An immersive dark radio player: a blurred-artwork backdrop with breathing gold/indigo
+// An immersive dark radio player: a blurred-artwork backdrop with breathing gold
 // glows, a now-playing centerpiece (LIVE badge, title, speaker, gold play/pause with an
 // expanding ring), an indeterminate sweep progress line, transport controls (mute · play ·
 // sleep), live stat chips, and segmented tabs (Live · Recordings · Schedule) over a Media3
@@ -39,19 +39,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -108,6 +95,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 private object RADIO {
@@ -120,8 +108,6 @@ private object RADIO {
     val red = Color(0xFFEF4444)
     val redDeep = Color(0xFFDC2626)
     val redSoft = Color(0xFFFCA5A5)
-    val indigo = Color(0xFF4338CA)
-    val indigoSoft = Color(0xFF818CF8)
     val green = Color(0xFF16A34A)
     val textOnGold = Color(0xFF0B1F33)
 
@@ -296,7 +282,7 @@ private fun LiveReactionCounter(total: Int, pulse: Int, reduceMotion: Boolean, m
     ) {
         Text("❤️", fontSize = 12.sp)
         Text(abbreviateCount(total), style = gInter(15, FontWeight.Bold), color = Color.White)
-        Text("reactions", style = gInter(10, FontWeight.SemiBold, 0.6f), color = Color.White.copy(alpha = 0.5f))
+        Text("reactions", style = gInter(11, FontWeight.SemiBold, 0.6f), color = Color.White.copy(alpha = 0.5f))
     }
 }
 
@@ -368,13 +354,18 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             val now = nowPlaying ?: programs.firstOrNull { it.live } ?: programs.firstOrNull()
             // The next scheduled program (soonest scheduledAt) — drives both the
             // off-air "Remind me" CTA and the header bell (iOS vm.nextScheduled).
-            val nextScheduled = programs.filter { it.status == "scheduled" }.minByOrNull { it.scheduledAt ?: "" }
+            // Only one a reminder can actually be set for: a readable future start.
+            val nextScheduled = RadioReminder.nextRemindable(programs)
             var reminderOn by remember(nextScheduled?.id) {
                 mutableStateOf(nextScheduled?.let { RadioReminder.isSet(it.id) } ?: false)
             }
+            // The reminder is a notification: this phone's permission is asked
+            // when it is turned on, with why (EXPERIENCE.md §7.2 #12).
+            val notifyAsk = org.nuruplace.member.data.firebase.rememberNotificationAsk()
             fun toggleReminder() {
                 val next = nextScheduled ?: return
                 reminderOn = RadioReminder.toggle(context, next)
+                if (reminderOn) notifyAsk.ask(org.nuruplace.member.data.firebase.NotificationWhy.RADIO)
             }
 
             // Radio home-screen widget (Glance) — this screen has the richest
@@ -426,7 +417,7 @@ fun LiveRadioScreen(onBack: () -> Unit) {
             )
             Box(
                 Modifier.matchParentSize().background(
-                    Brush.radialGradient(listOf(RADIO.indigo.copy(alpha = 0.28f), Color.Transparent), center = Offset(900f, 1900f), radius = 320f),
+                    Brush.radialGradient(listOf(RADIO.gold.copy(alpha = 0.16f), Color.Transparent), center = Offset(900f, 1900f), radius = 320f),
                 ),
             )
 
@@ -492,7 +483,7 @@ private fun Header(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassSquare(Icons.AutoMirrored.Filled.ArrowBack, 20.dp) { onBack() }
+        GlassSquare(Lucide.ArrowLeft, 22.dp) { onBack() }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (live) PulsingDot(RADIO.red, 6.dp)
@@ -502,7 +493,7 @@ private fun Header(
         // The bell toggles the SAME "remind me when we're live" reminder as the
         // off-air CTA below (iOS parity) — a no-op while a show is live or when
         // nothing is scheduled next.
-        GlassSquare(Icons.Filled.Notifications, 18.dp, active = reminderOn) {
+        GlassSquare(Lucide.Bell, 18.dp, active = reminderOn) {
             if (reminderAvailable) onToggleReminder()
         }
     }
@@ -533,14 +524,14 @@ private fun Centerpiece(now: RadioProgram?, modifier: Modifier = Modifier) {
                 Box(
                     Modifier.matchParentSize().background(Brush.linearGradient(listOf(RADIO.panelTop, RADIO.navy))),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = RADIO.gold.copy(alpha = 0.8f), modifier = Modifier.size(44.dp)) }
+                ) { Icon(Lucide.AudioLines, contentDescription = null, tint = RADIO.gold.copy(alpha = 0.8f), modifier = Modifier.size(44.dp)) }
             }
             if (now?.live != true) {
                 Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.5f)))
                 Box(
                     Modifier.align(Alignment.TopStart).padding(12.dp).clip(Capsule).background(RADIO.navyDeep.copy(alpha = 0.7f))
                         .border(1.dp, RADIO.glassBorder, Capsule).padding(horizontal = 12.dp, vertical = 4.dp),
-                ) { Text("OFF AIR", style = gInter(10, FontWeight.Bold, 2.2f), color = Color.White) }
+                ) { Text("OFF AIR", style = gInter(11, FontWeight.Bold, 2.2f), color = Color.White) }
             }
         }
     }
@@ -555,10 +546,10 @@ private fun Titles(now: RadioProgram?) {
         else -> "NURU PLACE RADIO"
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(kicker, style = gInter(9, FontWeight.Bold, 2.0f), color = RADIO.goldLight, modifier = Modifier.padding(top = 24.dp))
+        Text(kicker, style = gInter(11, FontWeight.Bold, 2.0f), color = RADIO.goldLight, modifier = Modifier.padding(top = 24.dp))
         Text(
             now?.title ?: "We're off air right now",
-            style = gSerif(24, FontWeight.SemiBold, -0.48f), color = Color.White,
+            style = gSerif(26, FontWeight.SemiBold, -0.48f), color = Color.White,
             textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
         )
         now?.speaker?.let {
@@ -573,9 +564,9 @@ private fun ProgressLine(now: RadioProgram?, programs: List<RadioProgram>, elaps
     if (now?.live == true) {
         Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(6.dp).clip(CircleShape).background(RADIO.redDeep))
-            Text("LIVE", style = gInter(10, FontWeight.Bold, 1.4f), color = RADIO.redSoft)
+            Text("LIVE", style = gInter(11, FontWeight.Bold, 1.4f), color = RADIO.redSoft)
             LiveWaveBar(Modifier.weight(1f))
-            Text(elapsed, style = gInter(10), color = Color.White.copy(alpha = 0.55f))
+            Text(elapsed, style = gInter(11), color = Color.White.copy(alpha = 0.55f))
         }
     } else {
         val nextUp = programs.firstOrNull { it.status == "scheduled" }?.title ?: "—"
@@ -631,9 +622,9 @@ private fun TransportRow(
 ) {
     if (now?.live == true || now?.streamUrl != null) {
         Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            GlassCircle(if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, active = !muted) { onMute() }
+            GlassCircle(if (muted) Lucide.VolumeX else Lucide.Volume2, active = !muted) { onMute() }
             PlayButton(playing, enabled = now?.streamUrl != null, onClick = onPlay)
-            GlassCircle(Icons.Filled.Bedtime, active = false) { }
+            GlassCircle(Lucide.Moon, active = false) { }
         }
     } else if (nextScheduled != null) {
         // Off-air CTA — schedules a local notification for the next scheduled
@@ -648,8 +639,8 @@ private fun TransportRow(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
-                    Icons.Filled.Notifications, contentDescription = null,
-                    tint = if (reminderOn) Color.White else RADIO.textOnGold, modifier = Modifier.size(15.dp),
+                    Lucide.Bell, contentDescription = null,
+                    tint = if (reminderOn) Color.White else RADIO.textOnGold, modifier = Modifier.size(14.dp),
                 )
                 Text(
                     if (reminderOn) "We'll notify you 🔔" else "Remind me when we're live",
@@ -690,7 +681,7 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
             )
         }
         Icon(
-            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) Lucide.Pause else Lucide.Play,
             contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(30.dp),
         )
     }
@@ -713,9 +704,9 @@ private fun GlassCircle(icon: ImageVector, active: Boolean, onClick: () -> Unit)
 @Composable
 private fun StatChips(now: RadioProgram?, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatChip(Icons.Filled.Headphones, (now?.peakListeners ?: 0).toString(), "LISTENING")
-        StatChip(Icons.Filled.Schedule, "LIVE", "STARTED")
-        StatChip(Icons.Filled.Public, "🌍", "REACH")
+        StatChip(Lucide.Headphones, (now?.peakListeners ?: 0).toString(), "LISTENING")
+        StatChip(Lucide.Clock4, "LIVE", "STARTED")
+        StatChip(Lucide.Globe, "🌍", "REACH")
     }
 }
 
@@ -725,9 +716,9 @@ private fun StatChip(icon: ImageVector, value: String, label: String) {
         Modifier.clip(Capsule).background(RADIO.glass).border(1.dp, RADIO.glassBorder, Capsule).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = RADIO.goldLight, modifier = Modifier.size(12.dp))
+        Icon(icon, contentDescription = null, tint = RADIO.goldLight, modifier = Modifier.size(14.dp))
         Text(value, style = gInter(11, FontWeight.Bold), color = Color.White)
-        Text(label, style = gInter(9, FontWeight.SemiBold, 0.9f), color = Color.White.copy(alpha = 0.45f))
+        Text(label, style = gInter(11, FontWeight.SemiBold, 0.9f), color = Color.White.copy(alpha = 0.45f))
     }
 }
 
@@ -764,6 +755,8 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
     var comments by remember(now?.id) { mutableStateOf<List<RadioComment>>(emptyList()) }
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var commentError by remember { mutableStateOf<String?>(null) }
+    val radioContext = androidx.compose.ui.platform.LocalContext.current
 
     // Reconcile the growing counter with the REAL server total whenever a
     // POST /react response updates the counts (only ever grows).
@@ -785,9 +778,11 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             listOf(
-                Triple("❤️", RADIO.redDeep, "heart"),
+                // One accent for every reaction (§8.1 rule 1): red and indigo
+                // said nothing.
+                Triple("❤️", RADIO.gold, "heart"),
                 Triple("🙏", RADIO.gold, "amen"),
-                Triple("🙌", RADIO.indigoSoft, "fire"),
+                Triple("🙌", RADIO.gold, "fire"),
             ).forEach { (emoji, tint, kind) ->
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).background(tint.copy(alpha = 0.165f)).border(1.dp, tint.copy(alpha = 0.4f), CircleShape)
@@ -798,13 +793,13 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                             org.nuruplace.member.ui.components.Haptics.tap(view)
                             fx.tap(emoji)
                             scope.launch {
-                                runCatching {
-                                    counts = Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
-                                }
+                                org.nuruplace.member.ui.components.noticeOnFailure(radioContext, lead = "Couldn't send that.") {
+                                    Net.client.api.radioReact(id, RadioReactBody(kind, java.util.UUID.randomUUID().toString())).counts
+                                }?.let { counts = it }
                             }
                         },
                     contentAlignment = Alignment.Center,
-                ) { Text(emoji, fontSize = 20.sp) }
+                ) { Text(emoji, fontSize = 22.sp) }
             }
         }
         LiveReactionCounter(
@@ -825,7 +820,8 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                 Spacer(Modifier.height(8.dp))
             }
 
-            // Composer.
+            // Composer — a comment that didn't send stays in it, with why.
+            commentError?.let { Text(it, style = gInter(12), color = Color(0xFFFCA5A5), modifier = Modifier.padding(top = 8.dp)) }
             Row(
                 Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -867,7 +863,12 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                                     Net.client.api.addRadioComment(id, RadioCommentBody(draft.trim(), java.util.UUID.randomUUID().toString()))
                                 }.onSuccess {
                                     draft = ""
+                                    commentError = null
                                     runCatching { comments = Net.client.api.radioComments(id) }
+                                }.onFailure {
+                                    // Kept in the field, with why (§7.4, §4).
+                                    if (it is kotlin.coroutines.cancellation.CancellationException) throw it
+                                    commentError = org.nuruplace.member.data.net.ApiException.failureLine(org.nuruplace.member.data.net.ApiException.SEND_FAILED, it, radioContext)
                                 }
                                 busy = false
                             }
@@ -875,9 +876,9 @@ private fun LiveTab(now: RadioProgram?, fx: ReactionsFx, reduceMotion: Boolean) 
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Send, contentDescription = null,
+                        Lucide.Send, contentDescription = null,
                         tint = if (draft.isNotBlank()) RADIO.textOnGold else Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier.size(15.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                 }
             }
@@ -908,7 +909,7 @@ private fun CommentRow(c: RadioComment) {
                     modifier = Modifier.matchParentSize().clip(CircleShape),
                 )
             } else {
-                Text(initials(c.authorName ?: ""), style = gInter(9, FontWeight.Bold), color = Color.White)
+                Text(initials(c.authorName ?: ""), style = gInter(11, FontWeight.Bold), color = Color.White)
             }
         }
         Column {
@@ -958,19 +959,19 @@ private fun RecordingRow(p: RadioProgram, tuned: Boolean, onToggle: () -> Unit) 
                 Box(Modifier.matchParentSize().background(RADIO.navyDeep.copy(alpha = 0.4f)))
             }
             Box(Modifier.size(32.dp).clip(CircleShape).background(RADIO.goldGrad), contentAlignment = Alignment.Center) {
-                Icon(if (tuned) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(13.dp))
+                Icon(if (tuned) Lucide.Pause else Lucide.Play, contentDescription = null, tint = RADIO.textOnGold, modifier = Modifier.size(14.dp))
             }
         }
         Column(Modifier.weight(1f)) {
             if (p.category.isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.clip(Capsule).background(RADIO.gold.copy(alpha = 0.2f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(p.category.uppercase(), style = gInter(8, FontWeight.Bold, 0.8f), color = Color.White)
+                        Text(p.category.uppercase(), style = gInter(11, FontWeight.Bold, 0.8f), color = Color.White)
                     }
                 }
             }
             Text(p.title, style = gInter(13, FontWeight.Bold), color = Color.White, modifier = Modifier.padding(top = 2.dp))
-            p.speaker?.let { Text(it, style = gInter(10), color = Color.White.copy(alpha = 0.55f)) }
+            p.speaker?.let { Text(it, style = gInter(11), color = Color.White.copy(alpha = 0.55f)) }
         }
     }
 }
@@ -1003,18 +1004,18 @@ private fun ScheduleRow(p: RadioProgram) {
             Text(p.title, style = gInter(13, FontWeight.Bold), color = Color.White)
             Text(
                 listOfNotNull(p.speaker, p.category.ifBlank { null }).joinToString(" · "),
-                style = gInter(10), color = Color.White.copy(alpha = 0.5f),
+                style = gInter(11), color = Color.White.copy(alpha = 0.5f),
             )
         }
         if (p.live) {
             Box(Modifier.clip(Capsule).background(RADIO.redDeep).padding(horizontal = 8.dp, vertical = 3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.size(4.dp).clip(CircleShape).background(Color.White))
-                    Text("LIVE", style = gInter(8, FontWeight.Bold, 0.8f), color = Color.White)
+                    Text("LIVE", style = gInter(11, FontWeight.Bold, 0.8f), color = Color.White)
                 }
             }
         } else {
-            Icon(Icons.Filled.Schedule, contentDescription = null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(13.dp))
+            Icon(Lucide.Clock4, contentDescription = null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(14.dp))
         }
     }
 }

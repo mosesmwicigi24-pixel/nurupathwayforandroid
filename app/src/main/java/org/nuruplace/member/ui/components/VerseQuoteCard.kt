@@ -56,7 +56,7 @@ fun VerseQuoteCard(verse: String, reference: String, modifier: Modifier = Modifi
             // rather than sitting inline with the first line.
             Text(
                 "“",
-                style = nuruSerif(52, FontWeight.SemiBold),
+                style = nuruSerif(28, FontWeight.SemiBold),
                 color = Nuru.gold,
                 modifier = Modifier.offset(x = (-4).dp, y = 6.dp),
             )

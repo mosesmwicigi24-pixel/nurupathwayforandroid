@@ -22,9 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,12 +43,21 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
-fun LiveReplaysScreen(onBack: () -> Unit, onOpenRecording: (LiveRecordingRow) -> Unit) {
+fun LiveReplaysScreen(
+    onBack: () -> Unit,
+    onOpenRecording: (LiveRecordingRow) -> Unit,
+    /** GET /live/recordings?scope=&cell_id= — the cell page opens its own
+     *  cell's replays (EXPERIENCE.md §7.4 #16); null = every replay. */
+    scope: String? = null,
+    cellId: String? = null,
+    cellName: String? = null,
+) {
     Column(Modifier.fillMaxSize().background(Nuru.paper)) {
-        ScreenHeader("Replays", kicker = "Nuru Live", onBack = onBack)
-        ReplaysList(onOpenRecording)
+        ScreenHeader("Replays", kicker = cellName?.takeIf { it.isNotBlank() } ?: "Nuru Live", onBack = onBack)
+        ReplaysList(onOpenRecording, scope = scope, cellId = cellId)
     }
 }
 
@@ -67,9 +73,14 @@ fun LiveReplaysScreen(onBack: () -> Unit, onOpenRecording: (LiveRecordingRow) ->
  * (infinite) height constraint.
  */
 @Composable
-fun ReplaysList(onOpenRecording: (LiveRecordingRow) -> Unit, modifier: Modifier = Modifier) {
+fun ReplaysList(
+    onOpenRecording: (LiveRecordingRow) -> Unit,
+    modifier: Modifier = Modifier,
+    scope: String? = null,
+    cellId: String? = null,
+) {
     Box(modifier.fillMaxSize()) {
-        AsyncContent(load = { Net.client.api.getLiveRecordings().data }) { recordings, _ ->
+        AsyncContent(key = scope to cellId, load = { Net.client.api.getLiveRecordings(scope = scope, cellId = cellId).data }) { recordings, _ ->
             if (recordings.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(Spacing.screen), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -108,7 +119,7 @@ private fun RecordingRow(row: LiveRecordingRow, onClick: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (row.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
+                if (row.isAudio) Lucide.AudioLines else Lucide.Video,
                 contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp),
             )
         }
@@ -132,8 +143,5 @@ private fun RecordingRow(row: LiveRecordingRow, onClick: () -> Unit) {
 internal fun replayDate(iso: String?): String {
     if (iso.isNullOrBlank()) return ""
     val zone = ZoneId.of("Africa/Nairobi")
-    val fmt = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
-    return runCatching { Instant.parse(iso).atZone(zone).format(fmt) }
-        .recoverCatching { OffsetDateTime.parse(iso).atZoneSameInstant(zone).format(fmt) }
-        .getOrDefault("")
+    return org.nuruplace.member.util.NuruDates.instant(iso)?.let { org.nuruplace.member.util.NuruDates.day(it, zone) }.orEmpty()
 }

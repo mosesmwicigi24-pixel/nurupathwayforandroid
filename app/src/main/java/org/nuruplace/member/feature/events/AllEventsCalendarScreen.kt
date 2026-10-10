@@ -21,10 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +44,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -59,8 +56,14 @@ fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String, String?) -
             .background(EV.paper)
             .verticalScroll(rememberScrollState()),
     ) {
-        AsyncContent(load = { Net.client.api.calendar(todayIso(), isoPlusDays(60)).data }) { events: List<CalendarOccurrence>, _ ->
-            AllEventsCalendarBody(events = events, onBack = onBack, onOpenEvent = onOpenEvent)
+        AsyncContent(load = {
+            val events = Net.client.api.calendar(todayIso(), isoPlusDays(60)).data
+            // The member's own RSVPs — a card says "You're going" (final walk
+            // C5); an accent, so a failure here never fails the calendar.
+            val mine = runCatching { Net.client.api.myRsvps().data }.getOrDefault(emptyList()).associate { it.eventId to it.status }
+            events to mine
+        }) { (events, mine): Pair<List<CalendarOccurrence>, Map<String, String>>, _ ->
+            AllEventsCalendarBody(events = events, myRsvps = mine, onBack = onBack, onOpenEvent = onOpenEvent)
         }
     }
 }
@@ -68,6 +71,7 @@ fun AllEventsCalendarScreen(onBack: () -> Unit, onOpenEvent: (String, String?) -
 @Composable
 private fun AllEventsCalendarBody(
     events: List<CalendarOccurrence>,
+    myRsvps: Map<String, String>,
     onBack: () -> Unit,
     onOpenEvent: (String, String?) -> Unit,
 ) {
@@ -77,14 +81,14 @@ private fun AllEventsCalendarBody(
 
     val monthYearFmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
     val monthFmt = DateTimeFormatter.ofPattern("MMMM", Locale.ENGLISH)
-    val monthDayFmt = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
     val upcomingCount = events.count { (evZdt(it.startAt)?.toLocalDate() ?: today) >= today }
 
     EvSubHeader(
         eyebrow = "EVENTS",
         title = "All events & calendar",
-        subtitle = "$upcomingCount upcoming · ${visibleMonth.format(monthYearFmt)}",
+        // No zero counts (§7.4 #9): the month alone when nothing is coming.
+        subtitle = org.nuruplace.member.util.ZeroCounts.calendarHeader(upcomingCount, visibleMonth.format(monthYearFmt)),
         onBack = onBack,
     )
 
@@ -120,18 +124,18 @@ private fun AllEventsCalendarBody(
                             selectedDate = null
                         }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) { Text("TODAY", style = evInter(9, FontWeight.Bold, 1f), color = EV.overline) }
+                ) { Text("TODAY", style = evInter(11, FontWeight.Bold, 1f), color = EV.overline) }
                 Spacer(Modifier.size(8.dp))
-                NavButton(Icons.Filled.ChevronLeft) { visibleMonth = visibleMonth.minusMonths(1) }
+                NavButton(Lucide.ChevronLeft) { visibleMonth = visibleMonth.minusMonths(1) }
                 Spacer(Modifier.size(8.dp))
-                NavButton(Icons.Filled.ChevronRight) { visibleMonth = visibleMonth.plusMonths(1) }
+                NavButton(Lucide.ChevronRight) { visibleMonth = visibleMonth.plusMonths(1) }
             }
 
             // Weekday header
             Row(Modifier.fillMaxWidth()) {
                 listOf("S", "M", "T", "W", "T", "F", "S").forEach { d ->
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(d, style = evInter(9, FontWeight.Bold, 0.8f), color = EV.ink300)
+                        Text(d, style = evInter(11, FontWeight.Bold, 0.8f), color = EV.ink300)
                     }
                 }
             }
@@ -178,7 +182,7 @@ private fun AllEventsCalendarBody(
                         Box(Modifier.size(6.dp).clip(CircleShape).background(evCategory(cat)))
                         Text(
                             cat.replaceFirstChar { c -> c.uppercase() },
-                            style = evInter(10, FontWeight.Medium),
+                            style = evInter(11, FontWeight.Medium),
                             color = EV.secondary,
                         )
                     }
@@ -198,12 +202,12 @@ private fun AllEventsCalendarBody(
 
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (selectedDate != null) selectedDate!!.format(monthDayFmt).uppercase() else "UPCOMING",
-                style = evInter(10, FontWeight.Bold, 1.5f),
+                if (selectedDate != null) org.nuruplace.member.util.NuruDates.day(selectedDate!!).uppercase() else "UPCOMING",
+                style = evInter(11, FontWeight.Bold, 1.4f),
                 color = EV.overline,
             )
             Spacer(Modifier.weight(1f))
-            Text("$listCount events", style = evInter(10, FontWeight.SemiBold), color = EV.tertiary)
+            org.nuruplace.member.util.ZeroCounts.count(listCount, "event", "events")?.let { Text(it, style = evInter(11, FontWeight.SemiBold), color = EV.tertiary) }
         }
 
         // ── List ────────────────────────────────────────────────────────────
@@ -221,14 +225,14 @@ private fun AllEventsCalendarBody(
                 Box(
                     Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.gold.copy(alpha = 0.08f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.CalendarMonth, null, tint = EV.gold, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Lucide.CalendarDays, null, tint = EV.gold, modifier = Modifier.size(22.dp)) }
                 Text("Nothing scheduled", style = evInter(12, FontWeight.SemiBold), color = EV.navy)
                 Text("Pick another day to see what's on.", style = evInter(11), color = EV.tertiary)
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 shown.forEach { occ ->
-                    EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) })
+                    EvCardView(occ, onClick = { onOpenEvent(occ.occurrenceId, occ.endAt) }, myRsvp = myRsvps[occ.occurrenceId])
                 }
             }
         }

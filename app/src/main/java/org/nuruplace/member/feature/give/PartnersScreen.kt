@@ -9,13 +9,24 @@ package org.nuruplace.member.feature.give
 //   STANDING   partner since · commitments (or gifts) kept · tier chip ·
 //              Make a pledge (the
 //              ONLY gold-filled button on the page) · Statement
-//   DUE        one row per upcoming due, Pay / Resume — only when there is one;
-//              a failed or paused schedule is a compact amber row under it
+//   DUE        one row per upcoming due, Pay / Resume — or "Collected on …"
+//              when a running recurring gift, or the collector of a pledge
+//              (on or before the instalment's day, EXPERIENCE.md §6.4),
+//              takes it — only when there is one; a failed or paused
+//              schedule is a compact amber row under it
 //   PLEDGES    one card per live pledge: its NAME (the member's own, or the
 //              server's derived one), state chip, amount + due line, gold
 //              progress, "N of M kept this year" or "paid · to go", next
 //   STATEMENT  year chips · Pledged / Paid / Remaining · pledge-tied payments
 //              only · "Partners statement and PDF →"
+//
+// A pledge's card opens its own PAGE over the list (iOS PledgeDetailView):
+// "YOUR PLEDGE" and its name; the promise, what counts toward it and a total
+// pledge's pace; the recurring gift that collects it — any pledge — or the
+// offer to collect it at its pace; Pay now · Pause (Pay early · Pause, both
+// quiet, while a gift collects it — EXPERIENCE.md §7 rule 6), Edit | Cancel,
+// I paid another way, reminders; PAYMENTS; PAID ANOTHER WAY. Back returns to the
+// list where it was.
 //
 // The Statement button and that link open the PARTNERS statement
 // (PartnersStatementScreen, route "partners-statement?year=") for the year the
@@ -42,10 +53,10 @@ package org.nuruplace.member.feature.give
 //   · nothing here says "your giving produced this"; we cannot trace a
 //     shilling to a disciple.
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +67,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,70 +76,88 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import org.nuruplace.member.ui.components.NuruDatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.DueItem
+import org.nuruplace.member.data.net.GivingMethodsRes
+import org.nuruplace.member.data.net.GivingSchedule
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Pledge
+import org.nuruplace.member.data.net.PledgeClaim
 import org.nuruplace.member.data.net.PledgeDetail
+import org.nuruplace.member.data.net.PledgePayment
 import org.nuruplace.member.data.net.StatementPayment
+import org.nuruplace.member.data.net.StatementPendingPayment
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.UpdatePledgeBody
-import org.nuruplace.member.data.net.pledgeTitlePatch
+import org.nuruplace.member.data.offline.Connectivity
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.NuruRefreshBox
+import org.nuruplace.member.ui.components.largeText
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.ui.theme.nuruSans
 import org.nuruplace.member.ui.theme.nuruSerif
 import java.text.NumberFormat
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 private val CardShape = RoundedCornerShape(16.dp)
@@ -136,6 +166,9 @@ class PartnersViewModel : ViewModel() {
     var partnership by mutableStateOf<Partnership?>(null); private set
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
+    /** Why the standing did not load, in the state language (EXPERIENCE.md §4)
+     *  — the shared card says it when there is nothing to show yet. */
+    var failure by mutableStateOf<StateMessage?>(null); private set
     var resuming by mutableStateOf(false); private set
     var joining by mutableStateOf(false); private set
     /** The pledge an action is in flight for — its card shows a spinner. */
@@ -154,6 +187,15 @@ class PartnersViewModel : ViewModel() {
     var statementLoading by mutableStateOf(false); private set
     private var statementsInFlight = 0
     var statementError by mutableStateOf<String?>(null); private set
+
+    // GET /giving/methods and GET /giving/schedules, read WITH the standing —
+    // never per pledge — so a pledge shows the recurring gift that collects
+    // it (monthly or total), or the offer to collect it at its pace, the
+    // moment it opens. Null until each has answered once; a failed read keeps
+    // what was there, and with either unknown nothing is offered (never a
+    // second collector on a guess).
+    var methods by mutableStateOf<GivingMethodsRes?>(null); private set
+    var schedules by mutableStateOf<List<GivingSchedule>?>(null); private set
 
     private val freshness = GivingFreshness()
     // Latest request wins: a slower, older answer never overwrites a newer
@@ -183,12 +225,27 @@ class PartnersViewModel : ViewModel() {
         freshness.fetchStarted()
         val seq = ++partnershipSeq
         viewModelScope.launch {
-            loading = true; error = null
+            loading = true; error = null; failure = null
             val r = runCatching { Net.client.api.partnership() }
             if (seq != partnershipSeq) return@launch // a newer fetch owns the state
             r.getOrNull()?.let { partnership = it }
-            if (r.isFailure) error = ApiException.message(r.exceptionOrNull() ?: Exception())
+            if (r.isFailure) {
+                // Read once (an error body is a one-shot stream): the card and the line.
+                val f = ApiException.state(r.exceptionOrNull() ?: Exception())
+                failure = f; error = f.sentence
+            }
             loading = false
+        }
+        // What collects each pledge, and whether M-Pesa can take a new
+        // recurring gift — side by side, beside the standing.
+        viewModelScope.launch {
+            val rails = async { runCatching { Net.client.api.givingMethods() } }
+            val gifts = async { runCatching { Net.client.api.schedules().data } }
+            val m = rails.await()
+            val s = gifts.await()
+            if (seq != partnershipSeq) return@launch // a newer fetch owns the state
+            m.getOrNull()?.let { methods = it }
+            s.getOrNull()?.let { schedules = it }
         }
         // Payments may have changed with whatever prompted this reload.
         val current = LocalDate.now().year
@@ -234,6 +291,9 @@ class PartnersViewModel : ViewModel() {
         }
     }
 
+    /** A sheet opening starts clean: an older action's error is not about it. */
+    fun clearActionError() { actionError = null }
+
     /** PATCH /giving/pledges/{id} — pause/resume/cancel, amount, due day, reminders, name. */
     fun update(pledgeId: String, body: UpdatePledgeBody, onDone: () -> Unit = {}) {
         viewModelScope.launch {
@@ -257,6 +317,18 @@ fun PartnersScreen(
     onAddPledge: () -> Unit = {},
     /** The tab's GIVE · PARTNERS control (GiveTabScreen) — first row of the band. */
     segmentControl: @Composable () -> Unit = {},
+    /** A pledge to open once the standing is here — a Partners notice, a
+     *  collector's "Change it on the pledge", or a pledge just made without
+     *  its automatic collection (with the server's reason). Giving Cycle 5. */
+    openPledge: PledgeLanding? = null,
+    /** [openPledge] has been opened; GiveTabScreen stops asking. */
+    onPledgeOpened: () -> Unit = {},
+    /** A pledge's "Collect it automatically at this pace" set its recurring
+     *  gift up (Giving Cycle 9): the Give segment shows the result. */
+    onScheduleStarted: (StartedSchedule) -> Unit = {},
+    /** Open a recurring gift by id when the standing's own list does not
+     *  have it yet — its sheet on the Recurring gifts screen. */
+    onOpenSchedule: (String) -> Unit = {},
 ) {
     // Stale-while-revalidate on every showing of the segment, and on every
     // return to the foreground (the M-Pesa PIN prompt is its own activity).
@@ -265,41 +337,200 @@ fun PartnersScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
     val p = vm.partnership
     val openStatement = { onOpenPartnersStatement(vm.statementYear ?: LocalDate.now().year) }
+    val today = LocalDate.now()
 
-    Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(rememberScrollState())) {
-        PartnersHeaderBand(segmentControl)
-        Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when {
-                p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
-                    CircularProgressIndicator(color = GIVE.gold)
-                }
-                p == null -> PartnerNotice(
-                    "We couldn't load this just now",
-                    vm.error ?: "Your giving is unaffected.",
-                    action = "Try again" to { vm.load() },
+    // A pledge opens as its own PAGE over the list (iOS PledgeDetailView): its
+    // back arrow, or the system back, returns to the list where it was.
+    // Saveable, so a receipt opened from the page comes back to it.
+    var pageId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Why a pledge just made has no automatic collection (Giving Cycle 5),
+    // said at the top of its page until dismissed.
+    var pageNotice by rememberSaveable { mutableStateOf<String?>(null) }
+    // A pledge not in the list — cancelled, or made a moment ago while the
+    // list reloads — is fetched on its own; and why one could not be opened.
+    var outside by remember { mutableStateOf<Pledge?>(null) }
+    var openError by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<Pledge?>(null) }
+    var cancelling by remember { mutableStateOf<Pledge?>(null) }
+    // The recurring gift collecting a pledge, opened from its page.
+    var collector by remember { mutableStateOf<GivingSchedule?>(null) }
+    // Held here, so the list keeps its place under an open page.
+    val listScroll = rememberScrollState()
+    // The member pulled the list down; its spinner shows until the reads end.
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(vm.loading, vm.statementLoading) { if (!vm.loading && !vm.statementLoading) pulled = false }
+
+    fun openPage(id: String, notice: String? = null) {
+        vm.clearActionError(); openError = null
+        pageNotice = notice; pageId = id
+    }
+    fun closePage() {
+        pageId = null; pageNotice = null
+        vm.clearActionError()
+    }
+    // Opened from outside (Giving Cycle 5): a Partners notice, a collector's
+    // "Change it on the pledge", a pledge just made without its collection.
+    LaunchedEffect(openPledge) {
+        val want = openPledge ?: return@LaunchedEffect
+        openPage(want.pledgeId, want.notice)
+        onPledgeOpened()
+    }
+    LaunchedEffect(pageId, p != null) {
+        val id = pageId ?: return@LaunchedEffect
+        val listed = vm.partnership?.pledges ?: return@LaunchedEffect
+        if (listed.any { it.pledgeId == id } || outside?.pledgeId == id) return@LaunchedEffect
+        runCatching { Net.client.api.pledge(id).asPledge() }
+            .onSuccess { outside = it }
+            .onFailure { openError = ApiException.message(it); pageId = null; pageNotice = null }
+    }
+    // Re-resolved by id, so a change made ON the page shows the reloaded
+    // pledge; one fetched on its own shows until the list has it.
+    val page = pageId?.let { id -> p?.pledges?.firstOrNull { it.pledgeId == id } ?: outside?.takeIf { it.pledgeId == id } }
+
+    if (page != null) {
+        BackHandler { closePage() }
+        PledgePage(
+            pl = page,
+            busy = vm.busyPledgeId == page.pledgeId,
+            actionError = vm.actionError,
+            notice = pageNotice,
+            // Read with the standing, so the collector (or the pace offer)
+            // is there the moment the page opens.
+            methods = vm.methods,
+            schedules = vm.schedules,
+            onBack = { closePage() },
+            onDismissNotice = { pageNotice = null },
+            onRefresh = { vm.load() },
+            onOpenReceipt = onOpenReceipt,
+            onPayNow = {
+                closePage()
+                onPayNow(
+                    GivePreset(
+                        fundId = page.fund?.code, amountMinor = payNowAmount(page), pledgeId = page.pledgeId, title = page.displayTitle,
+                        paysTo = page.paysTo, terms = pledgeTermsLine(page, today),
+                        // Its currency decides the rails (Giving Cycle 5).
+                        currency = page.currency,
+                    ),
                 )
-                p.isMember || p.isPartner -> {
-                    StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
-                    if (p.due.isNotEmpty()) DueSection(p.due, p, vm, onPayNow)
-                    // Only when there is something to say — a partner whose
-                    // giving is collecting cleanly never sees an amber row.
-                    p.trouble?.let { t -> TroubleRow(t, vm.resuming) { p.scheduleId?.let(vm::resume) } }
-                    PledgesSection(p, vm, onPayNow, onOpenReceipt)
-                    StatementSection(p, vm, onOpenReceipt, openStatement)
+            },
+            onPauseResume = { vm.update(page.pledgeId, UpdatePledgeBody(status = if (page.status == "paused") "active" else "paused")) },
+            onEdit = { vm.clearActionError(); editing = page },
+            onCancel = { cancelling = page },
+            onReminders = { on -> vm.update(page.pledgeId, UpdatePledgeBody(remindersEnabled = on)) },
+            // Collecting it at its pace: the Give segment shows the first prompt.
+            onScheduleStarted = { started -> closePage(); onScheduleStarted(started) },
+            onOpenCollector = { s -> collector = s },
+        )
+    } else {
+        // Pull down to read the standing and the statement again (iOS).
+        NuruRefreshBox(
+            refreshing = pulled && (vm.loading || vm.statementLoading),
+            onRefresh = { pulled = true; vm.load() },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Column(Modifier.fillMaxSize().background(GIVE.paper).verticalScroll(listScroll)) {
+                PartnersHeaderBand(segmentControl)
+                Column(
+                    Modifier.padding(horizontal = 16.dp, vertical = 12.dp).padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (vm.error != null && p != null) {
+                        // A refresh failed but we still have a standing to show — said
+                        // quietly, at the top (iOS).
+                        Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
+                    when {
+                        p == null && vm.loading -> Box(Modifier.fillMaxWidth().padding(top = 48.dp), Alignment.Center) {
+                            CircularProgressIndicator(color = GIVE.gold)
+                        }
+                        // Nothing loaded yet and the read failed — what really
+                        // happened, in the shared state card (§4, iOS parity).
+                        p == null -> FailedState(vm.failure ?: StateLanguage.serverError, onRetry = { vm.load() })
+                        // iOS's rule: the membership decides; an older server's is_partner otherwise.
+                        p.isProgrammeMember -> {
+                            StandingCard(p, vm.statements[LocalDate.now().year], onAddPledge, openStatement)
+                            // "DUE" only within the fortnight; further out the
+                            // same rows read "COMING UP" (EXPERIENCE.md §9.3 rule 2).
+                            val (soon, later) = p.due.partition { dueIsSoon(it, LocalDate.now()) }
+                            for ((label, rows) in listOf("DUE" to soon, "COMING UP" to later)) {
+                                if (rows.isEmpty()) continue
+                                DueSection(
+                                    rows, p, vm, onPayNow,
+                                    label = label,
+                                    onOpenSchedule = { id ->
+                                        // "Collected on …": the gift's own sheet, here, as the
+                                        // pledge page's collector row opens it.
+                                        vm.schedules?.firstOrNull { it.scheduleId == id }?.let { collector = it } ?: onOpenSchedule(id)
+                                    },
+                                    // A pledge its collector takes (§6.4): the pledge's page.
+                                    onOpenPledge = { id -> openPage(id) },
+                                )
+                            }
+                            // Only when there is something to say — a partner whose
+                            // giving is collecting cleanly never sees an amber row.
+                            p.trouble?.let { t -> TroubleRow(t, vm.resuming, onResume = p.scheduleId?.let { id -> { vm.resume(id) } }) }
+                            PledgesSection(p, vm, openError) { id -> openPage(id) }
+                            StatementSection(p, vm, onOpenReceipt, openStatement)
+                        }
+                        else -> {
+                            JoinCard(vm.joining, onJoin = { vm.join() })
+                            vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                        }
+                    }
                 }
-                else -> {
-                    JoinCard(vm.joining, onJoin = { vm.join() })
-                    vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
-                }
-            }
-            if (vm.error != null && p != null) {
-                // A refresh failed but we still have a standing to show — say so quietly.
-                Text("Couldn't refresh just now — showing what we last had.", style = giInter(11), color = GIVE.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+
+    // Over the page (or the list): edit, cancel, the gift that collects it.
+    editing?.let { pl ->
+        EditPledgeSheet(
+            pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
+            // The server's refusal — an amount M-Pesa can't take for the
+            // collector that follows this pledge is 422 AMOUNT_OUT_OF_RANGE —
+            // said in the sheet, not behind it.
+            error = vm.actionError,
+            onDismiss = { editing = null },
+            onSave = { patch ->
+                // Only what changed travels (pledgeEditPatch); nothing → close.
+                if (patch == null) editing = null else vm.update(pl.pledgeId, patch) { editing = null }
+            },
+        )
+    }
+    cancelling?.let { pl ->
+        NuruAlertDialog(
+            onDismissRequest = { cancelling = null },
+            title = { Text("Cancel “${pl.displayTitle}”?", style = NuruType.cardTitle, color = Nuru.navy) },
+            text = {
+                Text(
+                    "Nothing already given is affected, and nothing further is owed. You can make a new pledge any time.",
+                    style = NuruType.body, color = Nuru.ink600,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = pl.pledgeId; cancelling = null
+                    vm.update(id, UpdatePledgeBody(status = "cancelled"))
+                }) { Text("Cancel the pledge", style = NuruType.cardCta, color = Nuru.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { cancelling = null }) { Text("Keep it", style = NuruType.cardCta, color = Nuru.ink600) }
+            },
+        )
+    }
+    // The gift collecting a pledge — number, heads-up, pause, cancel; its
+    // amount and day follow a monthly pledge (ScheduleSheet).
+    collector?.let { s ->
+        ScheduleSheet(
+            s,
+            onClose = { collector = null },
+            onChanged = { GivingEvents.emit(); vm.load() },
+            // Paused, resumed or cancelled: the sheet closes (iOS).
+            onDone = { collector = null; GivingEvents.emit(); vm.load() },
+            pledges = p?.pledges.orEmpty(),
+            onOpenPledge = { id -> collector = null; openPage(id) },
+            phoneOnFile = vm.methods?.phoneOnFile,
+        )
     }
 }
 
@@ -312,15 +543,18 @@ private fun PartnersHeaderBand(segmentControl: @Composable () -> Unit) {
     GiveCreamHeaderBox {
         Column(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp)) {
             segmentControl()
-            Text("Walk with the church", style = giSerif(24, FontWeight.SemiBold, -0.48f), color = GIVE.navy, modifier = Modifier.padding(top = 14.dp))
-            Text("Decide in advance. The church can plan.", style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
+            // One header (§8.1 rule 2): the switch above the kicker that names
+            // the tab, the Fraunces title (26–28), one Inter line.
+            Text("PARTNERS", style = NuruType.kicker, color = GIVE.eyebrow, modifier = Modifier.padding(top = 14.dp))
+            Text("Walk with the church", style = giSerif(26, FontWeight.SemiBold, -0.52f), color = GIVE.navy, modifier = Modifier.padding(top = 4.dp))
+            Text("Decide in advance. The church can plan.", style = giInter(13), color = GIVE.sub, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
 
 @Composable
 internal fun Eyebrow(text: String) {
-    Text(text, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.goldLo)
+    Text(text, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.goldLo)
 }
 
 /** A white card: theme border, 16dp radius, 16dp padding. Clickable when asked. */
@@ -335,10 +569,12 @@ internal fun Hairline() {
 }
 
 @Composable
-private fun NavyPill(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun NavyPill(label: String, enabled: Boolean = true, quiet: Boolean = false, onClick: () -> Unit) {
     Text(
-        label, style = giInter(12, FontWeight.SemiBold), color = Color.White,
-        modifier = Modifier.alpha(if (enabled) 1f else 0.45f).clip(Capsule).background(GIVE.navy)
+        label, style = giInter(12, FontWeight.SemiBold), color = if (quiet) GIVE.navy else Color.White,
+        modifier = Modifier.alpha(if (enabled) 1f else 0.45f).clip(Capsule)
+            .background(if (quiet) GIVE.white else GIVE.navy)
+            .then(if (quiet) Modifier.border(1.dp, GIVE.border, Capsule) else Modifier)
             .clickable(enabled = enabled) { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }
@@ -358,45 +594,86 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
     val paused = p.membership?.status == "paused" || p.status == "paused" || p.trouble?.paused == true
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Eyebrow("STANDING")
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(since?.let { "Partner since $it" } ?: "Partner", style = giInter(16, FontWeight.SemiBold), color = GIVE.navy)
-                // Commitments kept this year (a monthly pledge), else gifts
-                // collected (a schedule) — PartnerStatementMath.standingKeptLine.
-                Text(
-                    standingKeptLine(p, yearStatement, paused),
-                    style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            p.tier?.name?.takeIf { it.isNotBlank() }?.let { name ->
-                Row(
-                    Modifier.clip(Capsule).background(GIVE.goldChipBg).padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Icon(Icons.Filled.WorkspacePremium, null, tint = GIVE.goldChipText, modifier = Modifier.size(13.dp))
-                    Text(name, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText)
+        // Nothing to stand on yet — no pledge, no gift collected: no "since",
+        // no "0 gifts kept", no tier; the next step instead.
+        if (!hasStanding(p)) {
+            Text(
+                "Your standing begins with your first gift or pledge.",
+                style = giInter(14), color = GIVE.sub,
+            )
+        } else
+        // iOS parity (HStack alignment .top): the standing and the tier chip
+        // share the width (FairSplitRow) — a long tier name wraps inside its
+        // chip instead of squeezing "Partner since Sep 2026" to a letter or
+        // two a line, at any font scale.
+        FairSplitRow(
+            spacing = 16.dp,
+            first = {
+                Column {
+                    Text(since?.let { "Partner since $it" } ?: "Partner", style = giInter(16, FontWeight.SemiBold), color = GIVE.navy)
+                    // Commitments kept this year (a monthly pledge), else gifts
+                    // collected (a schedule) — PartnerStatementMath.standingKeptLine.
+                    Text(
+                        standingKeptLine(p, yearStatement, paused),
+                        style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 3.dp),
+                    )
                 }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // The ONLY gold-filled button on the page.
+            },
+            second = p.tier?.takeIf { it.name.isNotBlank() }?.let { tier -> { TierChip(tier.name, tierSpoken(tier, p.currency)) } },
+        )
+        // The ONLY gold-filled button on the page. At least 44dp tall, and
+        // taller rather than clipped when a large font wraps its label; past
+        // the everyday sizes the two stand one above the other, each word
+        // whole — "Stateme / nt" (§9.7 M9).
+        val pledgeButton: @Composable (Modifier) -> Unit = { m ->
             Row(
-                Modifier.weight(1f).height(44.dp).clip(Capsule).background(GIVE.gold)
-                    .clickable { Haptics.tap(view); onAddPledge() },
+                m.heightIn(min = 44.dp).clip(Capsule).background(GIVE.gold)
+                    .clickable { Haptics.tap(view); onAddPledge() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(Icons.Filled.Add, null, tint = GIVE.navy, modifier = Modifier.size(16.dp))
+                Icon(Lucide.Plus, null, tint = GIVE.navy, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Make a pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
-            }
-            Row(
-                Modifier.weight(1f).height(44.dp).clip(Capsule).border(1.5.dp, GIVE.navy, Capsule)
-                    .clickable { onOpenStatement() },
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
-            ) {
-                Text("Statement", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+                Text("Make a pledge", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
         }
+        val statementButton: @Composable (Modifier) -> Unit = { m ->
+            Row(
+                m.heightIn(min = 44.dp).clip(Capsule).border(1.dp, GIVE.border, Capsule).background(GIVE.white)
+                    .clickable { onOpenStatement() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                Text("Statement", style = giInter(14, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
+            }
+        }
+        if (org.nuruplace.member.ui.components.largeText()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                pledgeButton(Modifier.fillMaxWidth())
+                statementButton(Modifier.fillMaxWidth())
+            }
+        } else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            pledgeButton(Modifier.weight(1f))
+            statementButton(Modifier.weight(1f))
+        }
+    }
+}
+
+/** The partner's tier as iOS shows it: award icon, 11 bold, gold chip — the
+ *  name wrapping inside the chip when it is a sentence ("carries one
+ *  disciple through a level, every year"), the icon centred on it. TalkBack
+ *  reads the tier's whole sentence ([spoken], iOS's accessibility label). */
+@Composable
+private fun TierChip(name: String, spoken: String) {
+    // A rounded rectangle, not a capsule: a capsule's ends clipped the first
+    // and last of its wrapped lines at the largest size (§9.7 M9).
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).background(GIVE.goldChipBg).clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(Lucide.Award, null, tint = GIVE.goldChipText, modifier = Modifier.size(14.dp))
+        Text(name, style = giInter(11, FontWeight.Bold), color = GIVE.goldChipText)
     }
 }
 
@@ -406,7 +683,7 @@ private fun StandingCard(p: Partnership, yearStatement: GivingStatement?, onAddP
 private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
     Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Eyebrow("JOIN THE PARTNERS PROGRAMME")
-        Text("Become a partner", style = giSerif(20, FontWeight.SemiBold), color = GIVE.navy)
+        Text("Become a partner", style = giSerif(18, FontWeight.SemiBold), color = GIVE.navy)
         Text("Joining costs nothing today. A pledge can come later.", style = giInter(13), color = GIVE.sub)
         Row(
             Modifier.fillMaxWidth().height(44.dp).clip(Capsule).background(GIVE.gold)
@@ -418,6 +695,10 @@ private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
             }
             Text(if (joining) "Joining…" else "Join the programme", style = giInter(14, FontWeight.Bold), color = GIVE.navy)
+            if (!joining) {
+                Spacer(Modifier.width(8.dp))
+                Icon(Lucide.ArrowRight, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }
@@ -425,18 +706,37 @@ private fun JoinCard(joining: Boolean, onJoin: () -> Unit) {
 // ── 2. Due + trouble ─────────────────────────────────────────────────────────
 
 @Composable
-private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel, onPayNow: (GivePreset) -> Unit) {
+private fun DueSection(
+    due: List<DueItem>,
+    p: Partnership,
+    vm: PartnersViewModel,
+    onPayNow: (GivePreset) -> Unit,
+    /** "DUE" within the fortnight, "COMING UP" further out (§9.3 rule 2). */
+    label: String = "DUE",
+    /** A running recurring gift's "Collected on …" chip: open that gift. */
+    onOpenSchedule: (String) -> Unit,
+    /** A pledge's "Collected on …" chip (EXPERIENCE.md §6.4): open that pledge. */
+    onOpenPledge: (String) -> Unit,
+) {
     val view = LocalView.current
     val today = LocalDate.now()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Eyebrow("DUE")
+        Eyebrow(label)
         Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).border(1.dp, GIVE.border, CardShape)) {
-            due.sortedBy { it.dueOn }.forEachIndexed { i, d ->
-                if (i > 0) Hairline()
+            // The server's order, as iOS lists them.
+            due.forEachIndexed { i, d ->
+                // Inset to the text on both sides, as iOS draws it.
+                if (i > 0) Box(Modifier.padding(horizontal = 16.dp)) { Hairline() }
                 val pledge = p.pledges.firstOrNull { it.pledgeId == d.id }
                 // pending_minor: the part of this instalment already on its
                 // way — Processing instead of Pay once it covers the amount.
                 val shown = dueRowView(d, pendingMethodFor(d.id, vm.statements[today.year]))
+                // The recurring gift that collects this pledge, read with the
+                // standing: when it prompts on or before the instalment's day,
+                // the row says so instead of Pay (§6.4). Gifts not read yet →
+                // no collector, and Pay stays — never a guess.
+                val pledgeCollected = pledge?.let { pl -> vm.schedules?.let { pledgeCollector(pl, it) } }
+                    ?.let { pledgeCollectedChip(d, it) }
                 // "today" · "in 3 days" · "5 Oct" — or, already past,
                 // "overdue since 10 Aug" / "2 overdue since 10 Aug" in amber.
                 val dueWhen = dueWhen(d, today)
@@ -445,83 +745,145 @@ private fun DueSection(due: List<DueItem>, p: Partnership, vm: PartnersViewModel
                 } else {
                     d.title.ifBlank { null } ?: pledge?.displayTitle ?: "Pledge"
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
+                // The due and what it is on the leading side, its button or
+                // chip on the trailing one — while "KSh 5,000 · today" fits
+                // beside it on one line; otherwise the chip goes below,
+                // deliberately (LeadOrStackRow, §8.2 #20). The amount used to
+                // split ("KSh 5,000 / · today") beside "Collected on Mon 5 Oct".
+                LeadOrStackRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    spacing = 12.dp,
+                    lead = {
+                        // "KSh 3,000 left · in 3 days" — a content row's title
+                        // (§8.1 rule 3, Fraunces 15 semibold); the whole line
+                        // amber when the server says it is overdue (iOS).
                         Text(
-                            buildAnnotatedString {
-                                append("${ksh(shown.leadMinor)} · ")
-                                if (dueWhen.overdue) withStyle(SpanStyle(color = GIVE.goldChipText)) { append(dueWhen.text) } else append(dueWhen.text)
-                            },
-                            style = giInter(15, FontWeight.SemiBold), color = GIVE.navy,
+                            dueLeadLine(d, shown, dueWhen.text),
+                            style = NuruType.rowTitle,
+                            color = if (dueWhen.overdue) GIVE.goldChipText else GIVE.ink,
                         )
-                        Text(
-                            listOfNotNull(what, shown.processingNote).joinToString(" · "),
-                            style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                    if (d.action == "resume") {
-                        NavyPill("Resume", enabled = !vm.resuming && vm.busyPledgeId == null) {
-                            Haptics.tap(view)
-                            if (d.kind == "schedule") vm.resume(d.id) else vm.update(d.id, UpdatePledgeBody(status = "active"))
-                        }
-                    } else if (shown.processingChip != null) {
-                        // Already paid and on its way: no Pay to tap twice.
-                        StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
-                    } else {
-                        NavyPill("Pay") {
-                            Haptics.tap(view)
-                            onPayNow(
-                                GivePreset(
-                                    fundId = pledge?.fund?.code,
-                                    // The uncovered remainder when part is already on its way.
-                                    amountMinor = shown.leadMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
-                                    pledgeId = if (d.kind == "pledge") d.id else pledge?.pledgeId,
-                                    title = d.title.ifBlank { null } ?: pledge?.displayTitle,
-                                    // Where the server will route it, for the
-                                    // PAYING YOUR PLEDGE card (GiveTargetCopy).
-                                    paysTo = d.paysTo ?: pledge?.paysTo,
-                                    terms = pledge?.let { pledgeTermsLine(it, today) },
-                                ),
+                    },
+                    rest = {
+                        Column {
+                            Text(
+                                listOfNotNull(what, shown.processingNote).joinToString(" · "),
+                                style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
                             )
+                            // A claim the office is checking, on the row it
+                            // covers (§9.3 rule 1) — said, never subtracted.
+                            dueClaimLine(d)?.let {
+                                Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                            }
                         }
-                    }
-                }
+                    },
+                    trailing = {
+                        if (d.action == "resume") {
+                            NavyPill("Resume", enabled = !vm.resuming && vm.busyPledgeId == null) {
+                                Haptics.tap(view)
+                                if (d.kind == "schedule") vm.resume(d.id) else vm.update(d.id, UpdatePledgeBody(status = "active"))
+                            }
+                        } else if (shown.processingChip != null) {
+                            // Already paid and on its way: no Pay to tap twice.
+                            Box(Modifier.clearAndSetSemantics { contentDescription = "${shown.processingChip} — this payment is already on its way" }) {
+                                StateChip(shown.processingChip, Nuru.warningBg, Nuru.answeredText)
+                            }
+                        } else if (dueCollectedChip(d) != null) {
+                            // A running recurring gift collects itself — no Pay,
+                            // which gave a second, one-time gift (owner,
+                            // 2026-09-28). A tap opens the gift (pause, change).
+                            val collected = dueCollectedChip(d).orEmpty()
+                            CollectedChip(collected, "$collected, automatically. Opens the recurring gift.") {
+                                Haptics.tap(view); onOpenSchedule(d.id)
+                            }
+                        } else if (pledgeCollected != null) {
+                            // The same for a pledge its collector takes on or
+                            // before the instalment's day (§6.4). A tap opens
+                            // the pledge, where paying early by hand stays.
+                            CollectedChip(pledgeCollected, "$pledgeCollected, automatically. Opens the pledge.") {
+                                Haptics.tap(view); onOpenPledge(d.id)
+                            }
+                        } else {
+                            // While the office checks money toward it, Pay is the
+                            // quiet secondary — never the row's navy ask (final walk
+                            // M1; iOS's DUE row, the same rule).
+                            NavyPill("Pay", quiet = duePayQuiet(d)) {
+                                Haptics.tap(view)
+                                onPayNow(
+                                    GivePreset(
+                                        fundId = pledge?.fund?.code,
+                                        // The uncovered remainder when part is already on its way.
+                                        amountMinor = shown.leadMinor.takeIf { it > 0 } ?: pledge?.let(::payNowAmount),
+                                        pledgeId = if (d.kind == "pledge") d.id else pledge?.pledgeId,
+                                        title = d.title.ifBlank { null } ?: pledge?.displayTitle,
+                                        // Where the server will route it, for the
+                                        // PAYING YOUR PLEDGE card (GiveTargetCopy).
+                                        paysTo = d.paysTo ?: pledge?.paysTo,
+                                        terms = pledge?.let { pledgeTermsLine(it, today) },
+                                        // Its currency decides the rails (Giving Cycle 5).
+                                        currency = d.currency.takeIf { it.isNotBlank() } ?: pledge?.currency,
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                )
             }
         }
     }
 }
 
-/** A failed or paused schedule, said once and plainly: nothing is owed. */
+/** A DUE row's "Collected on Mon 5 Oct" in place of Pay — a running
+ *  recurring gift's, or a pledge's its collector takes — one line that
+ *  shrinks rather than splits; [spoken] is what TalkBack reads. */
 @Composable
-private fun TroubleRow(t: PartnerTrouble, resuming: Boolean, onResume: () -> Unit) {
+private fun CollectedChip(text: String, spoken: String, onTap: () -> Unit) {
+    Box(
+        Modifier.heightIn(min = 32.dp).clip(Capsule).background(GIVE.goldChipBg)
+            .clickable { onTap() }
+            .clearAndSetSemantics { contentDescription = spoken }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText,
+            maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFit(0.85f),
+        )
+    }
+}
+
+/** A failed or paused schedule, said once and plainly: nothing is owed
+ *  (iOS TroubleRow). Resume only for a paused one the standing names a
+ *  schedule for ([onResume] null otherwise) — a spinner beside it while it
+ *  works. */
+@Composable
+private fun TroubleRow(t: PartnerTrouble, resuming: Boolean, onResume: (() -> Unit)?) {
+    val view = LocalView.current
     Row(
-        Modifier.fillMaxWidth().clip(CardShape).background(Nuru.warningBg).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.warningBg).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Outlined.Info, null, tint = Nuru.answeredText, modifier = Modifier.size(16.dp))
-        Text(
-            if (t.paused) "Your giving is paused — nothing is owed." else "One gift didn't go through — we'll try again. Nothing is owed.",
-            style = giInter(12, FontWeight.Medium), color = Nuru.answeredText, modifier = Modifier.weight(1f),
-        )
-        if (t.paused) NavyPill(if (resuming) "Starting…" else "Resume", enabled = !resuming) { onResume() }
+        Icon(Lucide.AlertTriangle, null, tint = Nuru.answeredText, modifier = Modifier.size(14.dp))
+        Text(troubleLine(t), style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText, modifier = Modifier.weight(1f))
+        if (t.paused && onResume != null) {
+            Row(
+                Modifier.heightIn(min = 32.dp).alpha(if (resuming) 0.7f else 1f).clip(Capsule).background(GIVE.navy)
+                    .clickable(enabled = !resuming) { Haptics.tap(view); onResume() }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (resuming) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
+                Text("Resume", style = giInter(12, FontWeight.Bold), color = Color.White)
+            }
+        }
     }
 }
 
 // ── 3. My pledges ────────────────────────────────────────────────────────────
 
+/** PLEDGES — one card per live pledge; a tap opens its page. [openError] is
+ *  why a pledge opened from outside could not be. */
 @Composable
-private fun PledgesSection(
-    p: Partnership,
-    vm: PartnersViewModel,
-    onPayNow: (GivePreset) -> Unit,
-    onOpenReceipt: (String) -> Unit,
-) {
-    var editing by remember { mutableStateOf<Pledge?>(null) }
-    var cancelling by remember { mutableStateOf<Pledge?>(null) }
-    var detailId by remember { mutableStateOf<String?>(null) }
+private fun PledgesSection(p: Partnership, vm: PartnersViewModel, openError: String?, onOpen: (String) -> Unit) {
     val live = p.pledges.filter { it.status != "cancelled" }
     val active = live.count { it.status == "active" }
     val today = LocalDate.now()
@@ -543,67 +905,14 @@ private fun PledgesSection(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 live.forEach { pl ->
-                    PledgeCard(pl, busy = vm.busyPledgeId == pl.pledgeId, yearStatement = yearStatement, today = today) { detailId = pl.pledgeId }
+                    PledgeCard(pl, busy = vm.busyPledgeId == pl.pledgeId, yearStatement = yearStatement, today = today) {
+                        onOpen(pl.pledgeId)
+                    }
                 }
             }
         }
         vm.actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
-    }
-
-    editing?.let { pl ->
-        EditPledgeSheet(
-            pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
-            onDismiss = { editing = null },
-            onSave = { amountMinor, dueDay, titlePatch ->
-                // `title` travels only when the Name field changed: a string
-                // sets the custom name, JsonNull clears it (pledgeTitlePatch).
-                vm.update(pl.pledgeId, UpdatePledgeBody(amountMinor = amountMinor, dueDay = dueDay, title = titlePatch)) { editing = null }
-            },
-        )
-    }
-    cancelling?.let { pl ->
-        AlertDialog(
-            onDismissRequest = { cancelling = null },
-            title = { Text("Cancel this pledge?", style = NuruType.cardTitle, color = Nuru.navy) },
-            text = {
-                Text(
-                    "Nothing is owed. What you have already given stays counted; nothing more will be asked for this pledge.",
-                    style = NuruType.body, color = Nuru.ink600,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val id = pl.pledgeId; cancelling = null
-                    vm.update(id, UpdatePledgeBody(status = "cancelled"))
-                }) { Text("Cancel pledge", style = NuruType.cardCta, color = Nuru.danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { cancelling = null }) { Text("Keep it", style = NuruType.cardCta, color = Nuru.ink600) }
-            },
-        )
-    }
-    // Re-resolved by id so a pause/resume/reminders change made INSIDE the
-    // sheet shows the reloaded pledge, not the one captured at the tap.
-    detailId?.let { id ->
-        val pl = p.pledges.firstOrNull { it.pledgeId == id } ?: return@let
-        PledgeDetailSheet(
-            pl = pl, busy = vm.busyPledgeId == pl.pledgeId,
-            onDismiss = { detailId = null },
-            onOpenReceipt = onOpenReceipt,
-            onPayNow = {
-                detailId = null
-                onPayNow(
-                    GivePreset(
-                        fundId = pl.fund?.code, amountMinor = payNowAmount(pl), pledgeId = pl.pledgeId, title = pl.displayTitle,
-                        paysTo = pl.paysTo, terms = pledgeTermsLine(pl, today),
-                    ),
-                )
-            },
-            onPauseResume = { vm.update(pl.pledgeId, UpdatePledgeBody(status = if (pl.status == "paused") "active" else "paused")) },
-            onEdit = { detailId = null; editing = pl },
-            onCancel = { detailId = null; cancelling = pl },
-            onReminders = { on -> vm.update(pl.pledgeId, UpdatePledgeBody(remindersEnabled = on)) },
-        )
+        openError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
     }
 }
 
@@ -635,16 +944,9 @@ private fun stateChip(pl: Pledge): Triple<String, Color, Color> = when {
 private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement?, today: LocalDate, onOpen: () -> Unit) {
     val total = pl.shape == "total"
     val (chipText, chipBg, chipFg) = stateChip(pl)
-    val amountLine = if (total) {
-        "${ksh(pl.targetMinor ?: 0)} by ${partnerDate(pl.dueOn)?.format(PartnerFormat.MONTH) ?: "a date"}"
-    } else {
-        "${ksh(pl.amountMinor ?: 0)} monthly"
-    }
-    val dueLine = if (total) partnerDate(pl.dueOn)?.let { "due ${PartnerFormat.dayMonth(it)}" } else pl.dueDay?.let { "due on the ${ordinal(it)}" }
     val left = if (total) {
-        val paid = pl.progress.paidMinor
-        val toGo = maxOf((pl.targetMinor ?: 0) - paid, 0)
-        "${ksh(paid)} paid · ${PartnerFormat.grouped(toGo / 100)} to go"
+        // "KSh 0 paid · 20,000 to go" — the currency once (iOS).
+        totalPledgeLeftLine(pl)
     } else {
         // The server's "N of M" when this year's statement names the pledge,
         // else the local estimate; nothing at all while nothing is due.
@@ -653,47 +955,51 @@ private fun PledgeCard(pl: Pledge, busy: Boolean, yearStatement: GivingStatement
     Column(Modifier.partnerCard(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(pl.displayTitle, style = giInter(15, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2)
-                Text(
-                    listOfNotNull(amountLine, dueLine).joinToString(" · "),
-                    style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp),
-                )
+                // A pledge is a content row (§8.1 rule 3): Fraunces 15 semibold.
+                // Two lines at the everyday sizes; past them, the lines it
+                // needs (§8.1 rule 9; "Roof sheets for the new…" at the largest).
+                Text(pl.displayTitle, style = NuruType.rowTitle, color = GIVE.navy, maxLines = if (largeText()) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
+                // What the office is checking leads (§9.3 rule 1, §9.7 M1):
+                // said, never subtracted — the member mustn't pay twice.
+                pledgeClaimLine(pl)?.let {
+                    Text(it, style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText, modifier = Modifier.padding(top = 2.dp))
+                }
+                // The promise as iOS says it — "KSh 20,000 · by 31 Dec", the
+                // date once (it read "KSh 20,000 by Dec · due 31 Dec").
+                Text(pledgeAmountLine(pl, today), style = giInter(12), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
             }
             if (busy) CircularProgressIndicator(color = GIVE.gold, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
             StateChip(chipText, chipBg, chipFg)
         }
-        Box(Modifier.fillMaxWidth().height(6.dp).clip(Capsule).background(GIVE.mutedBg)) {
+        // "40 percent" to TalkBack (iOS).
+        Box(
+            Modifier.fillMaxWidth().height(6.dp).clip(Capsule).background(GIVE.mutedBg)
+                .clearAndSetSemantics { contentDescription = progressSpoken(progressFraction(pl)) },
+        ) {
             Box(Modifier.fillMaxWidth(progressFraction(pl)).fillMaxHeight().clip(Capsule).background(GIVE.gold))
         }
-        Row(Modifier.fillMaxWidth()) {
-            left?.let { Text(it, style = giInter(11), color = GIVE.sub) }
-            Spacer(Modifier.weight(1f))
-            // "Next 5 Oct" — or "Overdue since 10 Aug" in amber once its
-            // next instalment is already past.
-            pledgeNextLabel(pl, today)?.let {
-                Text(
-                    it.text,
-                    style = giInter(11, if (it.overdue) FontWeight.SemiBold else FontWeight.Normal),
-                    color = if (it.overdue) GIVE.goldChipText else GIVE.sub,
-                )
-            }
-        }
+        // "KSh 20,000 paid · KSh 30,000 to go" at the leading edge and "Next
+        // 5 Oct" — or "Overdue since 10 Aug" in amber — at the trailing one,
+        // sharing the width (FairSplitRow): long dollar amounts wrap rather
+        // than squeeze the date into a column of letters.
+        val next = pledgeNextLabel(pl, today)
+        if (left != null || next != null) FairSplitRow(
+            modifier = Modifier.fillMaxWidth(),
+            spacing = 8.dp,
+            first = { left?.let { Text(it, style = giInter(11), color = GIVE.sub) } },
+            second = next?.let { n ->
+                {
+                    Text(
+                        n.text,
+                        style = giInter(11, if (n.overdue) FontWeight.SemiBold else FontWeight.Normal),
+                        color = if (n.overdue) GIVE.goldChipText else GIVE.sub,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            },
+        )
+        // A total pledge's pace lives on its page, not here (iOS).
     }
-}
-
-@Composable
-private fun ActionPill(label: String, primary: Boolean = false, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
-    val bg = when { primary -> Nuru.navyDeep; else -> Nuru.white }
-    val fg = when { primary -> Color.White; danger -> Nuru.danger; else -> Nuru.navy }
-    Text(
-        label, style = nuruSans(12, FontWeight.SemiBold), color = fg,
-        modifier = Modifier
-            .alpha(if (enabled) 1f else 0.45f)
-            .clip(CircleShape).background(bg)
-            .then(if (primary) Modifier else Modifier.border(1.dp, if (danger) Nuru.danger.copy(alpha = 0.3f) else Nuru.border, CircleShape))
-            .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    )
 }
 
 internal fun ordinal(n: Int): String {
@@ -701,185 +1007,832 @@ internal fun ordinal(n: Int): String {
     return "$n$suffix"
 }
 
-/** Edit name / amount / due day (spec §5 PATCH + pledge names). Due day only
- *  for monthly pledges. The Name field is prefilled with the custom name, or
- *  the derived one when there is none; only a CHANGE travels (a cleared field
- *  sends null so the server falls back to its derived name). */
+/** Edit name / amount / due day (spec §5 PATCH + pledge names), as iOS's
+ *  EditPledgeSheet: the NAME (prefilled with the member's own, else the
+ *  derived one — a cleared name goes back to the derived one), the promise
+ *  in the pledge's own currency (EACH MONTH or TOTAL, the suggested amounts
+ *  or one of the member's own), and a monthly pledge's DUE DAY. Only a
+ *  CHANGE travels (pledgeEditPatch: a monthly pledge's `amount_minor`, a
+ *  total pledge's TARGET); Save waits until something changed. A collector
+ *  that follows the pledge moves with it; an amount it can't take is the
+ *  server's refusal, said here ([error]). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditPledgeSheet(
     pl: Pledge,
     busy: Boolean,
+    error: String?,
     onDismiss: () -> Unit,
-    onSave: (amountMinor: Int?, dueDay: Int?, titlePatch: kotlinx.serialization.json.JsonElement?) -> Unit,
+    onSave: (UpdatePledgeBody?) -> Unit,
 ) {
-    var amountText by remember { mutableStateOf(((pl.amountMinor ?: pl.targetMinor ?: 0) / 100).toString()) }
-    var dueDay by remember { mutableStateOf(pl.dueDay ?: 1) }
-    val namePrefill = remember(pl.pledgeId) { pl.customTitle?.takeIf { it.isNotBlank() } ?: pl.displayTitle }
-    var name by remember(pl.pledgeId) { mutableStateOf(namePrefill) }
-    val parsed = amountText.filter { it.isDigit() }.take(8).toIntOrNull() ?: 0
+    val view = LocalView.current
+    val dollars = currencyCode(pl.currency) == USD_CURRENCY
+    val monthly = pl.shape != "total"
+    // The promise, in minor units of the pledge's own currency.
+    var amountMinor by remember(pl.pledgeId) { mutableIntStateOf(pl.headlineMinor) }
+    var customAmount by remember(pl.pledgeId) { mutableStateOf("") }
+    var dueDay by remember(pl.pledgeId) { mutableIntStateOf(pl.dueDay ?: 1) }
+    val hasCustom = !pl.customTitle.isNullOrBlank()
+    var name by remember(pl.pledgeId) { mutableStateOf(pl.customTitle?.takeIf { it.isNotBlank() } ?: pl.displayTitle) }
     // A blank name is a valid CLEAR; anything else must be 2–60.
     val nameValid = name.isBlank() || pledgeTitleValid(name)
-    val valid = parsed in 1..5_000_000 && nameValid
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Edit pledge", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
-            Text("NAME", style = NuruType.micro, color = Nuru.goldLo)
-            OutlinedTextField(
-                value = name,
-                onValueChange = { v -> name = v.take(PLEDGE_TITLE_MAX) },
-                singleLine = true,
-                placeholder = { Text(pl.displayTitle, style = NuruType.body, color = Nuru.ink400) },
-                supportingText = {
-                    Row(Modifier.fillMaxWidth()) {
-                        Text(
-                            if (!nameValid) "$PLEDGE_TITLE_MIN–$PLEDGE_TITLE_MAX characters, or clear it to use the church's name" else "",
-                            style = NuruType.caption, color = Nuru.danger, modifier = Modifier.weight(1f),
-                        )
-                        Text("${name.length}/$PLEDGE_TITLE_MAX", style = NuruType.caption, color = Nuru.ink400)
+    val patch = pledgeEditPatch(pl, amountMinor.takeIf { it > 0 }, if (monthly) dueDay else null, pledgeEditTitlePatch(pl, name))
+    val canSave = patch != null && amountMinor > 0 && nameValid && !busy
+    val label = giInter(11, FontWeight.SemiBold, 1.6f)
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Edit pledge", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy, modifier = Modifier.weight(1f))
+                Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() }, Alignment.Center) {
+                    Icon(Lucide.X, "Close", tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("NAME", style = label, color = GIVE.overline)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { v -> name = v.take(PLEDGE_TITLE_MAX) },
+                    singleLine = true,
+                    placeholder = { Text("Name this pledge", style = giInter(14), color = Nuru.ink400) },
+                    leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
+                    suffix = {
+                        Text("${name.trim().length}/$PLEDGE_TITLE_MAX", style = giInter(11), color = if (nameValid) Nuru.ink400 else Nuru.danger)
+                    },
+                    isError = !nameValid,
+                    textStyle = giInter(14).copy(color = Nuru.ink),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(pledgeNameHelp(hasCustom), style = giInter(12), color = Nuru.ink400)
+            }
+            // The promise, in its own money.
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (monthly) "EACH MONTH" else "TOTAL", style = label, color = GIVE.tertiary)
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (dollars) "US$" else "KSh", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary)
+                    val shown = pledgeEditAmountText(amountMinor, pl.currency)
+                    Text(shown, style = giSerif(TypeScale.amount(shown), FontWeight.SemiBold, -1.1f), color = GIVE.navy)
+                }
+            }
+            // The suggested amounts, three to a row.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                pledgeEditPresets(pl.currency).chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { v ->
+                            val on = amountMinor == v && customAmount.isEmpty()
+                            Box(
+                                Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(if (on) GIVE.navy else Nuru.surface)
+                                    .border(1.dp, if (on) Color.Transparent else Nuru.border, RoundedCornerShape(12.dp))
+                                    .clickable { Haptics.tick(view); customAmount = ""; amountMinor = v },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("%,d".format(v / 100), style = giInter(13, FontWeight.SemiBold), color = if (on) Color.White else GIVE.navy)
+                            }
+                        }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                     }
-                },
-                isError = !nameValid,
-                textStyle = nuruSans(16, FontWeight.Medium).copy(color = Nuru.ink),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(if (pl.shape == "total") "TARGET" else "AMOUNT EACH MONTH", style = NuruType.micro, color = Nuru.goldLo)
+                }
+            }
             OutlinedTextField(
-                value = amountText,
-                onValueChange = { v -> amountText = v.filter { it.isDigit() }.take(8) },
+                value = customAmount,
+                onValueChange = { v ->
+                    // Give's rules, in the pledge's money: whole shillings, or dollars and cents.
+                    customAmount = if (dollars) usdTyping(v) else v.filter { it.isDigit() }.take(8)
+                    pledgeAmountMinor(customAmount, pl.currency)?.let { amountMinor = it }
+                },
                 singleLine = true,
-                prefix = { Text("KSh ", style = NuruType.body, color = Nuru.ink600) },
-                textStyle = nuruSerif(22, FontWeight.Medium).copy(color = Nuru.ink),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                placeholder = {
+                    Text(if (dollars) "Or enter your own amount, e.g. 20.00" else "Or enter your own amount", style = giInter(14), color = Nuru.ink400)
+                },
+                leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
+                textStyle = giInter(14).copy(color = Nuru.ink),
+                keyboardOptions = KeyboardOptions(keyboardType = if (dollars) KeyboardType.Decimal else KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (pl.shape != "total") {
-                Text("DUE DAY", style = NuruType.micro, color = Nuru.goldLo)
+            if (dollars) Text("This pledge is in US dollars.", style = giInter(12), color = Nuru.ink400)
+            if (monthly) {
+                Text("DUE DAY", style = label, color = GIVE.overline)
                 DueDayPicker(dueDay) { dueDay = it }
             }
-            Button(
-                onClick = { if (valid) onSave(parsed * 100, if (pl.shape != "total") dueDay else null, pledgeTitlePatch(namePrefill, name)) },
-                enabled = valid && !busy,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Nuru.navyDeep, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+            error?.let { Text(it, style = giInter(12), color = Nuru.danger) }
+            // Gold, as iOS's sheet buttons; it waits until something changed.
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).alpha(if (canSave || busy) 1f else 0.5f)
+                    .clip(RoundedCornerShape(14.dp)).background(GIVE.gold)
+                    .clickable(enabled = canSave) { Haptics.tap(view); onSave(patch) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                if (busy) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp).size(16.dp))
-                Text(if (busy) "Saving…" else "Save changes", style = NuruType.cardCta)
+                if (busy) {
+                    CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (busy) "Saving…" else "Save changes", style = giInter(15, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
             }
         }
     }
 }
 
-/** 1–28 so every month has the day (spec §1). Shared with NewPledgeFlow. */
+/** 1–28 so every month has the day (spec §1), seven to a row — every day in
+ *  sight, as iOS lays it out. Shared with NewPledgeFlow. */
 @Composable
 internal fun DueDayPicker(selected: Int, onSelect: (Int) -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        (1..28).forEach { d ->
-            val on = d == selected
-            Box(
-                Modifier.size(38.dp).clip(CircleShape)
-                    .background(if (on) Nuru.navyDeep else Nuru.white)
-                    .border(1.dp, if (on) Nuru.navyDeep else Nuru.border, CircleShape)
-                    .clickable { onSelect(d) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("$d", style = nuruSans(13, FontWeight.SemiBold), color = if (on) Color.White else Nuru.navy)
+    val view = LocalView.current
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        (1..28).chunked(7).forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                week.forEach { d ->
+                    val on = d == selected
+                    Box(
+                        Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
+                            .background(if (on) GIVE.navy else Nuru.surface)
+                            .border(1.dp, if (on) Color.Transparent else Nuru.border, RoundedCornerShape(10.dp))
+                            .clickable { Haptics.tick(view); onSelect(d) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("$d", style = nuruSans(13, FontWeight.SemiBold), color = if (on) Color.White else Nuru.navy)
+                    }
+                }
             }
         }
     }
 }
 
-/** The pledge detail — the card's tap target. Its actions (Pay · Pause/Resume
- *  · Edit · Cancel · reminders) live here now that the cards carry none, then
- *  GET /giving/pledges/{id}: every payment attributed to it. */
+/** A pledge's own PAGE — the card's tap target (iOS PledgeDetailView), over
+ *  the Partners list with its own back. In iOS's order and words: the cream
+ *  band ("YOUR PLEDGE", the pledge's name); the promise card ("KSh 5,000
+ *  monthly · due on the 5th" · "KSh 0 of KSh 5,000 this month · KSh 0 given
+ *  in all", and a total pledge's pace); the recurring gift that collects it,
+ *  or "Collect it automatically at this pace"; the actions (Pay now — or Pay
+ *  early while a gift collects it — · Pause,
+ *  Edit | Cancel, I paid another way, Remind me); PAYMENTS (GET
+ *  /giving/pledges/{id}); PAID ANOTHER WAY — what the member told the office
+ *  (…/claims, Giving Cycle 5). A cancelled or fulfilled pledge shows its
+ *  record and no actions. Pull down to read it all again. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PledgeDetailSheet(
+private fun PledgePage(
     pl: Pledge,
     busy: Boolean,
-    onDismiss: () -> Unit,
+    /** A failed action on this pledge — said here, not behind the page. */
+    actionError: String?,
+    /** Said first: why a pledge just made has no automatic collection. */
+    notice: String?,
+    /** GET /giving/methods and /giving/schedules, from the screen's
+     *  ViewModel — null while unknown (then nothing is shown or offered). */
+    methods: GivingMethodsRes?,
+    schedules: List<GivingSchedule>?,
+    onBack: () -> Unit,
+    onDismissNotice: () -> Unit,
+    /** Pulled down: the standing too — the pledge's progress, its collector. */
+    onRefresh: () -> Unit,
     onOpenReceipt: (String) -> Unit,
     onPayNow: () -> Unit,
     onPauseResume: () -> Unit,
     onEdit: () -> Unit,
     onCancel: () -> Unit,
     onReminders: (Boolean) -> Unit,
+    onScheduleStarted: (StartedSchedule) -> Unit,
+    onOpenCollector: (GivingSchedule) -> Unit,
 ) {
     val view = LocalView.current
-    val paused = pl.status == "paused"
-    val done = pl.status == "fulfilled"
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val connectivity = remember(context) { Connectivity(context) }
+    val online by remember(connectivity) { connectivity.online() }.collectAsState(initial = connectivity.isOnline())
+    val today = remember { partnerToday() }
+    val fulfilled = pl.status == "fulfilled" || pl.progress.label == "fulfilled"
+    val cancelled = pl.status == "cancelled"
     var detail by remember(pl.pledgeId) { mutableStateOf<PledgeDetail?>(null) }
     var error by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
     var attempt by remember(pl.pledgeId) { mutableIntStateOf(0) }
+    var refreshing by remember(pl.pledgeId) { mutableStateOf(false) }
+    // What the member told the office about this pledge, newest first; a
+    // failed read with nothing yet on screen is said quietly.
+    var claims by remember(pl.pledgeId) { mutableStateOf<List<PledgeClaim>?>(null) }
+    var claimsFailed by remember(pl.pledgeId) { mutableStateOf(false) }
+    var claiming by remember(pl.pledgeId) { mutableStateOf(false) }
+    val checkingMinor = pledgeCheckingMinor(
+        listOf(pl.pendingClaimMinor, detail?.pledge?.pendingClaimMinor, detail?.pendingClaimMinor), claims, pl.currency,
+    )
     LaunchedEffect(pl.pledgeId, attempt) {
         error = null
         runCatching { Net.client.api.pledge(pl.pledgeId) }
             .onSuccess { detail = it }
-            .onFailure { error = ApiException.message(it) }
+            // A failed re-read keeps the payments already on screen.
+            .onFailure { if (detail == null) error = ApiException.message(it, context) }
+        runCatching { Net.client.api.pledgeClaims(pl.pledgeId).data }
+            .onSuccess { claims = it; claimsFailed = false }
+            .onFailure { claimsFailed = claims == null }
+        refreshing = false
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(pl.displayTitle, style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
-                    Text(
-                        "${money(pl.headlineMinor, pl.currency)} ${if (pl.shape == "total") "target" else "each month"} · ${money(pl.progress.paidMinor, pl.currency)} paid",
-                        style = NuruType.caption, color = Nuru.ink600,
-                    )
-                }
-                if (busy) CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp).size(14.dp))
-                Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() }, Alignment.Center) {
-                    Icon(Icons.Filled.Close, "Close", tint = Nuru.navy, modifier = Modifier.size(15.dp))
-                }
+    // "Collect it automatically at this pace" (Giving Cycle 9): in flight,
+    // its refusal in the server's words, and its key.
+    var startingPace by remember(pl.pledgeId) { mutableStateOf(false) }
+    var paceError by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
+    // Held only after a request that got no answer, so tapping again finds
+    // the gift that request may have made (newGivingKey otherwise).
+    var paceKey by remember(pl.pledgeId) { mutableStateOf<String?>(null) }
+
+    /** "Collect it automatically at this pace": a monthly M-Pesa gift bound
+     *  to the pledge at its pace, its first prompt now (PledgePaceLogic).
+     *  Online only — money is never queued. */
+    fun startPace() {
+        if (startingPace || !online) return
+        val key = paceKey ?: newGivingKey()
+        val body = paceScheduleBody(pl, key) ?: return
+        paceKey = key; startingPace = true; paceError = null
+        scope.launch {
+            var failure: Throwable? = null
+            try {
+                val created = Net.client.api.createSchedule(body)
+                Haptics.confirm(view)
+                // A schedule is the partnership's rhythm — the standing changes.
+                GivingEvents.emit()
+                onScheduleStarted(StartedSchedule(created, body))
+            } catch (e: Exception) {
+                failure = e
+                // GIFT_IN_PROGRESS, SCHEDULE_EXISTS, PHONE_REQUIRED… the server's words.
+                paceError = ApiException.message(e, context)
+                Haptics.reject(view)
+            } finally {
+                if (!keepGiveKeyAfter(failure)) paceKey = null
+                startingPace = false
             }
-            if (!done) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ActionPill("Pay now", primary = true, enabled = !busy && !paused) { Haptics.tap(view); onPayNow() }
-                    ActionPill(if (paused) "Resume" else "Pause", enabled = !busy) { Haptics.tap(view); onPauseResume() }
-                    ActionPill("Edit", enabled = !busy) { onEdit() }
-                    ActionPill("Cancel", enabled = !busy, danger = true) { onCancel() }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Remind me before it's due", style = NuruType.label, color = Nuru.ink)
-                        Text("A nudge three days ahead, on the channels you allow.", style = NuruType.caption, color = Nuru.ink400)
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(GIVE.paper)) {
+        PledgePageHeader(pl.displayTitle, onBack)
+        NuruRefreshBox(
+            refreshing = refreshing,
+            onRefresh = { refreshing = true; attempt++; onRefresh() },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        ) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // The pledge stands; only its automatic collection could not
+                // be set up (auto_schedule_error) — said once, nothing blocks.
+                notice?.let { AutoScheduleNotice(it, onDismissNotice) }
+                actionError?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+                // What the office is checking leads the page (§9.3 rule 1,
+                // §9.7 M1) — it sat at the foot under a gold "Pay now →" —
+                // whichever read knows it (the row, the single read, the
+                // page's own pending claims; iOS PledgeChecking).
+                pledgeCheckingLine(checkingMinor, pl.currency)?.let { PledgeClaimLead(it) }
+                PledgePromiseCard(pl, today)
+                // The recurring gift that collects it — ANY pledge, monthly or
+                // total — or, for a total pledge with a pace, the offer
+                // (PledgePaceLogic.pledgeCollection).
+                val collection = pledgeCollection(pl, methods, schedules)
+                when (val c = collection) {
+                    is PledgeCollection.Collected -> CollectorCard(collectedLine(c.schedule, today)) {
+                        Haptics.tap(view); onOpenCollector(c.schedule)
                     }
-                    Switch(
-                        checked = pl.remindersEnabled, enabled = !busy,
-                        onCheckedChange = { Haptics.tick(view); onReminders(it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = Nuru.gold, checkedThumbColor = Color.White),
+                    PledgeCollection.Offer -> PaceOfferCard(
+                        starting = startingPace,
+                        enabled = !startingPace && !busy && online,
+                        online = online,
+                        error = paceError,
+                    ) { Haptics.tap(view); startPace() }
+                    PledgeCollection.None -> Unit
+                }
+                if (!fulfilled && !cancelled) {
+                    PledgeActionsCard(
+                        paused = pl.status == "paused", busy = busy, online = online, reminders = pl.remindersEnabled,
+                        // Collected automatically: "Pay early", not the call to action (§7 rule 6).
+                        pay = pledgePayButton(collection, checkingMinor),
+                        onPayNow = onPayNow, onPauseResume = onPauseResume, onEdit = onEdit, onCancel = onCancel,
+                        onPaidAnotherWay = { claiming = true }, onReminders = onReminders,
                     )
                 }
-            }
-            Text("PAYMENTS", style = NuruType.micro, color = Nuru.goldLo)
-            val d = detail
-            when {
-                d == null && error == null -> Box(Modifier.fillMaxWidth().padding(20.dp), Alignment.Center) { CircularProgressIndicator(color = Nuru.gold) }
-                d == null -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(error ?: "", style = NuruType.body, color = Nuru.ink600)
-                    TextButton(onClick = { attempt++ }) { Text("Try again", style = NuruType.cardCta, color = Nuru.gold) }
-                }
-                d.payments.isEmpty() -> Text("Nothing counted toward this pledge yet.", style = NuruType.body, color = Nuru.ink600)
-                else -> d.payments.forEach { pay ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.white)
-                            .border(1.dp, Nuru.border, RoundedCornerShape(12.dp))
-                            .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                val d = detail
+                when {
+                    d == null && error == null -> Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), Alignment.Center) {
+                        CircularProgressIndicator(color = GIVE.gold)
+                    }
+                    d == null -> Column(
+                        Modifier.fillMaxWidth().padding(top = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(money(pay.amountMinor, pay.currency), style = NuruType.label, color = Nuru.ink)
-                            Text(
-                                listOfNotNull(pay.at?.let { PartnerFormat.dayMonthYear(it) }, pay.receiptCode?.takeIf { it.isNotBlank() }?.let { "Ref $it" }).joinToString(" · "),
-                                style = NuruType.caption, color = Nuru.ink600,
-                            )
-                        }
-                        if (pay.transactionId.isNotBlank()) Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
+                        Text(error.orEmpty(), style = giInter(14), color = GIVE.sub, textAlign = TextAlign.Center)
+                        Text(
+                            "Try again", style = giInter(11, FontWeight.SemiBold), color = Color.White,
+                            modifier = Modifier.clip(Capsule).background(GIVE.navy)
+                                .clickable { Haptics.tap(view); attempt++ }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
                     }
+                    else -> PledgePaymentsCard(d.payments, onOpenReceipt)
                 }
+                PledgeClaimsCard(claims, claimsFailed, today)
             }
+        }
+    }
+
+    // "I paid another way" — its form in a sheet over the page; the claim
+    // joins PAID ANOTHER WAY the moment the office has it.
+    if (claiming) {
+        NuruModalBottomSheet(onDismissRequest = { claiming = false }, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                ClaimForm(
+                    pl = pl,
+                    checking = pledgeCheckingLine(checkingMinor, pl.currency),
+                    onSent = { made ->
+                        claims = listOf(made) + claims.orEmpty().filter { it.claimId != made.claimId }
+                        claimsFailed = false
+                        claiming = false
+                    },
+                    onClose = { claiming = false },
+                )
+            }
+        }
+    }
+}
+
+/** The claim the office is checking, leading the pledge's page: a gentle
+ *  prompt on gold tint (§8.1 rule 5) — the clock on its gold-tint tile (rule
+ *  7), "US$ 50.00 is being checked by the office", and what it means. iOS's
+ *  PledgeClaimLead, the same. */
+@Composable
+private fun PledgeClaimLead(line: String) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(GIVE.priorityBg)
+            .border(1.dp, GIVE.gold.copy(alpha = 0.25f), shape).padding(14.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(GIVE.goldChipBg), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Clock4, contentDescription = null, tint = GIVE.goldChipText, modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(line, style = NuruType.rowTitle, color = GIVE.navy)
+            Text(PLEDGE_CLAIM_COUNTS, style = giInter(12), color = GIVE.ink600)
+        }
+    }
+}
+
+/** The page's cream band (iOS): back, then "YOUR PLEDGE" over the pledge's
+ *  name — the name IS the page's title (pledge names contract). */
+@Composable
+private fun PledgePageHeader(title: String, onBack: () -> Unit) {
+    val view = LocalView.current
+    GiveCreamHeaderBox {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 24.dp)) {
+            ReceiptHeaderButton(Lucide.ArrowLeft, "Back") { Haptics.tap(view); onBack() }
+            Text("YOUR PLEDGE", style = giInter(11, FontWeight.Bold, 1.4f), color = GIVE.eyebrow, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                title, style = giSerif(26, FontWeight.SemiBold), color = GIVE.navy,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/** The promise, under the page's name (iOS): "KSh 5,000 monthly · due on the
+ *  5th" or "KSh 20,000 · by 31 Dec"; "KSh 0 of KSh 5,000 this month · KSh 0
+ *  given in all"; and a total pledge's pace to reach it on time. */
+@Composable
+private fun PledgePromiseCard(pl: Pledge, today: LocalDate) {
+    Column(Modifier.fillMaxWidth().clip(CardShape).background(GIVE.white).padding(18.dp)) {
+        Text(pledgeAmountLine(pl, today), style = giSerif(22, FontWeight.Medium), color = GIVE.ink)
+        Text(pledgeGivenLine(pl, today), style = giInter(12), color = GIVE.ink600, modifier = Modifier.padding(top = 4.dp))
+        // A total pledge's pace (Giving Cycle 9), as the server sets it.
+        paceLine(pl, today)?.let { line ->
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Lucide.CalendarSync, null, tint = GIVE.gold, modifier = Modifier.padding(top = 2.dp).size(14.dp))
+                Text(line, style = giInter(12, FontWeight.SemiBold), color = GIVE.navy)
+            }
+        }
+    }
+}
+
+/** The recurring gift that collects the pledge — "Collected automatically —
+ *  next KSh 5,000 on 5 Oct" — on every pledge it collects, monthly or total;
+ *  it opens that gift's sheet. */
+@Composable
+private fun CollectorCard(line: String, onOpen: () -> Unit) {
+    Row(
+        Modifier.partnerCard(onClick = onOpen),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Lucide.Repeat, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+        Text(line, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, modifier = Modifier.weight(1f))
+        Icon(Lucide.ChevronRight, null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** "Collect it automatically at this pace" (iOS): an outlined button, its
+ *  one-line promise, and why it waits while offline — or the server's
+ *  refusal in its own words. */
+@Composable
+private fun PaceOfferCard(starting: Boolean, enabled: Boolean, online: Boolean, error: String?, onStart: () -> Unit) {
+    Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (enabled || starting) 1f else 0.5f)
+                .clip(RoundedCornerShape(12.dp)).background(GIVE.white)
+                .border(1.dp, GIVE.border, RoundedCornerShape(12.dp)) // a hairline secondary (§8.1 rule 4)
+                .clickable(enabled = enabled) { onStart() }
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            if (starting) {
+                CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+            } else {
+                Icon(Lucide.CalendarSync, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (starting) "Setting it up…" else "Collect it automatically at this pace",
+                style = giInter(13, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center,
+            )
+        }
+        Text(PACE_OFFER_NOTE, style = giInter(12), color = Nuru.ink400)
+        if (!online) {
+            Text("You're offline — setting this up needs a connection.", style = giInter(11), color = Nuru.ink400)
+        } else {
+            error?.let { Text(it, style = giInter(12), color = GIVE.danger) }
+        }
+    }
+}
+
+/** The pledge's actions, in one card (iOS): Pay now → beside Pause (Resume)
+ *  — or, while a running gift collects the pledge, "Pay early" beside Pause,
+ *  both secondary ([pay], §7 rule 6); Edit | Cancel; "I paid another way" —
+ *  online only, a claim about money is never queued; and "Remind me before
+ *  it's due". */
+@Composable
+private fun PledgeActionsCard(
+    paused: Boolean,
+    busy: Boolean,
+    online: Boolean,
+    reminders: Boolean,
+    pay: PledgePayButton,
+    onPayNow: () -> Unit,
+    onPauseResume: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
+    onPaidAnotherWay: () -> Unit,
+    onReminders: (Boolean) -> Unit,
+) {
+    val view = LocalView.current
+    val shape = RoundedCornerShape(12.dp)
+    // "Remind me before it's due" needs this phone's notification permission:
+    // asked when it is turned on, with why (EXPERIENCE.md §7.2 #12).
+    val notifyAsk = org.nuruplace.member.data.firebase.rememberNotificationAsk()
+    Column(Modifier.partnerCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The page's one gold button — unless the pledge is collected
+            // automatically, or the office is checking money toward it, when
+            // paying is a choice: the plain secondary, white with a hairline
+            // (iOS; §8.1 rule 4). A paused pledge takes nothing.
+            Row(
+                Modifier.weight(1f).heightIn(min = 40.dp).alpha(if (paused) 0.5f else 1f)
+                    .clip(shape)
+                    .then(if (pay.primary) Modifier.background(GIVE.gold) else Modifier.background(GIVE.white).border(1.dp, GIVE.border, shape))
+                    .clickable(enabled = !paused && !busy) { Haptics.tap(view); onPayNow() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    pay.label, style = giInter(13, if (pay.primary) FontWeight.Bold else FontWeight.SemiBold),
+                    color = GIVE.navy, textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.width(6.dp))
+                Icon(Lucide.ArrowRight, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+            }
+            Row(
+                Modifier.weight(1f).heightIn(min = 40.dp)
+                    .clip(shape).background(GIVE.surface).border(1.dp, GIVE.border, shape)
+                    .clickable(enabled = !busy) { Haptics.tap(view); onPauseResume() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
+                } else {
+                    Icon(if (paused) Lucide.Play else Lucide.Pause, null, tint = GIVE.navy, modifier = Modifier.size(14.dp))
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(if (paused) "Resume" else "Pause", style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, textAlign = TextAlign.Center)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // A text action is gold (§8.1 rule 4; final walk C16: grey).
+            SmallAction("Edit", Lucide.Pencil, GIVE.gold, enabled = !busy, modifier = Modifier.weight(1f), onClick = onEdit)
+            Box(Modifier.width(1.dp).height(16.dp).background(GIVE.border))
+            SmallAction("Cancel", Lucide.X, GIVE.danger, enabled = !busy, modifier = Modifier.weight(1f), onClick = onCancel)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val tint = if (online) GIVE.navy else GIVE.ink300
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 32.dp)
+                    .clickable(enabled = online && !busy) { Haptics.tap(view); onPaidAnotherWay() },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Lucide.Check, null, tint = tint, modifier = Modifier.size(14.dp))
+                Text("I paid another way", style = giInter(12, FontWeight.SemiBold), color = tint, modifier = Modifier.weight(1f))
+                Icon(Lucide.ChevronRight, null, tint = GIVE.ink300, modifier = Modifier.size(14.dp))
+            }
+            if (!online) Text("You're offline — telling the office needs a connection.", style = giInter(11), color = Nuru.ink400)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Lucide.Bell, null, tint = GIVE.gold, modifier = Modifier.size(14.dp))
+            Text("Remind me before it's due", style = giInter(13), color = GIVE.ink, modifier = Modifier.weight(1f))
+            Switch(
+                checked = reminders, enabled = !busy,
+                onCheckedChange = { on ->
+                    Haptics.tick(view)
+                    onReminders(on)
+                    if (on) notifyAsk.ask(org.nuruplace.member.data.firebase.NotificationWhy.PLEDGE_REMINDER)
+                },
+                colors = SwitchDefaults.colors(checkedTrackColor = GIVE.gold, checkedThumbColor = Color.White),
+            )
+        }
+    }
+}
+
+/** Edit / Cancel — a small action with its icon, half the row each. */
+@Composable
+private fun SmallAction(label: String, icon: ImageVector, tint: Color, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val view = LocalView.current
+    Row(
+        modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled) { Haptics.tap(view); onClick() }
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = giInter(12, FontWeight.SemiBold), color = tint)
+    }
+}
+
+/** PAYMENTS — every payment counted toward the pledge, each opening its
+ *  receipt; before the first, what will happen (iOS words). */
+@Composable
+private fun PledgePaymentsCard(payments: List<PledgePayment>, onOpenReceipt: (String) -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape).padding(16.dp)) {
+        Text("PAYMENTS", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline)
+        if (payments.isEmpty()) {
+            Text(
+                "No payments yet — the first one will appear here the moment it settles.",
+                style = giInter(13), color = GIVE.sub, modifier = Modifier.padding(top = 10.dp),
+            )
+        } else {
+            payments.forEach { pay -> PledgePaymentRow(pay, onOpenReceipt) }
+        }
+    }
+}
+
+/** One payment: the amount, then the day and its receipt code. */
+@Composable
+private fun PledgePaymentRow(pay: PledgePayment, onOpenReceipt: (String) -> Unit) {
+    val opens = pay.transactionId.isNotBlank()
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = opens) { onOpenReceipt(pay.transactionId) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(TILE_TINT), Alignment.Center) {
+            Icon(Lucide.HandHeart, null, tint = TILE_ICON, modifier = Modifier.size(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+            val meta = listOfNotNull(pay.at?.let { PartnerFormat.dayMonthYear(it) }, pay.receiptCode?.takeIf { it.isNotBlank() })
+            if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = giInter(11), color = GIVE.tertiary)
+        }
+        if (opens) Icon(Lucide.ChevronRight, null, tint = GIVE.ink300, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** PAID ANOTHER WAY — each thing the member told the office and where it
+ *  stands; hidden while there is none. A first read that failed says so
+ *  quietly (pull down to try again). */
+@Composable
+private fun PledgeClaimsCard(claims: List<PledgeClaim>?, failed: Boolean, today: LocalDate) {
+    val told = claims.orEmpty()
+    if (told.isNotEmpty()) {
+        val shape = RoundedCornerShape(22.dp)
+        Column(Modifier.fillMaxWidth().clip(shape).background(GIVE.white).border(1.dp, GIVE.border, shape).padding(16.dp)) {
+            Text("PAID ANOTHER WAY", style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.overline, modifier = Modifier.padding(bottom = 4.dp))
+            told.forEach { ClaimRow(it, today) }
+        }
+    } else if (failed) {
+        Text(
+            "We couldn't load what you've told the office. Pull down to try again.",
+            style = giInter(11), color = Nuru.ink400, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** A payment the member told the office about: the amount and the day it
+ *  was paid, where it stands — "The office is checking it" · "Recorded —
+ *  thank you" · "The office couldn't match it" — and their note. */
+@Composable
+private fun ClaimRow(c: PledgeClaim, today: LocalDate) {
+    val (tint, icon) = when (claimTone(c.status)) {
+        ClaimTone.Waiting -> GIVE.goldChipText to Lucide.Clock4
+        ClaimTone.Recorded -> GIVE.successText to Lucide.BadgeCheck
+        ClaimTone.Unmatched -> GIVE.ink600 to Lucide.CircleX
+    }
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), Alignment.Center) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(14.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(claimRowLine(c, today), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+            Text(claimStatusLine(c.status), style = giInter(12, FontWeight.SemiBold), color = tint)
+            c.note?.takeIf { it.isNotBlank() }?.let {
+                Text(it, style = giInter(11), color = Nuru.ink400, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** "I paid another way" — the form (iOS PledgeClaimSheet, PledgeClaimLogic):
+ *  the amount in the PLEDGE's currency (whole shillings, or dollars and
+ *  cents), the day it was paid (today back a year, Nairobi; today by
+ *  default), an optional note. What stops it is said as the member types,
+ *  and "Tell the office" waits for it. Online only — nothing is queued, so
+ *  offline the form says so and cannot send. The server's refusals (a
+ *  different currency, a day out of range, the same payment already told,
+ *  five waiting) are shown in its words. Shown in a sheet over the page. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClaimForm(pl: Pledge, checking: String?, onSent: (PledgeClaim) -> Unit, onClose: () -> Unit) {
+    val view = LocalView.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val connectivity = remember(context) { Connectivity(context) }
+    val online by remember(connectivity) { connectivity.online() }.collectAsState(initial = connectivity.isOnline())
+    val today = remember { partnerToday() }
+    val dollars = currencyCode(pl.currency) == USD_CURRENCY
+    var amountText by remember { mutableStateOf("") }
+    var paidOn by remember { mutableStateOf(today) }
+    var note by remember { mutableStateOf("") }
+    var picking by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val problem = claimProblem(amountText, pl.currency, paidOn, note, today)
+    val label = giInter(11, FontWeight.SemiBold, 1.6f)
+
+    fun send() {
+        if (!online || sending) return
+        val plan = planClaim(amountText, pl.currency, paidOn, note, partnerToday()) as? ClaimPlan.Ready ?: return
+        sending = true; error = null
+        scope.launch {
+            try {
+                val made = Net.client.api.createClaim(pl.pledgeId, plan.body)
+                Haptics.confirm(view)
+                onSent(made)
+            } catch (e: Exception) {
+                // No answer at all, or the server's words (422 CURRENCY_MISMATCH
+                // / INVALID_DATE, 409 CONFLICT).
+                error = if (e is java.io.IOException) CLAIM_NO_ANSWER_LINE else ApiException.message(e, context)
+                Haptics.reject(view)
+            } finally {
+                sending = false
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("I paid another way", style = giSerif(18, FontWeight.SemiBold, -0.36f), color = GIVE.navy, modifier = Modifier.weight(1f))
+            Box(Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable(enabled = !sending) { onClose() }, Alignment.Center) {
+                Icon(Lucide.X, "Close", tint = GIVE.navy, modifier = Modifier.size(14.dp))
+            }
+        }
+        Text(claimIntro(pl.displayTitle), style = giInter(12), color = Nuru.ink600)
+        // What the office is already checking, so the same money is never
+        // told twice (final walk M1; iOS PledgeClaimSheet).
+        checking?.let { Text("$it.", style = giInter(12, FontWeight.SemiBold), color = GIVE.goldChipText) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(claimAmountLabel(pl.currency), style = label, color = GIVE.overline)
+            OutlinedTextField(
+                value = amountText,
+                onValueChange = { v -> amountText = if (dollars) usdTyping(v) else v.filter { it.isDigit() }.take(8); error = null },
+                singleLine = true,
+                prefix = { Text(if (dollars) "US$ " else "KSh ", style = giInter(14, FontWeight.Medium), color = GIVE.tertiary) },
+                placeholder = { Text(if (dollars) "e.g. 20.00" else "e.g. 2000", style = giInter(16), color = Nuru.ink400) },
+                textStyle = giInter(16, FontWeight.SemiBold).copy(color = Nuru.ink),
+                keyboardOptions = KeyboardOptions(keyboardType = if (dollars) KeyboardType.Decimal else KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(claimAmountHelp(pl.currency), style = giInter(12), color = Nuru.ink400)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("THE DAY YOU PAID", style = label, color = GIVE.overline)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nuru.surface)
+                    .border(1.dp, Nuru.border, RoundedCornerShape(14.dp))
+                    .clickable { picking = true }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Lucide.CalendarDays, null, tint = GIVE.gold, modifier = Modifier.size(18.dp))
+                Text(org.nuruplace.member.util.NuruDates.day(paidOn), style = giInter(14), color = Nuru.ink)
+            }
+            Text("Today, or any day in the last year.", style = giInter(12), color = Nuru.ink400)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("A NOTE FOR THE OFFICE · OPTIONAL", style = label, color = GIVE.overline)
+            OutlinedTextField(
+                value = note,
+                onValueChange = { v -> note = v.take(CLAIM_NOTE_MAX); error = null },
+                placeholder = { Text("e.g. Cash at the 9am service", style = giInter(14), color = Nuru.ink400) },
+                leadingIcon = { Icon(Lucide.Pencil, null, tint = GIVE.gold, modifier = Modifier.size(14.dp)) },
+                minLines = 2, maxLines = 5,
+                textStyle = giInter(14).copy(color = Nuru.ink),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "${note.trim().length}/$CLAIM_NOTE_MAX", style = giInter(11), color = Nuru.ink400,
+                textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // Offline first, then the server's refusal, then what the typing lacks.
+        when {
+            !online -> Text(CLAIM_OFFLINE_LINE, style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText)
+            error != null -> Text(error.orEmpty(), style = giInter(12), color = Nuru.danger)
+            amountText.isNotEmpty() && problem != null -> Text(problem, style = giInter(12), color = Nuru.danger)
+        }
+        val canSend = problem == null && online && !sending
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).alpha(if (canSend || sending) 1f else 0.5f)
+                .clip(RoundedCornerShape(14.dp)).background(GIVE.gold)
+                .clickable(enabled = canSend) { Haptics.tap(view); send() }
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            if (sending) {
+                CircularProgressIndicator(color = GIVE.navy, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (sending) "Sending…" else "Tell the office", style = giInter(15, FontWeight.Bold), color = GIVE.navy, textAlign = TextAlign.Center)
+        }
+        Text(
+            "Nothing is charged. It's added to your pledge once the office confirms it.",
+            style = giInter(12), color = Nuru.ink400, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    if (picking) {
+        // Only the days the server takes: a year back to today (Nairobi).
+        val range = claimDateRange(today)
+        val years = range.start.year..range.endInclusive.year
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = paidOn.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            yearRange = years,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    claimDateAllowed(Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate(), today)
+                override fun isSelectableYear(year: Int): Boolean = year in years
+            },
+        )
+        NuruDatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { ms ->
+                        val d = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()
+                        if (claimDateAllowed(d, today)) { paidOn = d; error = null }
+                    }
+                    picking = false
+                }) { Text("Set date", style = NuruType.cardCta, color = Nuru.gold) }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel", style = NuruType.cardCta, color = Nuru.ink600) } },
+        ) { DatePicker(state = state) }
+    }
+}
+
+/** The day picked on the claim form: "Monday, 28 September 2026". */
+
+/** "Charge me automatically" could not be set up when the pledge was made
+ *  (Giving Cycle 5): the pledge stands, and the server's words say why —
+ *  one amber row, until dismissed. */
+@Composable
+private fun AutoScheduleNotice(message: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Nuru.warningBg)
+            .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Lucide.AlertTriangle, null, tint = Nuru.answeredText, modifier = Modifier.padding(top = 2.dp).size(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("Your pledge is made — automatic collection isn't set up.", style = giInter(12, FontWeight.SemiBold), color = Nuru.answeredText)
+            Text(message, style = giInter(12), color = GIVE.ink600)
+        }
+        Box(Modifier.size(28.dp).clip(CircleShape).clickable { onDismiss() }, Alignment.Center) {
+            Icon(Lucide.X, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -926,21 +1879,28 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
                     }
                 }
                 else -> {
-                    val sum = statementSummary(shownYear, p.pledges, s.payments)
-                    Row(Modifier.fillMaxWidth()) {
-                        SummaryColumn("PLEDGED", ksh(sum.pledgedMinor), GIVE.navy, Modifier.weight(1f))
-                        SummaryColumn("PAID", ksh(sum.paidMinor), GIVE.successText, Modifier.weight(1f))
-                        SummaryColumn("REMAINING", ksh(sum.remainingMinor), GIVE.goldLo, Modifier.weight(1f))
-                    }
+                    // One line per currency — never one sum across them: the
+                    // server's summary_by_currency (Cycle 9), else summed here.
+                    val sums = partnerStatementSummaries(shownYear, s, p.pledges)
+                    StatementFigures(sums, Modifier.fillMaxWidth())
                     Hairline()
                     val rows = pledgePayments(s.payments).sortedByDescending { it.occurredAt ?: "" }
-                    if (rows.isEmpty()) {
-                        Text("No pledge payments in $shownYear.", style = giInter(12), color = GIVE.sub)
-                    } else {
-                        Column {
+                    // Still processing: listed first, never in Paid above (iOS).
+                    val pending = pendingPaymentRows(s)
+                    Column {
+                        pending.forEach { pay ->
+                            PendingPledgePaymentRow(
+                                pay, statementPaymentTitle(pay.pledgeTitle, null, pay.pledgeId, p.pledges), onOpenReceipt,
+                            )
+                            Hairline()
+                        }
+                        if (rows.isEmpty() && pending.isEmpty()) {
+                            // The empty year in §4's state, its slim row (final walk C16; iOS).
+                            org.nuruplace.member.ui.components.StateStrip(noPledgePaymentsTitle(shownYear))
+                        } else {
                             rows.forEachIndexed { i, pay ->
                                 if (i > 0) Hairline()
-                                StatementPaymentRow(pay, onOpenReceipt)
+                                StatementPaymentRow(pay, statementPaymentTitle(pay.pledgeTitle, pay.title, pay.pledgeId, p.pledges), onOpenReceipt)
                             }
                         }
                     }
@@ -957,22 +1917,76 @@ private fun StatementSection(p: Partnership, vm: PartnersViewModel, onOpenReceip
 
 @Composable
 internal fun SummaryColumn(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(label, style = giInter(9, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
-        Text(value, style = giInter(16, FontWeight.SemiBold), color = color, modifier = Modifier.padding(top = 4.dp))
+    SummaryColumn(label, listOf(value), color, modifier)
+}
+
+/** Pledged · Paid · Remaining, one line per currency under each (Giving
+ *  Cycle 5). Three columns at the everyday sizes; past them, three rows —
+ *  the label whole at the left, the figures whole at the right (§9.6 #4:
+ *  at the largest text the columns read "PLEDG / ED", "REMAI / NING" and
+ *  "KSh 30,0"). */
+@Composable
+internal fun StatementFigures(sums: List<CurrencyStatementSummary>, modifier: Modifier = Modifier) {
+    val pledged = sums.map { money(it.pledgedMinor, it.currency) }
+    val paid = sums.map { money(it.paidMinor, it.currency) }
+    val paidColors = sums.map { paidTint(it.paidMinor) }
+    val remaining = sums.map { money(it.remainingMinor, it.currency) }
+    if (!largeText()) {
+        Row(modifier) {
+            SummaryColumn("PLEDGED", pledged, GIVE.navy, Modifier.weight(1f))
+            SummaryColumn("PAID", paid, GIVE.successText, Modifier.weight(1f), valueColors = paidColors)
+            SummaryColumn("REMAINING", remaining, GIVE.goldLo, Modifier.weight(1f))
+        }
+        return
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            Triple("PLEDGED", pledged, pledged.map { GIVE.navy }),
+            Triple("PAID", paid, paidColors),
+            Triple("REMAINING", remaining, remaining.map { GIVE.goldLo }),
+        ).forEach { (label, values, colors) ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Text(label, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    values.forEachIndexed { i, v ->
+                        Text(v, style = giInter(16, FontWeight.SemiBold), color = colors.getOrElse(i) { GIVE.navy }, textAlign = TextAlign.End)
+                    }
+                }
+            }
+        }
     }
 }
 
-/** "20 Sep · Monthly pledge" over "M-Pesa · UIKJ2713B5" (method when the row
- *  carries one, else the fund; then the receipt code), amount at right. */
+/** Green says a state (§8.1 rule 1: on track): money paid. Nothing paid is a
+ *  plain figure, navy (final walk C11: "PAID · KSh 0" in green) — iOS
+ *  PaidTint, the same rule. */
+internal fun paidTint(paidMinor: Int): Color = if (paidMinor > 0) GIVE.successText else GIVE.navy
+
+/** A summary figure per currency, one under another, each the same size —
+ *  the same currency on the same line in every column, never added
+ *  together (iOS partnerSummaryColumn). */
 @Composable
-private fun StatementPaymentRow(pay: StatementPayment, onOpenReceipt: (String) -> Unit) {
+internal fun SummaryColumn(label: String, values: List<String>, color: Color, modifier: Modifier = Modifier, valueColors: List<Color>? = null) {
+    Column(modifier) {
+        Text(label, style = giInter(11, FontWeight.SemiBold, 1.6f), color = GIVE.tertiary)
+        // One line each, shrunk to the column (iOS minimumScaleFactor 0.7) —
+        // "KSh 1,250,000" never splits mid-figure in a third of the card.
+        values.forEachIndexed { i, v ->
+            Text(
+                v, style = giInter(16, FontWeight.SemiBold), color = valueColors?.getOrNull(i) ?: color,
+                maxLines = 1, softWrap = false, modifier = Modifier.padding(top = if (i == 0) 4.dp else 3.dp).shrinkToFit(0.7f),
+            )
+        }
+    }
+}
+
+/** "20 Sep · Monthly pledge" over "Tithe · UIKJ2713B5" — the fund first,
+ *  then the receipt code (iOS StatementPaymentRow) — amount at right. */
+@Composable
+private fun StatementPaymentRow(pay: StatementPayment, title: String, onOpenReceipt: (String) -> Unit) {
     val date = partnerDate(pay.occurredAt)?.let { PartnerFormat.dayMonth(it) }
-    val what = pay.pledgeTitle?.takeIf { it.isNotBlank() } ?: pay.title?.takeIf { it.isNotBlank() } ?: "Pledge"
-    val via = listOfNotNull(
-        pay.method?.takeIf { it.isNotBlank() }?.let(::giveMethodLabel) ?: pay.fund?.takeIf { it.isNotBlank() }?.let { giveFund(it).name },
-        pay.receiptCode?.takeIf { it.isNotBlank() },
-    ).joinToString(" · ")
+    val meta = statementPaymentMeta(pay)
     Row(
         Modifier.fillMaxWidth()
             .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
@@ -980,10 +1994,45 @@ private fun StatementPaymentRow(pay: StatementPayment, onOpenReceipt: (String) -
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(listOfNotNull(date, what).joinToString(" · "), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
-            if (via.isNotBlank()) Text(via, style = giInter(11), color = GIVE.sub, modifier = Modifier.padding(top = 2.dp))
+            Text(
+                listOfNotNull(date, title).joinToString(" · "), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (meta.isNotBlank()) {
+                Text(meta, style = giInter(11), color = Nuru.ink400, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            }
         }
-        Text(ksh(pay.amountMinor), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy)
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 1)
+    }
+}
+
+/** A pledge payment still processing (iOS PendingPledgePaymentRow): the
+ *  pledge, an amber "Waiting for M-Pesa" chip and its day, the amount muted
+ *  — it is in no total yet. Tap → its receipt, which says so too. */
+@Composable
+internal fun PendingPledgePaymentRow(pay: StatementPendingPayment, title: String, onOpenReceipt: (String) -> Unit) {
+    val day = partnerDate(pay.at)?.let { PartnerFormat.dayMonth(it) }
+    Row(
+        Modifier.fillMaxWidth()
+            .clickable(enabled = pay.transactionId.isNotBlank()) { onOpenReceipt(pay.transactionId) }
+            .clearAndSetSemantics {
+                contentDescription = listOfNotNull(title, pendingChipText(pay.method), day, money(pay.amountMinor, pay.currency))
+                    .joinToString(", ") + ". Not yet counted in your totals"
+            }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = giInter(13, FontWeight.SemiBold), color = GIVE.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    pendingChipText(pay.method), style = giInter(11, FontWeight.Bold), color = Nuru.answeredText,
+                    modifier = Modifier.clip(Capsule).background(Nuru.warningBg).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+                day?.let { Text(it, style = giInter(11), color = Nuru.ink400) }
+            }
+        }
+        Text(money(pay.amountMinor, pay.currency), style = giInter(13, FontWeight.SemiBold), color = Nuru.ink400, maxLines = 1)
     }
 }
 
@@ -997,7 +2046,7 @@ private fun PartnerNotice(title: String, message: String, action: Pair<String, (
             .clip(RoundedCornerShape(14.dp)).background(Nuru.white).padding(22.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(title, style = nuruSerif(24, FontWeight.Medium), color = Nuru.ink)
+        Text(title, style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
         Text(message, style = NuruType.bodyLg, color = Nuru.ink600)
         action?.let { (label, onClick) ->
             Button(
@@ -1018,14 +2067,20 @@ private fun PartnerNotice(title: String, message: String, action: Pair<String, (
 internal object PartnerFormat {
     val MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
     private val MONTH_YEAR = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
-    private val DAY_MONTH = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
-    private val DAY_MONTH_YEAR = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
     fun monthYear(iso: String): String? = partnerDate(iso)?.format(MONTH_YEAR)
 
-    fun dayMonth(d: LocalDate): String = d.format(DAY_MONTH)
+    /** "Thu 5 Nov" — the one date form (§8.1 rule 8); it read "5 Nov" here
+     *  and "Mon 12 Oct" a card away. The caller adds the year when it isn't
+     *  this year, via [dayMonthYear]. */
+    fun dayMonth(d: LocalDate): String = org.nuruplace.member.util.NuruDates.day(d, withYear = false)
 
-    fun dayMonthYear(iso: String): String = partnerDate(iso)?.format(DAY_MONTH_YEAR) ?: iso.take(10)
+    /** "Thu 5 Nov 2026". */
+    fun dayMonthYear(d: LocalDate): String = org.nuruplace.member.util.NuruDates.day(d, withYear = true)
+
+    /** "Thu 5 Nov 2026" from a value the server sent; null when it can't be
+     *  read — never the raw text (it fell back to "2026-11-05"). */
+    fun dayMonthYear(iso: String): String? = partnerDate(iso)?.let(::dayMonthYear)
 
     fun grouped(n: Int): String = NumberFormat.getIntegerInstance(Locale.US).format(n)
 }

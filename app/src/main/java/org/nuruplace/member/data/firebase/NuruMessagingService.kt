@@ -3,9 +3,15 @@
 // (POST /me/devices, which already accepts it); onMessageReceived posts a local
 // notification for foreground/data messages. The backend's dispatcher sends via
 // the FCM HTTP v1 API. Add-alongside: this does not change the app's JWT session.
+//
+// Sound (owner request 2026-09-28): every push says what it is (`nuru_kind`:
+// message / update / ring) and whether the member wants it heard
+// (`nuru_sound`: on / off — Settings' "Sound and vibration"). A push the
+// SYSTEM shows while the app is in the background already names its channel
+// (NotificationChannels.kt); this code shows the rest — any push while the
+// app is open, and every ring — on the channel the same rule picks.
 package org.nuruplace.member.data.firebase
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -22,8 +28,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.nuruplace.member.MainActivity
 import org.nuruplace.member.R
+import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.OpenConversation
 import org.nuruplace.member.data.net.DeviceBody
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.feature.live.LiveInviteNotifications
+import org.nuruplace.member.feature.live.isStreamId
+import org.nuruplace.member.feature.live.liveInviteFrom
+import org.nuruplace.member.feature.live.liveInviteRoute
 
 class NuruMessagingService : FirebaseMessagingService() {
 
@@ -36,37 +48,69 @@ class NuruMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        val data = message.data
+        val kind = data["nuru_kind"]
+        val sound = data["nuru_sound"]
+        // Already made at process start (NuruApp); cheap to confirm, and a
+        // notification posted to a channel that doesn't exist is dropped.
+        NotificationChannels.ensure(this)
+
+        // A Live guest invite RINGS. It is data-only, so this runs for it
+        // even while the app is closed, and nothing shows it unless this does.
+        if (kind == PushKind.RING) {
+            // A signed-out phone never rings anyone's invite (its token can
+            // outlive the session it was registered under).
+            if (!Net.client.vault.hasSession) return
+            val invite = liveInviteFrom(data)
+            if (invite != null) {
+                LiveInviteNotifications.post(this, invite)
+                return
+            }
+            // No stream to join: fall through and show its words plainly.
+        }
+
         // Pastoral privacy (Chat Redesign C3b): a push about the member's
         // pastoral thread never shows a content preview — generic copy only,
-        // and nothing at all when the member muted it. DEFENSIVE today: the
-        // backend currently sends NO push for any chat message (verified —
-        // only space_join_*/connection events call notify()), so this branch
-        // guards the future, not a live leak. It only applies where the client
-        // renders the notification itself; a notification-payload push the OS
-        // renders while the app is dead never reaches this code — real limit,
-        // recorded in docs/PARITY_AUDIT.md.
-        val template = (message.data["template"] ?: "").lowercase()
-        val pastoralId = org.nuruplace.member.data.AppPrefs.pastoralConversationId
-        val isPastoral = template.startsWith("pastoral") ||
-            (pastoralId != null && message.data["conversationId"] == pastoralId)
-        if (isPastoral && org.nuruplace.member.data.AppPrefs.pastoralMuted) return
-        val title = if (isPastoral) "Nuru Pathway" else message.notification?.title ?: message.data["title"] ?: "Nuru Pathway"
+        // and nothing at all when the member muted it. Since Chat Redesign C4
+        // the backend DOES push chat messages (chat/service.ts notifyMessage):
+        // DIRECT, DISCIPLER and PASTORAL threads, a broadcast and every answer
+        // in its response thread (on the DM template) — at most one push
+        // outstanding per conversation, none for a conversation the member
+        // muted, and none for group (space) messages. Its pastoral push is
+        // already generic; this is the client's own guard on top. It only
+        // applies where the client renders the notification itself; a
+        // notification-payload push the OS renders while the app is in the
+        // background never reaches this code — real limit, recorded in
+        // docs/PARITY_AUDIT.md.
+        val isPastoral = isPastoralPush(data, AppPrefs.pastoralConversationId)
+        if (isPastoral && AppPrefs.pastoralMuted) return
+
+        // A message for the thread the member has open lands IN that thread
+        // — it refreshes, with a light tick unless they turned Sound and
+        // vibration off — and never in the tray (OpenConversation).
+        if (landsInOpenThread(kind, data, OpenConversation.id)) {
+            pushConversationId(data)?.let { OpenConversation.arrived(it, buzz = sound != "off") }
+            return
+        }
+
+        val title = if (isPastoral) "Nuru Pathway" else message.notification?.title ?: data["alert_title"] ?: data["title"] ?: "Nuru Pathway"
         val body = if (isPastoral) {
             "You have a new private pastoral message."
         } else {
-            message.notification?.body ?: message.data["body"] ?: return
+            message.notification?.body ?: data["alert_body"] ?: data["body"] ?: return
         }
-        ensureChannel(this)
         // Cold-tap deep link: compute the in-app destination from the push data and
         // hand it to MainActivity (PendingDest) so a tray tap lands on the target,
         // not just Home.
         val intent = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        destFor(message.data)?.let { intent.putExtra("nuru.dest", it) }
+        destFor(data)?.let { intent.putExtra("nuru.dest", it) }
         val pending = PendingIntent.getActivity(
             this, System.identityHashCode(message), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        // A ring that got this far has no stream to join — shown as an update.
+        val channel = channelFor(kind?.takeIf { it != PushKind.RING }, sound)
+        val notif = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
@@ -78,10 +122,20 @@ class NuruMessagingService : FirebaseMessagingService() {
     }
 
     companion object {
-        const val CHANNEL_ID = "nuru_default"
-
-        /** Push data → in-app nav route (mirrors NotificationsScreen.routeFor).
-         *  Null → open Home (nothing to deep-link to).
+        /** Push data → in-app nav route. Null → open Home (nothing to
+         *  deep-link to). The ONE router for a notice: the inbox hands each
+         *  row's payload here too, in the same keys (NotificationsScreen
+         *  .noticeData), so a notice tapped in the inbox lands exactly where
+         *  its push does (EXPERIENCE.md §7.2 #3).
+         *
+         *  Since 2026-09-28 every push's data also carries its `template`
+         *  (plus `nuru_kind` / `nuru_sound`), so the template rules at the
+         *  bottom — written for it, but until then only ever handed "" by a
+         *  real push — now route real pushes: badge → Profile, event_* →
+         *  Events, prayer_chain → the Prayer Room, live_stream_started → the
+         *  player, the plan_group_* without a token → Read with a Friend.
+         *  Every push that carries one of the specific keys below routes by
+         *  that key first, exactly as before; chat pushes still open Home.
          *
          *  NOTE on key casing: the backend dispatcher (workers/dispatch.ts)
          *  copies the notification's `payload` JSONB into the FCM `data` map
@@ -116,7 +170,25 @@ class NuruMessagingService : FirebaseMessagingService() {
             // _approved / _declined, department_post, department_need_* all
             // carry department_id → the department page (spec §4).
             data["department_id"]?.takeIf { it.isNotBlank() }?.let { return "department/$it" }
+            // Giving (feature/give/GivingRoutes.kt): their own keys say where,
+            // ahead of the template they now carry too — a gift that failed
+            // where the member could not see it opens that gift, with Try
+            // again; a failed or paused schedule opens that schedule; the
+            // heads-up before a prompt opens Give; a pledge's notices, and
+            // its collector's (covered / stopped), open that pledge.
+            org.nuruplace.member.feature.give.givingPushRoute(data)?.let { return it }
             val t = (data["template"] ?: "").lowercase()
+            // A Live notice opens the stream it NAMES, never whichever stream
+            // happens to be live now (EXPERIENCE.md §7.3): a guest invite
+            // (live/service.ts inviteGuest, payload { stream_id, title }) and
+            // a stream starting (notifyStreamStarted, { stream_id, scope,
+            // cell_id, title }) — the player while that stream is live, else
+            // "This Live has ended" with its name. Only a notice without a
+            // usable stream_id reaches the plain "live" rule below. (A ring is
+            // normally shown by LiveInviteNotifications, never through here.)
+            if (t == "live_guest_invite" || t == "live_stream_started") {
+                data["stream_id"]?.trim()?.takeIf { isStreamId(it) }?.let { return liveInviteRoute(it, data["title"]) }
+            }
             return when {
                 "department" in t || "serve_request" in t -> "departments"
                 // live_stream_started (packages/backend/src/modules/live/service.ts)
@@ -125,7 +197,8 @@ class NuruMessagingService : FirebaseMessagingService() {
                 // build LiveRoutes.kt's live-player route (no kind/viewers/
                 // startedAt) — "live-now" is a lightweight MainShell destination
                 // that re-fetches GET /live/now and forwards to the newest
-                // watchable stream (or Home if it already ended).
+                // watchable stream (or says the Live has ended) — only for a
+                // notice that names no stream.
                 "live" in t -> "live-now"
                 "prayer" in t -> "prayer-room?tab=corporate"
                 "verse" in t || "memory" in t -> "memory-verses"
@@ -144,16 +217,14 @@ class NuruMessagingService : FirebaseMessagingService() {
             }
         }
 
-        fun ensureChannel(context: Context) {
-            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
-                mgr.createNotificationChannel(
-                    NotificationChannel(CHANNEL_ID, "Nuru Pathway", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                        description = "Reflections, encouragement, events and reminders"
-                    },
-                )
-            }
-        }
+        /** A tap on a push the SYSTEM put in the tray — the app was in the
+         *  background or closed, so [onMessageReceived] never ran and no
+         *  `nuru.dest` was attached. FCM then hands the push's data to the
+         *  launch intent as extras, beside its own `google.*` keys, and the
+         *  same [destFor] reads them (before this, every such tap opened
+         *  Home). Null for any launch that is not a push tap. */
+        fun trayTapDest(extras: Map<String, String>): String? =
+            if ("google.message_id" in extras || "google.sent_time" in extras) destFor(extras) else null
 
         fun deviceBody(context: Context, token: String) = DeviceBody(
             platform = "android",

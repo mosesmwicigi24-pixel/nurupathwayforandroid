@@ -34,11 +34,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -66,15 +61,19 @@ import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
-private val AiOrb = Brush.radialGradient(listOf(Color(0xFFC4B5FD), Color(0xFF7C3AED), Color(0xFF2A1259)))
+// The AI's mark: gold with navy, like Quick help (§8.1 rule 1) — it was purple.
+private val AiOrb = Nuru.goldGradient
 
 @Composable
 fun PrayerPointsScreen() {
     val view = LocalView.current
     var optedOut by remember { mutableStateOf<Boolean?>(null) }
     var consentBusy by remember { mutableStateOf(false) }
-    var consentFailed by remember { mutableStateOf(false) }
+    // Why turning it on didn't land (§4), or null.
+    var consentFailed by remember { mutableStateOf<String?>(null) }
+    val consentContext = LocalContext.current
     val scope = rememberCoroutineScope()
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -96,10 +95,11 @@ fun PrayerPointsScreen() {
             true -> item {
                 ConsentGateCard(busy = consentBusy, failed = consentFailed) {
                     scope.launch {
-                        consentBusy = true; consentFailed = false
-                        val ok = runCatching { Net.client.api.setAiConsent(AiConsentBody(optOut = false)) }.isSuccess
+                        consentBusy = true; consentFailed = null
+                        val failure = runCatching { Net.client.api.setAiConsent(AiConsentBody(optOut = false)) }.exceptionOrNull()
                         consentBusy = false
-                        if (ok) { Haptics.confirm(view); optedOut = false } else { Haptics.reject(view); consentFailed = true }
+                        if (failure == null) { Haptics.confirm(view); optedOut = false }
+                        else { Haptics.reject(view); consentFailed = org.nuruplace.member.data.net.ApiException.saveFailureLine(failure, consentContext) }
                     }
                 }
             }
@@ -112,7 +112,7 @@ fun PrayerPointsScreen() {
 }
 
 @Composable
-private fun ConsentGateCard(busy: Boolean, failed: Boolean, enable: () -> Unit) {
+private fun ConsentGateCard(busy: Boolean, failed: String?, enable: () -> Unit) {
     val view = LocalView.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nuru.white)
@@ -120,7 +120,7 @@ private fun ConsentGateCard(busy: Boolean, failed: Boolean, enable: () -> Unit) 
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(26.dp).clip(CircleShape).background(AiOrb), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
             }
             Spacer(Modifier.width(8.dp))
             Text("NURU INTELLIGENCE", style = NuruType.sectionLabel, color = Nuru.eyebrow)
@@ -132,9 +132,9 @@ private fun ConsentGateCard(busy: Boolean, failed: Boolean, enable: () -> Unit) 
             "Nuru remembers your journey to walk with you personally. Your prayer journal is never read — ever. This is the same switch as your Sunday Letter and personal companion; turning it on here turns it on everywhere, and you can turn it off again anytime in Profile.",
             style = NuruType.caption, color = Nuru.ink600,
         )
-        if (failed) {
+        failed?.let { line ->
             Spacer(Modifier.height(Spacing.sm))
-            Text("Couldn't save that — check your connection and try again.", style = NuruType.caption, color = Nuru.danger)
+            Text(line, style = NuruType.caption, color = Nuru.danger)
         }
         Spacer(Modifier.height(Spacing.sm))
         Box(
@@ -164,7 +164,7 @@ private fun AssistComposerCard() {
             .border(1.dp, Nuru.border, RoundedCornerShape(18.dp)).padding(Spacing.base),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.FavoriteBorder, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Heart, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Draft a prayer", style = NuruType.cardTitle, color = Nuru.navy)
         }
@@ -202,10 +202,10 @@ private fun AssistComposerCard() {
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp))
-                    else Icon(Icons.Filled.AutoAwesome, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    if (busy) CircularProgressIndicator(color = Nuru.navy, modifier = Modifier.size(14.dp))
+                    else Icon(Lucide.Sparkles, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (busy) "Drafting…" else "Draft with Nuru", style = NuruType.cardCta.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                    Text(if (busy) "Drafting…" else "Draft with Nuru", style = NuruType.cardCta.copy(fontWeight = FontWeight.Bold), color = Nuru.navy)
                 }
             }
         }
@@ -259,7 +259,7 @@ private fun GatherPointsCard() {
             .border(1.dp, Nuru.border, RoundedCornerShape(18.dp)).padding(Spacing.base),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.List, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
+            Icon(Lucide.List, null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Gather my prayer points", style = NuruType.cardTitle, color = Nuru.navy)
         }
@@ -326,7 +326,7 @@ private fun PrayerPointRow(index: Int, text: String, onEdit: (String) -> Unit, o
         Box(
             Modifier.size(22.dp).clip(CircleShape).clickable { Haptics.tap(view); onRemove() },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Close, null, tint = Nuru.ink400, modifier = Modifier.size(11.dp)) }
+        ) { Icon(Lucide.X, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
     }
 }
 

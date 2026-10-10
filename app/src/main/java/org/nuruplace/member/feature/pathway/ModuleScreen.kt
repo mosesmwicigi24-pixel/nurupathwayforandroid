@@ -33,20 +33,11 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloseFullscreen
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.OpenInFull
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -95,6 +86,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 // Screen-local palette — iOS `enum ML` (ModuleView.swift), distinct from global Nuru.
 private object ML {
@@ -137,6 +129,9 @@ fun ModuleScreen(
     onBack: () -> Unit,
     onTakeQuiz: (String) -> Unit,
     onCompleted: () -> Unit,
+    /** The level's exam (its number) — a finished lesson points there once
+     *  every lesson in the level is done (final walk C9). */
+    onOpenExam: (Int) -> Unit = {},
 ) {
     var m by remember(moduleId) { mutableStateOf<ModuleDetail?>(null) }
     var loadError by remember(moduleId) { mutableStateOf<String?>(null) }
@@ -150,17 +145,44 @@ fun ModuleScreen(
         }
         return
     }
-    Loaded(detail, onBack, onTakeQuiz, onCompleted)
+    Loaded(detail, onBack, onTakeQuiz, onCompleted, onOpenExam)
 }
 
+/** What a finished lesson points to next (final walk C9, Android #15): the
+ *  level's exam, once every lesson in it is done and the exam is open — the
+ *  journey's own step, in its words. Null otherwise: the lesson offered only
+ *  "Retake" or "Revisit this module", and nothing pointed to the exam. */
+internal fun lessonExamStep(journey: Journey?, levelNumber: Int, completed: Boolean): JourneyStep? =
+    journey?.takeIf { completed && it.stage == JourneyStage.EXAM_READY && it.levelNumber == levelNumber }?.next
+
 @Composable
-private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> Unit, onCompleted: () -> Unit) {
+private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> Unit, onCompleted: () -> Unit, onOpenExam: (Int) -> Unit) {
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     var chromeHidden by remember { mutableStateOf(false) }
     var reflection by remember { mutableStateOf("") }
     var reflectSaved by remember { mutableStateOf(false) }
-    var reflectError by remember { mutableStateOf(false) }
+    // Why the reflection didn't save (§4), or null; the words stay in the box.
+    var reflectError by remember { mutableStateOf<String?>(null) }
+    val reflectContext = androidx.compose.ui.platform.LocalContext.current
+    // What the server holds for this module's reflection — a finished module's
+    // folded card says only that (Cycle 4 walk: it always drew "✓ Saved", over
+    // "—", because the words were never fetched).
+    var folded by remember(m.moduleId) { mutableStateOf<FoldedReflection>(FoldedReflection.Loading) }
+    LaunchedEffect(m.moduleId) {
+        runCatching { Net.client.api.moduleReflection(m.moduleId).data }
+            .onSuccess { saved ->
+                val state = foldedReflectionOf(saved)
+                folded = state
+                // Words already on the server fill the card and its Reflect step
+                // (iOS loadReflection) — nobody writes the same reflection twice.
+                if (state is FoldedReflection.Saved && reflection.isBlank()) {
+                    reflection = state.text
+                    reflectSaved = true
+                }
+            }
+            .onFailure { folded = FoldedReflection.Unavailable(ApiException.failureLine(RELOAD_FAILED, it, reflectContext)) }
+    }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // Living curriculum — "hear it another way": the same lesson re-rendered by
@@ -177,12 +199,23 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
         canLeaveVoiceNote = runCatching { Net.client.api.me().profile.role }.getOrNull() in
             setOf("Instructor", "Admin", "SuperAdmin")
     }
+    // A finished lesson: is the level's exam the next step? Best effort — a
+    // read that fails says nothing rather than something untrue.
+    var journey by remember(m.moduleId) { mutableStateOf<Journey?>(null) }
+    LaunchedEffect(m.moduleId, m.completed) {
+        if (m.completed) {
+            journey = runCatching {
+                JourneyState.derive(Net.client.api.pathway(), Net.client.api.levelModules(m.levelNumber).data)
+            }.getOrNull()
+        }
+    }
+    val examStep = lessonExamStep(journey, m.levelNumber, m.completed)
     var showRevisit by remember { mutableStateOf(false) }
     if (showRevisit) {
-        androidx.compose.material3.AlertDialog(
+        org.nuruplace.member.ui.components.NuruAlertDialog(
             onDismissRequest = { showRevisit = false },
             containerColor = Color.White,
-            title = { Text("You've completed this module", style = mlSerif(19, FontWeight.SemiBold), color = ML.navy) },
+            title = { Text("You've completed this module", style = mlSerif(18, FontWeight.SemiBold), color = ML.navy) },
             text = { Text("It is sealed — but you can still revisit what you wrote or try the quiz again.", style = ml(13), color = ML.secondary) },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { showRevisit = false; editingReflection = true }) {
@@ -256,7 +289,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
             ) {
                 // Footprints (Wave 3): cell-mates who already walked this
                 // module — quiet proof nobody reads alone. Absent when fresh.
-                FootprintsStrip(m.moduleId)
+                FootprintsStrip(m.moduleId, youFinished = m.completed)
                 // A word from the member's own discipler — the human voice
                 // before any produced media (Wave 2). Leaders can record.
                 (localVoiceNote ?: m.voiceNote)?.let { VoiceNoteCard(it) }
@@ -270,28 +303,32 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 }
                 Spacer(Modifier.height(8.dp))
                 if (m.completed && !editingReflection) {
-                    ReflectionFolded(text = reflection) { showRevisit = true }
+                    ReflectionFolded(state = folded) { showRevisit = true }
                 } else ReflectionCard(
-                    value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false; if (reflectError) reflectError = false },
+                    value = reflection, onValue = { reflection = it; if (reflectSaved) reflectSaved = false; if (reflectError != null) reflectError = null },
                     saved = reflectSaved,
                     onSave = {
                         scope.launch {
                             // "Saved" is a claim about the SERVER, not the tap:
                             // only say it when the write actually landed.
-                            runCatching { Net.client.api.submitModuleReflection(m.moduleId, SaveReflectionBody(reflection.trim().take(4000), UUID.randomUUID().toString())) }
-                                .onSuccess { reflectSaved = true }
-                                .onFailure { reflectError = true }
+                            val words = reflection.trim().take(4000)
+                            runCatching { Net.client.api.submitModuleReflection(m.moduleId, SaveReflectionBody(words, UUID.randomUUID().toString())) }
+                                .onSuccess { reflectSaved = true; folded = FoldedReflection.Saved(words) }
+                                .onFailure { reflectError = org.nuruplace.member.data.net.ApiException.saveFailureLine(it, reflectContext) }
                         }
                     },
                 )
-                if (reflectError) {
+                reflectError?.let { line ->
                     Text(
-                        "Couldn't save your reflection — check your connection and try again.",
+                        line,
                         style = ml(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 Spacer(Modifier.height(24.dp))
+            }
+            if (!chromeHidden && examStep != null) {
+                ExamNextBar(examStep) { flush(); onOpenExam(m.levelNumber) }
             }
             if (!chromeHidden && !m.completed) {
                 BottomGate(
@@ -329,7 +366,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                     .background(ML.navy.copy(alpha = 0.82f)).border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
                     .clickable { chromeHidden = false },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.CloseFullscreen, "Exit reading mode", tint = Color.White, modifier = Modifier.size(18.dp)) }
+            ) { Icon(Lucide.Minimize2, "Exit reading mode", tint = Color.White, modifier = Modifier.size(18.dp)) }
         }
 
         // Ten-minute whisper — one non-interactive scriptural line floating above
@@ -345,7 +382,10 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 style = NuruType.caption.copy(fontFamily = Fraunces, fontStyle = FontStyle.Italic),
                 color = ML.navy,
                 textAlign = TextAlign.Center,
+                // Floats above the gate, which now clears the gesture bar —
+                // lifted by the same inset so the two never overlap.
                 modifier = Modifier
+                    .navigationBarsPadding()
                     .padding(horizontal = 28.dp)
                     .padding(bottom = Spacing.tabBarSpace + 60.dp)
                     .clip(RoundedCornerShape(16.dp))
@@ -365,40 +405,49 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
         Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(ML.headerGrad)
             .padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 20.dp),
     ) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text("LEVEL ${m.levelNumber} · MODULE ${m.moduleSequenceNumber}", style = ml(11, FontWeight.Bold, 2f), color = ML.overline)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SquareBtn(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
-                Spacer(Modifier.weight(1f))
-                // "Hear it another way" — Nuru re-renders this lesson.
-                SquareBtn(Icons.Filled.AutoAwesome, "Hear it another way", onExplain)
-                Spacer(Modifier.width(8.dp))
-                SquareBtn(Icons.Filled.OpenInFull, "Reading mode", onExpand)
-                Spacer(Modifier.width(8.dp))
-                SquareBtn(Icons.Filled.Share, "Share") {}
-            }
-        }
-        Text(m.title, style = mlSerif(24, FontWeight.Medium, -0.7f), color = ML.navy, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 14.dp))
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {
-            MetaPill(Icons.Filled.Schedule, "≈ $readMinutes min read")
+        // The kicker takes the room between the buttons — centred over the
+        // whole width it ran under them and read "LEVEL 1 · MODULE" (§8.1
+        // rule 9; seen on the final walk's lesson).
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SquareBtn(Lucide.ArrowLeft, "Back", onBack)
+            org.nuruplace.member.ui.components.WholeWordsText(
+                "LEVEL ${m.levelNumber} · MODULE ${m.moduleSequenceNumber}", style = ml(11, FontWeight.Bold, 2f), color = ML.overline,
+                textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            // "Hear it another way" — Nuru re-renders this lesson.
+            SquareBtn(Lucide.Sparkles, "Hear it another way", onExplain)
             Spacer(Modifier.width(8.dp))
-            MetaPill(Icons.Filled.MenuBook, "$sectionCount section" + if (sectionCount == 1) "" else "s")
+            SquareBtn(Lucide.Maximize2, "Reading mode", onExpand)
+            Spacer(Modifier.width(8.dp))
+            SquareBtn(Lucide.Share2, "Share") {}
+        }
+        Text(m.title, style = mlSerif(26, FontWeight.Medium, -0.7f), color = ML.navy, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 14.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.Center) {
+            MetaPill(Lucide.Clock4, "≈ $readMinutes min read")
+            Spacer(Modifier.width(8.dp))
+            MetaPill(Lucide.BookOpen, "$sectionCount section" + if (sectionCount == 1) "" else "s")
         }
         if (m.completed) {
-            // Completed ribbon — ✓ COMPLETED · score · finish time · Retake.
+            // Completed ribbon — ✓ COMPLETED · score, the finish time on its
+            // own line under them (as iOS; "Mon 5 Oct · 10:08 AM" shared one
+            // line with the status and Retake, and a longer date is cut), Retake.
             Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(999.dp))
+                Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(16.dp))
                     .background(ML.gold.copy(alpha = 0.14f))
-                    .border(1.dp, ML.gold.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                    .border(1.dp, ML.gold.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("COMPLETED", style = ml(11, FontWeight.Bold, 1.4f), color = ML.navy)
+                        if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
+                    }
+                    m.finishedLine?.let { Text(it, style = ml(11), color = ML.secondary) }
+                }
                 Spacer(Modifier.width(6.dp))
-                Text("COMPLETED", style = ml(10, FontWeight.Bold, 1.4f), color = ML.navy)
-                if (m.bestScore >= 0) { Spacer(Modifier.width(6.dp)); Text("· ${m.bestScore}%", style = ml(11, FontWeight.Bold), color = ML.gold) }
-                m.finishedLine?.let { Spacer(Modifier.width(6.dp)); Text("· $it", style = ml(10), color = ML.secondary, maxLines = 1) }
-                Spacer(Modifier.weight(1f))
                 if (onRetake != null) {
                     Box(
                         Modifier.clip(RoundedCornerShape(999.dp)).background(ML.navy)
@@ -419,14 +468,14 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
 @Composable
 private fun SquareBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, cd: String, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(16.dp)).clickable { onClick() }, contentAlignment = Alignment.Center) {
-        Icon(icon, cd, tint = ML.navy, modifier = Modifier.size(17.dp))
+        Icon(icon, cd, tint = ML.navy, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun MetaPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = ML.secondary, modifier = Modifier.size(13.dp))
+        Icon(icon, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
         Text(text, style = ml(11), color = ML.secondary)
     }
@@ -435,7 +484,7 @@ private fun MetaPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text
 @Composable
 private fun Segment(label: String, done: Boolean, modifier: Modifier) {
     Row(modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else Color.Transparent).padding(vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        if (done) { Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(13.dp)); Spacer(Modifier.width(4.dp)) }
+        if (done) { Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
         Text(label, style = ml(12, FontWeight.SemiBold), color = if (done) ML.navy else ML.secondary)
     }
 }
@@ -448,10 +497,11 @@ private fun BottomGate(
     requiresQuiz: Boolean, passMark: Int, busy: Boolean, error: String?,
     onStartQuiz: () -> Unit, onComplete: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().background(ML.cream).padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Clear of the system's gesture bar (§7.1 rule 3) — the cream runs under it.
+    Column(Modifier.fillMaxWidth().background(ML.cream).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
         Text(
-            if (complete) "All steps done 🎉" else "$doneCount of 2 steps done",
+            if (complete) "All steps done" else "$doneCount of 2 steps done",
             style = ml(11, FontWeight.Bold), color = if (complete) ML.overline else ML.navy,
         )
         // The done state collapses to the celebratory line + CTA; in progress,
@@ -467,7 +517,7 @@ private fun BottomGate(
         when {
             !complete -> Box(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Lock, null, tint = ML.secondary, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Lock, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(if (!readDone) "Read to the end to ${if (requiresQuiz) "unlock the quiz" else "continue"}" else "Add a reflection to ${if (requiresQuiz) "unlock the quiz" else "continue"}", style = ml(13, FontWeight.SemiBold), color = ML.secondary)
                 }
@@ -475,6 +525,19 @@ private fun BottomGate(
             requiresQuiz -> GoldCta(if (busy) "…" else "Start the quiz  →", busy) { onStartQuiz() }
             else -> GoldCta(if (busy) "…" else "Mark complete", busy) { onComplete() }
         }
+    }
+}
+
+/** A finished lesson's way on, pinned where the gate stands on an unfinished
+ *  one: the journey's step — "Every module is done — the exam opens the way
+ *  to Level 2." — and its one action, "Begin the exam". */
+@Composable
+private fun ExamNextBar(step: JourneyStep, onGo: () -> Unit) {
+    Column(Modifier.fillMaxWidth().background(ML.cream).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(ML.border))
+        Text(step.title, style = mlSerif(16, FontWeight.SemiBold), color = ML.navy)
+        if (step.line.isNotBlank()) Text(step.line, style = ml(13), color = ML.secondary)
+        step.action?.let { a -> GoldCta(a.label, busy = false) { onGo() } }
     }
 }
 
@@ -486,7 +549,7 @@ private fun GateSeg(done: Boolean, modifier: Modifier) {
 @Composable
 private fun StepChip(label: String, done: Boolean) {
     Row(Modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else Color.White).border(1.dp, if (done) Color.Transparent else ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (done) { Icon(Icons.Filled.Check, null, tint = ML.navy, modifier = Modifier.size(11.dp)); Spacer(Modifier.width(3.dp)) }
+        if (done) { Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)) }
         Text(label, style = ml(11, FontWeight.Bold), color = if (done) ML.navy else ML.secondary)
     }
 }
@@ -518,14 +581,35 @@ private fun PaceRail(progress: Float, modifier: Modifier) {
 
 // ─────────────────────────── Content: KEY VERSE + section + markdown ───────────────────────────
 
+/** The verse's words with its reference under them (walk E22) — it put the
+ *  reference itself in quotes ("“James 1:5”"). A module that names only the
+ *  reference has its words fetched; until they come (or if they can't), the
+ *  reference stands alone, never in quotes. */
 @Composable
-private fun KeyVerseCard(verse: String) {
+private fun KeyVerseCard(raw: String) {
+    val content = remember(raw) { keyVerseContent(raw) }
+    var words by remember(raw) { mutableStateOf((content as? KeyVerseContent.Words)?.text) }
+    val reference = when (content) {
+        is KeyVerseContent.Fetch -> content.reference
+        is KeyVerseContent.Passage -> content.reference
+        is KeyVerseContent.Words -> content.reference
+    }
+    if (content is KeyVerseContent.Fetch) {
+        LaunchedEffect(content.reference) {
+            org.nuruplace.member.feature.grow.ScriptureStore.passage(content.reference).getOrNull()
+                ?.let { p -> keyVerseWords(p.text, content.reference)?.let { words = it } }
+        }
+    }
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
         Column(Modifier.padding(16.dp)) {
-            Text("KEY VERSE", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker)
+            Text("KEY VERSE", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker)
             Spacer(Modifier.height(8.dp))
-            Text("“$verse”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy)
+            words?.let { Text("“$it”", style = mlSerif(16, FontWeight.Normal, italic = true), color = ML.navy) }
+            reference?.let {
+                if (words != null) Spacer(Modifier.height(6.dp))
+                Text(it, style = ml(12, FontWeight.SemiBold), color = if (words != null) ML.kicker else ML.navy)
+            }
         }
     }
 }
@@ -533,9 +617,9 @@ private fun KeyVerseCard(verse: String) {
 @Composable
 private fun SectionHeader(index: Int, total: Int) {
     Column {
-        Text(if (total > 1) "SECTION · $index OF $total" else "SECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker)
+        Text(if (total > 1) "SECTION · $index OF $total" else "SECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker)
         Spacer(Modifier.height(6.dp))
-        Text("Section $index", style = mlSerif(23, FontWeight.SemiBold, -0.5f), color = ML.navy)
+        Text("Section $index", style = mlSerif(22, FontWeight.SemiBold, -0.5f), color = ML.navy)
     }
 }
 
@@ -548,17 +632,17 @@ private fun MarkdownView(md: String) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         blocks.forEach { b ->
             when (b) {
-                is Md.Heading -> Text(b.text, style = mlSerif(when (b.level) { 1 -> 22; 2 -> 19; 3 -> 17; else -> 16 }, FontWeight.SemiBold, -0.4f), color = ML.navy)
+                is Md.Heading -> Text(b.text, style = mlSerif(when (b.level) { 1 -> 22; 2 -> 18; else -> 16 }, FontWeight.SemiBold, -0.4f), color = ML.navy)
                 is Md.Para -> {
                     val lead = !firstParaSeen; firstParaSeen = true
-                    Text(inline(b.text), style = if (lead) ml(16, FontWeight.Medium) else ml(15), color = if (lead) ML.lead else ML.bodyInk, lineHeight = scaledLineHeight(if (lead) 23 else 21))
+                    Text(inline(b.text), style = if (lead) ml(16, FontWeight.Medium) else ml(16), color = if (lead) ML.lead else ML.bodyInk, lineHeight = scaledLineHeight(23))
                 }
                 is Md.Bullet -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     b.items.forEach { item ->
                         Row {
                             Box(Modifier.padding(top = 7.dp).size(5.dp).clip(RoundedCornerShape(999.dp)).background(ML.navy))
                             Spacer(Modifier.width(10.dp))
-                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = scaledLineHeight(21))
+                            Text(inline(item), style = ml(16), color = ML.bodyInk, lineHeight = scaledLineHeight(23))
                         }
                     }
                 }
@@ -567,7 +651,7 @@ private fun MarkdownView(md: String) {
                         Row {
                             Text("${i + 1}.", style = ml(14, FontWeight.Bold), color = ML.gold, modifier = Modifier.width(22.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(inline(item), style = ml(15), color = ML.bodyInk, lineHeight = scaledLineHeight(21))
+                            Text(inline(item), style = ml(16), color = ML.bodyInk, lineHeight = scaledLineHeight(23))
                         }
                     }
                 }
@@ -621,7 +705,7 @@ private fun MarkdownView(md: String) {
                     } else {
                         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
                             Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
-                            Text("“${b.text}”", style = mlSerif(17, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
+                            Text("“${b.text}”", style = mlSerif(16, FontWeight.Normal, italic = true), color = ML.navy, modifier = Modifier.padding(16.dp))
                         }
                     }
                 }
@@ -720,21 +804,55 @@ private fun inline(text: String): androidx.compose.ui.text.AnnotatedString = bui
 
 // ─────────────────────────── Reflection card ───────────────────────────
 
+/** What a finished module's folded reflection can truthfully say. It used to
+ *  draw "✓ Saved" whatever the server held, over "—" when nothing came back
+ *  (Cycle 4 walk, ModuleScreen's ReflectionFolded). */
+internal sealed interface FoldedReflection {
+    /** Still asking the server — no claim either way. */
+    data object Loading : FoldedReflection
+
+    /** The server holds these words: "✓ Saved", and the words. */
+    data class Saved(val text: String) : FoldedReflection
+
+    /** The server holds no reflection for this module (legacy completion text
+     *  was backfilled into the same table — migration 022). */
+    data object NoneSaved : FoldedReflection
+
+    /** The server couldn't be asked; [line] says why in §4's words. */
+    data class Unavailable(val line: String) : FoldedReflection
+}
+
+/** The folded state from GET modules/{id}/reflection — blank words are none. */
+internal fun foldedReflectionOf(saved: org.nuruplace.member.data.net.SavedModuleReflection?): FoldedReflection =
+    saved?.body?.takeIf { it.isNotBlank() }?.let { FoldedReflection.Saved(it) } ?: FoldedReflection.NoneSaved
+
+internal const val NO_REFLECTION_SAVED = "No reflection saved for this module."
+internal const val RELOAD_FAILED = "Couldn't load your reflection."
+
 @Composable
-private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
+private fun ReflectionFolded(state: FoldedReflection, onRevisit: () -> Unit) {
     Column {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
                 .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("YOUR REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp))
-                Spacer(Modifier.width(3.dp))
-                Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D))
+                Text("YOUR REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
+                // "Saved" is a claim about the server: only when it holds the words.
+                if (state is FoldedReflection.Saved) {
+                    Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D))
+                }
             }
             Spacer(Modifier.height(10.dp))
-            Text(if (text.isBlank()) "\u2014" else text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = scaledLineHeight(22))
+            when (state) {
+                FoldedReflection.Loading -> org.nuruplace.member.ui.components.SkeletonBlock(height = 16.dp, corner = 6.dp)
+                is FoldedReflection.Saved ->
+                    Text(state.text, style = mlSerif(15, FontWeight.Normal), color = ML.bodyInk, lineHeight = scaledLineHeight(22))
+                FoldedReflection.NoneSaved -> Text(NO_REFLECTION_SAVED, style = ml(13), color = ML.secondary)
+                is FoldedReflection.Unavailable -> Text(state.line, style = ml(13), color = ML.secondary)
+            }
         }
         Spacer(Modifier.height(14.dp))
         // The module is sealed — changing anything is intentional, one quiet door.
@@ -745,7 +863,7 @@ private fun ReflectionFolded(text: String, onRevisit: () -> Unit) {
                     .clickable { onRevisit() }.padding(horizontal = 18.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.MenuBook, null, tint = ML.secondary, modifier = Modifier.size(13.dp))
+                Icon(Lucide.BookOpen, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Revisit this module", style = ml(13, FontWeight.SemiBold), color = ML.secondary)
             }
@@ -758,8 +876,8 @@ private fun ReflectionCard(value: String, onValue: (String) -> Unit, saved: Bool
     val canSave = value.trim().length >= 20
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, if (saved) ML.gold.copy(alpha = 0.5f) else ML.border, RoundedCornerShape(16.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("REFLECTION", style = ml(10, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
-            if (saved) { Icon(Icons.Filled.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(11.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(10, FontWeight.Bold), color = Color(0xFF15803D)) }
+            Text("REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
+            if (saved) { Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D)) }
         }
         Spacer(Modifier.height(8.dp))
         Text("What is God showing you today?", style = mlSerif(16, FontWeight.Medium, italic = true), color = ML.navy)

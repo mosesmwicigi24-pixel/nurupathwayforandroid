@@ -75,6 +75,11 @@ interface MemberApi {
     @POST("modules/{id}/reflection")
     suspend fun submitModuleReflection(@Path("id") moduleId: String, @Body body: SaveReflectionBody): Unit
 
+    // The member's saved reflection for a module — `data` is null when none is
+    // on the server (iOS MemberAPI.moduleReflection).
+    @GET("modules/{id}/reflection")
+    suspend fun moduleReflection(@Path("id") moduleId: String): ModuleReflectionEnv
+
     // --- Module engagement heartbeat (reading/audio/video seconds + resume page) ---
     @GET("modules/{id}/engagement")
     suspend fun moduleEngagement(@Path("id") moduleId: String): ModuleEngagement
@@ -394,8 +399,10 @@ interface MemberApi {
     suspend fun myRsvps(): Envelope<MyRsvp>
 
     // --- Notification center ---
+    /** [limit]: how many rows (the server's default, 50, when null) — the
+     *  bells ask for one: `unread` counts every unread notice regardless. */
     @GET("me/notifications")
-    suspend fun notifications(): NotificationsRes
+    suspend fun notifications(@Query("limit") limit: Int? = null): NotificationsRes
 
     @POST("me/notifications/read")
     suspend fun markNotificationsRead(@Body body: MarkReadBody): Unit
@@ -408,6 +415,12 @@ interface MemberApi {
     @GET("giving/history")
     suspend fun givingHistory(): Envelope<GivingRecord>
 
+    /** The rails this member can give with here, their limits, and the
+     *  number on file for a prompt (Giving Cycle 1). The Give form draws its
+     *  method list from this — never offering a rail the server cannot take. */
+    @GET("giving/methods")
+    suspend fun givingMethods(): GivingMethodsRes
+
     @POST("giving/intents")
     suspend fun giving(@Body body: GiveBody): GivingIntentResult
 
@@ -417,6 +430,12 @@ interface MemberApi {
 
     @GET("giving/transactions/{id}")
     suspend fun givingDetail(@Path("id") transactionId: String): GivingDetail
+
+    /** "Try again" on one of MY failed gifts (Giving Cycle 3): a new gift with
+     *  everything the failed one carried; answered like POST /giving/intents
+     *  plus retry_of. 409 GIFT_IN_PROGRESS while a prompt is still waiting. */
+    @POST("giving/transactions/{id}/retry")
+    suspend fun retryGift(@Path("id") transactionId: String, @Body body: RetryGiftBody): GivingIntentResult
 
     // --- Profile / growth: scores, gifts, resources, assistant ---
     @GET("me/scores")
@@ -497,9 +516,11 @@ interface MemberApi {
     // Giving statement / single-gift receipt as PDFs (financial/index.ts:71,88).
     // Fetched through the authed client (never a ?token= browser URL — that
     // would leak the JWT into browser history).
+    // One year when asked (Giving Cycle 2: the year on screen); null = the
+    // complete record.
     @retrofit2.http.Streaming
     @GET("giving/statement.pdf")
-    suspend fun givingStatementPdf(): okhttp3.ResponseBody
+    suspend fun givingStatementPdf(@Query("year") year: Int? = null): okhttp3.ResponseBody
 
     @retrofit2.http.Streaming
     @GET("giving/transactions/{id}/receipt.pdf")
@@ -571,18 +592,29 @@ interface MemberApi {
      * The reply is the created schedule (schedule_id/status/next_run_at/…).
      */
     @POST("giving/schedules")
-    suspend fun createSchedule(@Body body: CreateScheduleBody): GivingSchedule
+    suspend fun createSchedule(@Body body: CreateScheduleBody): CreatedScheduleRes
 
     @POST("giving/schedules/{id}/cancel")
     suspend fun cancelSchedule(@Path("id") scheduleId: String): Unit
 
+    /** Change a recurring gift instead of cancelling it (Giving Cycle 4):
+     *  amount, day, number, heads-up — only what changes travels. Answers the
+     *  schedule row. 409 SCHEDULE_EXISTS; 422 as a new gift's checks. */
+    @PATCH("giving/schedules/{id}")
+    suspend fun updateSchedule(@Path("id") scheduleId: String, @Body body: UpdateScheduleBody): GivingSchedule
+
+    /** Pause a running gift myself, until resumed or until a date (Cycle 4). */
+    @POST("giving/schedules/{id}/pause")
+    suspend fun pauseSchedule(@Path("id") scheduleId: String, @Body body: PauseScheduleBody): ScheduleStateRes
+
     /**
-     * Re-arm a schedule paused after repeated collection failures. It
-     * deliberately does NOT collect the cycle that was missed — money must
-     * never surprise anyone.
+     * Resume a paused schedule (after repeated collection failures, or the
+     * member's own pause). It deliberately does NOT collect the cycle that
+     * was missed — money must never surprise anyone. 422 when it is paused
+     * with its pledge (resume the pledge).
      */
     @POST("giving/schedules/{id}/resume")
-    suspend fun resumeSchedule(@Path("id") scheduleId: String): Unit
+    suspend fun resumeSchedule(@Path("id") scheduleId: String): ScheduleStateRes
 
     /** May we invite this member today, and with what. The client never decides. */
     @GET("giving/invitation")
@@ -608,6 +640,11 @@ interface MemberApi {
     @POST("giving/partners/join")
     suspend fun joinPartners(@Body body: JoinPartnersBody = JoinPartnersBody()): PartnerMembership
 
+    /** The member's pledges (not cancelled) — a pledge collector's shape
+     *  (monthly: changed on the pledge) when Partners isn't loaded. */
+    @GET("giving/pledges")
+    suspend fun pledges(): Envelope<Pledge>
+
     @POST("giving/pledges")
     suspend fun createPledge(@Body body: CreatePledgeBody): Pledge
 
@@ -618,6 +655,16 @@ interface MemberApi {
     /** The pledge plus its payments. */
     @GET("giving/pledges/{id}")
     suspend fun pledge(@Path("id") pledgeId: String): PledgeDetail
+
+    /** "I paid another way" (Giving Cycle 5): pending until the office
+     *  confirms. 422 CURRENCY_MISMATCH | INVALID_DATE; 409 CONFLICT (already
+     *  told, or five waiting). Online only — never queued. */
+    @POST("giving/pledges/{id}/claims")
+    suspend fun createClaim(@Path("id") pledgeId: String, @Body body: ClaimBody): PledgeClaim
+
+    /** This pledge's claims, newest first. */
+    @GET("giving/pledges/{id}/claims")
+    suspend fun pledgeClaims(@Path("id") pledgeId: String): Envelope<PledgeClaim>
 
     /** By year → by pledge → by fund → payments (JSON; the PDF stays on giving/statement.pdf). */
     @GET("giving/statements")
@@ -676,6 +723,14 @@ interface MemberApi {
     @GET("me/cell-summary")
     suspend fun cellSummary(): CellSummary
 
+    // "Ask to be connected" (EXPERIENCE.md §9.2 #12): 409 already in a cell;
+    // 422 in words for a minor, or when no pastor can receive it.
+    @GET("me/cell-connection")
+    suspend fun cellConnection(): CellConnectionStatus
+
+    @POST("me/cell-connection")
+    suspend fun askCellConnection(@Body body: CellConnectionBody): CellConnectionSent
+
     // The cell's people. Server-authoritative privacy: the shepherd fields
     // (score/band/attendance/last_seen_days) are only serialized for a caller
     // the server itself judges `can_shepherd` — the client never decides who
@@ -719,6 +774,13 @@ interface MemberApi {
 
     @POST("me/letters/{id}/read")
     suspend fun markLetterRead(@Path("id") letterId: String): LetterReadRes
+
+    // "Keep this letter" (v3): the letter's own `pdf_url`, a path on the API's
+    // host (/v1/me/letters/{id}/pdf), resolved by EditorialLetter.pdfUrl — which
+    // refuses any other host, because this client signs every request.
+    @retrofit2.http.Streaming
+    @GET
+    suspend fun letterPdf(@retrofit2.http.Url url: String): okhttp3.ResponseBody
 
     @GET("me/ai")
     suspend fun aiConsent(): AiConsentRes

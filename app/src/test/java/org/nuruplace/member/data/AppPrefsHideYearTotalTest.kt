@@ -32,7 +32,7 @@ class AppPrefsHideYearTotalTest {
 }
 
 /** Just enough SharedPreferences to hold booleans/floats/strings in a map. */
-private class MemoryPrefs : SharedPreferences {
+internal class MemoryPrefs : SharedPreferences {
     val values = HashMap<String, Any?>()
 
     override fun getAll(): MutableMap<String, *> = values

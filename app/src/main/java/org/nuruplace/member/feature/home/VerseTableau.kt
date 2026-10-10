@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,63 +70,84 @@ val DeepNavyBlockBrush = Brush.verticalGradient(
 
 @Composable
 fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: String) {
-    Box(Modifier.fillMaxWidth().height(216.dp)) {
+    // The owner's 216 dp tableau at the everyday text sizes; past them it grows
+    // to hold the whole verse, veiled so the words read — at the largest text
+    // the verse ran over its own kicker and lost its last words (§9.6 #4;
+    // iOS 84d2acb). The words are a column over the photograph, so they can't
+    // overlap: the kicker at the top, the verse at the foot.
+    val large = org.nuruplace.member.ui.components.largeText()
+    Box(Modifier.fillMaxWidth().heightIn(min = 216.dp)) {
         AsyncImage(
             model = art.url,
             contentDescription = art.alt,
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize(),
         )
-        // The photograph SHOWS (owner, 2026-08-25): no full veil — a slim top
-        // scrim for the kicker and a bottom-third scrim for the verse, so the
-        // words occupy only the image's lower third (iOS parity).
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.verticalGradient(
-                    0f to Color.Black.copy(alpha = 0.35f),
-                    0.28f to Color.Transparent,
-                ),
-            ),
-        )
-        Box(
-            Modifier.matchParentSize().background(
-                Brush.verticalGradient(
-                    0.5f to Color.Transparent,
-                    0.78f to Color(0xFF0A1C33).copy(alpha = 0.85f),
-                    1f to Color(0xFF06111F).copy(alpha = 0.95f),
-                ),
-            ),
-        )
-        Row(
-            Modifier.align(Alignment.TopStart).fillMaxWidth().padding(Spacing.base),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("📖  VERSE FOR TODAY", style = NuruType.micro, color = GoldLight, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-            Spacer(Modifier.weight(1f))
+        if (large) {
+            Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
+        } else {
+            // The photograph SHOWS (owner, 2026-08-25): no full veil — a slim top
+            // scrim for the kicker and a bottom-third scrim for the verse, so the
+            // words occupy only the image's lower third (iOS parity).
             Box(
-                Modifier.clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.16f))
-                    .padding(horizontal = 10.dp, vertical = 3.dp),
-            ) {
-                Text(version.uppercase(), style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
-            }
+                Modifier.matchParentSize().background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.35f),
+                        0.28f to Color.Transparent,
+                    ),
+                ),
+            )
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.verticalGradient(
+                        0.5f to Color.Transparent,
+                        0.78f to Color(0xFF0A1C33).copy(alpha = 0.85f),
+                        1f to Color(0xFF06111F).copy(alpha = 0.95f),
+                    ),
+                ),
+            )
         }
-        Column(Modifier.align(Alignment.BottomStart).padding(Spacing.base)) {
-            if (!text.isNullOrBlank()) {
-                // Smaller, lower-third (owner, 2026-08-25) — long verses step down.
-                val size = when {
-                    text.length > 220 -> 12.sp
-                    text.length > 140 -> 13.sp
-                    else -> 14.sp
-                }
-                Text(
-                    "“$text”",
-                    style = NuruType.rowTitle.copy(fontSize = size, lineHeight = size * 1.35),
-                    color = Color.White, maxLines = 4,
+        Column(Modifier.fillMaxWidth().heightIn(min = 216.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(Spacing.base),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Lucide book-open, not a colour emoji (§8.1 rule 7; Cycle 4 walk 01) — as iOS.
+                androidx.compose.material3.Icon(
+                    org.nuruplace.member.ui.icons.Lucide.BookOpen, null, tint = GoldLight,
+                    modifier = Modifier.size(14.dp),
                 )
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("VERSE FOR TODAY", style = NuruType.micro, color = GoldLight, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp, modifier = Modifier.weight(1f))
+                Box(
+                    Modifier.clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.16f))
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                ) {
+                    Text(version.uppercase(), style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
+                }
             }
-            Text(refLine, style = NuruType.micro.copy(fontSize = 11.sp), color = GoldLight, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Column(Modifier.padding(Spacing.base)) {
+                if (!text.isNullOrBlank()) {
+                    // Smaller, lower-third (owner, 2026-08-25) — long verses step down.
+                    val size = when {
+                        text.length > 220 -> 12.sp
+                        text.length > 140 -> 13.sp
+                        else -> 14.sp
+                    }
+                    Text(
+                        "“$text”",
+                        style = NuruType.rowTitle.copy(fontSize = size, lineHeight = size * 1.35),
+                        color = Color.White,
+                        // Four lines in the owner's card; the whole verse once it grows.
+                        maxLines = if (large) Int.MAX_VALUE else 4,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(5.dp))
+                }
+                Text(refLine, style = NuruType.micro.copy(fontSize = 11.sp), color = GoldLight, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

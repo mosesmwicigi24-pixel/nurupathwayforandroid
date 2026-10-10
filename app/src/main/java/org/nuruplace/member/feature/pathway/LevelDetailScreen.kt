@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,16 +32,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -53,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -76,12 +69,12 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PathwayLevel
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.Kicker
-import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private data class LevelBundle(
     val level: PathwayLevel?,
@@ -94,6 +87,9 @@ private data class LevelBundle(
     /** Current streak in days (GET /me/achievements) — same figure the Pathway
      *  hub header already shows. */
     val streak: Int,
+    /** The member's journey (docs/EXPERIENCE.md §3) — its words for the wait
+     *  after a passed exam, so this page and Home say the same thing. */
+    val journey: Journey? = null,
 )
 
 /** One row of the trail — module cards and authored encouragement cards
@@ -155,29 +151,39 @@ fun LevelDetailScreen(
 ) {
     AsyncContent(
         key = levelNumber,
+        // Held by the page (EXPERIENCE.md §7.2 #8): Back from a module or the
+        // exam finds the same trail at the same scroll, refreshed in place —
+        // a module just finished reads done.
+        heldAs = "LevelDetail",
         load = {
             val modules = Net.client.api.levelModules(levelNumber).data
-            val level = runCatching { Net.client.api.pathway().levels.firstOrNull { it.levelNumber == levelNumber } }.getOrNull()
+            val summary = runCatching { Net.client.api.pathway() }.getOrNull()
+            val level = summary?.levels?.firstOrNull { it.levelNumber == levelNumber }
             val mentor = runCatching { Net.client.api.mentor().mentor }.getOrNull()
             // Best-effort: no encouragements (unauthored or failed fetch) weaves nothing in.
             val encouragements = runCatching { Net.client.api.levelEncouragements(levelNumber).data }.getOrDefault(emptyList())
             val levelScore = runCatching { Net.client.api.levelScore(levelNumber) }.getOrNull()
             val streak = runCatching { Net.client.api.achievements().streak.current }.getOrDefault(0)
-            LevelBundle(level, modules, mentor, encouragements, levelScore, streak)
+            LevelBundle(level, modules, mentor, encouragements, levelScore, streak, JourneyState.derive(summary, modules))
         },
     ) { bundle: LevelBundle, _ ->
         val modules = bundle.modules
         val level = bundle.level
-        val total = level?.totalModules ?: modules.size
-        val done = level?.completedModules ?: modules.count { it.completed }
-        val pct = if (total > 0) done * 100 / total else 0
+        // Lessons, never the exam (§8.2 #4) — the trail's own exam row is a
+        // step of its own, and production counts it in total_modules.
+        val total = level?.lessonCount ?: modules.count { !it.isExam }
+        val done = level?.lessonsDone ?: modules.count { it.completed && !it.isExam }
+        // The exam is the level's last step (§9.2 #10): every lesson done
+        // reads 91%, not 100%, until the exam is passed.
+        val pct = level?.let { levelPercent(it, bundle.journey) } ?: if (total > 0) done * 100 / (total + 1) else 0
         // The exam container is its own visible row in the trail — exclude it from
         // "finished every module", and keep the standalone exam button only as a
         // fallback for levels that have no exam module authored.
         val hasExamModule = modules.any { it.isExam }
         val content = modules.filter { !it.isExam }
         val allDone = content.isNotEmpty() && content.all { it.completed }
-        val nextIdx = modules.indexOfFirst { !it.completed && !(it.locked || it.status == ModuleStatus.LOCKED) }
+        // An exam that has nothing to ask yet is never the next step (§7.2 #1).
+        val nextIdx = modules.indexOfFirst { !it.completed && !(it.locked || it.status == ModuleStatus.LOCKED) && !it.examOpensSoon }
 
         // Within-level "walk with your discipler" reminder — eligible once the
         // member is genuinely mid-level (≥3 modules done, not yet at the level's
@@ -185,8 +191,10 @@ fun LevelDetailScreen(
         // cap) + AppPrefs (24h quiet period after an explicit X dismissal).
         var showReminder by remember { mutableStateOf(false) }
         val reduceMotion = rememberDisciplerReduceMotion()
-        LaunchedEffect(done, allDone, levelNumber) {
-            if (done >= 3 && !allDone && DisciplerReminderSession.shouldShow(levelNumber)) {
+        // Only for a member who has a discipler (§9.2 #8): "A discipler is
+        // walking this with you" floated over members who had none.
+        LaunchedEffect(done, allDone, levelNumber, bundle.mentor) {
+            if (bundle.mentor != null && done >= 3 && !allDone && DisciplerReminderSession.shouldShow(levelNumber)) {
                 showReminder = true
             }
         }
@@ -201,24 +209,37 @@ fun LevelDetailScreen(
         Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
             // Hero — navy gradient with overlaid pills + serif title (data-honest
             // fallback for the Figma's per-level hero image).
-            Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Nuru.heroGradient)) {
+            // At least 220 dp, and taller when the level's name needs it — its
+            // words stay clear of the back button (§9.6 #4; iOS 30b8b15).
+            Box(Modifier.fillMaxWidth().heightIn(min = 220.dp).clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Nuru.heroGradient)) {
                 IconButton(onClick = onBack, modifier = Modifier.padding(top = Spacing.md, start = Spacing.sm)) {
                     Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.navyDeep.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.onNavy)
+                        Icon(Lucide.ArrowLeft, "Back", tint = Nuru.onNavy, modifier = Modifier.size(22.dp))
                     }
                 }
-                Column(Modifier.align(Alignment.BottomStart).padding(Spacing.screen)) {
+                Column(Modifier.align(Alignment.BottomStart).padding(top = if (org.nuruplace.member.ui.components.largeText()) 64.dp else 0.dp).padding(Spacing.screen)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                        // A label pill is white with navy words; a state is a tinted
+                        // chip (§8.1 rule 6; final walk C16: both were gold-filled).
+                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.white).padding(horizontal = 10.dp, vertical = 4.dp)) {
                             Text("LEVEL $levelNumber", style = NuruType.micro, color = Nuru.navy, fontWeight = FontWeight.Bold)
                         }
-                        val complete = level?.status == LevelStatus.COMPLETED
-                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (complete) Nuru.success else Nuru.white.copy(alpha = 0.22f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text(if (complete) "COMPLETE" else "IN PROGRESS", style = NuruType.micro, color = Nuru.onNavy, fontWeight = FontWeight.Bold)
+                        // The one journey state (Cycle 3's closing walk, B3): "EXAM
+                        // READY" when Pathway says so, never "IN PROGRESS" beside it.
+                        val badge = levelBadge(levelNumber, level, bundle.journey)
+                        val (badgeBg, badgeFg) = when (badge.tone) {
+                            LevelBadge.Tone.ACHIEVED -> Nuru.successBg to Nuru.successText
+                            LevelBadge.Tone.NEXT_STEP -> Nuru.goldChipBg to Nuru.goldChipText
+                            LevelBadge.Tone.QUIET -> Nuru.white.copy(alpha = 0.22f) to Nuru.onNavy
+                        }
+                        Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(badgeBg).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text(badge.text, style = NuruType.micro, fontWeight = FontWeight.Bold, color = badgeFg)
                         }
                     }
                     Spacer(Modifier.height(Spacing.sm))
-                    Text(level?.title ?: "Level $levelNumber", style = NuruType.display, color = Nuru.onNavy, maxLines = 2)
+                    // The level's name whole: its words never break, and past the
+                    // everyday sizes it takes the lines it needs (§9.6 #4).
+                    org.nuruplace.member.ui.components.WholeWordsText(level?.title ?: "Level $levelNumber", style = NuruType.display, color = Nuru.onNavy, maxLines = if (org.nuruplace.member.ui.components.largeText()) Int.MAX_VALUE else 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     level?.theme?.let { Text(it, style = NuruType.body, color = Nuru.onNavyDim) }
                 }
             }
@@ -229,16 +250,22 @@ fun LevelDetailScreen(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.white)
                         .border(1.dp, Nuru.border, RoundedCornerShape(Radii.card)).padding(Spacing.base),
                 ) {
+                    // No zero counts (Cycle 4 walk): "Level 2 is being prepared",
+                    // "10 modules", "3 of 10 modules" — the percent, bar and
+                    // lesson chip only once there is something to show.
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$done of $total modules", style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        Text("$pct%", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.Bold)
+                        Text(levelPageProgressLine(levelNumber, done, total, pct), style = NuruType.cardCta, color = Nuru.navy, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (pct > 0) Text("$pct%", style = NuruType.cardCta, color = Nuru.gold, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(Modifier.height(Spacing.sm))
-                    ProgressBar(if (total > 0) done.toFloat() / total else 0f)
-                    Spacer(Modifier.height(Spacing.sm))
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                        level?.minutes?.takeIf { it > 0 }?.let { MetaChip("≈ $it min") }
-                        MetaChip("$total lessons")
+                    if (pct > 0) {
+                        Spacer(Modifier.height(Spacing.sm))
+                        ProgressBar(pct / 100f)
+                    }
+                    // One word for one count (§8.1 rule 8): "10 lessons" beside
+                    // "10 of 10 modules" said it twice — the time alone, as iOS.
+                    if (total > 0) level?.minutes?.takeIf { it > 0 }?.let {
+                        Spacer(Modifier.height(Spacing.sm))
+                        MetaChip("≈ $it min")
                     }
                 }
 
@@ -253,6 +280,8 @@ fun LevelDetailScreen(
                     Text("Learn step by step", style = NuruType.title, color = Nuru.ink)
                     Spacer(Modifier.height(Spacing.md))
                     val trail = remember(modules, bundle.encouragements) { weaveTrail(modules, bundle.encouragements) }
+                    // An empty trail says why (§4) — it was a heading over nothing.
+                    if (trail.isEmpty()) Text(emptyListLine(total), style = NuruType.body, color = Nuru.ink600)
                     trail.forEachIndexed { idx, item ->
                         val isLastRow = idx == trail.lastIndex
                         when (item) {
@@ -275,20 +304,28 @@ fun LevelDetailScreen(
                 }
 
                 if (allDone && !hasExamModule) {
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.card)).background(Nuru.goldTint).padding(Spacing.base),
-                    ) {
-                        Text("You've finished every module in this level.", style = NuruType.body, color = Nuru.ink)
-                        Spacer(Modifier.height(Spacing.md))
-                        // The exam gate stays hidden until an admin publishes it.
-                        if (level?.examPublished != false) {
-                            PrimaryButton("Take the Level $levelNumber exam", onClick = { onTakeExam(levelNumber) })
-                        } else {
-                            Text(
-                                "Your discipler is preparing this level's exam. It will appear here once it's ready.",
-                                style = NuruType.caption, color = Nuru.ink600,
-                            )
-                        }
+                    // The gate is the journey's (§3), for the member's own
+                    // level only — the same title, line and action the hub
+                    // and Home say. It used to offer the exam on any level
+                    // whose modules were all done: a level already passed,
+                    // or one whose exam was passed and awaits the usher
+                    // (where "See Level N" lands). Only the exam is opened
+                    // from here; the other steps' actions lead back to this
+                    // very page. No journey to ask (the pathway read failed):
+                    // the old gate — the server still decides.
+                    val j = bundle.journey?.takeIf { it.levelNumber == levelNumber && it.stage != JourneyStage.LEARNING }
+                    when {
+                        j != null -> LevelGateCard(
+                            title = j.next.title, line = j.next.line,
+                            actionLabel = j.next.action?.takeIf { j.stage == JourneyStage.EXAM_READY }?.label,
+                            onAction = { onTakeExam(levelNumber) },
+                        )
+                        bundle.journey == null -> LevelGateCard(
+                            title = "You've finished every module in this level.", line = null,
+                            actionLabel = "Take the Level $levelNumber exam",
+                            onAction = { onTakeExam(levelNumber) },
+                        )
+                        else -> LevelGateCard(title = "You've finished every module in this level.", line = null, actionLabel = null, onAction = {})
                     }
                 }
                 Spacer(Modifier.height(Spacing.xxl))
@@ -302,7 +339,10 @@ fun LevelDetailScreen(
             visible = showReminder,
             enter = if (reduceMotion) fadeIn(tween(220)) else slideInVertically(tween(320)) { it / 2 } + fadeIn(tween(320)),
             exit = fadeOut(tween(200)),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = Spacing.screen, vertical = Spacing.tabBarSpace),
+            // At the foot of the page, clear of the gesture bar: the level page
+            // has no tab bar, and a 96dp lift left the card in mid-air.
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                .padding(horizontal = Spacing.screen).padding(bottom = 16.dp),
         ) {
             DisciplerReminderCard(
                 mentor = bundle.mentor,
@@ -340,6 +380,9 @@ private fun DisciplerCard(m: MentorInfo.Mentor) {
 private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean, onOpen: () -> Unit) {
     val locked = module.locked || module.status == ModuleStatus.LOCKED
     val done = module.completed
+    // The exam row whose exam has nothing to ask yet: "Opens soon", and
+    // nothing to tap — the exam would only refuse (§7.2 #1).
+    val soon = module.examOpensSoon
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         // Node + connector column.
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -365,14 +408,14 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                             .clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy)
                             .border(1.5.dp, Nuru.white, RoundedCornerShape(Radii.pill)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, null, tint = Nuru.white, modifier = Modifier.size(9.dp)) }
+                    ) { Icon(Lucide.Check, null, tint = Nuru.white, modifier = Modifier.size(14.dp)) }
                 } else if (locked) {
                     Box(
                         Modifier.offset(x = 4.dp, y = (-3).dp).size(15.dp)
                             .clip(RoundedCornerShape(Radii.pill)).background(Nuru.inputBg)
                             .border(1.5.dp, Nuru.white, RoundedCornerShape(Radii.pill)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(8.dp)) }
+                    ) { Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
                 }
             }
             if (!isLast) {
@@ -386,19 +429,20 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                 .clip(RoundedCornerShape(20.dp))
                 .background(if (locked) Nuru.surface else Nuru.white)
                 .border(1.dp, if (isNext) Nuru.gold.copy(alpha = 0.4f) else Nuru.border, RoundedCornerShape(20.dp))
-                .then(if (locked) Modifier.alpha(0.85f) else Modifier.clickable { onOpen() })
+                .then(if (locked) Modifier.alpha(0.85f) else if (soon) Modifier else Modifier.clickable { onOpen() })
                 .padding(Spacing.base),
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Kicker(if (module.isExam) "Level exam" else "Module ${module.moduleSequenceNumber}")
-                    Text(module.title, style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    Kicker(if (module.isExam) "Exam" else "Module ${module.moduleSequenceNumber}")
+                    // The exam's one name (§9.1 rule 1) — the server titles it "Level 1 Review".
+                    Text(ExamWords.rowTitle(module), style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
-                ModuleStatusPill(done, isNext)
+                ModuleStatusPill(done, isNext, soon, module.isExam)
             }
-            module.summary?.let {
+            module.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                 Spacer(Modifier.height(Spacing.xs))
-                Text(it, style = NuruType.caption, color = Nuru.ink600, maxLines = 2)
+                ModuleSummary(module.moduleId, summary)
             }
             if (done || isNext) {
                 Spacer(Modifier.height(Spacing.sm))
@@ -414,22 +458,25 @@ private fun ModuleStation(module: LevelModule, isNext: Boolean, isLast: Boolean,
                         Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.navy).padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (module.isExam) "Start exam" else "Resume", style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
+                        Text(ModuleWords.trailAction(module), style = NuruType.micro, color = Nuru.gold, fontWeight = FontWeight.Bold)
+                        Icon(Lucide.ChevronRight, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                     }
                 }
             }
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 when {
-                    module.isExam && done -> "Level exam · passed."
-                    module.isExam && isNext -> "Level exam · ready — tap to begin."
+                    module.isExam && done -> "Passed."
+                    soon -> "Opens soon."
+                    module.isExam && isNext -> "Ready — tap to begin."
                     module.isExam -> "Unlocks when you finish every module."
                     done -> "Completed — nicely done."
-                    isNext -> "Pick up where you left off."
+                    isNext -> "Up next — tap to start."
                     else -> "Unlocks when you finish the one before."
                 },
-                style = NuruType.micro, color = if (done) Nuru.goldChipText else if (isNext) Nuru.goldLo else Nuru.ink400,
+                // Words in ink, not gold (§8.1 rule 1; final walk C16:
+                // "Completed — nicely done." was gold italic body text).
+                style = NuruType.micro, color = if (isNext) Nuru.navy else if (done) Nuru.ink600 else Nuru.ink400,
                 fontStyle = FontStyle.Italic,
             )
         }
@@ -451,7 +498,7 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
                 if (!e.emoji.isNullOrBlank()) {
                     Text(e.emoji, style = NuruType.caption)
                 } else {
-                    Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.gold, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Sparkles, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                 }
             }
             if (!isLast) {
@@ -473,7 +520,7 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
                 Spacer(Modifier.height(Spacing.sm))
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = Nuru.goldChipText, modifier = Modifier.size(11.dp))
+                Icon(Lucide.Sparkles, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
                 Text(encouragementKicker(e.kind), style = NuruType.kicker, color = Nuru.goldChipText)
             }
             e.title?.takeIf { it.isNotBlank() }?.let {
@@ -501,6 +548,44 @@ private fun EncouragementStation(e: LevelEncouragement, isLast: Boolean) {
     }
 }
 
+/** The level's gate (EXPERIENCE.md §8.2 #15) — navy, the level page's one
+ *  feature card, as iOS draws it (ExamGateCard): "THE LEVEL GATE", the
+ *  journey's title and line, and — only while the exam can be taken — its
+ *  gold action. It was a gold card on Android. */
+@Composable
+private fun LevelGateCard(title: String, line: String?, actionLabel: String?, onAction: () -> Unit) {
+    val shape = RoundedCornerShape(Radii.card)
+    Column(
+        Modifier.fillMaxWidth()
+            .shadow(12.dp, shape, ambientColor = Nuru.navyCeremony.copy(alpha = 0.35f), spotColor = Nuru.navyCeremony.copy(alpha = 0.35f))
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(Nuru.navy700, Nuru.navyCeremony)))
+            .border(1.dp, Nuru.gold.copy(alpha = 0.5f), shape)
+            .then(if (actionLabel != null) Modifier.clickable { onAction() } else Modifier)
+            .padding(Spacing.base),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Lucide.Award, null, tint = Nuru.goldGlow, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("THE LEVEL GATE", style = NuruType.kicker, color = Nuru.goldGlow)
+        }
+        Text(title, style = NuruType.cardTitle, color = Nuru.onNavy)
+        line?.let { Text(it, style = NuruType.body, color = Nuru.onNavy.copy(alpha = 0.65f)) }
+        if (actionLabel != null) {
+            Row(
+                Modifier.padding(top = 4.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.goldGradient)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(actionLabel, style = NuruType.actionLabel, color = Nuru.navyDeep)
+                Spacer(Modifier.width(6.dp))
+                Icon(Lucide.ArrowRight, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
 // ── Mid-level stats card (owner spec: "around modules 5-8 you should have a
 // card that captures all your stats, beautiful, with imagery, that reminds
 // and encourages you"). Navy-gradient + gold accents, the member's real,
@@ -517,7 +602,7 @@ private fun StatsStation(
             Box(
                 Modifier.size(28.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+            ) { Icon(Lucide.TrendingUp, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
             if (!isLast) {
                 Box(Modifier.width(2.dp).height(46.dp).background(Nuru.gold.copy(alpha = 0.35f)))
             }
@@ -531,7 +616,7 @@ private fun StatsStation(
                 .padding(Spacing.base),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Nuru.gold, modifier = Modifier.size(12.dp))
+                Icon(Lucide.TrendingUp, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
                 Text("YOUR JOURNEY SO FAR", style = NuruType.kicker, color = Nuru.gold)
             }
             Spacer(Modifier.height(Spacing.xs))
@@ -541,26 +626,29 @@ private fun StatsStation(
                 StatsRing(pct)
                 Spacer(Modifier.size(Spacing.base))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatLine("$done of $total", "modules complete")
+                    if (total > 0) StatLine("$done of $total", "modules complete")
                     if (!band.isNullOrBlank()) StatLine(band, "your mastery so far")
                     if (streak > 0) StatLine("$streak-day", "streak")
                 }
             }
-            Spacer(Modifier.height(Spacing.base))
-            Text(
-                "Walk the rest with your discipler" + (mentorName?.let { " — $it is right there with you" } ?: "") + ".",
-                style = NuruType.caption, color = Color.White.copy(alpha = 0.7f),
-            )
-            Spacer(Modifier.height(Spacing.sm))
-            Row(
-                Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold)
-                    .clickable { onMessage() }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
-                Text("Message your discipler", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold)
+            // The discipler, only for a member who has one (§9.2 #8).
+            if (mentorName != null) {
+                Spacer(Modifier.height(Spacing.base))
+                Text(
+                    "Walk the rest with your discipler — $mentorName is right there with you.",
+                    style = NuruType.caption, color = Color.White.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(Spacing.sm))
+                Row(
+                    Modifier.clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold)
+                        .clickable { onMessage() }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Lucide.MessageCircle, null, tint = Nuru.navyDeep, modifier = Modifier.size(14.dp))
+                    Text("Message your discipler", style = NuruType.micro, color = Nuru.navyDeep, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -585,7 +673,10 @@ private fun StatsRing(pct: Int) {
             drawArc(Color.White.copy(alpha = 0.18f), 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(sw))
             drawArc(Nuru.gold, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, Offset(inset, inset), arc, style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
-        Text("$pct%", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.Bold)
+        // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+        org.nuruplace.member.ui.components.CappedFontScale(1f) {
+            Text("$pct%", style = NuruType.rowTitle, color = Color.White, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -651,13 +742,13 @@ private fun DisciplerReminderCard(mentor: MentorInfo.Mentor?, onMessage: () -> U
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                Icon(Lucide.MessageCircle, null, tint = Color.White, modifier = Modifier.size(14.dp))
                 Text("Message", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
         IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
             Box(Modifier.size(26.dp).clip(RoundedCornerShape(Radii.pill)).background(Nuru.inputBg), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(13.dp))
+                Icon(Lucide.X, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -673,11 +764,14 @@ private fun encouragementKicker(kind: String?): String = when (kind?.lowercase()
 }
 
 @Composable
-private fun ModuleStatusPill(done: Boolean, isNext: Boolean) {
-    val (label, bg, fg) = when {
-        done -> Triple("Done", Nuru.successBg, Nuru.successText)
-        isNext -> Triple("In progress", Nuru.goldTint, Nuru.goldChipText)
-        else -> Triple("Locked", Nuru.inputBg, Nuru.ink400)
+private fun ModuleStatusPill(done: Boolean, isNext: Boolean, soon: Boolean = false, isExam: Boolean = false) {
+    // "Up next" (an exam: "Ready"), never "In progress" — `next` is the next
+    // one to do, not progress (B2).
+    val label = ModuleWords.levelPagePill(done, isNext, soon, isExam)
+    val (bg, fg) = when {
+        done -> Nuru.successBg to Nuru.successText
+        soon || isNext -> Nuru.goldTint to Nuru.goldChipText
+        else -> Nuru.inputBg to Nuru.ink400
     }
     Box(Modifier.clip(RoundedCornerShape(Radii.pill)).background(bg).padding(horizontal = 8.dp, vertical = 2.dp)) {
         Text(label, style = NuruType.micro, color = fg, fontWeight = FontWeight.Bold)
@@ -686,8 +780,12 @@ private fun ModuleStatusPill(done: Boolean, isNext: Boolean) {
 
 @Composable
 private fun MetaChip(label: String, gold: Boolean = false) {
+    // White with a hairline, as every unselected pill (§8.1 rule 6; final
+    // walk C16: "≈ 194 min" was grey-filled); the quiz's pass mark tinted.
     Box(
-        Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (gold) Nuru.goldTint else Nuru.inputBg).padding(horizontal = 8.dp, vertical = 2.dp),
+        Modifier.clip(RoundedCornerShape(Radii.pill)).background(if (gold) Nuru.goldTint else Nuru.white)
+            .then(if (gold) Modifier else Modifier.border(1.dp, Nuru.border, RoundedCornerShape(Radii.pill)))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
     ) { Text(label, style = NuruType.micro, color = if (gold) Nuru.goldChipText else Nuru.ink600) }
 }
 
@@ -699,4 +797,24 @@ private fun ProgressBar(fraction: Float, navy: Boolean = false) {
                 .clip(RoundedCornerShape(Radii.pill)).background(if (navy) Nuru.navy else Nuru.gold),
         )
     }
+}
+
+/** A module's description: two lines, and "…" when there is more — a tap on
+ *  it shows the rest (and folds it again), on a locked module too. It used to
+ *  stop after two lines mid-sentence with no "…" ("…and with His", Cycle 4
+ *  walk 14; §8.1 rule 9). It takes the tap only when there is more to show,
+ *  so a short description never swallows the tap that opens the module. */
+@Composable
+private fun ModuleSummary(moduleId: String, summary: String) {
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(moduleId) { mutableStateOf(false) }
+    var overflows by remember(summary) { mutableStateOf(false) }
+    Text(
+        summary, style = NuruType.caption, color = Nuru.ink600,
+        maxLines = if (expanded) Int.MAX_VALUE else 2,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+        modifier = if (overflows || expanded) {
+            Modifier.clickable(onClickLabel = if (expanded) "Show less" else "Show more") { expanded = !expanded }
+        } else Modifier,
+    )
 }
