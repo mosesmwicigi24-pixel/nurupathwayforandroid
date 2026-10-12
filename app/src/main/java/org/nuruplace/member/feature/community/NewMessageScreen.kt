@@ -24,10 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +42,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ChatPerson
 import org.nuruplace.member.data.net.ConnectionRequestRow
 import org.nuruplace.member.data.net.ConnectionRow
@@ -53,6 +51,8 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.RequestConnectionBody
 import org.nuruplace.member.ui.components.AsyncContent
 import java.util.UUID
+import org.nuruplace.member.ui.components.QuickNotice
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -68,46 +68,16 @@ private data class NewMessageData(
 fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var busyUserId by remember { mutableStateOf<String?>(null) }
     var consentPromptFor by remember { mutableStateOf<ChatPerson?>(null) }
 
     Column(Modifier.fillMaxSize().background(CHAT.paper).imePadding()) {
-        // ── Cream header ──
-        ChatCreamHeaderBox {
-            Column(
-                Modifier
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 12.dp, bottom = 24.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(CHAT.white)
-                            .border(1.dp, CHAT.border, CircleShape)
-                            .clickable { onBack() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = CHAT.navy,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("NEW MESSAGE", style = cInter(11, FontWeight.Bold, 1.98f), color = CHAT.eyebrow)
-                        Text(
-                            "Start a conversation",
-                            style = cSerif(24, FontWeight.SemiBold, -0.48f),
-                            color = CHAT.navy,
-                        )
-                    }
-                }
-            }
-        }
+        // ── The pushed page's standard header (§8.1 rule 2: back · kicker ·
+        // title) — it sat the kicker and title beside the back button.
+        org.nuruplace.member.ui.components.PushedHeader(
+            kicker = "New message", title = "Start a conversation", onBack = onBack,
+        )
 
         // ── Search field ──
         Row(
@@ -123,7 +93,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = CHAT.faint, modifier = Modifier.size(16.dp))
+            Icon(Lucide.Search, contentDescription = null, tint = CHAT.faint, modifier = Modifier.size(18.dp))
             BasicTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -162,6 +132,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                         .onFailure { e ->
                             busyUserId = null
                             if (isConsentRequired(e)) consentPromptFor = person
+                            else QuickNotice.show(ApiException.failureLine("Couldn't open that chat.", e, context))
                         }
                 }
             }
@@ -170,6 +141,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                 busyUserId = person.userId
                 scope.launch {
                     runCatching { Net.client.api.requestConnection(RequestConnectionBody(person.userId, clientMutationId = UUID.randomUUID().toString())) }
+                        .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't send that request.", it, context)) }
                     busyUserId = null
                     reload()
                 }
@@ -180,6 +152,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                 busyUserId = person.userId
                 scope.launch {
                     runCatching { Net.client.api.cancelConnectionRequest(req.requestId) }
+                        .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't cancel that request.", it, context)) }
                     busyUserId = null
                     reload()
                 }
@@ -231,7 +204,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
         // Stale-cache recovery: offer the connection request instead of a dead-end error.
         val prompt = consentPromptFor
         if (prompt != null) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { consentPromptFor = null },
                 containerColor = CHAT.white,
                 title = { Text("Not connected yet", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
@@ -248,6 +221,7 @@ fun NewMessageScreen(onBack: () -> Unit, onOpenThread: (String) -> Unit) {
                             busyUserId = prompt.userId
                             scope.launch {
                                 runCatching { Net.client.api.requestConnection(RequestConnectionBody(prompt.userId, clientMutationId = UUID.randomUUID().toString())) }
+                                    .onFailure { QuickNotice.show(ApiException.failureLine("Couldn't send that request.", it, context)) }
                                 busyUserId = null
                             }
                         }

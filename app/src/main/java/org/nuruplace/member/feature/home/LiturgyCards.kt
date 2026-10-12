@@ -26,10 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,10 +68,12 @@ import org.nuruplace.member.data.net.HomeEcho
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.feature.community.Avatar
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.rememberHeld
 import org.nuruplace.member.ui.components.pressScale
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 private val LitGold = Color(0xFFE8CA6C)
 // Paper-card palette (iOS parity): the card body sits on the app's PAPER
@@ -89,8 +87,11 @@ private val LitDeepGold = Color(0xFFA8861C)
 
 @Composable
 fun LiturgyCard(canManageRecordings: Boolean = false) {
-    var lit by remember { mutableStateOf<HomeLiturgy?>(null) }
-    LaunchedEffect(Unit) { lit = runCatching { Net.client.api.homeLiturgy() }.getOrNull() }
+    // Held by Home's destination, so Back finds the card already there — it
+    // never pops in late and shifts the page (EXPERIENCE.md §7.2 #8); a
+    // refresh that fails keeps it.
+    var lit by rememberHeld("LiturgyCard.lit") { mutableStateOf<HomeLiturgy?>(null) }
+    LaunchedEffect(Unit) { lit = runCatching { Net.client.api.homeLiturgy() }.getOrElse { lit } }
 
     // Spoken liturgy (LiturgyVoice.kt) — bound as soon as the card mounts so
     // the engine is already warm by the time a member reads the line and
@@ -156,8 +157,11 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
     val partLabel = when (l.part) {
         "morning" -> "MORNING"; "midday" -> "MIDDAY"; "evening" -> "EVENING"; else -> "NIGHT"
     }
-    val partEmoji = when (l.part) {
-        "morning" -> "🌅"; "midday" -> "☀️"; "evening" -> "🌆"; else -> "🌙"
+    // The hour's glyph — Lucide on a gold-tint tile, never a colour emoji
+    // (§8.1 rule 7; Cycle 4 walk 02's 🌆): the sun by day, the first star at
+    // evening, the moon at night — iOS's marks (ea37d94).
+    val partGlyph = when (l.part) {
+        "morning", "midday" -> Lucide.Sun; "evening" -> Lucide.Sparkle; else -> Lucide.Moon
     }
     // Scripture First under the hour's photograph (owner's pick, 2026-08-25,
     // then refined same day; iOS feat/liturgy-scripture-first parity): the
@@ -199,7 +203,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 )
                 Column(Modifier.align(Alignment.TopStart).padding(16.dp)) {
                     LitKicker(
-                        Modifier, partEmoji, partLabel, l.isSunday, onArt = true, textShadow = textShadow,
+                        Modifier, partGlyph, partLabel, l.isSunday, onArt = true, textShadow = textShadow,
                         speaking = listenSpeaking, onToggleVoice = onToggleListen,
                         canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
                     )
@@ -216,7 +220,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             if (art == null) {
                 LitKicker(
-                    Modifier, partEmoji, partLabel, l.isSunday, onArt = false, textShadow = textShadow,
+                    Modifier, partGlyph, partLabel, l.isSunday, onArt = false, textShadow = textShadow,
                     speaking = listenSpeaking, onToggleVoice = onToggleListen,
                     canManageRecordings = canManageRecordings, onOpenRecorder = { showRecorder = true },
                 )
@@ -229,11 +233,13 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 }
                 Spacer(Modifier.height(14.dp))
             }
-            // The lead: the composed statement, small and golden — it frames the verse.
+            // The lead: the composed statement, small — it frames the verse.
+            // In ink, not gold: words are ink (§8.1 rule 1; final walk C16 —
+            // "Growth is minutes, not seasons…" was gold body text).
             Text(
                 l.line,
-                style = NuruType.micro.copy(fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
-                color = LitDeepGold,
+                style = NuruType.label.copy(lineHeight = 17.sp, fontWeight = FontWeight.SemiBold),
+                color = Nuru.ink600,
             )
             val vl = l.verseLine?.takeIf { it.text.isNotBlank() }
             if (vl != null) {
@@ -243,14 +249,14 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     // skips straight to the verse itself.
                     Text(
                         "“",
-                        style = NuruType.display.copy(fontSize = 44.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
+                        style = NuruType.display.copy(fontSize = 28.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
                         color = Nuru.gold,
                         modifier = Modifier.offset(y = 2.dp).clearAndSetSemantics { },
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         vl.text,
-                        style = NuruType.display.copy(fontSize = 19.5.sp, lineHeight = 26.5.sp),
+                        style = NuruType.display.copy(fontSize = 18.sp, lineHeight = 25.sp),
                         color = Nuru.navyDeep,
                         modifier = Modifier.padding(top = 7.dp),
                     )
@@ -258,7 +264,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 Spacer(Modifier.height(10.dp))
                 Text(
                     vl.reference.uppercase(),
-                    style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                    style = NuruType.kicker,
                     color = LitDeepGold,
                 )
             } else {
@@ -266,7 +272,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                     Spacer(Modifier.height(10.dp))
                     Text(
                         ref.uppercase(),
-                        style = NuruType.micro.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                        style = NuruType.kicker,
                         color = LitDeepGold,
                     )
                 }
@@ -278,7 +284,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
                 Text(
                     charge,
                     style = NuruType.body.copy(
-                        fontSize = 12.5.sp, lineHeight = 17.5.sp, fontWeight = FontWeight.Normal,
+                        fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal,
                     ),
                     color = Nuru.ink600,
                 )
@@ -298,7 +304,7 @@ fun LiturgyCard(canManageRecordings: Boolean = false) {
 @Composable
 private fun LitKicker(
     modifier: Modifier = Modifier,
-    partEmoji: String,
+    partGlyph: androidx.compose.ui.graphics.vector.ImageVector,
     partLabel: String,
     isSunday: Boolean,
     onArt: Boolean,
@@ -309,7 +315,9 @@ private fun LitKicker(
     onOpenRecorder: (() -> Unit)? = null,
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(partEmoji, style = NuruType.body)
+        Box(Modifier.size(24.dp).clip(RoundedCornerShape(8.dp)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(partGlyph, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
+        }
         Spacer(Modifier.width(7.dp))
         Text(
             if (isSunday) "SUNDAY · $partLabel" else partLabel,
@@ -353,7 +361,7 @@ private fun LiturgyRecorderEntryButton(onArt: Boolean, onOpen: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.Mic,
+            Lucide.Mic,
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(14.dp),
@@ -388,7 +396,7 @@ private fun LiturgyListenButton(speaking: Boolean, onArt: Boolean, onToggle: () 
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            if (speaking) Icons.Filled.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+            if (speaking) Lucide.Square else Lucide.Volume2,
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(14.dp),
@@ -436,10 +444,10 @@ private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (speaking) Icons.Filled.Stop else Icons.Filled.Mic,
+            if (speaking) Lucide.Square else Lucide.Mic,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(5.dp))
         Text(label, style = NuruType.micro.copy(fontWeight = FontWeight.Bold), color = tint, maxLines = 1)
@@ -449,9 +457,11 @@ private fun RecordedWordChip(speaking: Boolean, onArt: Boolean, durationSec: Int
 @Composable
 fun CelebrationsRail() {
     val scope = rememberCoroutineScope()
-    var moments by remember { mutableStateOf<List<CommunityMoment>>(emptyList()) }
+    val blessContext = androidx.compose.ui.platform.LocalContext.current
+    // Held by the destination, like the liturgy card (§7.2 #8).
+    var moments by rememberHeld("CelebrationsRail.moments") { mutableStateOf<List<CommunityMoment>>(emptyList()) }
     LaunchedEffect(Unit) {
-        moments = runCatching { Net.client.api.communityMoments().data }.getOrDefault(emptyList())
+        moments = runCatching { Net.client.api.communityMoments().data }.getOrElse { moments }
     }
     if (moments.isEmpty()) return
     Column {
@@ -464,7 +474,9 @@ fun CelebrationsRail() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             moments.forEach { m ->
                 MomentCard(m) { kind ->
-                    // Optimistic: move my blessing to the tapped kind.
+                    // Optimistic: move my blessing to the tapped kind — and back,
+                    // with a word, if the server didn't take it (§7.4).
+                    val before = moments
                     moments = moments.map { cur ->
                         if (cur.momentId != m.momentId) cur
                         else {
@@ -474,7 +486,11 @@ fun CelebrationsRail() {
                             cur.copy(amenCount = a, heartCount = h, fireCount = f, myBlessing = kind)
                         }
                     }
-                    scope.launch { runCatching { Net.client.api.blessMoment(m.momentId, BlessBody(kind)) } }
+                    scope.launch {
+                        org.nuruplace.member.ui.components.noticeOnFailure(blessContext, lead = "Couldn't send that blessing.", onFailure = { moments = before }) {
+                            Net.client.api.blessMoment(m.momentId, BlessBody(kind))
+                        }
+                    }
                 }
             }
         }
@@ -534,8 +550,9 @@ private fun BlessChip(emoji: String, count: Int, mine: Boolean, onTap: () -> Uni
 // server-side from the member's own history; renders nothing on null.
 @Composable
 fun HomeEchoCard() {
-    var echo by remember { mutableStateOf<HomeEcho?>(null) }
-    LaunchedEffect(Unit) { echo = runCatching { Net.client.api.homeEcho().echo }.getOrNull() }
+    // Held by the destination, like the liturgy card (§7.2 #8).
+    var echo by rememberHeld("HomeEchoCard.echo") { mutableStateOf<HomeEcho?>(null) }
+    LaunchedEffect(Unit) { echo = runCatching { Net.client.api.homeEcho().echo }.getOrElse { echo } }
     val e = echo ?: return
     val kicker = when (e.kind) {
         "welcome_back" -> "WELCOME BACK"

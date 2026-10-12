@@ -28,18 +28,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.net.PlanDayUnlockAck
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ScripturePassage
 import org.nuruplace.member.data.net.VerseUpsertBody
@@ -84,6 +79,7 @@ import org.nuruplace.member.ui.theme.Fraunces
 import org.nuruplace.member.ui.theme.Inter
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 // ── Type helpers (exact-size brand faces) ──
 internal fun rInter(size: Int, weight: FontWeight = FontWeight.Medium, kerning: Float = 0f) =
@@ -131,6 +127,57 @@ internal object PlanProgressBus {
      * alive underneath.
      */
     val dayUnlocked = MutableSharedFlow<PlanDayUnlockAck>(replay = 1, extraBufferCapacity = 4)
+}
+
+/**
+ * The server sealed a day — the LAST part's ack says so, computed in the same
+ * transaction as the write. Tell the day hub and the plan page, and note the
+ * day for the Plans streak card (EXPERIENCE.md §7.4 #4). Every part that can
+ * end a day (a part's finish, Talk it Over's post or its gold button) ends
+ * here; iOS's PlanDayUnlockAck.announce is the same.
+ */
+/** What finishing a part came to: the server's last ack, or what stopped it. */
+internal data class PartFinish(
+    val lastAck: org.nuruplace.member.data.net.SegmentCompleteResult?,
+    val failure: Throwable?,
+)
+
+/**
+ * Complete a part's segments in order (POST /growth/segments/{id}/complete),
+ * stopping at the first the server does not record. Each one recorded goes to
+ * [onSaved] (the hub's tick); the rest stay open for the button to try again —
+ * a part never reads as done when it isn't (§4). Every part's finish goes
+ * through here: the part readers (Watch/Listen, The Word, Respond) and Talk it
+ * Over. Cancellation propagates.
+ */
+internal suspend fun completeSegments(
+    segmentIds: List<String>,
+    complete: suspend (String) -> org.nuruplace.member.data.net.SegmentCompleteResult,
+    onSaved: (String) -> Unit,
+): PartFinish {
+    var last: org.nuruplace.member.data.net.SegmentCompleteResult? = null
+    for (id in segmentIds) {
+        val r = runCatching { complete(id) }
+        val failure = r.exceptionOrNull()
+        if (failure != null) {
+            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
+            return PartFinish(last, failure)
+        }
+        last = r.getOrNull()
+        onSaved(id)
+    }
+    return PartFinish(last, null)
+}
+
+internal fun announceDaySealed(ack: org.nuruplace.member.data.net.SegmentCompleteResult, planId: String?) {
+    if (!ack.dayComplete) return
+    PlanDayLog.noteSealed()
+    PlanProgressBus.dayUnlocked.tryEmit(
+        org.nuruplace.member.data.net.PlanDayUnlockAck(
+            planId = planId, dayNumber = ack.dayNumber,
+            nextDayNumber = ack.nextDayNumber, nextDayUnlocked = ack.nextDayUnlocked,
+        ),
+    )
 }
 
 // ── Reading instruments ──
@@ -215,7 +262,7 @@ internal fun passageCaption(p: ScripturePassage): String =
 /** One verse's row: the number small, gold and raised, the words in serif. */
 private fun verseRow(v: PassageVerse, pal: ReaderPalette, size: Int): AnnotatedString = buildAnnotatedString {
     v.number?.let { n ->
-        withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("$n ") }
+        withStyle(SpanStyle(fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = pal.gold, baselineShift = BaselineShift(0.4f))) { append("$n ") }
     }
     withStyle(SpanStyle(fontFamily = Fraunces, fontWeight = FontWeight.Normal, fontSize = size.sp, color = pal.ink)) { append(v.body) }
 }
@@ -237,29 +284,32 @@ internal fun RLongPressSave(
     val clipboard = LocalClipboardManager.current
     var menu by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
-    fun flash(t: String) {
+    val saveContext = androidx.compose.ui.platform.LocalContext.current
+    fun flash(t: String, ms: Long = 2_200) {
         note = t
-        scope.launch { delay(2_200); if (note == t) note = null }
+        scope.launch { delay(ms); if (note == t) note = null }
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })) {
             content()
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = pal.card) {
+            NuruDropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = pal.card) {
                 if (reference != null) {
                     DropdownMenuItem(
                         text = { Text("Save to my verses", style = rInter(13, FontWeight.SemiBold), color = pal.ink) },
                         onClick = {
                             menu = false
                             scope.launch {
-                                val ok = runCatching {
+                                val failure = runCatching {
                                     Net.client.api.saveVerse(
                                         VerseUpsertBody(
                                             savedVerseId = UUID.randomUUID().toString(), reference = reference,
                                             version = version, verseText = text, clientMutationId = UUID.randomUUID().toString(),
                                         ),
                                     )
-                                }.isSuccess
-                                flash(if (ok) "Saved to your verses" else "Couldn't save — try again")
+                                }.exceptionOrNull()
+                                // Why it didn't save (§4), long enough to read.
+                                if (failure == null) flash("Saved to your verses")
+                                else flash(org.nuruplace.member.data.net.ApiException.saveFailureLine(failure, saveContext), 5_000)
                             }
                         },
                     )
@@ -310,8 +360,8 @@ internal fun RScripturePassageText(text: String, pal: ReaderPalette, size: Int =
 internal fun RDayOpening(title: String?, reference: String?, minutes: Int, pal: ReaderPalette) {
     val meta = listOfNotNull(reference?.takeIf { it.isNotEmpty() }, "about $minutes min").joinToString(" · ")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("TODAY'S READING", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(24, FontWeight.Medium), color = pal.ink) }
+        Text(PlanDayWords.READING_KICKER, style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+        title?.takeIf { it.isNotEmpty() }?.let { Text(it, style = rSerif(26, FontWeight.Medium), color = pal.ink) }
         Text(meta, style = rInter(12, FontWeight.Medium), color = pal.inkDim)
     }
 }
@@ -351,10 +401,10 @@ internal fun RScriptureRefCard(reference: String, pal: ReaderPalette) {
             Modifier.fillMaxWidth().clickable { open = !open }.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.goldDeep, modifier = Modifier.size(16.dp))
+            Icon(Lucide.BookOpen, null, tint = pal.goldDeep, modifier = Modifier.size(18.dp))
             Text(reference, style = rInter(13, FontWeight.SemiBold), color = pal.ink, modifier = Modifier.weight(1f))
             if (loading) CircularProgressIndicator(color = pal.goldDeep, strokeWidth = 1.5.dp, modifier = Modifier.size(14.dp))
-            else Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, if (open) "Hide" else "Read", tint = pal.inkDim, modifier = Modifier.size(18.dp))
+            else Icon(if (open) Lucide.ChevronUp else Lucide.ChevronDown, if (open) "Hide" else "Read", tint = pal.inkDim, modifier = Modifier.size(18.dp))
         }
         if (open) {
             passage?.let { p ->
@@ -365,7 +415,7 @@ internal fun RScriptureRefCard(reference: String, pal: ReaderPalette) {
                     Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(pal.gold))
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         RScripturePassageText(p.text, pal, reference = reference, version = p.version)
-                        Text(passageCaption(p).uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
+                        Text(passageCaption(p).uppercase(), style = rInter(11, FontWeight.Bold, 1.2f), color = pal.inkDim)
                     }
                 }
             }
@@ -435,24 +485,27 @@ internal fun RLinkedParagraph(text: String, pal: ReaderPalette, onReference: (St
 @Composable
 internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: () -> Unit) {
     var passage by remember(reference) { mutableStateOf<ScripturePassage?>(null) }
-    var failed by remember(reference) { mutableStateOf(false) }
+    // Why the passage did not come, in the state language (§4) — not "check
+    // your connection" whatever the cause.
+    var failure by remember(reference) { mutableStateOf<String?>(null) }
     var attempt by remember(reference) { mutableStateOf(0) }
     LaunchedEffect(reference, attempt) {
-        failed = false
-        ScriptureStore.passage(reference).onSuccess { passage = it }.onFailure { failed = true }
+        failure = null
+        ScriptureStore.passage(reference).onSuccess { passage = it }
+            .onFailure { failure = "Couldn't load this passage. ${ApiException.message(it)}" }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = pal.bg) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = pal.bg) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(36.dp).clip(CircleShape).background(pal.gold.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = pal.gold, modifier = Modifier.size(16.dp))
+                    Icon(Lucide.BookOpen, null, tint = pal.gold, modifier = Modifier.size(18.dp))
                 }
                 Column {
-                    Text("SCRIPTURE", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.goldDeep)
-                    Text(reference, style = rSerif(20, FontWeight.Medium), color = pal.ink)
+                    Text("SCRIPTURE", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.goldDeep)
+                    Text(reference, style = rSerif(18, FontWeight.Medium), color = pal.ink)
                 }
             }
             val p = passage
@@ -460,14 +513,14 @@ internal fun RScriptureSheet(reference: String, pal: ReaderPalette, onDismiss: (
                 p != null -> {
                     Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(pal.gold))
-                        RScripturePassageText(p.text, pal, size = 17, reference = reference, version = p.version)
+                        RScripturePassageText(p.text, pal, reference = reference, version = p.version)
                     }
                     p.version?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                        Text(it.uppercase(), style = rInter(10, FontWeight.Bold, 1.2f), color = pal.inkDim)
+                        Text(it.uppercase(), style = rInter(11, FontWeight.Bold, 1.2f), color = pal.inkDim)
                     }
                 }
-                failed -> {
-                    Text("Couldn't load this passage — check your connection and try again.", style = rInter(13), color = pal.inkDim)
+                failure != null -> {
+                    Text(failure ?: "", style = rInter(13), color = pal.inkDim)
                     Text("Try again", style = rInter(13, FontWeight.Bold), color = pal.goldDeep, modifier = Modifier.clickable { attempt++ }.padding(vertical = 4.dp))
                 }
                 else -> Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), contentAlignment = Alignment.Center) {
@@ -486,7 +539,7 @@ internal fun RPullQuote(text: String, caption: String, quoted: Boolean, pal: Rea
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(pal.gold))
         Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Filled.FormatQuote, null, tint = pal.gold, modifier = Modifier.size(16.dp))
+            Icon(Lucide.Quote, null, tint = pal.gold, modifier = Modifier.size(18.dp))
             val alreadyQuoted = text.trimStart().firstOrNull()?.let { it == '“' || it == '"' } == true
             Text(if (quoted && !alreadyQuoted) "“$text”" else text, style = rSerif(18, FontWeight.Normal, 25, italic = true), color = pal.ink)
             Text(caption.uppercase(), style = rInter(11, FontWeight.Bold, 1.4f), color = pal.inkDim)
@@ -543,7 +596,7 @@ internal fun RMediaCard(imageUrl: String?, videoUrl: String?, portrait: Boolean)
                 AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
             Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFC89B3C)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
+                Icon(Lucide.Play, "Play", tint = Color(0xFF0A1628), modifier = Modifier.size(30.dp))
             }
         }
     }

@@ -32,6 +32,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.nuruplace.member.ui.theme.Spacing
@@ -112,3 +114,17 @@ fun ListSkeleton(rows: Int) {
         }
     }
 }
+
+/** What TalkBack reads over a loading shape — one label for the whole shape,
+ *  never its shimmering bars (final walk M4's class; iOS's accessibility
+ *  labels, word for word). */
+object SkeletonWords {
+    const val WEEK = "Your week, loading"
+    const val LEVEL = "Your level, loading"
+    const val BADGES = "Your badges, loading"
+    const val CERTIFICATES = "Your certificates, loading"
+}
+
+/** A loading shape TalkBack reads as one thing: [label]. */
+fun Modifier.loadingLabel(label: String): Modifier =
+    this.then(Modifier.clearAndSetSemantics { contentDescription = label })

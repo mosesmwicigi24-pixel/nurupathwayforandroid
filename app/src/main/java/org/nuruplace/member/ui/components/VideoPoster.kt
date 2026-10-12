@@ -75,18 +75,25 @@ object VideoPosterCache {
 /**
  * Draws the video's own first-second frame, or nothing at all while it is being
  * cut / if it cannot be. Sits UNDER the play disc and duration pill, so the
- * card's chrome is unchanged either way.
+ * card's chrome is unchanged either way. [onSize]: the frame's width and
+ * height once it is cut — the platform turns it upright, so it is the shape
+ * the video is seen in (Home's featured card takes it, VideoShape.kt).
  */
 @Composable
 fun VideoPosterFrame(
     url: String?,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    onSize: ((width: Int, height: Int) -> Unit)? = null,
 ) {
     if (url.isNullOrBlank()) return
     var bitmap by remember(url) { mutableStateOf(VideoPosterCache.cached(url)) }
     LaunchedEffect(url) {
         if (bitmap == null) bitmap = VideoPosterCache.poster(url)
+    }
+    val reportSize by androidx.compose.runtime.rememberUpdatedState(onSize)
+    LaunchedEffect(bitmap) {
+        bitmap?.let { reportSize?.invoke(it.width, it.height) }
     }
     bitmap?.let {
         Image(

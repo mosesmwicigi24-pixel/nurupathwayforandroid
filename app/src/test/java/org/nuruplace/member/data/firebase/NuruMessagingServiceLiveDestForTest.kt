@@ -9,7 +9,8 @@ import org.junit.Test
  *  LiveRoutes.kt's live-player route (no kind/viewers/startedAt), so
  *  [NuruMessagingService.destFor] maps it to the lightweight "live-now"
  *  MainShell destination instead, which re-fetches GET /live/now and forwards
- *  to the newest watchable stream (or Home if it already ended). */
+ *  to the newest watchable stream (or "This Live has ended" once nothing is
+ *  left to join — EXPERIENCE.md §7.2 #3). */
 class NuruMessagingServiceLiveDestForTest {
 
     @Test fun `live_stream_started routes to the live-now forwarder`() {

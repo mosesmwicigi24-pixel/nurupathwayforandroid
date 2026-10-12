@@ -1,68 +1,76 @@
-// Friendly error text from a failed call — reads the backend error envelope
-// ({ "error": { "message" } } or { "message" }) off a Retrofit HttpException, and
-// gives a plain "you're offline" for transport failures. Mirrors the iOS
-// APIError.errorDescription.
+// Member-facing words for a failed call, in the one state language (pathway
+// docs/EXPERIENCE.md §4 — StateLanguage.kt): reads the backend error envelope
+// ({ "error": { "message" } } or { "message" }) off a Retrofit HttpException
+// for a refusal's own words, and asks the phone whether it is really offline
+// before saying so. Raw server or exception text never comes out of here.
 package org.nuruplace.member.data.net
 
 import android.content.Context
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import retrofit2.HttpException
-import java.io.IOException
-import java.net.ConnectException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import javax.net.ssl.SSLException
 
 object ApiException {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Friendly message for a failed call. Pass [context] and we consult the OS
-     * network state so a member on full WiFi/4G is never wrongly told they're
-     * "offline" — a transient reach/timeout/TLS failure reads as "couldn't
-     * reach Nuru Place, try again" instead. Without context we fall back to
-     * classifying by the exception type.
+     * The shared state (§4) for a failed call — a title, a line and the one
+     * action — for a screen that shows a whole state card. Reads an HTTP
+     * error's body (a one-shot stream) for a refusal's own words. With
+     * [context] (else the app's own), the OS network state decides between
+     * "You're offline" and "Something went wrong on our side": a member on
+     * full WiFi/4G is never told the fault is their connection.
      */
-    fun message(e: Throwable, context: Context? = null): String = when (e) {
-        is HttpException -> {
-            val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
-            parseEnvelope(body) ?: when (e.code()) {
-                401 -> "Your session has expired. Please sign in again."
-                else -> "Something went wrong (${e.code()})."
-            }
+    fun state(e: Throwable, context: Context? = null): StateMessage =
+        StateLanguage.forError(e, deviceOnline(context), (e as? HttpException)?.let(::refusalWords))
+
+    /**
+     * The one-line form of [state], for a note under a button or a toast.
+     * [credentials]: the call carried a password or a code the member typed
+     * (sign-in, two-step codes) — its 401 is a refusal in the server's own
+     * words ("Invalid email or password"), not an ended session.
+     */
+    fun message(e: Throwable, context: Context? = null, credentials: Boolean = false): String {
+        if (credentials && e is HttpException && e.code() == 401) {
+            return envelopeWords(e) ?: StateLanguage.sessionEnded.sentence
         }
-        is IOException -> transportMessage(e, context)
-        else -> e.message ?: "Something went wrong."
+        return state(e, context).sentence
     }
 
     /**
-     * A transport failure is only truly "offline" when the device has no
-     * validated network. Otherwise the phone is online but we couldn't reach
-     * the server (DNS blip, timeout, TLS reset, brief drop) — say so honestly.
+     * A write the server did not record (EXPERIENCE.md §7.4, "no success
+     * before the server says so"): "Couldn't save that." and why, in §4's
+     * words — the line that sits above the button that tried, while the
+     * member's entry stays where it was. iOS NuruStateCopy.saveFailureLine.
      */
-    private fun transportMessage(e: IOException, context: Context?): String {
-        val online = context?.let { NetworkStatus.isOnline(it) }
-        if (online == false) return "You appear to be offline. Check your connection and try again."
-        return when (e) {
-            // DNS didn't resolve with no known-good network → almost always offline.
-            is UnknownHostException ->
-                if (online == null) "You appear to be offline. Check your connection and try again."
-                else "Couldn't reach Nuru Place. Please try again in a moment."
-            // OkHttp says "connect timed out" when the server never answered the
-            // handshake at all — the box is away (a recurring host outage, see
-            // the pathway incident ledger), not the phone. Say so, so a tester
-            // stops blaming their network. A read timeout is the slower kind.
-            is SocketTimeoutException ->
-                if (e.message?.contains("connect", ignoreCase = true) == true)
-                    "Nuru Place can't be reached right now — that's on our side, not your phone. We'll keep trying; please try again in a few minutes."
-                else "Nuru Place is taking too long to respond. Please try again."
-            is SSLException -> "Secure connection failed. Please try again."
-            is ConnectException -> "Couldn't reach Nuru Place. Please try again in a moment."
-            else -> "Couldn't reach Nuru Place. Please check your connection and try again."
-        }
-    }
+    fun saveFailureLine(e: Throwable, context: Context? = null): String =
+        failureLine(SAVE_FAILED, e, context)
+
+    /** [lead] and §4's sentence for why: "Couldn't send that. You're
+     *  offline. Connect to the internet, then try again." */
+    fun failureLine(lead: String, e: Throwable, context: Context? = null): String =
+        "$lead ${state(e, context).sentence}"
+
+    const val SAVE_FAILED = "Couldn't save that."
+    const val SEND_FAILED = "Couldn't send that."
+
+    /** The phone's own network state: from [context] when given, else from
+     *  the app's HTTP stack; null when neither can say (a JVM test). */
+    private fun deviceOnline(context: Context?): Boolean? =
+        context?.let { NetworkStatus.isOnline(it) } ?: runCatching { Net.client.deviceOnline() }.getOrNull()
+
+    private fun envelopeWords(e: HttpException): String? =
+        parseEnvelope(runCatching { e.response()?.errorBody()?.string() }.getOrNull())
+
+    /** A refusal's own words — only from OUR envelope (`{ error: { code,
+     *  message } }`): a bare `{ message }`, a proxy's page or an empty body is
+     *  not something our API said to the member (iOS NuruStateCopy, the same
+     *  rule) — and neither is the body-parse failure ([ServerError.refusalWords]). */
+    private fun refusalWords(e: HttpException): String? =
+        parseServerError(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull()).refusalWords
 
     private fun parseEnvelope(body: String?): String? {
         if (body.isNullOrBlank()) return null
@@ -72,4 +80,79 @@ object ApiException {
                 ?: obj["message"]?.jsonPrimitive?.content
         }.getOrNull()
     }
+
+    /**
+     * The server's error envelope — `{ error: { code, message, request_id,
+     * details? } }` — off a failed call, for a caller that must act on the
+     * CODE (Give: 409 GIFT_IN_PROGRESS follows `details.transaction_id`).
+     * Null when no HTTP answer came back. An error body is a one-shot
+     * stream: read it here ONCE and use [ServerError.displayMessage], never
+     * [message] on the same exception afterwards.
+     */
+    fun serverError(e: Throwable): ServerError? {
+        if (e !is HttpException) return null
+        val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
+        return parseServerError(e.code(), body)
+    }
+
+    /** [serverError]'s parse, pure: an unreadable or absent body leaves
+     *  code, message and details null — the status still stands. */
+    fun parseServerError(status: Int, body: String?): ServerError {
+        val obj = body?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+        val err = obj?.get("error") as? JsonObject
+        fun str(o: JsonObject?, key: String): String? =
+            ((o?.get(key)) as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        return ServerError(
+            status = status,
+            code = str(err, "code"),
+            message = str(err, "message") ?: str(obj, "message"),
+            details = err?.get("details") as? JsonObject,
+        )
+    }
+
+}
+
+/** The envelope code the server uses both for a body it could not parse and
+ *  for many refusals written for members ("That code is not valid", "Photo
+ *  exceeds 5 MB"). Only the parse failure is ours (EXPERIENCE.md §7.3). */
+const val VALIDATION_FAILED = "VALIDATION_FAILED"
+
+/** The words of a request the server could not parse: the APP built it
+ *  wrong, so it is our side's fault, never a refusal in a member's words —
+ *  "Request body failed validation" is never shown (§7.3; iOS's
+ *  bodyParseRefusal, the same rule). */
+const val BODY_PARSE_REFUSAL = "Request body failed validation"
+
+/** A server refusal, as [ApiException.serverError] read it. */
+data class ServerError(
+    val status: Int,
+    /** The envelope's machine code (e.g. GIFT_IN_PROGRESS); null when absent. */
+    val code: String?,
+    /** The envelope's words — member-facing only as [refusalWords]. Null
+     *  when the body carried none. */
+    val message: String?,
+    val details: JsonObject?,
+) {
+    /** The server's own words for the member: a refusal in our envelope (a
+     *  4xx with its code) — never the body-parse failure ([BODY_PARSE_REFUSAL],
+     *  ours), a 5xx's "Internal server error", or a proxy's page. Null
+     *  otherwise. A VALIDATION_FAILED in words written for the member ("That
+     *  code is not valid") is theirs to read, as on iOS. */
+    val refusalWords: String?
+        get() = message?.takeIf {
+            code != null && status in 400..499 && status != 401 &&
+                !(code == VALIDATION_FAILED && it.trim() == BODY_PARSE_REFUSAL)
+        }
+
+    /** What the member reads (EXPERIENCE.md §4): [refusalWords] when there
+     *  are any, else the state language's sentence for the status — "Something
+     *  went wrong on our side. It isn't you — please try again in a moment.",
+     *  "Your session has ended. …", "This isn't here any more. …". Never raw
+     *  server text. */
+    val displayMessage: String get() = StateLanguage.forStatus(status, refusalWords).sentence
+
+    /** A string detail (`details.transaction_id`), null when absent or blank. */
+    fun detail(key: String): String? =
+        (details?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 }

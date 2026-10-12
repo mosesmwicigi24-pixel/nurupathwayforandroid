@@ -26,10 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -65,6 +61,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private const val EXPLAINER_PREF = "nuru_selah"
 private const val EXPLAINER_KEY = "explainer_dismissed"
@@ -115,15 +112,29 @@ fun SelahScreen() {
             }
         }
 
+        var selahSaving by remember { mutableStateOf(false) }
+        var selahError by remember { mutableStateOf<String?>(null) }
+        // One id per thought being saved: a retry after a save that did land
+        // can't write it twice.
+        val selahMutationId = remember(editing?.thoughtId) { UUID.randomUUID().toString() }
+        val selahContext = androidx.compose.ui.platform.LocalContext.current
         editing?.let { draft ->
-            androidx.compose.ui.window.Dialog(
+            org.nuruplace.member.ui.components.NuruDialog(
                 onDismissRequest = { editing = null },
                 properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
             ) {
+                // The thought closes once the server — or, offline, the queue
+                // (§1.7) — has it; a refusal keeps it open, words, spans and
+                // drawings, and says why (§7.4, §4). It used to close and lose
+                // it.
                 SelahEditorScreen(
                     draft = draft,
-                    onDismiss = { editing = null },
+                    onDismiss = { editing = null; selahError = null },
+                    saving = selahSaving,
+                    error = selahError,
                     onSave = { d ->
+                        selahSaving = true
+                        selahError = null
                         scope.launch {
                             val dto = ThoughtUpsertBody(
                                 thoughtId = d.thoughtId,
@@ -131,28 +142,43 @@ fun SelahScreen() {
                                 body = d.body,
                                 bodySpans = d.spans.ifEmpty { null },
                                 drawingUrls = d.drawingUrls,
-                                clientMutationId = UUID.randomUUID().toString(),
+                                clientMutationId = selahMutationId,
                             )
-                            runCatching {
-                                Net.client.offline.runOrQueue("member_thoughts", "upsert", queuePayload(dto)) {
-                                    Net.client.api.upsertThought(dto)
-                                }
+                            val outcome = org.nuruplace.member.data.offline.queuedWrite(
+                                send = {
+                                    Net.client.offline.runOrQueue("member_thoughts", "upsert", queuePayload(dto)) {
+                                        Net.client.api.upsertThought(dto)
+                                    }
+                                },
+                                failureLine = { org.nuruplace.member.data.net.ApiException.saveFailureLine(it, selahContext) },
+                            )
+                            selahSaving = false
+                            if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
+                                selahError = outcome.line
+                            } else {
+                                editing = null
+                                reload()
                             }
-                            editing = null
-                            reload()
                         }
                     },
                     onDelete = if (draft.isNew) null else {
                         {
                             scope.launch {
                                 val payload = buildJsonObject { put("thought_id", JsonPrimitive(draft.thoughtId)) }
-                                runCatching {
-                                    Net.client.offline.runOrQueue("member_thoughts", "delete", payload) {
-                                        Net.client.api.deleteThought(draft.thoughtId)
-                                    }
+                                val outcome = org.nuruplace.member.data.offline.queuedWrite(
+                                    send = {
+                                        Net.client.offline.runOrQueue("member_thoughts", "delete", payload) {
+                                            Net.client.api.deleteThought(draft.thoughtId)
+                                        }
+                                    },
+                                    failureLine = { org.nuruplace.member.data.net.ApiException.failureLine("Couldn't delete that.", it, selahContext) },
+                                )
+                                if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
+                                    selahError = outcome.line
+                                } else {
+                                    editing = null
+                                    reload()
                                 }
-                                editing = null
-                                reload()
                             }
                         }
                     },
@@ -172,7 +198,7 @@ private fun NewThoughtPill(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.Add, null, tint = Color.White, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Plus, null, tint = Color.White, modifier = Modifier.size(14.dp))
         Text("New Thought", style = NuruType.actionLabel, color = Color.White)
     }
 }
@@ -185,9 +211,9 @@ private fun ExplainerCard(onDismiss: () -> Unit) {
         verticalAlignment = Alignment.Top,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(Nuru.surface),
+            Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(Nuru.goldTint),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.EditNote, null, tint = Nuru.gold, modifier = Modifier.size(18.dp)) }
+        ) { Icon(Lucide.NotebookPen, null, tint = Nuru.navy, modifier = Modifier.size(18.dp)) }
         Spacer(Modifier.width(12.dp))
         Text(
             "Selah — a word from the Psalms meaning pause and reflect. This is your quiet page: write what's on your heart. Only you can see it.",
@@ -197,7 +223,7 @@ private fun ExplainerCard(onDismiss: () -> Unit) {
         Box(
             Modifier.size(24.dp).clip(CircleShape).clickable { onDismiss() },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Close, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(13.dp)) }
+        ) { Icon(Lucide.X, "Dismiss", tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
     }
 }
 
@@ -210,7 +236,7 @@ private fun EmptyThoughts(onCompose: () -> Unit) {
             .padding(vertical = Spacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Icons.Filled.EditNote, null, tint = Nuru.gold, modifier = Modifier.size(28.dp))
+        Icon(Lucide.NotebookPen, null, tint = Nuru.gold, modifier = Modifier.size(28.dp))
         Spacer(Modifier.height(Spacing.sm))
         Text(
             "Selah. Pause here — write your first thought.",
@@ -235,7 +261,7 @@ private fun ThoughtRowCard(thought: Thought, onOpen: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 thought.title?.takeIf { it.isNotBlank() } ?: "Untitled",
-                style = NuruType.rowTitle, color = Nuru.navy, maxLines = 1,
+                style = NuruType.rowTitle, color = Nuru.navy, maxLines = 2,
                 modifier = Modifier.weight(1f),
             )
             Text(relativeThoughtLabel(thought.updatedAt), style = NuruType.micro, color = Nuru.ink400)
@@ -259,6 +285,6 @@ private fun relativeThoughtLabel(iso: String?): String {
         days < 1 -> "today"
         days == 1L -> "1 day ago"
         days < 7 -> "$days days ago"
-        else -> instant.atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("MMM d"))
+        else -> org.nuruplace.member.util.NuruDates.day(instant)
     }
 }

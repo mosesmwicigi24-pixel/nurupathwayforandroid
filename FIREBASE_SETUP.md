@@ -13,8 +13,11 @@ Project: **`pathway-63ca4`** (`777897756817`) · Android package: **`com.nurupla
 ## What's wired (this branch, `feat/firebase-integration`)
 - `firebase-bom` + `firebase-auth-ktx` + `firebase-messaging-ktx`; `google-services`
   plugin **applied** (`app/google-services.json` present, git-ignored).
-- `data/firebase/FirebaseAuthService.kt` — Email/Password `signIn`/`register`/`signOut`,
-  surfaced at **Settings → Firebase account**.
+- `data/firebase/FirebaseAuthService.kt` — Email/Password `signIn`/`register`/`signOut`.
+  No longer surfaced to members (2026-10-05, EXPERIENCE.md §8.2 #9): the
+  "Settings → Firebase account" row signed in to a second, Firebase-only
+  account that nothing reads, so it was removed from the member UI.
+  `isConfigured()` still gates push registration.
 - `data/firebase/NuruMessagingService.kt` — FCM: `onNewToken` → `POST /me/devices`
   (the backend already accepts `{platform, app_version, model, push_token}`);
   `onMessageReceived` → local notification on channel `nuru_default`.

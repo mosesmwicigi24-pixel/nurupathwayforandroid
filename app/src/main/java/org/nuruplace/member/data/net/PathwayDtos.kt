@@ -40,6 +40,10 @@ enum class LevelStatus {
     @kotlinx.serialization.SerialName("completed") COMPLETED,
     @kotlinx.serialization.SerialName("active") ACTIVE,
     @kotlinx.serialization.SerialName("locked") LOCKED,
+    /** The member passed this level's exam and waits for their discipler to
+     *  usher them on (§1.9 usher gate). Until 2026-10-04 this decoded to
+     *  LOCKED, so the member's own level read as locked. */
+    @kotlinx.serialization.SerialName("awaiting_review") AWAITING_REVIEW,
 }
 
 @Serializable
@@ -50,12 +54,45 @@ data class PathwayLevel(
     val description: String? = null,
     val totalModules: Int = 0,
     val completedModules: Int = 0,
+    // Lessons only — the exam is a step of its own, never "a module"
+    // (EXPERIENCE.md §8.2 #4). total_modules counts a published exam
+    // container, so a finisher read "20 of 21 done" beside "20 of 20 modules
+    // done". Null from a server that predates them: the totals above stand.
+    val lessonsTotal: Int? = null,
+    val lessonsCompleted: Int? = null,
     val minutes: Int = 0,
     val status: LevelStatus = LevelStatus.LOCKED,
     // The level's final exam is live only once an admin publishes it. Defaults
     // TRUE so payloads from a server that predates the gate keep showing the exam.
     val examPublished: Boolean = true,
-)
+    // The exam can be TAKEN: published AND with at least one active question
+    // in a published module of the level (EXPERIENCE.md §7.2 #1) — published
+    // with none, the exam answers 422. Null from a server that predates it:
+    // available, as before.
+    val examAvailable: Boolean? = null,
+    // The server's own flag beside `status: awaiting_review` (curriculum
+    // getPathwaySummary) — exam passed, not yet ushered on.
+    val awaitingReview: Boolean = false,
+) {
+    /** Exam passed, waiting on the discipler — by the status or its flag. */
+    val isAwaitingReview: Boolean get() = status == LevelStatus.AWAITING_REVIEW || awaitingReview
+
+    /** The server says the exam can be taken: published, and not said to be
+     *  unavailable. Only then is it offered (§7 rule 2). */
+    val examOffered: Boolean get() = examPublished && examAvailable != false
+
+    /** Walked: every module done (the server's "completed"), or the exam
+     *  passed and waiting to be ushered on. Drives the rail's seals, the
+     *  milestone badges and the summit's road — never the journey's stage. */
+    val walked: Boolean get() = status == LevelStatus.COMPLETED || isAwaitingReview
+
+    /** The level's modules as a member counts them — its lessons, never the
+     *  exam (§8.2 #4). Every "X of Y modules" reads these two. */
+    val lessonCount: Int get() = lessonsTotal ?: totalModules
+
+    /** Lessons done — never more than there are. */
+    val lessonsDone: Int get() = (lessonsCompleted ?: completedModules).coerceAtMost(lessonCount.coerceAtLeast(0))
+}
 
 @Serializable
 data class PathwaySummary(
@@ -103,10 +140,18 @@ data class LevelModule(
     val status: ModuleStatus = ModuleStatus.LOCKED,
     val progress: Double = 0.0,
     val locked: Boolean = false,
+    // The exam row's own word (only on `exit_exam`): its exam can be taken —
+    // published and with questions (EXPERIENCE.md §7.2 #1). Null from an
+    // older server, and on a lesson: available, as before.
+    val examAvailable: Boolean? = null,
 ) {
     /** The level's capstone exam container — a visible, locked-until-ready row that
      *  opens the level exam rather than a lesson reader. */
     val isExam: Boolean get() = evaluationKind == "exit_exam"
+
+    /** The exam row whose exam is not open yet (it has no questions): it
+     *  reads "Opens soon" and opens nothing. Never a lesson, never a passed exam. */
+    val examOpensSoon: Boolean get() = isExam && !completed && examAvailable == false
 }
 
 /** GET /levels/{n}/encouragements → { data: [...] } rows from level_encouragements
@@ -157,16 +202,12 @@ data class ModuleDetail(
 ) {
     val requiresQuiz: Boolean get() = evaluationKind.lowercase().contains("quiz")
 
-    /** "11 Jul 2026 · 20:14" from completed_at's Postgres text form, or null. */
-    val finishedLine: String? get() {
-        val raw = completedAt ?: return null
-        // "2026-07-11 17:14:09.123+00" or ISO — take date + hh:mm, render simply.
-        val m = Regex("(\\d{4})-(\\d{2})-(\\d{2})[T ](\\d{2}):(\\d{2})").find(raw) ?: return null
-        val (y, mo, d, h, min) = m.destructured
-        val months = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
-        val name = months.getOrNull(mo.toInt() - 1) ?: return null
-        return "${d.toInt()} $name $y · $h:$min"
-    }
+    /** When the lesson was finished, said the one way (EXPERIENCE.md §8.1
+     *  rule 8; final walk C2): "Mon 5 Oct · 10:08 AM" in the phone's zone —
+     *  the year only when it isn't this year. completed_at comes as
+     *  Postgres's text form ("2026-10-05 10:08:19.848184+03") or ISO; it
+     *  read "5 Oct 2026 · 10:08", the server's wall clock. Null when unread. */
+    val finishedLine: String? get() = org.nuruplace.member.util.NuruDates.dayTime(completedAt)
 
     /** Pages to render — the server split when present, else the whole body. */
     val pages: List<String> get() = contentPages?.takeIf { it.isNotEmpty() } ?: listOf(lessonContent)
@@ -262,6 +303,10 @@ data class AssembledExam(
     val levelNumber: Int = 0,
     val questionCount: Int = 0,
     val questions: List<QuizQuestion> = emptyList(),
+    /** The mark a pass needs, in percent — the exam's front door names it
+     *  before question 1 (EXPERIENCE.md §9.1 rule 2; pathway d230e35). Null
+     *  on an older server: the front door then names the count alone. */
+    val passMark: Int? = null,
 )
 
 @Serializable

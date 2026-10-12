@@ -18,9 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +36,7 @@ import org.nuruplace.member.ui.components.Kicker
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * @param onNavigate hands off to MainShell's NavHost — the post-mint broadcast
@@ -77,12 +75,12 @@ fun BroadcastCard(me: MeResponse?, onNavigate: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Icon(Icons.Filled.Videocam, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
+            Icon(Lucide.Video, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(18.dp))
             Column(Modifier.weight(1f)) {
                 Text("My Broadcasts", style = NuruType.rowTitle, color = Nuru.ink)
                 Text("Your past streams — play, share, delete", style = NuruType.micro, color = Nuru.ink600)
             }
-            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
+            Icon(Lucide.ChevronRight, contentDescription = null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
         }
     }
 

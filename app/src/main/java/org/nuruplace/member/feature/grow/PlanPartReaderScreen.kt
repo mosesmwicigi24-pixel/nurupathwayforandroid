@@ -2,7 +2,9 @@
 // THIS). One PART of the day at a time (Watch/Listen · The Word · Respond) on a
 // warm day/night canvas, with the reading progress hairline + right-rail pace
 // dot. "Finished" ticks every segment in the part (server-backed), tells the hub
-// (PlanProgressBus), and pops back. The Respond part carries the day's reflection.
+// (PlanProgressBus), and pops back — or, when the server did not record it,
+// stays and says why above the button (§4). The Respond part carries the day's
+// reflection.
 // Ported from the iOS PlanSegmentView grouped-part reader.
 package org.nuruplace.member.feature.grow
 
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,11 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -39,6 +37,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,13 +55,18 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PlanSegment
 import org.nuruplace.member.data.net.ReadingPlanDetail
 import org.nuruplace.member.data.net.SaveReflectionBody
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.theme.scaledLineHeight
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private fun rankOf(s: PlanSegment): Int = when (s.kind.lowercase()) {
     "video", "audio" -> 0
@@ -81,9 +85,20 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
+    // Why finishing did not land — said above the button (§4), and the parts
+    // of this group the server already recorded on an earlier try.
+    var finishError by remember { mutableStateOf<String?>(null) }
+    val savedIds = remember { mutableStateListOf<String>() }
+    // A part that did not load says so (§4) — it read "Nothing to read here."
+    var loadError by remember { mutableStateOf<StateMessage?>(null) }
+    var attempt by remember { mutableStateOf(0) }
+    val loadContext = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(planId) {
-        runCatching { Net.client.api.plan(planId) }.onSuccess { detail = it }
+    LaunchedEffect(planId, attempt) {
+        loading = true
+        runCatching { Net.client.api.plan(planId) }
+            .onSuccess { detail = it; loadError = null }
+            .onFailure { if (it !is kotlin.coroutines.cancellation.CancellationException) loadError = ApiException.state(it, loadContext) }
         loading = false
     }
 
@@ -111,11 +126,20 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
         if (saving) return
         if (done) { onBack(); return }
         saving = true
+        finishError = null
         scope.launch {
-            var lastAck: org.nuruplace.member.data.net.SegmentCompleteResult? = null
-            group.filterNot { it.completed }.forEach { seg ->
-                runCatching { Net.client.api.completeSegment(seg.segmentId) }.onSuccess { lastAck = it }
-                PlanProgressBus.finished.tryEmit(seg.segmentId)
+            val result = completeSegments(
+                segmentIds = group.filterNot { it.completed || it.segmentId in savedIds }.map { it.segmentId },
+                complete = { Net.client.api.completeSegment(it) },
+            ) { id -> savedIds.add(id); PlanProgressBus.finished.tryEmit(id) }
+            result.failure?.let { failure ->
+                // Not recorded: stay and say why, as Talk it Over does
+                // (EXPERIENCE.md §7.4 #1, §4) — it used to tick the hub's row
+                // and go back as if it had. The parts that did land keep
+                // their tick; the button tries the rest again.
+                finishError = "Couldn't save that. ${ApiException.state(failure, loadContext).sentence}"
+                saving = false
+                return@launch
             }
             // The LAST segment's ack is the server's authoritative word on
             // whether this day just sealed and the next one opened — computed
@@ -123,16 +147,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
             // day hub skip waiting on an extra "Seal the day" tap, and the
             // plan overview tell a genuine lock apart from a completion still
             // landing through the sync path.
-            lastAck?.let { ack ->
-                if (ack.dayComplete) {
-                    PlanProgressBus.dayUnlocked.tryEmit(
-                        org.nuruplace.member.data.net.PlanDayUnlockAck(
-                            planId = planId, dayNumber = ack.dayNumber,
-                            nextDayNumber = ack.nextDayNumber, nextDayUnlocked = ack.nextDayUnlocked,
-                        ),
-                    )
-                }
-            }
+            result.lastAck?.let { ack -> announceDaySealed(ack, planId) }
             done = true; saving = false
             onBack()
         }
@@ -147,9 +162,9 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                     .padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 16.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ReaderChip(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
+                    ReaderChip(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(8.dp))
-                    Text("DAY $dayNumber", style = rInter(10, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
+                    Text("DAY $dayNumber", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
                     // Text size: Small → Regular → Large → Small, one tap each,
                     // remembered per device (AppPrefs.readerTextScale).
                     ReaderChip(onClick = { AppPrefs.updateReaderTextScale(ReaderTextScale.next(AppPrefs.readerTextScale)) }) {
@@ -157,10 +172,10 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                     }
                     Spacer(Modifier.width(8.dp))
                     ReaderChip(onClick = { ReaderMode.night = !ReaderMode.night }) {
-                        Icon(if (ReaderMode.night) Icons.Filled.LightMode else Icons.Filled.DarkMode, "Reader mode", tint = Color.White, modifier = Modifier.size(16.dp))
+                        Icon(if (ReaderMode.night) Lucide.Sun else Lucide.Moon, "Reader mode", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
-                Text(partName, style = rSerif(24, FontWeight.Medium), color = Color.White, modifier = Modifier.padding(top = 10.dp))
+                Text(partName, style = rSerif(26, FontWeight.Medium), color = Color.White, modifier = Modifier.padding(top = 10.dp))
                 group.firstOrNull { it.kind.lowercase() == "scripture" }?.reference?.let {
                     Text(it, style = rInter(11), color = Color.White.copy(alpha = 0.65f))
                 }
@@ -170,6 +185,9 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
 
             when {
                 loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = pal.gold) }
+                detail == null && loadError != null -> Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                    FailedState(loadError ?: StateLanguage.serverError, onRetry = { attempt++ }, onBack = onBack)
+                }
                 group.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nothing to read here.", style = rInter(13), color = pal.inkDim) }
                 else -> Box(Modifier.weight(1f).fillMaxWidth()) {
                     // The reader's text-size step scales every sp in the reading
@@ -192,17 +210,27 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                 }
             }
 
-            // Finished CTA.
+            // Finished CTA — clear of the system's gesture bar (§7.1 rule 3);
+            // the canvas runs under it.
             val fade = Brush.verticalGradient(listOf(pal.bg.copy(alpha = 0f), pal.bg))
-            Column(Modifier.fillMaxWidth().background(fade).padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 12.dp)) {
+            Column(Modifier.fillMaxWidth().background(fade).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 12.dp)) {
+                // Why the part was not saved (§4), right above the button that
+                // tries again — the state colour, readable in night mode too.
+                finishError?.let { err ->
+                    Text(
+                        err, style = rInter(12),
+                        color = if (pal.night) Color(0xFFF87171) else Color(0xFFB91C1C),
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
-                        .background(Brush.linearGradient(listOf(pal.gold, Color(0xFFB6862F)))).clickable { finish() },
+                        .background(Brush.linearGradient(listOf(pal.gold, Color(0xFFB6862F)))).clickable(enabled = !saving) { finish() },
                     horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (saving) CircularProgressIndicator(color = pal.navy, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                     else {
-                        Icon(Icons.Filled.Check, null, tint = pal.navy, modifier = Modifier.size(16.dp))
+                        Icon(Lucide.Check, null, tint = pal.navy, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             if (done) "Done" else when (part) {
@@ -257,7 +285,7 @@ private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalet
         else -> {
             val seg = group.first()
             RMediaCard(seg.imageUrl, seg.videoUrl, portrait = true)
-            if (seg.title.isNotEmpty()) Text(seg.title, style = rSerif(20, FontWeight.Medium), color = pal.ink)
+            if (seg.title.isNotEmpty()) Text(seg.title, style = rSerif(18, FontWeight.Medium), color = pal.ink)
             seg.content?.takeIf { it.isNotEmpty() }?.let { RKeynotes(it, pal) }
         }
     }
@@ -313,7 +341,7 @@ private fun ReflectionBox(planId: String, dayNumber: Int, pal: ReaderPalette) {
                             delay(2_200)
                             justSaved = false
                         }.onFailure {
-                            error = "Couldn't save your reflection — check your connection and try again."
+                            error = "Couldn't save your reflection. ${ApiException.message(it)}"
                         }
                     }
                 }.padding(horizontal = 16.dp, vertical = 9.dp),

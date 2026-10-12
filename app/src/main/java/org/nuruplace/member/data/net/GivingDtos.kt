@@ -32,6 +32,71 @@ data class GivingRecord(
     // giving statement tags a row "<title> pledge" when it is set.
     val pledgeId: String? = null,
     val pledgeTitle: String? = null,
+    /** The department need this gift was given to ("Give to this need"); null
+     *  otherwise and from an older server. With [pledgeId], what "Repeat last
+     *  gift" checks to skip pledge and need gifts (GiveHistoryLogic). */
+    val needId: String? = null,
+    /** Why a failed gift failed (Giving Cycle 1). Null unless it failed, and
+     *  from an older server. */
+    val failure: GiftFailure? = null,
+    /** How much of amount_minor was the fee the member covered (Giving Cycle
+     *  2); null when none. */
+    val feeCoverMinor: Int? = null,
+)
+
+/**
+ * Why a gift did not go through (Giving Cycle 1) — from M-Pesa's own result
+ * code, in words the member can act on. `reason` says what happened, `hint`
+ * what to do next and whether money moved; both are shown VERBATIM (the
+ * server's one table, financial/giftFailure.ts, so the apps, receipts and the
+ * office never word it differently). `code` is cancelled | unreachable |
+ * expired | insufficient_funds | wrong_pin | busy | limit_exceeded | declined
+ * | system | no_answer | no_phone — carried, never rendered.
+ */
+@Serializable
+data class GiftFailure(
+    val code: String = "",
+    val reason: String = "",
+    val hint: String = "",
+    /** The member never had a chance to answer — a recurring gift may try once more on its own. */
+    val retryable: Boolean = false,
+)
+
+/**
+ * GET /giving/methods (Giving Cycle 1) — the rails this member can give with
+ * here, and the number on file for a prompt. The Give form draws its method
+ * list from this instead of hard-coding one, so a rail that cannot take money
+ * (Airtel, cards) is never offered as if it could. GiveMethodsLogic.kt turns
+ * it into what the form may select.
+ */
+@Serializable
+data class GivingMethodsRes(
+    val methods: List<GivingMethodInfo> = emptyList(),
+    /** The profile number as E.164 when it is a Kenyan mobile number, else null. */
+    val phoneOnFile: String? = null,
+    /** The first enabled rail — where the form starts. Null when none is. */
+    val defaultMethod: String? = null,
+)
+
+/** One rail on GET /giving/methods. Every field defaults so a partial row
+ *  still decodes — and a row that does not say it is enabled is not. */
+@Serializable
+data class GivingMethodInfo(
+    val key: String = "",                    // mpesa | airtel | paypal | card
+    val label: String = "",
+    /** Can take a member's money on this server right now. */
+    val enabled: Boolean = false,
+    /** coming_soon | unavailable | null (enabled). */
+    val unavailableReason: String? = null,
+    /** The rail's own currency (M-Pesa KES, PayPal USD); null = any. */
+    val currency: String? = null,
+    val minMinor: Long = 0,
+    val maxMinor: Long = 0,
+    /** Whole shillings only (no cents). */
+    val wholeUnits: Boolean = false,
+    /** A recurring gift can run on it here. */
+    val recurring: Boolean = false,
+    val needsPhone: Boolean = false,
 )
 
 @Serializable
@@ -51,13 +116,27 @@ data class GivingIntentResult(
     val fund: FundRef? = null,
     /** The pledge it counts toward, by name. Null off-pledge. */
     val pledge: IntentPledge? = null,
+    /** On a "Try again" answer (Giving Cycle 3): the failed gift this one
+     *  retries. Null on an ordinary intent. */
+    val retryOf: String? = null,
+)
+
+/** POST /giving/transactions/{id}/retry (Giving Cycle 3): the server carries
+ *  everything the failed gift did — fund, amount, currency, method, pledge or
+ *  need, name, fee cover — so only the key and, for mobile money, the number
+ *  to prompt this time travel (absent = the profile's number). */
+@Serializable
+data class RetryGiftBody(
+    val idempotencyKey: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: String? = null,
 )
 
 /** A fund by code and display name (`fund` on POST /giving/intents' result). */
 @Serializable
 data class FundRef(val code: String = "", val name: String = "")
 
-/** The pledge a gift counts toward (`pledge` on POST /giving/intents' result). */
+/** The pledge a gift counts toward (`pledge` on POST /giving/intents' result
+ *  and a receipt), or a recurring gift collects (a schedule's, Giving Cycle 5). */
 @Serializable
 data class IntentPledge(val pledgeId: String = "", val title: String = "")
 
@@ -105,6 +184,11 @@ data class GivingDetail(
     val memberName: String? = null,
     /** The giver's congregation, when known. */
     val congregation: String? = null,
+    /** Why it failed (status failed), else null — Giving Cycle 1. */
+    val failure: GiftFailure? = null,
+    /** How much of amount_minor was the fee the member covered (Giving Cycle
+     *  2); null when none. The receipt reads Gift · Fee cover · Total. */
+    val feeCoverMinor: Int? = null,
 )
 
 @Serializable
@@ -127,6 +211,10 @@ data class GiveBody(
     // the need is its own giving target, written at giving time so progress
     // is exact. 422 server-side unless the need is approved and open.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val needId: String? = null,
+    /** "Cover the fee" (Giving Cycle 2): how much of amount_minor (still the
+     *  TOTAL charged) is the fee the member covered — whole shillings, at most
+     *  half the gift. Omitted when none. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val coverFeeMinor: Int? = null,
 )
 
 /** POST /giving/schedules — a real server-charged recurring gift (money §5.6:
@@ -139,9 +227,59 @@ data class CreateScheduleBody(
     val amountMinor: Int,
     val currency: String,
     val frequency: String,   // weekly | monthly
-    val method: String,      // mpesa | airtel
+    val method: String,      // mpesa (the one recurring rail, Giving Cycle 1)
     val idempotencyKey: String,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val pledgeId: String? = null,
+    /** The number every cycle prompts, sent only when the member chose one
+     *  other than their profile's; absent, each cycle follows the profile
+     *  number, so a changed number is used (GiveMethodsLogic.schedulePhoneFor). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: String? = null,
+    /** "now" = the first prompt goes out at once as the first cycle; "next"
+     *  = wait for the next one (Giving Cycle 4). Absent = the server's "next". */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val firstCharge: String? = null,
+    /** A push minutes before each prompt; absent = the server's default (on). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val headsUp: Boolean? = null,
+)
+
+/** POST /giving/schedules' answer: the schedule's id, status and next run —
+ *  and, with first_charge "now" (Giving Cycle 4), today's prompt as an intent
+ *  answer, or null with `first_charge_error` when it could not be sent (the
+ *  schedule stands either way). */
+@Serializable
+data class CreatedScheduleRes(
+    val scheduleId: String = "",
+    val status: String = "active",
+    val nextRunAt: String = "",
+    val reused: Boolean = false,
+    val firstCharge: GivingIntentResult? = null,
+    val firstChargeError: String? = null,
+)
+
+/** PATCH /giving/schedules/{id} (Giving Cycle 4): only what changes travels.
+ *  `phone_number` is tri-state — absent leaves it, JsonNull sends it back to
+ *  the profile number, a string pins that number (ScheduleCopy.scheduleEditPatch). */
+@Serializable
+data class UpdateScheduleBody(
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val amountMinor: Int? = null,
+    /** Monthly 1–31 (clamped to short months); weekly 0–6, Sunday 0. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val day: Int? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val phoneNumber: JsonElement? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val headsUp: Boolean? = null,
+)
+
+/** POST /giving/schedules/{id}/pause — until resumed, or until a Nairobi
+ *  date from tomorrow to a year ahead (YYYY-MM-DD). */
+@Serializable
+data class PauseScheduleBody(@EncodeDefault(EncodeDefault.Mode.NEVER) val resumeOn: String? = null)
+
+/** What pause and resume answer: the schedule's new state. */
+@Serializable
+data class ScheduleStateRes(
+    val scheduleId: String = "",
+    val status: String = "",
+    val nextRunAt: String? = null,
+    val pauseReason: String? = null,
+    val resumeOn: String? = null,
 )
 
 /** POST /giving/paypal/capture — settles an approved PayPal order (money §5.6: online-only). */
@@ -191,6 +329,13 @@ data class Partnership(
 ) {
     /** Joined the programme (spec §1: `partner_memberships.status` active|paused|left). */
     val isMember: Boolean get() = membership?.status in setOf("active", "paused")
+
+    /** In the programme, as iOS reads it (Partnership.isProgrammeMember): the
+     *  membership's word when there is one — active or paused; a member who
+     *  LEFT is not, even with a recurring gift still running — else, from an
+     *  older server with no membership block, `is_partner`. STANDING when
+     *  true, the invitation to JOIN when false. */
+    val isProgrammeMember: Boolean get() = membership?.let { it.status in setOf("active", "paused") } ?: isPartner
 }
 
 /** One thing a pledge may be for (`pledge_options` on GET /giving/partnership).
@@ -251,6 +396,30 @@ data class Pledge(
      *  pledge money, whatever fund the client sends (wire `pays_to`). Null
      *  from an older server; the Give screen then says "Routed by the church". */
     val paysTo: FundRef? = null,
+    // Giving Cycle 5 — all null/false from an older server.
+    /** Monthly: the first day an instalment can fall due when later than the
+     *  creation day (YYYY-MM-DD) — a pledge collected automatically starts
+     *  with its first collection. Null = the creation day. */
+    val startsOn: String? = null,
+    /** Monthly: the last day an instalment can fall due (YYYY-MM-DD); none
+     *  after it is pledged, owed or missed. Null = open-ended. */
+    val untilOn: String? = null,
+    /** Create only: the same pledge made a moment ago (a double tap, a
+     *  retried request) — no second pledge was created. */
+    val reused: Boolean = false,
+    /** Create only: the pledge WAS made, but its automatic collection could
+     *  not be set up — said to the member, who pays with Pay now. */
+    val autoScheduleError: String? = null,
+    /** Giving Cycle 9 — an ACTIVE TOTAL pledge with money still owed and its
+     *  date not passed: the pace that reaches it on time. Null otherwise (a
+     *  monthly pledge never has one) and from an older server. */
+    val pace: PledgePace? = null,
+    /** What the member told the office they paid toward this pledge, still
+     *  being checked — in the pledge's own currency (wire
+     *  `pending_claim_minor`, pathway#516). Said first, never subtracted:
+     *  a claim counts once the office confirms it (EXPERIENCE.md §9.3 rule 1,
+     *  §9.7 M1). 0 from an older server. */
+    val pendingClaimMinor: Int = 0,
 ) {
     /** What the pledge is for, derived client-side from its target — the
      *  fallback when an older server sends no `title`. */
@@ -265,6 +434,18 @@ data class Pledge(
     /** The headline amount — monthly amount or total target. */
     val headlineMinor: Int get() = if (shape == "total") (targetMinor ?: 0) else (amountMinor ?: 0)
 }
+
+/** A total pledge's pace (`pace` on the Pledge, Giving Cycle 9): what is
+ *  still owed spread over the monthly collections left — one today, then the
+ *  same day each month through `by` — rounded UP to whole shillings in KES
+ *  (cents stay cents) so the last is never short. */
+@Serializable
+data class PledgePace(
+    val perMonthMinor: Int = 0,
+    val collectionsLeft: Int = 0,
+    /** The pledge's due date, YYYY-MM-DD. */
+    val by: String = "",
+)
 
 @Serializable
 data class PledgeFund(val code: String = "", val name: String = "")
@@ -305,7 +486,25 @@ data class DueItem(
     /** kind "pledge": the earliest overdue instalment's date — the DUE row
      *  says "overdue since" it, preferring it over `due_on`. */
     val overdueSince: String? = null,
-)
+    /** The server's word on whether the row is overdue (`overdue_count > 0`;
+     *  false on a schedule row). Null from an older server that does not
+     *  send it — the row then reads its own due date. */
+    val overdue: Boolean? = null,
+    /** kind "pledge": what the office is checking toward it — the member's
+     *  pending "I paid another way" claims, in the pledge's currency (pathway
+     *  563185e). Shown beside the row so nobody pays twice; never subtracted:
+     *  a claim counts once the office confirms it. 0 from an older server. */
+    val pendingClaimMinor: Int = 0,
+) {
+    /** What is still uncovered once the money already on its way lands
+     *  (iOS DueItem.uncoveredMinor). */
+    val uncoveredMinor: Int get() = maxOf(0, amountMinor - pendingMinor)
+
+    /** Every shilling of this pledge instalment is already on its way — a
+     *  payment started in the last 15 minutes covers it (iOS
+     *  DueItem.fullyPending). Never a Resume row, never a schedule. */
+    val fullyPending: Boolean get() = kind == "pledge" && action != "resume" && pendingMinor > 0 && pendingMinor >= amountMinor
+}
 
 /** POST /giving/partners/join `{}` — joining needs no fund, no campaign and no
  *  money (spec §1). An empty @Serializable class encodes as `{}`. */
@@ -341,7 +540,10 @@ data class AutoScheduleBody(val method: String, val frequency: String = "monthly
 @Serializable
 data class UpdatePledgeBody(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val status: String? = null,        // paused | active | cancelled
+    /** A monthly pledge's amount (its collector follows it). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val amountMinor: Int? = null,
+    /** A total pledge's target — its amount_minor means nothing. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val targetMinor: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val dueDay: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val remindersEnabled: Boolean? = null,
     /** The name, tri-state: absent (Kotlin null) leaves it alone; JsonNull
@@ -383,14 +585,50 @@ data class PledgeDetail(
     val title: String? = null,
     val customTitle: String? = null,
     val paysTo: FundRef? = null,
+    val startsOn: String? = null,
+    val untilOn: String? = null,
+    val pace: PledgePace? = null,
     val payments: List<PledgePayment> = emptyList(),
+    /** What the office is still checking toward it — the single read carries
+     *  it too now (pathway d6478e4); 0 from an older server. */
+    val pendingClaimMinor: Int = 0,
 ) {
     fun asPledge(): Pledge = pledge ?: Pledge(
         pledgeId, shape, amountMinor, targetMinor, currency, dueDay, dueOn, fund, campaign,
         needId, status, progress, scheduleId, remindersEnabled,
         createdAt = createdAt, title = title, customTitle = customTitle, paysTo = paysTo,
+        startsOn = startsOn, untilOn = untilOn, pace = pace, pendingClaimMinor = pendingClaimMinor,
     )
 }
+
+/** "I paid another way" (POST /giving/pledges/{id}/claims): in the pledge's
+ *  own currency, the day it was paid (Nairobi, today or within the last
+ *  year), an optional note — the office confirms before it counts. */
+@Serializable
+data class ClaimBody(
+    val amountMinor: Int,
+    val currency: String,
+    val paidOn: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val note: String? = null,
+)
+
+/** One claim on a pledge (GET /giving/pledges/{id}/claims → `data[]`, and
+ *  the POST's answer). The list sends amount_minor as TEXT (a Postgres
+ *  bigint cast) and the create as a number; both decode. status is
+ *  pending | confirmed | rejected. */
+@Serializable
+data class PledgeClaim(
+    val claimId: String = "",
+    val pledgeId: String = "",
+    val amountMinor: Long = 0,
+    val currency: String = "KES",
+    val paidOn: String? = null,
+    val note: String? = null,
+    val status: String = "pending",
+    val decidedAt: String? = null,
+    val transactionId: String? = null,
+    val createdAt: String? = null,
+)
 
 @Serializable
 data class PledgePayment(
@@ -421,6 +659,14 @@ data class GivingStatement(
     val pledgedMinor: Int? = null,
     val paidMinor: Int? = null,
     val remainingMinor: Int? = null,
+    /** Giving Cycle 9: the currency pledged / paid / remaining above are in —
+     *  shillings whenever any pledge money is in shillings (they used to add
+     *  every currency's minor units together). Null from an older server. */
+    val summaryCurrency: String? = null,
+    /** Giving Cycle 9: pledged / paid / remaining for EACH currency — that
+     *  currency's pledges against that currency's payments, shillings first.
+     *  Null from an older server (the lines are then summed locally). */
+    val summaryByCurrency: List<StatementCurrencySummary>? = null,
     val pledges: List<StatementPledge>? = null,
     // Statement v2 (docs/PARTNERS_PROGRAMME.md §3d, owner-delegated
     // 2026-09-25): the impact-led blocks. Each is null from an older server
@@ -439,6 +685,15 @@ data class GivingStatement(
      *  total — `payments` and the server's figures are settled money only.
      *  Null from an older server. */
     val pending: List<StatementPendingPayment>? = null,
+)
+
+/** One currency's Pledged / Paid / Remaining (`summary_by_currency[]`). */
+@Serializable
+data class StatementCurrencySummary(
+    val currency: String = "KES",
+    val pledgedMinor: Int = 0,
+    val paidMinor: Int = 0,
+    val remainingMinor: Int = 0,
 )
 
 /** One unsettled pledge payment (`pending[]` on GET /giving/statements). */

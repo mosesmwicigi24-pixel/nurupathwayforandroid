@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,37 +41,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EmojiEmotions
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PersonRemove
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Unarchive
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -116,7 +92,9 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.OpenConversation
 import org.nuruplace.member.data.PastoralLock
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.ChatInviteMeta
 import org.nuruplace.member.data.net.ChatMessage
 import org.nuruplace.member.data.net.ChatThreadDetail
@@ -125,16 +103,21 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReactBody
 import org.nuruplace.member.data.net.SendMessageBody
 import org.nuruplace.member.data.net.SendVoiceBody
+import org.nuruplace.member.data.offline.WriteOutcome
+import org.nuruplace.member.data.offline.queuedWrite
+import org.nuruplace.member.data.offline.runOrQueue
 import org.nuruplace.member.ui.components.AiDraftButton
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.components.Haptics
 import org.nuruplace.member.ui.components.LiveWave
 import org.nuruplace.member.ui.components.WaveformBars
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -212,6 +195,23 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             "DISCIPLER" -> "discipler"
             else -> preloadCtx
         }
+        // This thread is the open one while it is on screen in the
+        // foreground: a push about a new message in it posts no notification
+        // (NuruMessagingService) and lands here instead — the thread has no
+        // live feed, so it refreshes to show the message, with a light tick
+        // unless the member turned Sound and vibration off.
+        androidx.lifecycle.compose.LifecycleResumeEffect(conversationId) {
+            OpenConversation.opened(conversationId)
+            onPauseOrDispose { OpenConversation.closed(conversationId) }
+        }
+        val latestReload by rememberUpdatedState(reload)
+        LaunchedEffect(conversationId) {
+            OpenConversation.arrivals.collect { arrival ->
+                if (arrival.conversationId != conversationId) return@collect
+                latestReload()
+                if (arrival.buzz) Haptics.tap(view)
+            }
+        }
         var draft by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         val listState = rememberLazyListState()
@@ -232,7 +232,21 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 actionError = null
             }
         }
-        val messages = thread.messages
+        // Messages this phone queued while offline (§1.7 — as iOS does): shown
+        // as "Waiting to send" until the server's copy arrives with the same id.
+        var pending by remember(conversationId) { mutableStateOf(listOf<ChatMessage>()) }
+        LaunchedEffect(thread.messages) {
+            val landed = thread.messages.mapTo(HashSet()) { it.messageId }
+            pending = pending.filter { it.messageId !in landed }
+        }
+        // Why the last send didn't go — above the composer, while what the
+        // member typed stays in it (EXPERIENCE.md §7.4, §4).
+        var sendError by remember(conversationId) { mutableStateOf<String?>(null) }
+        // A voice note that didn't send is kept, with a way to send it again
+        // (iOS: "Couldn't send — tap to retry"); it was deleted on any outcome.
+        var unsentVoice by remember(conversationId) { mutableStateOf<UnsentVoice?>(null) }
+        val pendingIds = pending.mapTo(HashSet()) { it.messageId }
+        val messages = (thread.messages + pending.filter { p -> thread.messages.none { it.messageId == p.messageId } })
             .filter { it.messageId !in locallyDeleted }
             .map { m -> editOverrides[m.messageId]?.let { m.copy(body = it, isEdited = true) } ?: m }
         fun editMessage(m: ChatMessage, newBody: String) {
@@ -250,10 +264,12 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     editingMessage = null
                     Haptics.confirm(view)
                     reload()
-                } catch (_: Exception) {
+                } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                    throw c
+                } catch (e: Exception) {
                     editOverrides = if (previous != null) editOverrides + (m.messageId to previous) else editOverrides - m.messageId
                     Haptics.reject(view)
-                    editError = "Couldn't save — please try again."
+                    editError = ApiException.saveFailureLine(e, context)
                 } finally {
                     editSaving = false
                 }
@@ -265,10 +281,12 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 try {
                     Net.client.api.deleteChatMessage(m.messageId)
                     reload()
-                } catch (_: Exception) {
+                } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                    throw c
+                } catch (e: Exception) {
                     locallyDeleted = locallyDeleted - m.messageId
                     Haptics.reject(view)
-                    actionError = "Couldn't delete this message — try again."
+                    actionError = ApiException.failureLine("Couldn't delete that message.", e, context)
                 }
             }
         }
@@ -285,56 +303,132 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 askMic.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
-        fun sendVoice() {
+        // Upload, then send — the recording is deleted only once the server has
+        // the message; a failure keeps it (and an uploaded file's address, and
+        // the message's ids, so sending again can't send it twice).
+        fun deliverVoice(v: UnsentVoice) {
             if (busy) return
-            val f = recorder.stop() ?: return
-            Haptics.confirm(view) // a voice note committed — the weightier tick
-            val duration = recorder.elapsedSec.coerceAtLeast(1)
-            val wave = recorder.waveformFor()
             busy = true
+            unsentVoice = null
             scope.launch {
-                try {
-                    val url = withContext(Dispatchers.IO) {
-                        val part = MultipartBody.Part.createFormData("file", f.name, f.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
+                var held = v
+                val failure = try {
+                    val url = held.uploadedUrl ?: withContext(Dispatchers.IO) {
+                        val part = MultipartBody.Part.createFormData("file", held.file.name, held.file.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
                         Net.client.api.uploadVoiceNote(part).url
+                    }.ifBlank { throw IllegalStateException("no address for the upload") }
+                    held = held.copy(uploadedUrl = url)
+                    val meta = buildJsonObject {
+                        put("duration", held.durationSec)
+                        putJsonArray("waveform") { held.waveform.forEach { add(it) } }
                     }
-                    if (url.isNotBlank()) {
-                        val meta = buildJsonObject {
-                            put("duration", duration)
-                            putJsonArray("waveform") { wave.forEach { add(it) } }
-                        }
-                        Net.client.api.sendChatVoice(
-                            conversationId,
-                            SendVoiceBody(UUID.randomUUID().toString(), "Voice message", "voice", url, meta, UUID.randomUUID().toString()),
-                        )
-                        reload()
-                    }
-                } catch (_: Exception) {
-                } finally {
-                    busy = false
-                    withContext(Dispatchers.IO) { runCatching { f.delete() } }
+                    Net.client.api.sendChatVoice(
+                        conversationId,
+                        SendVoiceBody(held.messageId, "Voice message", "voice", url, meta, held.mutationId),
+                    )
+                    null
+                } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                    throw c
+                } catch (e: Exception) {
+                    e
+                }
+                busy = false
+                if (failure == null) {
+                    Haptics.confirm(view) // a voice note delivered — the weightier tick
+                    withContext(Dispatchers.IO) { runCatching { held.file.delete() } }
+                    reload()
+                } else {
+                    Haptics.reject(view)
+                    unsentVoice = held.copy(line = ApiException.failureLine(ApiException.SEND_FAILED, failure, context))
                 }
             }
         }
+        fun sendVoice() {
+            if (busy) return
+            val f = recorder.stop() ?: return
+            deliverVoice(
+                UnsentVoice(
+                    file = f,
+                    durationSec = recorder.elapsedSec.coerceAtLeast(1),
+                    waveform = recorder.waveformFor(),
+                    messageId = UUID.randomUUID().toString(),
+                    mutationId = UUID.randomUUID().toString(),
+                ),
+            )
+        }
+        fun discardVoice() {
+            val v = unsentVoice ?: return
+            unsentVoice = null
+            scope.launch { withContext(Dispatchers.IO) { runCatching { v.file.delete() } } }
+        }
 
-        fun send(text: String) {
+        // A text message goes through the app's durable offline queue, as on
+        // iOS (§1.7): sent now when it can be; with no answer it waits in the
+        // queue (same ids, so a send that did land is never doubled) and shows
+        // as "Waiting to send". A refusal keeps what was typed and says why.
+        fun send(text: String, fromDraft: Boolean = true) {
             val t = text.trim()
             if (t.isBlank() || busy) return
-            Haptics.tap(view) // light tap — the message left your hands
             busy = true
+            sendError = null
+            val messageId = UUID.randomUUID().toString()
+            val mutationId = UUID.randomUUID().toString()
             scope.launch {
-                try {
-                    Net.client.api.sendChatMessage(conversationId, SendMessageBody(UUID.randomUUID().toString(), t, "text", UUID.randomUUID().toString()))
-                    draft = ""
-                    reload()
-                } catch (_: Exception) {
-                } finally { busy = false }
+                val payload = buildJsonObject {
+                    put("conversation_id", conversationId)
+                    put("message_id", messageId)
+                    put("body", t)
+                    put("msg_type", "text")
+                    put("client_mutation_id", mutationId)
+                }
+                val outcome = queuedWrite(
+                    send = {
+                        Net.client.offline.runOrQueue("chat_messages", "create", payload) {
+                            Net.client.api.sendChatMessage(conversationId, SendMessageBody(messageId, t, "text", mutationId))
+                        }
+                    },
+                    failureLine = { ApiException.failureLine(ApiException.SEND_FAILED, it, context) },
+                )
+                busy = false
+                when (outcome) {
+                    WriteOutcome.Sent -> {
+                        Haptics.tap(view) // light tap — the message left your hands
+                        if (fromDraft && draft.trim() == t) draft = ""
+                        reload()
+                    }
+                    WriteOutcome.Queued -> {
+                        Haptics.tap(view)
+                        if (fromDraft && draft.trim() == t) draft = ""
+                        pending = pending + ChatMessage(
+                            messageId = messageId, body = t, msgType = "text",
+                            createdAt = java.time.Instant.now().toString(), mine = true,
+                        )
+                    }
+                    is WriteOutcome.Failed -> {
+                        Haptics.reject(view)
+                        sendError = outcome.line
+                    }
+                }
             }
         }
         fun react(m: ChatMessage, emoji: String) {
-            scope.launch { try { Net.client.api.toggleChatReaction(m.messageId, ReactBody(emoji)); reload() } catch (_: Exception) {} }
+            scope.launch {
+                noticeOnFailure(context, onFailure = { Haptics.reject(view) }) {
+                    Net.client.api.toggleChatReaction(m.messageId, ReactBody(emoji))
+                }?.let { reload() }
+            }
         }
-        fun join() { scope.launch { try { Net.client.api.joinChatSpace(conversationId); reload() } catch (_: Exception) {} } }
+        var joining by remember { mutableStateOf(false) }
+        fun join() {
+            if (joining) return
+            joining = true
+            scope.launch {
+                noticeOnFailure(context, lead = "Couldn't join this space.", onFailure = { Haptics.reject(view) }) {
+                    Net.client.api.joinChatSpace(conversationId)
+                }?.let { reload() }
+                joining = false
+            }
+        }
 
         // ── Connection controls (Chat Redesign C3a — thread ⋮ menu) ──
         var connectionBusy by remember { mutableStateOf(false) }
@@ -345,7 +439,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             scope.launch {
                 runCatching { Net.client.api.removeConnection(peer) }
                     .onSuccess { actionError = "Connection removed. This chat's history is kept." }
-                    .onFailure { actionError = "Couldn't remove this connection — try again." }
+                    .onFailure { actionError = ApiException.failureLine("Couldn't remove this connection.", it, context) }
                 connectionBusy = false
             }
         }
@@ -356,7 +450,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
             scope.launch {
                 runCatching { Net.client.api.blockConnection(peer) }
                     .onSuccess { actionError = "Blocked. They can no longer message you." }
-                    .onFailure { actionError = "Couldn't block — try again." }
+                    .onFailure { actionError = ApiException.failureLine("Couldn't block them.", it, context) }
                 connectionBusy = false
             }
         }
@@ -370,7 +464,10 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     // The menu offers Unblock unconditionally (no per-pair status
                     // read exists client-side) — a 404 "wasn't blocked" is the
                     // expected, harmless outcome when it wasn't needed.
-                    .onFailure { actionError = "This person wasn't blocked." }
+                    .onFailure {
+                        actionError = if ((it as? retrofit2.HttpException)?.code() == 404) "This person wasn't blocked."
+                        else ApiException.failureLine("Couldn't unblock them.", it, context)
+                    }
                 connectionBusy = false
             }
         }
@@ -393,7 +490,14 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
         // endpoint) sees the same state without a second round trip.) ──
         var biometricOn by remember { mutableStateOf(PastoralLock.enabled) }
         var muted by remember(conversationId) { mutableStateOf(thread.muted) }
-        LaunchedEffect(thread.muted) { muted = thread.muted; AppPrefs.pastoralMuted = thread.muted }
+        // Mirrored only from the PASTORAL thread: the flag means "the pastoral
+        // thread is muted" (the Chat tab's badge, and the push service drops
+        // pastoral pushes while it is set), so opening some other muted — or
+        // unmuted — thread must not flip it.
+        LaunchedEffect(thread.muted) {
+            muted = thread.muted
+            if (ctx == "pastoral") AppPrefs.pastoralMuted = thread.muted
+        }
         var archived by remember { mutableStateOf(AppPrefs.pastoralArchived) }
         var showPrivacyInfo by remember { mutableStateOf(false) }
 
@@ -426,7 +530,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             muted = !target
                             AppPrefs.pastoralMuted = !target
                             Haptics.reject(view)
-                            actionError = if (target) "Couldn't mute — try again." else "Couldn't unmute — try again."
+                            actionError = if (target) "Couldn't mute this chat. Try again in a moment." else "Couldn't unmute this chat. Try again in a moment."
                         }
                     }
                 },
@@ -459,6 +563,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     val runHead = i == 0 || messages[i - 1].authorUserId != m.authorUserId || chatDayKey(messages[i - 1].createdAt) != thisDay
                     MessageRow(
                         m, thread.kind, runHead, player,
+                        pending = m.messageId in pendingIds,
                         onReact = { emoji -> react(m, emoji) },
                         onLongPress = { if (m.mine) { Haptics.tap(view); actionsForMessage = m } },
                         onOpenRoute = onNavigate,
@@ -476,7 +581,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
                     Text(
                         "Only ${thread.title ?: "the pastor"} sees your reply",
                         style = cInter(11, FontWeight.SemiBold),
@@ -493,24 +598,53 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                 listOf("Amen 🙏", "Praying for you 💛", "On my way 🚶", "Thank you 🤍").forEach { q ->
                     Box(
                         Modifier.clip(Capsule).background(CHAT.white.copy(alpha = 0.9f)).border(1.dp, CHAT.border, Capsule)
-                            .clickable { send(q) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                            .clickable { send(q, fromDraft = false) }.padding(horizontal = 14.dp, vertical = 8.dp),
                     ) { Text(q, style = cInter(13, FontWeight.Medium), color = CHAT.navy) }
                 }
             }
 
             // A failed edit/delete already rolled its optimistic change back —
             // this just tells the member why, briefly, above the composer.
-            actionError?.let { msg ->
+            (sendError ?: actionError)?.let { msg ->
                 Row(
                     Modifier.fillMaxWidth().background(Color(0xFFFDECEA)).padding(horizontal = 16.dp, vertical = 7.dp),
-                ) { Text(msg, style = cInter(11, FontWeight.Medium), color = Color(0xFFB3261E)) }
+                ) { Text(msg, style = cInter(12, FontWeight.Medium), color = Color(0xFFB3261E)) }
+            }
+            // A voice note that didn't send — kept, with Send again and Discard.
+            unsentVoice?.let { v ->
+                if (!recorder.isRecording) {
+                    Row(
+                        Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(Modifier.size(10.dp).clip(Capsule).background(Color(0xFFD4183D)))
+                        Column(Modifier.weight(1f)) {
+                            Text("Voice note · ${voiceClock(v.durationSec)}", style = cInter(12, FontWeight.SemiBold), color = CHAT.navy)
+                            v.line?.let { Text(it, style = cInter(11), color = Color(0xFFB3261E)) }
+                        }
+                        Box(
+                            Modifier.size(38.dp).clip(Capsule).background(CHAT.white).border(1.dp, CHAT.border, Capsule)
+                                .clickable { discardVoice() },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Lucide.Trash2, "Discard voice note", tint = CHAT.meta, modifier = Modifier.size(18.dp)) }
+                        Box(
+                            Modifier.clip(Capsule).background(CHAT.navy).clickable(enabled = !busy) { deliverVoice(v) }
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("Send again", style = cInter(12, FontWeight.SemiBold), color = Color.White) }
+                    }
+                }
             }
 
             // Composer — swaps to the live recording strip while a voice note is
             // being captured (red pulsing dot + m:ss + live wave + cancel/send).
+            // Both clear the system's gesture bar (§7.1 rule 3): the screen's
+            // imePadding lifts them over the keyboard, but with the keyboard
+            // down they sat under the gesture handle.
             if (recorder.isRecording) {
                 Row(
-                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -525,20 +659,20 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         Modifier.size(38.dp).clip(Capsule).background(CHAT.white).border(1.dp, CHAT.border, Capsule)
                             .clickable { recorder.cancel() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, "Cancel recording", tint = CHAT.meta, modifier = Modifier.size(16.dp)) }
+                    ) { Icon(Lucide.X, "Cancel recording", tint = CHAT.meta, modifier = Modifier.size(18.dp)) }
                     Box(
                         Modifier.size(44.dp).clip(Capsule).background(CHAT.gold).clickable { sendVoice() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.AutoMirrored.Filled.Send, "Send voice note", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                    ) { Icon(Lucide.Send, "Send voice note", tint = Color.White, modifier = Modifier.size(18.dp)) }
                 }
             } else {
                 Row(
-                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().background(CHAT.white.copy(alpha = 0.92f)).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(Modifier.size(36.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.bubbleInk), contentAlignment = Alignment.Center) {
-                        Text(if (myName.isBlank()) "You" else chatInitials(myName), style = cInter(10, FontWeight.Bold), color = Color.White)
+                        Text(if (myName.isBlank()) "You" else chatInitials(myName), style = cInter(11, FontWeight.Bold), color = Color.White)
                     }
                     Row(
                         Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(CHAT.paper).border(1.dp, CHAT.border, RoundedCornerShape(24.dp))
@@ -546,7 +680,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Filled.Add, null, tint = CHAT.meta, modifier = Modifier.size(19.dp))
+                        Icon(Lucide.Plus, null, tint = CHAT.meta, modifier = Modifier.size(18.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                             if (draft.isBlank()) Text("Message", style = cInter(12), color = CHAT.faint)
                             BasicTextField(
@@ -575,7 +709,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                                 },
                             conversationId = conversationId,
                         ) { text -> draft = text }
-                        Icon(Icons.Filled.EmojiEmotions, null, tint = CHAT.meta, modifier = Modifier.size(19.dp))
+                        Icon(Lucide.Smile, null, tint = CHAT.meta, modifier = Modifier.size(18.dp))
                     }
                     val hasDraft = draft.isNotBlank()
                     Box(
@@ -584,8 +718,8 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             .clickable { if (hasDraft) send(draft) else startRecording() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (hasDraft) Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(17.dp))
-                        else Icon(Icons.Filled.Mic, "Record voice note", tint = Color.White, modifier = Modifier.size(18.dp))
+                        if (hasDraft) Icon(Lucide.Send, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        else Icon(Lucide.Mic, "Record voice note", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -593,7 +727,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Long-press action sheet — own messages only: Edit (text only), Delete ----
         actionsForMessage?.let { m ->
-            ModalBottomSheet(onDismissRequest = { actionsForMessage = null }) {
+            NuruModalBottomSheet(onDismissRequest = { actionsForMessage = null }) {
                 Column(Modifier.padding(bottom = 24.dp)) {
                     if (m.msgType != "voice" && m.msgType != "image") {
                         Row(
@@ -608,7 +742,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            Icon(Icons.Filled.Edit, null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.Pencil, null, tint = CHAT.navy, modifier = Modifier.size(18.dp))
                             Text("Edit", style = cInter(14, FontWeight.SemiBold), color = CHAT.navy)
                         }
                     }
@@ -622,7 +756,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(Icons.Filled.Delete, null, tint = Color(0xFFB3261E), modifier = Modifier.size(18.dp))
+                        Icon(Lucide.Trash2, null, tint = Color(0xFFB3261E), modifier = Modifier.size(18.dp))
                         Text("Delete", style = cInter(14, FontWeight.SemiBold), color = Color(0xFFB3261E))
                     }
                 }
@@ -631,9 +765,9 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Edit sheet — prefilled with the current body; PATCH on save ----
         editingMessage?.let { m ->
-            ModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }) {
+            NuruModalBottomSheet(onDismissRequest = { editingMessage = null; editError = null }, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-                    Text("Edit message", style = cSerif(19, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
+                    Text("Edit message", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy)
                     Spacer(Modifier.height(12.dp))
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(CHAT.paper)
@@ -666,7 +800,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Delete confirm — irreversible, so always ask first ----
         deleteConfirmFor?.let { m ->
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { deleteConfirmFor = null },
                 title = { Text("Delete this message?", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
                 text = { Text("This can't be undone.", style = cInter(13), color = CHAT.ink600) },
@@ -686,7 +820,7 @@ fun ChatThreadScreen(conversationId: String, onBack: () -> Unit, threadContext: 
 
         // ---- Privacy info (pastoral ⋮ menu) — honest, no false E2EE claim ----
         if (showPrivacyInfo) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { showPrivacyInfo = false },
                 containerColor = CHAT.white,
                 title = { Text("About this conversation's privacy", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy) },
@@ -724,7 +858,7 @@ private fun PrivacyLabelBanner(label: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(Icons.Filled.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(12.dp))
+        Icon(Lucide.Lock, null, tint = CHAT.goldDeep, modifier = Modifier.size(14.dp))
         Text(label, style = cInter(11, FontWeight.SemiBold), color = CHAT.goldDeep)
     }
 }
@@ -764,7 +898,7 @@ private fun PastoralLockScreen(onBack: () -> Unit) {
         Box(
             Modifier.size(64.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.selectedSeg),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
+        ) { Icon(Lucide.Lock, null, tint = Color.White, modifier = Modifier.size(26.dp)) }
         Spacer(Modifier.height(16.dp))
         Text("Talk with My Pastor is locked", style = cSerif(18, FontWeight.SemiBold), color = CHAT.navy, textAlign = TextAlign.Center)
         Text(
@@ -817,23 +951,24 @@ private fun ThreadHeader(
                 Box(
                     Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.white).border(1.dp, CHAT.border, RoundedCornerShape(999.dp)).clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = CHAT.navy, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Lucide.ArrowLeft, "Back", tint = CHAT.navy, modifier = Modifier.size(18.dp)) }
 
                 if (thread.kind == "dm") {
                     Box(Modifier.size(38.dp).clip(RoundedCornerShape(999.dp)).background(CHAT.storyRing), contentAlignment = Alignment.Center) {
                         ChatCircleAvatar(thread.title ?: "", size = 34.dp)
                     }
                 } else {
-                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF2E7D6B)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.navy), contentAlignment = Alignment.Center) {
                         Text("#", style = cInter(18, FontWeight.Bold), color = Color.White)
                     }
                 }
 
                 Column(Modifier.weight(1f)) {
-                    Text(thread.title ?: "Conversation", style = cSerif(19, FontWeight.SemiBold, -0.3f), color = CHAT.navy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(thread.title ?: "Conversation", style = cSerif(18, FontWeight.SemiBold, -0.3f), color = CHAT.navy, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (thread.kind == "dm") {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("🕊️", fontSize = 10.sp)
+                            // A Lucide glyph, not an emoji (§8.1 rule 7; final walk C16).
+                            Icon(Lucide.HeartHandshake, contentDescription = null, tint = CHAT.ink600, modifier = Modifier.size(14.dp))
                             Text(
                                 when {
                                     threadContext == "discipler" -> "My Discipler"
@@ -865,7 +1000,7 @@ private fun ThreadHeader(
                     Box(
                         Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(CHAT.white).border(1.dp, CHAT.gold.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.AutoAwesome, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(Lucide.Sparkles, null, tint = CHAT.eyebrow, modifier = Modifier.size(18.dp)) }
                 }
             }
         }
@@ -875,7 +1010,7 @@ private fun ThreadHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Filled.Flag, null, tint = CHAT.ink600, modifier = Modifier.size(13.dp))
+                Icon(Lucide.Flag, null, tint = CHAT.ink600, modifier = Modifier.size(14.dp))
                 Text(thread.topic!!, style = cInter(12), color = CHAT.ink600)
             }
         }
@@ -900,22 +1035,22 @@ private fun ConnectionMenuButton(busy: Boolean, onRemove: () -> Unit, onBlock: (
         if (busy) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), color = CHAT.navy, strokeWidth = 2.dp)
         } else {
-            Icon(Icons.Filled.MoreVert, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+            Icon(Lucide.EllipsisVertical, contentDescription = "Connection options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        NuruDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text("Remove connection") },
-                leadingIcon = { Icon(Icons.Filled.PersonRemove, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.UserMinus, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onRemove() },
             )
             DropdownMenuItem(
                 text = { Text("Block") },
-                leadingIcon = { Icon(Icons.Filled.Block, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.Ban, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onBlock() },
             )
             DropdownMenuItem(
                 text = { Text("Unblock") },
-                leadingIcon = { Icon(Icons.Filled.LockOpen, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.LockOpen, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onUnblock() },
             )
         }
@@ -946,33 +1081,33 @@ private fun PastoralMenuButton(
             .clickable { expanded = true },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.MoreVert, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        Icon(Lucide.EllipsisVertical, contentDescription = "Pastoral options", tint = CHAT.navy, modifier = Modifier.size(18.dp))
+        NuruDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (biometricOn) {
                 DropdownMenuItem(
                     text = { Text("Lock now") },
-                    leadingIcon = { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(Lucide.Lock, null, modifier = Modifier.size(22.dp)) },
                     onClick = { expanded = false; onLockNow() },
                 )
             }
             DropdownMenuItem(
                 text = { Text(if (biometricOn) "Disable biometric lock" else "Enable biometric lock") },
-                leadingIcon = { Icon(Icons.Filled.Fingerprint, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.FingerprintPattern, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onToggleBiometric() },
             )
             DropdownMenuItem(
                 text = { Text(if (muted) "Unmute" else "Mute") },
-                leadingIcon = { Icon(Icons.Filled.NotificationsOff, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.BellOff, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onToggleMute() },
             )
             DropdownMenuItem(
                 text = { Text(if (archived) "Unarchive" else "Archive") },
-                leadingIcon = { Icon(if (archived) Icons.Filled.Unarchive else Icons.Filled.Archive, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(if (archived) Lucide.ArchiveRestore else Lucide.Archive, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onArchive() },
             )
             DropdownMenuItem(
                 text = { Text("Privacy info") },
-                leadingIcon = { Icon(Icons.Filled.Info, null, modifier = Modifier.size(20.dp)) },
+                leadingIcon = { Icon(Lucide.Info, null, modifier = Modifier.size(22.dp)) },
                 onClick = { expanded = false; onPrivacyInfo() },
             )
         }
@@ -1041,11 +1176,11 @@ private fun InviteCardBubble(invite: ChatInviteMeta, from: String, mine: Boolean
             if (!invite.imageUrl.isNullOrBlank()) {
                 AsyncImage(model = invite.imageUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
-                Icon(Icons.Filled.MenuBook, null, tint = CHAT.navy.copy(alpha = 0.6f), modifier = Modifier.size(28.dp))
+                Icon(Lucide.BookOpen, null, tint = CHAT.navy.copy(alpha = 0.6f), modifier = Modifier.size(28.dp))
             }
         }
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("READ WITH A FRIEND", style = cInter(9, FontWeight.Bold, 1.6f), color = if (mine) CHAT.goldLight else CHAT.eyebrow)
+            Text("READ WITH A FRIEND", style = cInter(11, FontWeight.Bold, 1.6f), color = if (mine) CHAT.goldLight else CHAT.eyebrow)
             Text(
                 invite.planTitle.ifBlank { "A reading plan" },
                 style = cSerif(15, FontWeight.SemiBold), color = if (mine) Color.White else CHAT.navy,
@@ -1067,7 +1202,7 @@ private fun InviteCardBubble(invite: ChatInviteMeta, from: String, mine: Boolean
 private fun DaySeparator(iso: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(CHAT.hairline))
-        Text(chatDayDivider(iso), style = cInter(10, FontWeight.Bold, 2.2f), color = CHAT.dayGold, modifier = Modifier.padding(horizontal = 10.dp))
+        Text(chatDayDivider(iso), style = cInter(11, FontWeight.Bold, 2.2f), color = CHAT.dayGold, modifier = Modifier.padding(horizontal = 10.dp))
         Box(Modifier.weight(1f).height(1.dp).background(CHAT.hairline))
     }
 }
@@ -1079,6 +1214,8 @@ private fun MessageRow(
     kind: String,
     runHead: Boolean,
     player: VoicePlayer,
+    /** Queued on this phone, not yet on the server (§1.7). */
+    pending: Boolean = false,
     onReact: (String) -> Unit,
     onLongPress: () -> Unit = {},
     onOpenRoute: (String) -> Unit = {},
@@ -1097,7 +1234,7 @@ private fun MessageRow(
                     if (!m.authorAvatar.isNullOrBlank()) {
                         AsyncImage(model = m.authorAvatar, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     } else {
-                        Text(chatInitials(m.authorName), style = cInter(9, FontWeight.Bold), color = Color.White)
+                        Text(chatInitials(m.authorName), style = cInter(11, FontWeight.Bold), color = Color.White)
                     }
                 }
             } else {
@@ -1184,10 +1321,10 @@ private fun MessageRow(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                    if (playing) Lucide.Pause else Lucide.Play,
                                     if (playing) "Pause voice note" else "Play voice note",
                                     tint = if (m.mine) CHAT.navy else CHAT.navy.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(17.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                             WaveformBars(
@@ -1199,12 +1336,12 @@ private fun MessageRow(
                             )
                             val shownDur = metaDur ?: player.durationSec.takeIf { playing && it > 0 }
                             if (shownDur != null) {
-                                Text(voiceClock(shownDur), style = cInter(10, FontWeight.SemiBold), color = if (m.mine) Color.White.copy(alpha = 0.7f) else CHAT.meta)
+                                Text(voiceClock(shownDur), style = cInter(11, FontWeight.SemiBold), color = if (m.mine) Color.White.copy(alpha = 0.7f) else CHAT.meta)
                             }
                         }
                     }
                     "video", "file" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Filled.Movie, null, tint = if (m.mine) Color.White else CHAT.textDark, modifier = Modifier.size(14.dp))
+                        Icon(Lucide.Film, null, tint = if (m.mine) Color.White else CHAT.textDark, modifier = Modifier.size(14.dp))
                         Text(if (m.body.isNotBlank()) m.body else "Shared a video", style = cInter(13), color = if (m.mine) Color.White else CHAT.textDark)
                     }
                     else -> LinkifiedBubbleText(m.body, mine = m.mine, onOpenRoute = onOpenRoute)
@@ -1246,27 +1383,48 @@ private fun MessageRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(r.emoji, fontSize = 11.sp)
-                                Text(r.count.toString(), style = cInter(9, FontWeight.Bold), color = if (r.mine) CHAT.navy else CHAT.ink600)
+                                Text(r.count.toString(), style = cInter(11, FontWeight.Bold), color = if (r.mine) CHAT.navy else CHAT.ink600)
                             }
                         }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     if (m.isEdited) {
-                        Text("edited", style = cInter(9).copy(fontStyle = FontStyle.Italic), color = if (m.mine) Color.White.copy(alpha = 0.5f) else CHAT.meta)
+                        Text("edited", style = cInter(11).copy(fontStyle = FontStyle.Italic), color = if (m.mine) Color.White.copy(alpha = 0.5f) else CHAT.meta)
                         Spacer(Modifier.width(4.dp))
                     }
-                    Text(chatMsgTime(m.createdAt), style = cInter(10), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
-                    if (m.mine) {
+                    if (pending) {
+                        // Honest: not delivered yet — no tick until the server has it.
+                        Icon(Lucide.Clock4, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Waiting to send", style = cInter(11), color = Color.White.copy(alpha = 0.7f))
+                    } else {
+                        Text(chatMsgTime(m.createdAt), style = cInter(11), color = if (m.mine) Color.White.copy(alpha = 0.6f) else CHAT.meta)
+                    }
+                    if (m.mine && !pending) {
                         Spacer(Modifier.width(4.dp))
                         // The broadcast rule, everywhere: ONE blue tick = delivered
                         // (the copy is in their thread), TWO blue ticks = seen
                         // (their last_read_at covers it). Always WhatsApp-blue.
                         val seen = (m.readCount ?: 0) > 0
-                        Text(if (seen) "✓✓" else "✓", style = cInter(9, FontWeight.SemiBold, -1f), color = CHAT.tickBlue)
+                        Text(if (seen) "✓✓" else "✓", style = cInter(11, FontWeight.SemiBold, -1f), color = CHAT.tickBlue)
                     }
                 }
             }
         }
     }
 }
+
+/** A recorded voice note on its way — or kept after a send that failed, with
+ *  what got done (the upload's address) and the message's own ids, so
+ *  "Send again" finishes it rather than sending it twice. */
+internal data class UnsentVoice(
+    val file: java.io.File,
+    val durationSec: Int,
+    val waveform: List<Int>,
+    val messageId: String,
+    val mutationId: String,
+    val uploadedUrl: String? = null,
+    /** Why it didn't send, in §4's words. */
+    val line: String? = null,
+)

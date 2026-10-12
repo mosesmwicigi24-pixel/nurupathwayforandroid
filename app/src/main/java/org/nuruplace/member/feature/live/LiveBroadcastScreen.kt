@@ -39,13 +39,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cameraswitch
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -75,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.LiveMessageRow
 import org.nuruplace.member.data.net.LivePulse
 import org.nuruplace.member.data.net.LiveSendMessageBody
@@ -84,6 +79,7 @@ import org.nuruplace.member.ui.components.PrimaryButton
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun LiveBroadcastScreen(
@@ -548,15 +544,17 @@ fun LiveBroadcastScreen(
             visible = showChatSheet,
             messages = chatMessages,
             onSend = { body ->
-                scope.launch {
-                    runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
-                        .onSuccess { chatMessages = (chatMessages + it).takeLast(60); chatCursor = it.sentAt }
-                }
+                runCatching { Net.client.api.postLiveMessage(streamId, LiveSendMessageBody(body)) }
+                    .onSuccess { chatMessages = (chatMessages + it).takeLast(60); chatCursor = it.sentAt }
+                    .exceptionOrNull()?.let { e ->
+                        if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+                        ApiException.failureLine(ApiException.SEND_FAILED, e, context)
+                    }
             },
         )
 
         if (showEndConfirm) {
-            AlertDialog(
+            NuruAlertDialog(
                 onDismissRequest = { showEndConfirm = false },
                 title = { Text("End this broadcast?", style = NuruType.cardTitle, color = Nuru.navy) },
                 text = { Text("Viewers watching now will see the stream end. This can't be undone.", style = NuruType.body, color = Nuru.ink600) },
@@ -584,7 +582,7 @@ private fun AudioHud(title: String) {
             Box(
                 Modifier.size(96.dp).clip(RoundedCornerShape(28.dp)).background(Color.White.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
+            ) { Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(44.dp)) }
             Spacer(Modifier.height(20.dp))
             Text(title.ifBlank { "Nuru Live" }, style = NuruType.title, color = Color.White, textAlign = TextAlign.Center)
             Spacer(Modifier.height(20.dp))
@@ -674,13 +672,13 @@ private fun LiveHudOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                HudIconButton(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, "Mute", onToggleMute)
+                HudIconButton(if (muted) Lucide.MicOff else Lucide.Mic, "Mute", onToggleMute)
                 Row(
                     Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.danger).clickable { onEndTapped() }
                         .padding(horizontal = 18.dp, vertical = 12.dp),
                 ) { Text("End", style = NuruType.cardCta, color = Color.White, fontWeight = FontWeight.Bold) }
-                if (isVideo) HudIconButton(Icons.Filled.Cameraswitch, "Flip camera", onFlipCamera)
-                if (isVideo) HudIconButton(Icons.Filled.Tune, "Broadcast source", onSourceTapped)
+                if (isVideo) HudIconButton(Lucide.SwitchCamera, "Flip camera", onFlipCamera)
+                if (isVideo) HudIconButton(Lucide.SlidersHorizontal, "Broadcast source", onSourceTapped)
                 HudHandButton(count = handCount, onClick = onHandsTapped)
                 HudEmojiIconButton("💬", "Live chat", onChatTapped)
             }
@@ -696,7 +694,7 @@ private fun HudIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
     Box(
         Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(20.dp)) }
+    ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(22.dp)) }
 }
 
 @Composable
@@ -704,7 +702,7 @@ private fun HudEmojiIconButton(emoji: String, label: String, onClick: () -> Unit
     Box(
         Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Text(emoji, fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = label }) }
+    ) { Text(emoji, fontSize = 18.sp, modifier = Modifier.semantics { contentDescription = label }) }
 }
 
 /** ✋ raise-hand queue toggle — gold badge counts hands from the 3s pulse
@@ -716,7 +714,7 @@ private fun HudHandButton(count: Int, onClick: () -> Unit) {
         Box(
             Modifier.size(LiveChromeCircleSize).clip(CircleShape).background(LiveChromeCircleBg).clickable { onClick() },
             contentAlignment = Alignment.Center,
-        ) { Text("✋", fontSize = 19.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
+        ) { Text("✋", fontSize = 18.sp, modifier = Modifier.semantics { contentDescription = "Raised hands, $count" }) }
         if (count > 0) {
             Box(
                 Modifier.size(20.dp).align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
@@ -770,10 +768,12 @@ private fun SummaryView(
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+    val deleteContext = androidx.compose.ui.platform.LocalContext.current
 
     Box(Modifier.fillMaxSize().background(Nuru.homeNavyGradient), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(Spacing.lg)) {
-            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
+            Icon(Lucide.AudioLines, contentDescription = null, tint = Nuru.gold.copy(alpha = 0.7f), modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(16.dp))
             Text(
                 if (endedInBackground) "Nuru Live ended" else "You were live!",
@@ -788,7 +788,7 @@ private fun SummaryView(
                 Spacer(Modifier.height(8.dp))
             }
             Text(
-                "${mmss(elapsedSec)} · peak $peakViewers watching",
+                org.nuruplace.member.util.ZeroCounts.join(mmss(elapsedSec), if (peakViewers > 0) "peak $peakViewers watching" else null),
                 style = NuruType.body, color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center,
             )
             title.takeIf { it.isNotBlank() }?.let {
@@ -819,20 +819,33 @@ private fun SummaryView(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false }, // dismissing keeps the recording, per spec
+        NuruAlertDialog(
+            // Open until the server has deleted it (§7.4): a failure stays here
+            // and says why — it used to close first and report nothing.
+            onDismissRequest = { if (!deleting) { showDeleteConfirm = false; deleteError = null } },
             title = { Text("Delete “${title.ifBlank { "Nuru Live" }}”?", style = NuruType.cardTitle, color = Nuru.navy) },
-            text = { Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The recording will be gone forever.", style = NuruType.body, color = Nuru.ink600)
+                    deleteError?.let { Text(it, style = NuruType.body, color = Nuru.danger) }
+                }
+            },
             confirmButton = {
                 Text(
-                    "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable {
-                        showDeleteConfirm = false
+                    if (deleting) "Deleting…" else "Delete forever", style = NuruType.cardCta, color = Nuru.danger, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable(enabled = !deleting) {
                         deleting = true
+                        deleteError = null
                         scope.launch {
-                            runCatching { Net.client.api.deleteLiveRecording(streamId) }
+                            val failure = runCatching { Net.client.api.deleteLiveRecording(streamId) }.exceptionOrNull()
+                            if (failure is kotlin.coroutines.cancellation.CancellationException) throw failure
                             deleting = false
-                            onDone()
+                            if (failure == null) {
+                                showDeleteConfirm = false
+                                onDone()
+                            } else {
+                                deleteError = ApiException.failureLine("Couldn't delete it.", failure, deleteContext)
+                            }
                         }
                     }.padding(Spacing.sm),
                 )
@@ -840,7 +853,7 @@ private fun SummaryView(
             dismissButton = {
                 Text(
                     "Cancel", style = NuruType.cardCta, color = Nuru.ink600,
-                    modifier = Modifier.clickable { showDeleteConfirm = false }.padding(Spacing.sm),
+                    modifier = Modifier.clickable(enabled = !deleting) { showDeleteConfirm = false; deleteError = null }.padding(Spacing.sm),
                 )
             },
         )

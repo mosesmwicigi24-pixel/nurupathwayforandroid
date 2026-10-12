@@ -2,11 +2,13 @@
 // ONE bottom-bar destination: Give (the giving screen) · Partners (the
 // programme, PartnersScreen.kt).
 //
-// The control is a FULL-WIDTH pill split in two equal halves (GIVE · PARTNERS,
-// navy fill + gold text when selected) and it is the FIRST ROW INSIDE each
-// screen's cream header band — one band, not a segment strip over a second
-// header. The selection state lives here; the control itself is handed to
-// each screen as a composable slot so the band scrolls with the page.
+// The control is a pill split in two equal halves (GIVE · PARTNERS, navy fill
+// + gold text when selected), the tab's bell at its right (EXPERIENCE.md §6.2
+// — the same notifications inbox as every other tab's bell), and it is the
+// FIRST ROW INSIDE each screen's cream header band — one band, not a segment
+// strip over a second header. The selection state lives here; the control
+// itself is handed to each screen as a composable slot so the band scrolls
+// with the page.
 //
 // Two routes wear this tab: "give" opens on Give, "partners" opens on Partners
 // — so every existing nav.navigate("give") (Home's Give card, pushes,
@@ -15,12 +17,25 @@
 //
 // Cross-segment handoffs live here, not in either screen: a pledge's "Pay"
 // hands a GivePreset to Give and switches the segment; "Make a pledge" opens
-// the full-screen NewPledgeFlow over the tab (system back closes it), and a
+// the full-screen NewPledgeFlow over the tab — and over the tab bar, which
+// it covers while open (TabBarCover, EXPERIENCE.md §7.3) — (system back steps
+// back through it, and closes it from the first step), and a
 // created pledge reloads Partners through the ViewModel hoisted here so it
 // survives the segment switch. That ViewModel is scoped to this destination
 // (viewModel(), not remember) so it outlives a trip to the partners statement
 // and back — the standing stays on screen while it refetches — and so its
 // GivingEvents collector is cancelled with the destination, never leaked.
+//
+// A pledge opens here too (Giving Cycle 5): a Partners notice or a pledge's
+// collector lands on "partners-pledge/{id}" (MainShell → openPledgeId), and a
+// pledge made without its automatic collection lands on itself with the
+// server's reason — the pledge stands; nothing blocks. Each opens once: a
+// saveable flag keeps a return to the tab from opening it again.
+//
+// A pledge's "Collect it automatically at this pace" (Giving Cycle 9) sets
+// its recurring gift up on Partners and hands the server's answer here: the
+// Give segment shows it on the form's own give-now result — today's prompt
+// watched, or why it could not go out.
 //
 // The double-pay guard's upstream half lives here too: when a bound gift goes
 // through (or the member picks "Give to a fund instead") GivingScreen calls
@@ -38,10 +53,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +78,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.components.InboxBell
 import org.nuruplace.member.ui.theme.Nuru
 
 private val Capsule = RoundedCornerShape(999.dp)
@@ -93,15 +112,28 @@ internal fun GiveSegmentControl(segment: GiveSegment, onSelect: (GiveSegment) ->
                     .clickable { onSelect(s) },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    s.label.uppercase(),
-                    style = giInter(13, FontWeight.SemiBold, 1.2f),
-                    color = if (on) Nuru.goldGlow else GIVE.ink600,
-                    maxLines = 1,
-                )
+                // A fixed 38 dp switch: its words grow to the largest everyday
+                // size and stop there (§9.6 #4; iOS 84d2acb).
+                org.nuruplace.member.ui.components.CappedFontScale(org.nuruplace.member.ui.components.EVERYDAY_MAX_FONT_SCALE) {
+                    Text(
+                        s.label.uppercase(),
+                        style = giInter(13, FontWeight.SemiBold, 1.2f),
+                        color = if (on) Nuru.goldGlow else GIVE.ink600,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
+}
+
+/** The tab's bell, at the right of the switch — the one bell every tab
+ *  wears (EXPERIENCE.md §7.2 #4): the notifications inbox, white, a
+ *  hairline, the switch's own height, and the gold dot only while
+ *  something is unread. */
+@Composable
+private fun GiveBell(onClick: () -> Unit) {
+    InboxBell(onClick = onClick)
 }
 
 @Composable
@@ -112,6 +144,12 @@ fun GiveTabScreen(
      *  this need" (MainShell's give-need route). In-tab handoffs (a pledge's
      *  Pay) set the same state from Partners below. */
     initialPreset: GivePreset? = null,
+    /** A gift to open on its result — a giving_gift_failed push (MainShell's
+     *  give-gift route, Giving Cycle 3): its reason, hint and Try again. */
+    followTransactionId: String? = null,
+    /** A pledge to open on Partners — a Partners notice or "Change it on the
+     *  pledge" (MainShell's partners-pledge route, Giving Cycle 5). */
+    openPledgeId: String? = null,
 ) {
     val view = LocalView.current
     // rememberSaveable so rotation / process death restore the segment; landing
@@ -124,33 +162,60 @@ fun GiveTabScreen(
     // saveable, so re-entering composition never re-seeds from initialPreset.
     var initialPresetCleared by rememberSaveable { mutableStateOf(false) }
     var payPreset by remember { mutableStateOf(if (initialPresetCleared) null else initialPreset) }
+    // Set once the gift this destination opened with has been shown; saveable,
+    // so coming back to the tab never re-opens it.
+    var followOpened by rememberSaveable { mutableStateOf(false) }
     // Bumped by each Pay handoff so the giving form re-seeds from it. NOT
     // bumped when a binding is cleared — the form resets itself in place, so
     // a ceremony on screen is never torn down.
     var presetSeq by remember { mutableIntStateOf(0) }
     var newPledge by remember { mutableStateOf(false) }
+    // Set once the pledge this destination opened with has been shown.
+    var pledgeOpened by rememberSaveable { mutableStateOf(false) }
+    // A pledge just made whose automatic collection could not be set up:
+    // opened, with the server's reason (auto_schedule_error), once.
+    var landing by remember { mutableStateOf<PledgeLanding?>(null) }
+    // A recurring gift set up from a pledge's pace, waiting for the Give
+    // segment to show its result — once.
+    var startedSchedule by remember { mutableStateOf<StartedSchedule?>(null) }
 
     if (newPledge) {
+        // Full screen, over the tab bar (EXPERIENCE.md §7.3): a tab switch
+        // can't throw a half-made pledge away — only its Close, which asks.
+        org.nuruplace.member.ui.components.CoverTabBar()
         BackHandler { newPledge = false }
         NewPledgeFlow(
             // The standing is already loaded (Make a pledge lives on it), so
             // the picker's options ride along instead of a second fetch.
             pledgeOptions = partnersVm.partnership?.pledgeOptions.orEmpty(),
+            // Not yet a partner: the review says the pledge joins them.
+            isMember = partnersVm.partnership?.isProgrammeMember ?: false,
             onClose = { newPledge = false },
-            onCreated = {
+            onCreated = { created ->
                 newPledge = false
                 partnersVm.load()
+                // The pledge WAS made — a replay (`reused`) is the same pledge.
+                // Only its collection failed: land on it and say why.
+                pledgeLandingAfterCreate(created)?.let { landing = it; segment = GiveSegment.Partners }
             },
         )
         return
     }
 
     // One control, rendered by whichever screen is showing, as the first row
-    // of its header band.
+    // of its header band — with the tab's bell at its right (EXPERIENCE.md
+    // §6.2: one header on every tab, the bell always at the far right),
+    // opening the same inbox every other bell opens.
     val segmentControl: @Composable () -> Unit = {
-        GiveSegmentControl(segment) { s ->
-            if (segment != s) Haptics.tick(view)
-            segment = s
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                GiveSegmentControl(segment) { s ->
+                    if (segment != s) Haptics.tick(view)
+                    segment = s
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            GiveBell { onNavigate("notifications") }
         }
     }
 
@@ -163,7 +228,8 @@ fun GiveTabScreen(
                     GivingScreen(
                         onBack = {},
                         onOpenStatement = { onNavigate("statement") },
-                        onOpenSchedules = { onNavigate("schedules") },
+                        // A RECENT GIVING row opens its receipt.
+                        onOpenReceipt = { onNavigate("receipt/$it") },
                         preset = payPreset,
                         segmentControl = segmentControl,
                         onUnbind = {
@@ -176,6 +242,13 @@ fun GiveTabScreen(
                             payPreset = p
                             if (p == initialPreset) initialPresetCleared = false
                         },
+                        followTransactionId = followTransactionId.takeIf { !followOpened },
+                        onFollowed = { followOpened = true },
+                        // A pledge collector's "Change it on the pledge": the
+                        // pledge opens on Partners, in this same tab.
+                        onOpenPledge = { id -> landing = PledgeLanding(id); segment = GiveSegment.Partners },
+                        startedSchedule = startedSchedule,
+                        onStartedShown = { startedSchedule = null },
                     )
                 }
                 GiveSegment.Partners -> PartnersScreen(
@@ -190,6 +263,17 @@ fun GiveTabScreen(
                     onOpenPartnersStatement = { year -> onNavigate(partnersStatementRoute(year)) },
                     onAddPledge = { newPledge = true },
                     segmentControl = segmentControl,
+                    openPledge = landing ?: openPledgeId?.takeIf { !pledgeOpened }?.let { PledgeLanding(it) },
+                    onPledgeOpened = { landing = null; pledgeOpened = true },
+                    // Its first prompt went out (or could not): the Give
+                    // segment shows the same result as a give-now.
+                    onScheduleStarted = { started ->
+                        startedSchedule = started
+                        segment = GiveSegment.Give
+                    },
+                    // A recurring gift not yet in the standing's list: its
+                    // sheet on the Recurring gifts screen.
+                    onOpenSchedule = { id -> onNavigate(scheduleRoute(id)) },
                 )
             }
         }

@@ -110,8 +110,9 @@ private fun PathwayWidgetContent(context: Context, snapshot: WidgetSnapshot, rin
                             ),
                         )
                     }
+                    // The app's words for the count — never "0 of 0 modules" (§3; Cycle 4 walk).
                     Text(
-                        "${snapshot.completedModules} of ${snapshot.totalModules} modules",
+                        org.nuruplace.member.feature.pathway.levelPageCountLine(snapshot.currentLevel, snapshot.completedModules, snapshot.totalModules),
                         style = TextStyle(color = WidgetBrand.onNavyDimProvider, fontSize = 10.sp),
                     )
                 }

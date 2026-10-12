@@ -1,18 +1,14 @@
 // Push registration — runs once inside the authed shell: ensures the notification
-// channel, asks for POST_NOTIFICATIONS on Android 13+, fetches the current FCM
-// token and registers it with the backend (POST /me/devices). No-ops when
-// Firebase isn't configured or there's no backend session. Add-alongside.
+// channels, fetches the current FCM token and registers it with the backend
+// (POST /me/devices). No-ops when Firebase isn't configured or there's no
+// backend session. Add-alongside. It no longer asks for POST_NOTIFICATIONS:
+// that is asked when the member turns on something that needs it, with one
+// line saying why (NotificationAsk.kt, EXPERIENCE.md §7.2 #12) — never cold.
 package org.nuruplace.member.data.firebase
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.nuruplace.member.data.net.Net
@@ -22,21 +18,15 @@ import kotlin.coroutines.resumeWithException
 @Composable
 fun PushRegistration() {
     val context = LocalContext.current
-    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { /* token registers regardless */ }
 
     LaunchedEffect(Unit) {
         if (!FirebaseAuthService.isConfigured(context)) return@LaunchedEffect
         if (!Net.client.vault.hasSession) return@LaunchedEffect
-        NuruMessagingService.ensureChannel(context)
+        NotificationChannels.ensure(context)
 
-        // Android 13+ needs the runtime notification permission to DISPLAY pushes;
-        // token registration proceeds either way so the server can target the device.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
+        // The token registers whether or not this phone may DISPLAY pushes
+        // yet (Android 13+'s permission, asked only when the member turns on
+        // something that needs it), so the server can target the device.
         val token = runCatching { fcmToken() }.getOrNull() ?: return@LaunchedEffect
         runCatching { Net.client.api.registerDevice(NuruMessagingService.deviceBody(context, token)) }
     }

@@ -32,10 +32,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FlashOff
-import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,6 +66,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
 import java.util.concurrent.Executors
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun CheckInScannerScreen(eventId: String, onBack: () -> Unit) {
@@ -110,7 +110,8 @@ fun CheckInScannerScreen(eventId: String, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Nuru.navyDeep)) {
+    // The torch and Done clear the system's gesture bar (§7.1 rule 3).
+    Column(Modifier.fillMaxSize().background(Nuru.navyDeep).navigationBarsPadding()) {
         ScreenHeader("Check in", kicker = "Scan the QR code", onBack = onBack)
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             when {
@@ -185,9 +186,10 @@ private fun TorchButton(torchOn: Boolean, onToggle: () -> Unit, modifier: Modifi
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            if (torchOn) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
+            if (torchOn) Lucide.Zap else Lucide.ZapOff,
             contentDescription = if (torchOn) "Torch on" else "Torch",
             tint = if (torchOn) Nuru.navy else Nuru.onNavy,
+            modifier = Modifier.size(18.dp),
         )
         Text(
             if (torchOn) "Torch on" else "Torch",

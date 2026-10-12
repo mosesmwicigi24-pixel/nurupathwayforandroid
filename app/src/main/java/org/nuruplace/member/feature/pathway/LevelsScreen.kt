@@ -1,4 +1,4 @@
-// Pathway hub — the member's six-level journey (GET /me/pathway). Ported to the
+// Pathway hub — the member's journey, level by level (GET /me/pathway). Ported to the
 // Figma LevelsOverview: a calm cream header with an overall progress ring + stat
 // cards, a gold-ringed "continue your journey" card for the active level, then
 // the level cards (icon chip · status pill · progress or locked label). Locked
@@ -21,10 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,19 +45,35 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // The calm all-levels overview (iOS LevelsMapView) — reached from the Pathway hub's
 // "Map view" link. The hub itself is PathwayHubScreen.
 @Composable
 fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> Unit = {}) {
-    AsyncContent(load = { Net.client.api.pathway() }) { summary: PathwaySummary, _ ->
+    // The current level's trail rides along, as on Home, Pathway and the
+    // level page: production counts the exam among a level's modules, so the
+    // summary alone says "learning" at 10 of 10 — Map view read "In progress"
+    // and "Complete Level 1 to unlock" while every other screen said "Exam
+    // ready" (Cycle 4's closing walk, 18–19).
+    AsyncContent(load = {
+        val s = Net.client.api.pathway()
+        s to JourneyState.derive(s)?.levelNumber?.let { n -> runCatching { Net.client.api.levelModules(n).data }.getOrNull() }
+    }) { (summary: PathwaySummary, trail), _ ->
         val levels = summary.levels
-        val totalModules = levels.sumOf { it.totalModules }
-        val doneModules = levels.sumOf { it.completedModules }
-        val pct = if (totalModules > 0) (doneModules * 100 / totalModules) else 0
+        // Lessons, never the exams (§8.2 #4).
+        val totalModules = levels.sumOf { it.lessonCount }
+        val doneModules = levels.sumOf { it.lessonsDone }
+        // The journey in levels (docs/EXPERIENCE.md §3), the same number the
+        // hub's ring shows — never a share of published modules (20 of 20
+        // read 100% at Level 1 of 6).
+        val journey = JourneyState.derive(summary, trail)
+        val pct = journey?.percent ?: 0
         val levelsDone = levels.count { it.status == LevelStatus.COMPLETED }
-        val active = levels.firstOrNull { it.status == LevelStatus.ACTIVE }
-        val firstName = me?.profile?.fullName?.substringBefore(' ')
+        // The member's own level — the journey's, whatever its status — then
+        // the server's active one.
+        val active = levels.firstOrNull { it.levelNumber == journey?.levelNumber }
+            ?: levels.firstOrNull { it.status == LevelStatus.ACTIVE }
 
         LazyColumn(
             Modifier.fillMaxWidth().background(Nuru.paper),
@@ -73,9 +85,21 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                     Modifier.fillMaxWidth().background(Nuru.surface)
                         .padding(horizontal = Spacing.screen).padding(top = Spacing.xl, bottom = Spacing.lg),
                 ) {
-                    Text("‹  Pathway", style = NuruType.cardCta, color = Nuru.navy, modifier = Modifier.clickable { onBack() })
+                    // One back control on every pushed page: the arrow in its round
+                    // white button, as the Prayer Room and iOS's Map view — it was a
+                    // typed "‹  Pathway" (§8.1 rules 2 and 7; Cycle 4 walk 18).
+                    Box(
+                        Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Nuru.white)
+                            .border(1.dp, Nuru.border, androidx.compose.foundation.shape.CircleShape)
+                            .clickable { onBack() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Lucide.ArrowLeft, "Back to Pathway", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    }
                     Spacer(Modifier.height(Spacing.md))
-                    Kicker(if (firstName != null) "Welcome back, $firstName" else "Welcome back")
+                    // A pushed page: back · kicker · title (§8.1 rule 2) — the
+                    // greeting ("WELCOME BACK, ADA") belongs to Home alone.
+                    Kicker("Pathway · Map")
                     Spacer(Modifier.height(Spacing.md))
                     Row(verticalAlignment = Alignment.Bottom) {
                         Column(Modifier.weight(1f)) {
@@ -93,7 +117,8 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         StatCard("Levels", "$levelsDone/${levels.size}", Modifier.weight(1f))
                         StatCard("Modules", "$doneModules/$totalModules", Modifier.weight(1f))
-                        StatCard("Offline", "Ready", Modifier.weight(1f))
+                        // "Offline · Ready" was jargon about the app, not the
+                        // member's journey (§8.1 rule 8) — gone.
                     }
                 }
             }
@@ -101,13 +126,15 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
             // Continue-your-journey card for the active level.
             active?.let { lvl ->
                 item {
-                    ContinueCard(lvl, Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.base)) { onOpenLevel(lvl.levelNumber) }
+                    ContinueCard(lvl, LevelsMapWords.continueCard(lvl, journey), levelPercent(lvl, journey) / 100f, Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.base)) { onOpenLevel(lvl.levelNumber) }
                 }
             }
 
             item {
                 Column(Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.lg, bottom = Spacing.sm)) {
-                    Kicker("Six-level pathway")
+                    // The road's real length (Cycle 3's closing walk, B4): "SIX"
+                    // was written in, beside a "LEVELS 0/7" tile on the same screen.
+                    Kicker("${countWord(levels.size)}-level pathway")
                     Spacer(Modifier.height(Spacing.xs))
                     Text("Choose your level", style = NuruType.title, color = Nuru.ink)
                 }
@@ -116,6 +143,7 @@ fun LevelsMapScreen(me: MeResponse?, onOpenLevel: (Int) -> Unit, onBack: () -> U
                 LevelCard(
                     level = level,
                     currentLevel = summary.currentLevel,
+                    journey = journey,
                     onOpen = { onOpenLevel(level.levelNumber) },
                     modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.sm),
                 )
@@ -152,16 +180,19 @@ private fun ProgressRing(pct: Int) {
                 topLeft = Offset(inset, inset), size = arc, style = Stroke(width = stroke, cap = StrokeCap.Round),
             )
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("$pct%", style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.Medium)
-            Text("DONE", style = NuruType.micro, color = Nuru.ink400)
+        // A figure in a fixed ring keeps the everyday size (§9.6 #4).
+        org.nuruplace.member.ui.components.CappedFontScale(1f) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("$pct%", style = NuruType.rowTitle, color = Nuru.navy, fontWeight = FontWeight.Medium)
+                Text("DONE", style = NuruType.micro, color = Nuru.ink400)
+            }
         }
     }
 }
 
 @Composable
-private fun ContinueCard(level: PathwayLevel, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val pct = if (level.totalModules > 0) level.completedModules.toFloat() / level.totalModules else 0f
+private fun ContinueCard(level: PathwayLevel, words: LevelsMapWords.Card, pct: Float, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    // [pct]: the level with its exam as the last step (§9.2 #10).
     Row(
         modifier.fillMaxWidth()
             .clip(RoundedCornerShape(Radii.hero))
@@ -171,24 +202,30 @@ private fun ContinueCard(level: PathwayLevel, modifier: Modifier = Modifier, onO
             .padding(Spacing.base),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.navy.copy(alpha = 0.06f)), contentAlignment = Alignment.Center) {
-            Text("📖", style = NuruType.title)
+        // Lucide on a gold-tint tile, not a colour emoji on grey (§8.1 rule 7;
+        // Cycle 4 walk 18) — iOS's book-open.
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.goldTint), contentAlignment = Alignment.Center) {
+            Icon(Lucide.BookOpen, null, tint = Nuru.navy, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.size(Spacing.base))
         Column(Modifier.weight(1f)) {
-            Kicker("Continue your journey")
+            Kicker(words.kicker)
             Spacer(Modifier.height(Spacing.xs))
-            Text("Level ${level.levelNumber}: ${level.title}", style = NuruType.cardTitle, color = Nuru.ink, maxLines = 2)
+            Text(words.title, style = NuruType.cardTitle, color = Nuru.ink, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            words.line?.let {
+                Spacer(Modifier.height(Spacing.xs))
+                Text(it, style = NuruType.caption, color = Nuru.ink600)
+            }
             Spacer(Modifier.height(Spacing.sm))
             ProgressBar(pct)
         }
         Spacer(Modifier.size(Spacing.sm))
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Nuru.gold)
+        Icon(Lucide.ChevronRight, null, tint = Nuru.gold, modifier = Modifier.size(22.dp))
     }
 }
 
 @Composable
-private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+private fun LevelCard(level: PathwayLevel, currentLevel: Int, journey: Journey?, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val locked = LevelGating.isLevelLocked(level.levelNumber, currentLevel, level.status)
     val done = level.status == LevelStatus.COMPLETED
     val active = level.status == LevelStatus.ACTIVE
@@ -208,35 +245,51 @@ private fun LevelCard(level: PathwayLevel, currentLevel: Int, onOpen: () -> Unit
             contentAlignment = Alignment.Center,
         ) {
             when {
-                done -> Icon(Icons.Filled.Check, null, tint = Nuru.goldLo, modifier = Modifier.size(20.dp))
-                locked -> Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(18.dp))
-                else -> Text("✝", style = NuruType.title, color = Nuru.gold)
+                done -> Icon(Lucide.Check, null, tint = Nuru.goldLo, modifier = Modifier.size(22.dp))
+                locked -> Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(18.dp))
+                // The level being walked: the cross, drawn — not a "✝" typed in
+                // a text face (§8.1 rule 7; Cycle 4 walk 18) — as iOS draws it.
+                else -> CrossMark(18.dp, Nuru.gold)
             }
         }
         Spacer(Modifier.size(Spacing.base))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Kicker("Level ${level.levelNumber}", modifier = Modifier.weight(1f))
-                StatusPill(if (done) "Complete" else if (active) "Active" else "Locked", done, active)
+                // The level page's own words (levelBadge, B3) — "Active" here,
+                // "IN PROGRESS" there and "Exam ready" on Pathway were three
+                // words for one state.
+                val badge = levelBadge(level.levelNumber, level, journey)
+                StatusPill(
+                    if (locked) "Locked" else badge.text.lowercase().replaceFirstChar { it.uppercase() },
+                    done = !locked && badge.tone == LevelBadge.Tone.ACHIEVED,
+                    active = !locked && badge.tone != LevelBadge.Tone.ACHIEVED && (active || journey?.levelNumber == level.levelNumber),
+                )
             }
             Spacer(Modifier.height(Spacing.xs))
-            Text(level.title, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Medium, maxLines = 2)
+            Text(level.title, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Medium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             level.theme?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
             Spacer(Modifier.height(Spacing.sm))
             if (locked) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(12.dp))
+                    Icon(Lucide.Lock, null, tint = Nuru.ink400, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.size(Spacing.xs))
-                    Text(LevelGating.lockedLevelLabel(currentLevel), style = NuruType.caption, color = Nuru.ink400)
+                    Text(LevelsMapWords.lockLine(level.levelNumber, journey, preparing = level.lessonCount <= 0), style = NuruType.caption, color = Nuru.ink400)
                 }
             } else {
+                // The exam is the level's last step (§9.2 #10): Map gave
+                // Level 1 "100%" before its exam was sat. No zero counts (Cycle
+                // 4 walk): "Level 2 is being prepared", "10 modules", "3/10
+                // modules" — the percent and the bar once there is progress.
+                val p = levelPercent(level, journey)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${level.completedModules}/${level.totalModules} modules", style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
-                    val p = if (level.totalModules > 0) level.completedModules * 100 / level.totalModules else 0
-                    Text("$p%", style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.Medium)
+                    Text(cardCountLine(level), style = NuruType.caption, color = Nuru.ink600, modifier = Modifier.weight(1f))
+                    if (p > 0) Text("$p%", style = NuruType.caption, color = Nuru.navy, fontWeight = FontWeight.Medium)
                 }
-                Spacer(Modifier.height(Spacing.xs))
-                ProgressBar(if (level.totalModules > 0) level.completedModules.toFloat() / level.totalModules else 0f)
+                if (p > 0) {
+                    Spacer(Modifier.height(Spacing.xs))
+                    ProgressBar(p / 100f)
+                }
             }
         }
     }
@@ -261,5 +314,24 @@ private fun ProgressBar(fraction: Float) {
             Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(6.dp)
                 .clip(RoundedCornerShape(Radii.pill)).background(Nuru.gold),
         )
+    }
+}
+
+/** A small count in words, as a heading says it ("Six-level pathway");
+ *  past ten, the number. */
+internal fun countWord(n: Int): String = when (n) {
+    1 -> "One"; 2 -> "Two"; 3 -> "Three"; 4 -> "Four"; 5 -> "Five"
+    6 -> "Six"; 7 -> "Seven"; 8 -> "Eight"; 9 -> "Nine"; 10 -> "Ten"
+    else -> n.toString()
+}
+
+/** The cross on the level being walked — two rounded bars, as iOS's CrossMark
+ *  ("Figma's lucide Cross"): a mark, not a glyph in a text face. */
+@Composable
+private fun CrossMark(size: androidx.compose.ui.unit.Dp, color: androidx.compose.ui.graphics.Color) {
+    val bar = size * 0.32f
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(width = bar, height = size).clip(RoundedCornerShape(999.dp)).background(color))
+        Box(Modifier.size(width = size, height = bar).clip(RoundedCornerShape(999.dp)).background(color))
     }
 }

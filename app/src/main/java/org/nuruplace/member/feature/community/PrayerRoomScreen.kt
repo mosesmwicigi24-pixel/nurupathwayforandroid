@@ -1,5 +1,5 @@
 // My Prayer Room — the single destination that replaces the separate
-// "Prayer wall" and "Prayer journal" entries. THREE tabs over one screen:
+// "Prayer wall" and "Prayer journal" entries. FIVE tabs over one screen:
 // Private (the member's own journal, PrayerJournalScreen, embedded), Corporate
 // (the congregation's wall, PrayerWallScreen, embedded), and Answered (the
 // journal again, pinned to its answered filter — iOS build 80 parity). Child
@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,12 +42,15 @@ import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // "Answered" used to be its own top-level tab; it now folds into Private's own
 // Active/Answered chips (PrayerJournalScreen already shows them whenever it
 // isn't pinned to a forced tab) so the room stays at a clean four across —
 // Selah and Prayer Points took its top-level slot.
-enum class PrayerRoomTab { Private, Corporate, Selah, PrayerPoints }
+// Ekklesia (2026-10-10): the church's intercessory watch, beside Corporate —
+// the two shared segments stand together; the private ones follow.
+enum class PrayerRoomTab { Private, Corporate, Ekklesia, Selah, PrayerPoints }
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -60,38 +61,60 @@ fun PrayerRoomScreen(
      *  circle is hidden. Same precedent as PrayerWallScreen(embedded). */
     embedded: Boolean = false,
     onBack: () -> Unit = {},
+    /** The bell at the header's right (§8.1 rule 2) — given on the Pray door. */
+    onOpenNotifications: (() -> Unit)? = null,
     onOpenPost: (String) -> Unit,
+    /** A need on the watch, pushed to its own page (EkklesiaRequestScreen). */
+    onOpenEkklesiaRequest: (String) -> Unit = {},
 ) {
     var tab by remember { mutableStateOf(initialTab) }
 
     Column(Modifier.fillMaxSize().background(Nuru.paper)) {
         GrowCreamHeader {
             Column(Modifier.fillMaxWidth().padding(horizontal = Spacing.screen, vertical = Spacing.lg)) {
+                // Rule 2's header (§8.1), as iOS: the kicker names where you
+                // are — "PRAY" — and the title says it once; the bell at the
+                // right. Pushed, it is the standard shape — back, then kicker,
+                // then title (it sat the kicker beside the back button).
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!embedded) {
                         Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(Nuru.white)
-                                .border(1.dp, Nuru.border, CircleShape)
-                                .clickable { onBack() },
+                            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(Nuru.white)
+                                .border(1.dp, Nuru.border, RoundedCornerShape(16.dp))
+                                .clickable(onClickLabel = "Back") { onBack() },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.ArrowLeft, "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                         }
-                        Spacer(Modifier.width(Spacing.md))
+                        Spacer(Modifier.weight(1f))
+                    } else {
+                        Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.weight(1f))
                     }
-                    Text("MY PRAYER ROOM", style = NuruType.kicker, color = Nuru.eyebrow)
+                    onOpenNotifications?.let {
+                        org.nuruplace.member.ui.components.InboxBell(onClick = it)
+                    }
                 }
-                Text(
-                    "My Prayer Room", style = NuruType.title, color = Nuru.navy,
-                    modifier = Modifier.padding(start = Spacing.xs, top = Spacing.sm, bottom = Spacing.md),
-                )
+                if (!embedded) {
+                    Text("PRAY", style = NuruType.kicker, color = Nuru.eyebrow, modifier = Modifier.padding(top = 14.dp))
+                    Text(
+                        "My Prayer Room", style = org.nuruplace.member.ui.theme.nuruSerif(26, androidx.compose.ui.text.font.FontWeight.SemiBold), color = Nuru.navy,
+                        modifier = Modifier.padding(top = 4.dp, bottom = Spacing.md),
+                    )
+                } else {
+                    Text(
+                        "My Prayer Room", style = NuruType.title, color = Nuru.navy,
+                        modifier = Modifier.padding(top = if (onOpenNotifications != null) 0.dp else Spacing.sm, bottom = Spacing.md),
+                    )
+                }
                 SegmentedControl(tab) { tab = it }
             }
         }
         Box(Modifier.fillMaxSize()) {
             when (tab) {
                 PrayerRoomTab.Private -> PrayerJournalScreen(embedded = true)
-                PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, onOpenPost = onOpenPost)
+                // Off the tab (a pushed route), the wall's "+" clears the gesture bar itself.
+                PrayerRoomTab.Corporate -> PrayerWallScreen(embedded = true, clearNavigationBar = !embedded, onOpenPost = onOpenPost)
+                PrayerRoomTab.Ekklesia -> EkklesiaScreen(clearNavigationBar = !embedded, onOpenRequest = onOpenEkklesiaRequest)
                 PrayerRoomTab.Selah -> SelahScreen()
                 PrayerRoomTab.PrayerPoints -> PrayerPointsScreen()
             }
@@ -111,6 +134,7 @@ private fun SegmentedControl(tab: PrayerRoomTab, onSelect: (PrayerRoomTab) -> Un
     ) {
         item { SegmentButton("Private", tab == PrayerRoomTab.Private) { onSelect(PrayerRoomTab.Private) } }
         item { SegmentButton("Corporate", tab == PrayerRoomTab.Corporate) { onSelect(PrayerRoomTab.Corporate) } }
+        item { SegmentButton("Ekklesia", tab == PrayerRoomTab.Ekklesia) { onSelect(PrayerRoomTab.Ekklesia) } }
         item { SegmentButton("Selah", tab == PrayerRoomTab.Selah) { onSelect(PrayerRoomTab.Selah) } }
         item { SegmentButton("Prayer Points", tab == PrayerRoomTab.PrayerPoints) { onSelect(PrayerRoomTab.PrayerPoints) } }
     }

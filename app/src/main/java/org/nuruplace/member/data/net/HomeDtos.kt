@@ -9,11 +9,15 @@ import kotlinx.serialization.Serializable
 // The server writes these two keys in camelCase inside a snake_case envelope;
 // the client's global SnakeCase naming strategy would look for `module_id`
 // and never match — so the hero's "module" route always fell back to the
-// pathway tab (found 2026-09-16 while wiring the nudges rail). Explicit
-// @SerialName wins over the naming strategy.
+// pathway tab (found 2026-09-16 while wiring the nudges rail).
 data class NextActionParams(
-    @SerialName("moduleId") val moduleId: String? = null,
-    @SerialName("levelNumber") val levelNumber: Int? = null,
+    // The naming strategy renames @SerialName names too ("moduleId" →
+    // "module_id"), so @SerialName never matched; @JsonNames adds the
+    // camelCase key as written (2026-10-07, with the letter's params).
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.json.JsonNames("moduleId") val moduleId: String? = null,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.json.JsonNames("levelNumber") val levelNumber: Int? = null,
 )
 
 @Serializable
@@ -248,3 +252,36 @@ data class HomeEventRow(
     val myRsvp: String? = null,
 )
 
+
+// "Ask to be connected" to a cell (pathway ed1525d; EXPERIENCE.md §9.2 #12):
+// the member says where they live and when they're free, and the request goes
+// to their own pastor in their pastoral thread. No list of cells is shown.
+
+/** GET /me/cell-connection — in a cell already, else the member's latest ask. */
+@Serializable
+data class CellConnectionStatus(
+    val inCell: Boolean = false,
+    val request: CellConnectionRequest? = null,
+)
+
+@Serializable
+data class CellConnectionRequest(
+    val requestedAt: String = "",
+    val conversationId: String = "",
+)
+
+/** POST /me/cell-connection — idempotent on [clientMutationId]. */
+@Serializable
+data class CellConnectionBody(
+    val area: String,
+    val availability: String,
+    val note: String? = null,
+    val clientMutationId: String,
+)
+
+/** 201 — where the request was posted, and when. */
+@Serializable
+data class CellConnectionSent(
+    val conversationId: String = "",
+    val requestedAt: String = "",
+)

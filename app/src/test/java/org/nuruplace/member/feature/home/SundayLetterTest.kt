@@ -16,7 +16,17 @@ import org.junit.Test
 import org.nuruplace.member.data.net.PastoralLetter
 
 class SundayLetterTest {
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    // The app's own Json (ApiClient.json) on the wire's own shape — this test
+    // used camelCase keys and an object `highlights` the server never sends,
+    // with no naming strategy, which is how every v2 letter failing to decode
+    // on Android went unseen (2026-10-07).
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+        namingStrategy = kotlinx.serialization.json.JsonNamingStrategy.SnakeCase
+    }
 
     private fun decode(s: String) = json.decodeFromString(PastoralLetter.serializer(), s)
 
@@ -25,8 +35,8 @@ class SundayLetterTest {
     @Test
     fun `pre-v2 letter with the five fields ABSENT still decodes and renders honestly`() {
         val l = decode(
-            """{"letterId":"a","weekOf":"2026-08-09","body":"Dear friend, this week…",
-               "scriptureRef":"Psalm 23:1","createdAt":"2026-08-09T18:00:00Z","readAt":null}""",
+            """{"letter_id":"a","week_of":"2026-08-09","body":"Dear friend, this week…",
+               "scripture_ref":"Psalm 23:1","created_at":"2026-08-09T18:00:00Z","read_at":null}""",
         )
         assertEquals("Dear friend, this week…", l.body)
         assertEquals("Psalm 23:1", l.displayScripture)
@@ -42,9 +52,9 @@ class SundayLetterTest {
     @Test
     fun `pre-v2 letter with the five fields EXPLICITLY NULL decodes identically`() {
         val l = decode(
-            """{"letterId":"a","weekOf":"2026-08-09","body":"b","scriptureRef":null,
-               "createdAt":"c","readAt":null,"title":null,"salutation":null,
-               "theme":null,"imageKey":null,"highlights":null}""",
+            """{"letter_id":"a","week_of":"2026-08-09","body":"b","scripture_ref":null,
+               "created_at":"c","read_at":null,"title":null,"salutation":null,
+               "theme":null,"image_key":null,"highlights":null,"next_step":null,"share_line":null}""",
         )
         assertNull(l.displayTitle)
         assertNull(l.displaySalutation)
@@ -59,13 +69,12 @@ class SundayLetterTest {
     @Test
     fun `a fully populated v2 letter exposes every field`() {
         val l = decode(
-            """{"letterId":"a","weekOf":"2026-08-09","body":"body","scriptureRef":"John 1:5",
-               "createdAt":"c","readAt":"2026-08-10T06:00:00Z","title":"The week you kept going",
-               "salutation":"Dear Moses","theme":"dawn","imageKey":"dawn",
-               "highlights":{"moments":["You finished Module 4 on Tuesday","You prayed three mornings"],
-                             "nextStep":{"label":"Module 5 is waiting","route":"module",
-                                         "params":{"moduleId":"m5"}},
-                             "shareLine":"Grace upon grace."}}""",
+            """{"letter_id":"a","week_of":"2026-08-09","body":"body","scripture_ref":"John 1:5",
+               "created_at":"c","read_at":"2026-08-10T06:00:00Z","title":"The week you kept going",
+               "salutation":"Dear Moses","theme":"dawn","image_key":"dawn",
+               "highlights":["You finished Module 4 on Tuesday","You prayed three mornings"],
+               "next_step":{"label":"Module 5 is waiting","route":"module","params":{"moduleId":"m5"}},
+               "share_line":"Grace upon grace."}""",
         )
         assertEquals("The week you kept going", l.displayTitle)
         assertEquals("Dear Moses", l.displaySalutation)
@@ -82,9 +91,9 @@ class SundayLetterTest {
     @Test
     fun `blank strings are treated as absent rather than rendered empty`() {
         val l = decode(
-            """{"letterId":"a","weekOf":"w","body":"b","createdAt":"c",
-               "title":"   ","salutation":"","scriptureRef":"  ",
-               "highlights":{"moments":["  ","real moment"],"shareLine":" "}}""",
+            """{"letter_id":"a","week_of":"w","body":"b","created_at":"c",
+               "title":"   ","salutation":"","scripture_ref":"  ",
+               "highlights":["  ","real moment"],"share_line":" "}""",
         )
         assertNull(l.displayTitle)
         assertNull(l.displaySalutation)
@@ -96,12 +105,12 @@ class SundayLetterTest {
     @Test
     fun `a next step missing its label or route is not offered`() {
         val noLabel = decode(
-            """{"letterId":"a","weekOf":"w","body":"b","createdAt":"c",
-               "highlights":{"nextStep":{"label":"","route":"module"}}}""",
+            """{"letter_id":"a","week_of":"w","body":"b","created_at":"c",
+               "next_step":{"label":"","route":"module"}}""",
         )
         val noRoute = decode(
-            """{"letterId":"a","weekOf":"w","body":"b","createdAt":"c",
-               "highlights":{"nextStep":{"label":"Go","route":""}}}""",
+            """{"letter_id":"a","week_of":"w","body":"b","created_at":"c",
+               "next_step":{"label":"Go","route":""}}""",
         )
         assertNull(noLabel.nextStep)
         assertNull(noRoute.nextStep)
@@ -109,8 +118,8 @@ class SundayLetterTest {
 
     @Test
     fun `image_key wins over theme, and theme is the fallback when image_key is blank`() {
-        val both = decode("""{"letterId":"a","weekOf":"w","body":"b","createdAt":"c","theme":"water","imageKey":"harvest"}""")
-        val themeOnly = decode("""{"letterId":"a","weekOf":"w","body":"b","createdAt":"c","theme":"water","imageKey":"  "}""")
+        val both = decode("""{"letter_id":"a","week_of":"w","body":"b","created_at":"c","theme":"water","image_key":"harvest"}""")
+        val themeOnly = decode("""{"letter_id":"a","week_of":"w","body":"b","created_at":"c","theme":"water","image_key":"  "}""")
         assertEquals(LetterTheme.HARVEST, LetterTheme.resolve(both.artKey))
         assertEquals(LetterTheme.WATER, LetterTheme.resolve(themeOnly.artKey))
     }

@@ -139,3 +139,12 @@ class PlanPromoHookTest {
         assertNull(out[0].reason)
     }
 }
+
+/** A promo opens its plan's page and says so; starting is the plan page's
+ *  "Begin Day 1" — never a second name for it here (Cycle 3 close walk E3,
+ *  as iOS's PlanPromoWords). */
+class PlanPromoWordsTest {
+    @org.junit.Test fun `a promo says See the plan`() {
+        org.junit.Assert.assertEquals("See the plan", PLAN_PROMO_CTA)
+    }
+}

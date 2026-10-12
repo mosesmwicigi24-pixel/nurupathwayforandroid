@@ -101,6 +101,9 @@ fun LetterHero(
     imageKey: String?,
     modifier: Modifier = Modifier,
     height: Dp = 220.dp,
+    /** The bottom scrim for a title laid over the art; the editorial letter
+     *  sets its title below the picture and draws the art bare. */
+    scrim: Boolean = true,
 ) {
     val art = LetterTheme.resolve(imageKey).art
     Box(
@@ -117,7 +120,7 @@ fun LetterHero(
             // Bottom scrim so the overlaid warm-white title stays legible over
             // any motif — the hero never follows system appearance, so this is
             // a fixed guarantee rather than a per-theme judgement call.
-            drawRect(
+            if (scrim) drawRect(
                 Brush.verticalGradient(
                     0f to Color.Transparent,
                     0.55f to Color.Transparent,

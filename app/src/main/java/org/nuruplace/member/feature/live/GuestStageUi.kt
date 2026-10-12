@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +53,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
+import org.nuruplace.member.ui.icons.Lucide
 
 /** The guest's own on-stage publish state, driven by WhipPublisher —
  *  LivePlayerScreen owns the transitions (see its "L6b guest publish" block),
@@ -181,7 +180,7 @@ fun GuestSelfPreviewPiP(
                     .semantics { contentDescription = "Restore your self-preview" },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Lucide.Video, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
             }
         } else {
             val widthPx = with(density) { 96.dp.toPx() }

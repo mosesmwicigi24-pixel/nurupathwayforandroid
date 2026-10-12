@@ -32,11 +32,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -74,6 +72,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun CellRosterScreen(
@@ -136,7 +135,7 @@ fun CellRosterScreen(
 
     val prompt = consentPromptFor
     if (prompt != null) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { consentPromptFor = null },
             containerColor = Nuru.white,
             title = { Text("Not connected yet", style = NuruType.cardTitle, color = Nuru.navy) },
@@ -174,7 +173,7 @@ fun CellRosterScreen(
 
     val msg = notice
     if (msg != null) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { notice = null },
             containerColor = Nuru.white,
             title = { Text("Couldn't open the chat", style = NuruType.cardTitle, color = Nuru.navy) },
@@ -332,14 +331,14 @@ private fun MemberRow(
                         CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     } else {
                         Icon(
-                            Icons.Filled.MoreVert,
+                            Lucide.EllipsisVertical,
                             contentDescription = "Options for ${m.fullName}",
                             tint = Nuru.ink400,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
                         text = { Text("Message") },
                         onClick = { menuOpen = false; onMessage() },
@@ -385,7 +384,7 @@ private fun BandPill(band: String?) {
  *  [Nuru.bandColor]'s foreground, so a band chip reads like every other chip. */
 private fun bandBg(band: String?): Color = when (band?.lowercase()) {
     "thriving" -> Nuru.successBg
-    "steady" -> Nuru.infoBg
+    "steady" -> Nuru.tintBlue
     "watch" -> Nuru.warningBg
     "at_risk", "at risk" -> Nuru.dangerBg
     else -> Nuru.tintBlue

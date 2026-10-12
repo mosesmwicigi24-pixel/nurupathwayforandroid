@@ -36,26 +36,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.VolunteerActivism
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -106,6 +96,7 @@ import org.nuruplace.member.util.relTime
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 private val CardShape = RoundedCornerShape(14.dp)
@@ -178,15 +169,15 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 HeroCircleButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.weight(1f))
                 if (d.isActive) {
                     Box {
                         HeroCircleButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                            Icon(Lucide.EllipsisVertical, contentDescription = "More", tint = Nuru.navy, modifier = Modifier.size(18.dp))
                         }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        NuruDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Leave this department", style = NuruType.body, color = Nuru.danger) },
                                 onClick = { menuOpen = false; confirmLeave = true },
@@ -202,7 +193,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                 Text(d.name, style = nuruSerif(26, FontWeight.SemiBold), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 d.meets?.takeIf { it.isNotBlank() }?.let { meets ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Icon(Icons.Filled.Schedule, contentDescription = null, tint = Nuru.goldHi, modifier = Modifier.size(13.dp))
+                        Icon(Lucide.Clock4, contentDescription = null, tint = Nuru.goldHi, modifier = Modifier.size(14.dp))
                         Text(meets, style = NuruType.caption, color = Color.White.copy(alpha = 0.85f))
                     }
                 }
@@ -224,10 +215,10 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                     }
                     Spacer(Modifier.weight(1f))
                 }
-                Icon(Icons.Filled.Groups, contentDescription = null, tint = Nuru.ink400, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Users, contentDescription = null, tint = Nuru.ink400, modifier = Modifier.size(14.dp))
                 Text(servingCount(d.memberCount), style = NuruType.caption, color = Nuru.ink600)
             }
-            if (d.fit) DeptChip("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText, Icons.Filled.AutoAwesome)
+            if (d.fit) DeptChip("Good fit for you${matchedGiftsSuffix(d)}", Nuru.goldChipBg, Nuru.goldChipText, Lucide.Sparkles)
 
             // ── My standing ──
             StandingBlock(
@@ -246,9 +237,9 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Segment("Posts", Icons.Filled.Campaign, d.posts.size.takeIf { it > 0 }, section == SECTION_POSTS) { section = SECTION_POSTS }
-                Segment("Needs", Icons.Filled.VolunteerActivism, d.needs.size.takeIf { it > 0 }, section == SECTION_NEEDS) { section = SECTION_NEEDS }
-                Segment("Members", Icons.Filled.Groups, d.members.size.takeIf { it > 0 }, section == SECTION_MEMBERS) { section = SECTION_MEMBERS }
+                Segment("Posts", Lucide.Megaphone, d.posts.size.takeIf { it > 0 }, section == SECTION_POSTS) { section = SECTION_POSTS }
+                Segment("Needs", Lucide.HandHeart, d.needs.size.takeIf { it > 0 }, section == SECTION_NEEDS) { section = SECTION_NEEDS }
+                Segment("Members", Lucide.Users, d.members.size.takeIf { it > 0 }, section == SECTION_MEMBERS) { section = SECTION_MEMBERS }
             }
 
             when (section) {
@@ -261,6 +252,8 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
                             amountMinor = (n.targetMinor - n.raisedMinor).takeIf { it > 0 },
                             needId = n.needId,
                             title = n.title,
+                            // The need's currency decides the rails (Giving Cycle 5).
+                            currency = n.currency,
                         ),
                     )
                 })
@@ -271,7 +264,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
 
     // ── Dialogs & sheets ──
     if (confirmLeave) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { confirmLeave = false },
             title = { Text("Leave ${d.name}?", style = NuruType.cardTitle, color = Nuru.navy) },
             text = { Text("You can ask to serve here again any time.", style = NuruType.body, color = Nuru.ink600) },
@@ -286,7 +279,7 @@ private fun DepartmentBody(d: Department, reload: () -> Unit, onBack: () -> Unit
         )
     }
     removing?.let { post ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { removing = null },
             title = { Text("Remove this post?", style = NuruType.cardTitle, color = Nuru.navy) },
             text = { Text("Members will no longer see it.", style = NuruType.body, color = Nuru.ink600) },
@@ -338,7 +331,7 @@ private fun StandingBlock(d: Department, busy: Boolean, error: String?, onServe:
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when {
             d.isActive -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                DeptChip("You serve here", Nuru.successBg, Nuru.successText, Icons.Filled.Verified)
+                DeptChip("You serve here", Nuru.successBg, Nuru.successText, Lucide.BadgeCheck)
                 if (d.isLeader || d.myRole == "leader") DeptChip("Leader", Nuru.goldChipBg, Nuru.goldChipText)
                 if (busy) CircularProgressIndicator(color = Nuru.gold, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
             }
@@ -423,7 +416,7 @@ private fun PostComposerSheet(busy: Boolean, onDismiss: () -> Unit, onPost: (bod
     val url = imageUrl.trim()
     val urlOk = url.isBlank() || url.startsWith("http://") || url.startsWith("https://")
     val valid = trimmedBody.isNotEmpty() && trimmedBody.length <= 2000 && urlOk
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Write a post", style = nuruSerif(22, FontWeight.Medium), color = Nuru.ink)
             Text("Members of this department are notified.", style = NuruType.caption, color = Nuru.ink600)
@@ -470,7 +463,7 @@ private fun NeedCard(n: DepartmentNeed, showStatus: Boolean, onGive: () -> Unit)
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(n.title, style = nuruSerif(17, FontWeight.SemiBold), color = Nuru.ink, modifier = Modifier.weight(1f))
+            Text(n.title, style = nuruSerif(18, FontWeight.SemiBold), color = Nuru.ink, modifier = Modifier.weight(1f))
             if (showStatus || n.reached) DeptChip(chipText, chipBg, chipFg)
         }
         if (n.why.isNotBlank()) Text(n.why, style = NuruType.body, color = Nuru.ink600)
@@ -507,9 +500,9 @@ private fun needChip(n: DepartmentNeed): Triple<String, Color, Color> = when {
     else -> Triple("Closed", Nuru.inputBg, Nuru.ink600)
 }
 
-private val deadlineFmt = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
-private fun deadlineLabel(iso: String): String =
-    runCatching { LocalDate.parse(iso.take(10)).format(deadlineFmt) }.getOrDefault(iso.take(10))
+// One date form (§8.1 rule 8); a deadline that can't be read says nothing —
+// it fell back to the raw "2026-10-30".
+private fun deadlineLabel(iso: String): String = org.nuruplace.member.util.NuruDates.day(iso.take(10)).orEmpty()
 
 /** Leader submit: title, why, amount (KSh), optional deadline (yyyy-MM-dd). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -522,7 +515,7 @@ private fun NeedSheet(busy: Boolean, onDismiss: () -> Unit, onSubmit: (Departmen
     val amountMajor = amountText.filter { it.isDigit() }.take(8).toIntOrNull() ?: 0
     val deadlineOk = deadline.isBlank() || runCatching { LocalDate.parse(deadline.trim()) }.isSuccess
     val valid = title.trim().length in 3..120 && why.trim().length in 10..1500 && amountMajor in 1..50_000_000 && deadlineOk
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Nuru.paper, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -609,7 +602,7 @@ private fun MemberTile(m: DepartmentMember, modifier: Modifier) {
                 Box(
                     Modifier.align(Alignment.BottomEnd).size(18.dp).clip(CircleShape).background(Nuru.gold).border(2.dp, Nuru.white, CircleShape),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Verified, contentDescription = "Leader", tint = Nuru.navyDeep, modifier = Modifier.size(10.dp)) }
+                ) { Icon(Lucide.BadgeCheck, contentDescription = "Leader", tint = Nuru.navyDeep, modifier = Modifier.size(14.dp)) }
             }
         }
         Text(m.fullName, style = NuruType.micro, color = Nuru.ink, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -624,7 +617,7 @@ private fun LeaderPill(label: String, onClick: () -> Unit) {
         Modifier.clip(CircleShape).background(Nuru.navyDeep).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(Icons.Filled.Add, null, tint = Nuru.gold, modifier = Modifier.size(13.dp))
+        Icon(Lucide.Plus, null, tint = Nuru.gold, modifier = Modifier.size(14.dp))
         Text(label, style = nuruSans(12, FontWeight.SemiBold), color = Color.White)
     }
 }

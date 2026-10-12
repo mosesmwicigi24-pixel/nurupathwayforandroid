@@ -189,7 +189,8 @@ private data class Confetto(
 /** ~60 gold/navy/green/pink rectangles falling for 2.2s — pure Compose Canvas. */
 @Composable
 private fun ConfettiRain(key: String, modifier: Modifier = Modifier) {
-    val palette = listOf(Nuru.gold, Nuru.goldHi, Nuru.navy, Nuru.navyMid, Nuru.success, Color(0xFFEC4899))
+    // Navy and gold only (§8.1 rule 1) — the confetti had green and pink.
+    val palette = listOf(Nuru.gold, Nuru.goldHi, Nuru.navy, Nuru.navyMid, Nuru.goldTint)
     val pieces = remember(key) {
         List(60) {
             Confetto(

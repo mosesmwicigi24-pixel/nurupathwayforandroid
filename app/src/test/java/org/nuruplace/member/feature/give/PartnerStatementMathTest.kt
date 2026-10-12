@@ -8,11 +8,15 @@
 package org.nuruplace.member.feature.give
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.nuruplace.member.data.net.DueItem
 import org.nuruplace.member.data.net.GivingStatement
 import org.nuruplace.member.data.net.PartnerRhythm
+import org.nuruplace.member.data.net.PartnerTier
+import org.nuruplace.member.data.net.PartnerTrouble
 import org.nuruplace.member.data.net.Partnership
 import org.nuruplace.member.data.net.Pledge
 import org.nuruplace.member.data.net.PledgeProgress
@@ -264,43 +268,157 @@ class PartnerStatementMathTest {
         // Neither a schedule nor a monthly pledge (a total pledge only, or just joined): the state alone.
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true, pledges = listOf(total(dueOn = "2026-12-15"))), null, false))
         assertEquals("On track", standingKeptLine(Partnership(isPartner = true), null, false))
+        // No zero counts: a schedule that has never collected says its state alone.
+        assertEquals("On track", standingKeptLine(scheduleOnly.copy(kept = 0), null, false))
+    }
+
+    @Test
+    fun `a standing shows only once there is a pledge or a gift collected (Cycle 3 closing walk, Ben)`() {
+        // Ben: a weekly gift set up that never collected, no pledge — nothing to stand on.
+        org.junit.Assert.assertFalse(hasStanding(scheduleOnly.copy(kept = 0)))
+        org.junit.Assert.assertFalse(hasStanding(Partnership(isPartner = true)))
+        org.junit.Assert.assertFalse(hasStanding(Partnership(isPartner = true, pledges = listOf(monthly(status = "cancelled")))))
+        org.junit.Assert.assertTrue(hasStanding(scheduleOnly))
+        org.junit.Assert.assertTrue(hasStanding(pledgeOnly))
+    }
+
+    // ── A total pledge's card foot (iOS leftLine) ──
+
+    @Test
+    fun `a total pledge's card says what is paid and a bare figure to go`() {
+        fun roof(paid: Int, currency: String = "KES", target: Int = 2_000_000) =
+            Pledge(pledgeId = "p", shape = "total", targetMinor = target, currency = currency, progress = PledgeProgress(paidMinor = paid))
+        assertEquals("KSh 0 paid · 20,000 to go", totalPledgeLeftLine(roof(0)))
+        assertEquals("KSh 5,000 paid · 15,000 to go", totalPledgeLeftLine(roof(500_000)))
+        // Paid past the target: nothing to go, never negative.
+        assertEquals("KSh 25,000 paid · 0 to go", totalPledgeLeftLine(roof(2_500_000)))
+        // Dollars keep their cents.
+        assertEquals("US$ 12.50 paid · 87.50 to go", totalPledgeLeftLine(roof(1_250, currency = "USD", target = 10_000)))
+    }
+
+    // ── What TalkBack reads on the list (iOS accessibility labels) ──
+
+    @Test
+    fun `the tier chip speaks the server's own sentence, and the progress bar its percent`() {
+        // Before any money lands the server says "will carry" (owner,
+        // 2026-10-08); the chip's spoken line adds no "carries" of its own.
+        assertEquals(
+            "will carry one disciple through a level, every year. KSh 1,700 a month.",
+            tierSpoken(PartnerTier(name = "will carry one disciple through a level, every year", monthlyMinor = 170_000), "KES"),
+        )
+        assertEquals(
+            "carries 3 disciples through a level, every year. KSh 5,000 a month.",
+            tierSpoken(PartnerTier(name = "carries 3 disciples through a level, every year", monthlyMinor = 500_000), "KES"),
+        )
+        assertEquals("0 percent", progressSpoken(0f))
+        assertEquals("40 percent", progressSpoken(0.4f))
+        assertEquals("67 percent", progressSpoken(2f / 3f))
+        assertEquals("100 percent", progressSpoken(1.3f)) // never past the whole
+    }
+
+    // ── The amber trouble row (iOS TroubleRow) ──
+
+    @Test
+    fun `the trouble row says nothing is owed, in iOS's words`() {
+        assertEquals("One gift didn't go through — nothing is owed.", troubleLine(PartnerTrouble(paused = false, consecutiveFailures = 1)))
+        assertEquals("Your giving is paused — nothing is owed.", troubleLine(PartnerTrouble(paused = true, consecutiveFailures = 3)))
     }
 
     // ── Overdue wording (owner, 2026-09-26) ──
 
     private val sep25: LocalDate = LocalDate.of(2026, 9, 25)
-    private fun pledgeDue(dueOn: String, count: Int = 0, since: String? = null, kind: String = "pledge") =
-        DueItem(kind = kind, id = "p1", amountMinor = 200_000, dueOn = dueOn, overdueCount = count, overdueSince = since)
+    private fun pledgeDue(dueOn: String, count: Int = 0, since: String? = null, kind: String = "pledge", overdue: Boolean? = null) =
+        DueItem(kind = kind, id = "p1", amountMinor = 200_000, dueOn = dueOn, overdueCount = count, overdueSince = since, overdue = overdue)
 
     @Test
     fun `a DUE row counts down to its date, and an instalment already past reads overdue since`() {
         assertEquals(WhenLabel("today", false), dueWhen(pledgeDue("2026-09-25"), sep25))
         assertEquals(WhenLabel("tomorrow", false), dueWhen(pledgeDue("2026-09-26"), sep25))
         assertEquals(WhenLabel("in 3 days", false), dueWhen(pledgeDue("2026-09-28"), sep25))
-        assertEquals(WhenLabel("20 Oct", false), dueWhen(pledgeDue("2026-10-20"), sep25))
+        assertEquals(WhenLabel("Tue 20 Oct", false), dueWhen(pledgeDue("2026-10-20"), sep25))
         // Past: amber "overdue since", one instalment behind or an older server.
-        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-08-10"), sep25))
-        assertEquals(WhenLabel("overdue since 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 1), sep25))
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-08-10"), sep25))
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 1), sep25))
         // Two or more behind: the count leads (the amount is the catch-up total).
-        assertEquals(WhenLabel("2 overdue since 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 2), sep25))
+        assertEquals(WhenLabel("2 overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-08-10", count = 2), sep25))
         // overdue_since is preferred for the date when sent.
-        assertEquals(WhenLabel("3 overdue since 10 Jul", true), dueWhen(pledgeDue("2026-08-10", count = 3, since = "2026-07-10"), sep25))
+        assertEquals(WhenLabel("3 overdue since Fri 10 Jul", true), dueWhen(pledgeDue("2026-08-10", count = 3, since = "2026-07-10"), sep25))
         // Another year carries its year.
-        assertEquals(WhenLabel("overdue since 10 Dec 2025", true), dueWhen(pledgeDue("2025-12-10"), sep25))
+        assertEquals(WhenLabel("overdue since Wed 10 Dec 2025", true), dueWhen(pledgeDue("2025-12-10"), sep25))
     }
 
     @Test
-    fun `a recurring-gift row is never overdue, and an unreadable date reads soon`() {
-        assertEquals(WhenLabel("10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule"), sep25))
-        assertEquals(WhenLabel("soon", false), dueWhen(pledgeDue(""), sep25))
+    fun `a recurring-gift row is never overdue, and an unreadable date is said as sent`() {
+        assertEquals(WhenLabel("Thu 10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule"), sep25))
+        assertEquals(WhenLabel("Thu 10 Sep", false), dueWhen(pledgeDue("2026-09-10", kind = "schedule", overdue = false), sep25))
+        // iOS relativeDay: the text as it came.
+        assertEquals(WhenLabel("soon-ish", false), dueWhen(pledgeDue("soon-ish"), sep25))
+    }
+
+    @Test
+    fun `the server decides overdue — as sent, not by the phone's calendar`() {
+        // A catch-up row: due_on is today (the earliest uncovered), the server
+        // says one instalment is overdue since 10 Aug.
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-09-25", count = 1, since = "2026-08-10", overdue = true), sep25))
+        // overdue_since alone, or overdue_count alone, is the server's word too.
+        assertEquals(WhenLabel("overdue since Mon 10 Aug", true), dueWhen(pledgeDue("2026-09-25", since = "2026-08-10"), sep25))
+        assertEquals(WhenLabel("2 overdue since Fri 25 Sep", true), dueWhen(pledgeDue("2026-09-25", count = 2), sep25))
+        // The server says on time: on time, even when the phone's day has moved on.
+        assertEquals(WhenLabel("Thu 24 Sep", false), dueWhen(pledgeDue("2026-09-24", overdue = false), sep25))
+        assertFalse(dueOverdue(pledgeDue("2026-09-24", overdue = false), sep25))
+        // An older server sends none of them: the due date itself decides.
+        assertTrue(dueOverdue(pledgeDue("2026-09-24"), sep25))
+        assertFalse(dueOverdue(pledgeDue("2026-09-25"), sep25))
+        // A schedule row is never overdue, whatever it carries.
+        assertFalse(dueOverdue(pledgeDue("2026-08-10", count = 2, since = "2026-08-10", kind = "schedule", overdue = true), sep25))
+    }
+
+    @Test
+    fun `a running recurring gift's DUE row says when it is collected, not Pay`() {
+        // Owner, 2026-09-28: Pay gave a second, one-time gift that cycle.
+        assertEquals("Collected on Mon 5 Oct", collectedOnLine("2026-10-05"))
+        assertEquals("Collected on Mon 5 Oct", collectedOnLine("2026-10-05T06:00:00Z")) // the date as the server sent it
+        assertEquals("Collected on Tue 5 Jan", collectedOnLine("2027-01-05"))
+        // Not a date: no chip at all (Pay stays, as before).
+        assertNull(collectedOnLine(""))
+        assertNull(collectedOnLine("soon"))
+        val gift = DueItem(kind = "schedule", id = "s1", amountMinor = 100_000, dueOn = "2026-10-05", action = "pay")
+        assertEquals("Collected on Mon 5 Oct", dueCollectedChip(gift))
+        // A paused gift keeps Resume; a pledge row keeps Pay; a bad date keeps Pay.
+        assertNull(dueCollectedChip(gift.copy(action = "resume")))
+        assertNull(dueCollectedChip(gift.copy(kind = "pledge")))
+        assertNull(dueCollectedChip(gift.copy(dueOn = "not a date")))
+    }
+
+    @Test
+    fun `the DUE row's first line says what is left when part is on its way`() {
+        val d = due(amount = 500_000, pending = 200_000)
+        assertEquals("KSh 3,000 left · in 3 days", dueLeadLine(d, dueRowView(d, "mpesa"), "in 3 days"))
+        val whole = due(amount = 500_000)
+        assertEquals("KSh 5,000 · in 3 days", dueLeadLine(whole, dueRowView(whole, "mpesa"), "in 3 days"))
+        // All of it on its way: Processing instead of Pay, the whole amount said.
+        val all = due(amount = 500_000, pending = 500_000)
+        assertEquals("KSh 5,000 · today", dueLeadLine(all, dueRowView(all, "mpesa"), "today"))
     }
 
     @Test
     fun `the pledge card says Next, or Overdue since once its next instalment has passed`() {
         fun card(nextDue: String?) = Pledge(pledgeId = "p", status = "active", progress = PledgeProgress(nextDue = nextDue))
-        assertEquals(WhenLabel("Next 5 Oct", false), pledgeNextLabel(card("2026-10-05"), sep25))
-        assertEquals(WhenLabel("Next 25 Sep", false), pledgeNextLabel(card("2026-09-25"), sep25)) // due today is not overdue
-        assertEquals(WhenLabel("Overdue since 10 Aug", true), pledgeNextLabel(card("2026-08-10"), sep25))
+        assertEquals(WhenLabel("Next Mon 5 Oct", false), pledgeNextLabel(card("2026-10-05"), sep25))
+        assertEquals(WhenLabel("Next Fri 25 Sep", false), pledgeNextLabel(card("2026-09-25"), sep25)) // due today is not overdue
+        assertEquals(WhenLabel("Overdue since Mon 10 Aug", true), pledgeNextLabel(card("2026-08-10"), sep25))
         assertEquals(null, pledgeNextLabel(card(null), sep25))
+    }
+
+    @Test
+    fun `a paused or fulfilled pledge's card says no Next`() {
+        fun card(status: String, label: String = "on_track") =
+            Pledge(pledgeId = "p", status = status, progress = PledgeProgress(label = label, nextDue = "2026-10-05"))
+        assertNull(pledgeNextLabel(card("paused"), sep25))
+        assertNull(pledgeNextLabel(card("active", label = "paused"), sep25))
+        assertNull(pledgeNextLabel(card("fulfilled"), sep25))
+        assertNull(pledgeNextLabel(card("active", label = "fulfilled"), sep25))
+        // Behind is still asked for: it keeps its Next.
+        assertEquals(WhenLabel("Next Mon 5 Oct", false), pledgeNextLabel(card("active", label = "behind"), sep25))
     }
 }

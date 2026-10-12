@@ -5,6 +5,7 @@ package org.nuruplace.member.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +56,8 @@ fun NuruCard(
     }
 }
 
-/** Primary navy-gradient CTA (matches iOS PButton .primary). */
+/** The screen's one primary (EXPERIENCE.md §8.1 rule 4): gold fill, navy
+ *  text, radius 14. It was a navy gradient with white text. */
 @Composable
 fun PrimaryButton(
     label: String,
@@ -68,14 +71,47 @@ fun PrimaryButton(
             .fillMaxWidth()
             .height(Spacing.buttonLg)
             .clip(RoundedCornerShape(Radii.button))
-            .background(if (enabled && !loading) Nuru.primaryButton else androidx.compose.ui.graphics.SolidColor(Nuru.ink300))
+            .background(if (enabled && !loading) Nuru.gold else Nuru.ink300)
             .then(if (enabled && !loading) Modifier.clickable { onClick() } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             if (loading) "Please wait…" else label,
             style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold),
-            color = Nuru.onNavy,
+            color = Nuru.navy,
+        )
+    }
+}
+
+/**
+ * A secondary (§8.1 rule 4): white, hairline border, navy text — beside the
+ * screen's one primary. [onNavy]: on a navy ceremony page it is the outline
+ * of the same shape, white words on a faint white hairline (as iOS).
+ */
+@Composable
+fun SecondaryButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onNavy: Boolean = false,
+) {
+    val shape = RoundedCornerShape(Radii.button)
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(Spacing.buttonLg)
+            .clip(shape)
+            .then(if (onNavy) Modifier else Modifier.background(Nuru.white))
+            .border(1.dp, if (onNavy) Nuru.onNavy.copy(alpha = 0.25f) else Nuru.border, shape)
+            .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+            .alpha(if (enabled) 1f else 0.5f),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = NuruType.cardCta.copy(fontWeight = FontWeight.SemiBold),
+            color = if (onNavy) Nuru.onNavy else Nuru.navy,
         )
     }
 }
@@ -125,7 +161,7 @@ fun NuruField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            leadingIcon = { Icon(leadingIcon, contentDescription = null, tint = Nuru.ink400) },
+            leadingIcon = { Icon(leadingIcon, contentDescription = null, tint = Nuru.ink400, modifier = Modifier.size(18.dp)) },
             visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             textStyle = NuruType.bodyLg,

@@ -1,8 +1,9 @@
 // Nuru Live discovery — the two "invite loudly, never hijack" surfaces that
 // aren't the full-screen player itself: [LiveMiniPopup] (Home's floating
 // muted-preview mini-window) and [AppLiveBar] (the slim app-wide strip on
-// every other screen). Both are pure presentation — LiveDiscoveryCenter owns
-// all the state; LivePlayerScreen owns the real (unmuted) playback surface.
+// every other screen) — plus [LiveEndedState], where a Live notice lands once
+// its stream is over. All pure presentation — LiveDiscoveryCenter owns all
+// the state; LivePlayerScreen owns the real (unmuted) playback surface.
 package org.nuruplace.member.feature.live
 
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,10 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,9 +47,11 @@ import androidx.media3.ui.PlayerView
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.ui.components.LivePulsingDot
+import org.nuruplace.member.ui.components.StateCard
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Home's floating mini-window: a MUTED autoplaying preview of the actual
  *  HLS (media3, volume 0 — falls back to the branded icon tile if the item
@@ -112,8 +112,8 @@ fun LiveMiniPopup(
                 )
             } else {
                 Icon(
-                    if (stream.isAudio) Icons.Filled.GraphicEq else Icons.Filled.Videocam,
-                    contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(20.dp),
+                    if (stream.isAudio) Lucide.AudioLines else Lucide.Video,
+                    contentDescription = null, tint = Nuru.gold, modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -143,7 +143,7 @@ fun LiveMiniPopup(
                 .clickable { onDismiss() },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+            Icon(Lucide.X, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -172,5 +172,23 @@ fun AppLiveBar(stream: LiveNowRow, modifier: Modifier = Modifier, onClick: () ->
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
         Text("›", style = NuruType.title, color = Color.White.copy(alpha = 0.6f))
+    }
+}
+
+/** Where a Live notice lands once its stream is over — a tapped push or its
+ *  row in the inbox, the same router (EXPERIENCE.md §7.2 #3, §7.3): a calm
+ *  "This Live has ended" in the shared state card, the Live's [name] when
+ *  the notice carried it, and Go back. Never an error, never a blank, never
+ *  some other stream in its place. */
+@Composable
+fun LiveEndedState(name: String?, onBack: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Nuru.paper).padding(Spacing.screen), contentAlignment = Alignment.Center) {
+        StateCard(
+            title = "This Live has ended",
+            line = name?.trim()?.takeIf { it.isNotEmpty() },
+            glyph = Lucide.AudioLines,
+            actionLabel = "Go back",
+            onAction = onBack,
+        )
     }
 }

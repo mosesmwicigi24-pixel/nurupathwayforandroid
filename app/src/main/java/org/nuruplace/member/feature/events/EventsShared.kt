@@ -21,11 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.nuruplace.member.ui.components.CappedFontScale
 import org.nuruplace.member.data.net.CalendarOccurrence
 import org.nuruplace.member.ui.components.FitImage
 import org.nuruplace.member.ui.theme.nuruSans
@@ -52,6 +48,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import org.nuruplace.member.ui.icons.Lucide
 
 /**
  * iOS Events palette — merges the global `Nuru` tokens the tab/calendar use with the
@@ -114,25 +111,19 @@ object EV {
     val buzzing = Brush.linearGradient(listOf(going, goingDeep))
     val selectedDay = Brush.linearGradient(listOf(navy, navyDeep))       // month-grid selected cell
 
-    // Deterministic roster/buzz avatar accents (hash % 7)
-    val avatarPalette = listOf(
-        Color(0xFF0A1628), Color(0xFFC9A227), Color(0xFF16A34A), Color(0xFF0EA5E9),
-        Color(0xFFA855F7), Color(0xFFDC2626), Color(0xFFD97706),
-    )
+    // Deterministic roster/buzz avatar accents: navy or gold only (§8.1
+    // rule 1) — seven hues before, red and amber among them.
+    val avatarPalette = listOf(Color(0xFF0A1628), Color(0xFFA87F2E))
 
     fun avatarAccent(seed: String): Color =
         avatarPalette[(seed.hashCode().let { if (it < 0) -it else it }) % avatarPalette.size]
 }
 
-/** Category → accent color, ported from iOS `Ev.categoryColor`. */
-fun evCategory(cat: String?): Color = when (cat?.lowercase()?.trim()) {
-    "worship" -> Color(0xFFC89B3C)
-    "cell" -> Color(0xFF6366F1)
-    "leaders" -> Color(0xFF0EA5E9)
-    "youth" -> Color(0xFF16A34A)
-    "marketplace" -> Color(0xFFE07B39)
-    else -> Color(0xFF59667C)
-}
+/** An event's accent — gold for every category. A category is its word, on
+ *  rule 6's pills (EXPERIENCE.md §8.1 rules 1 and 6); it was a hue each
+ *  (indigo cells, sky leaders, green youth, orange marketplace). */
+@Suppress("UNUSED_PARAMETER")
+fun evCategory(cat: String?): Color = EV.gold
 
 /** Inter text style — delegates to the canonical schema (ui/theme/TypeSchema.kt). */
 fun evInter(size: Int, weight: FontWeight = FontWeight.Normal, kerning: Float = 0f) =
@@ -178,32 +169,13 @@ fun EvCreamHeaderBox(modifier: Modifier = Modifier, content: @Composable BoxScop
     }
 }
 
-/** Sub-page header (Calendar / AnnouncementDetail): back · eyebrow pill · serif title · subtitle · gold accent bar. */
+/** Sub-page header (Calendar / Announcements / an announcement): the pushed page's header. */
 @Composable
-fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> Unit) {
-    EvCreamHeaderBox {
-        Column(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(EV.white)
-                        .border(1.dp, EV.border, RoundedCornerShape(16.dp)).clickable { onBack() },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.ChevronLeft, "Back", tint = EV.navy, modifier = Modifier.size(22.dp)) }
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier.clip(RoundedCornerShape(999.dp)).background(EV.white)
-                        .border(1.dp, EV.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
-                ) { Text(eyebrow.uppercase(), style = evInter(9, FontWeight.Bold, 1.5f), color = EV.eyebrowGold) }
-            }
-            Text(title, style = evSerif(27, FontWeight.SemiBold), color = EV.navy, modifier = Modifier.padding(top = 16.dp))
-            if (subtitle.isNotBlank()) Text(subtitle, style = evInter(12), color = EV.secondary, modifier = Modifier.padding(top = 6.dp))
-            Box(
-                Modifier.padding(top = 12.dp).width(48.dp).height(3.dp).clip(RoundedCornerShape(2.dp))
-                    .background(Brush.horizontalGradient(listOf(EV.gold, EV.gold.copy(alpha = 0f)))),
-            )
-        }
-    }
-}
+fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> Unit) =
+    // The pushed page's one header — back · kicker · title · one line (§8.1
+    // rule 2; final walk C16: "ANNOUNCEMENT" sat as a white pill at the far
+    // right, over a gold underline) — iOS EvSubHeader → NuruPushedHeader.
+    org.nuruplace.member.ui.components.PushedHeader(kicker = eyebrow, title = title, line = subtitle, onBack = onBack)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared event card — used by the Events tab ("Today's gatherings") and the
@@ -211,7 +183,7 @@ fun EvSubHeader(eyebrow: String, title: String, subtitle: String, onBack: () -> 
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier = Modifier, myRsvp: String? = null) {
     val accent = evCategory(occ.category)
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(EV.white)
@@ -225,14 +197,25 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent, EV.navy.copy(alpha = 0.62f))),
                 ),
             )
-            // Date badge (top-start)
-            Column(
-                Modifier.align(Alignment.TopStart).padding(12.dp).size(48.dp).clip(RoundedCornerShape(16.dp)).background(EV.white),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(evWeekdayShort(occ.startAt), style = evInter(8, FontWeight.Bold, 0.8f), color = accent)
-                Text(evDayNum(occ.startAt), style = evSerif(17, FontWeight.SemiBold), color = EV.navy)
+            // Date badge (top-start). A gathering in another month carries
+            // its month (§8.1 rule 8; final walk C2: "SUN 11", "WED 25" on
+            // cards weeks out), as iOS. A figure in a fixed tile keeps the
+            // everyday size (§9.6 #4); the card's countdown carries the day,
+            // and grows.
+            val month = evOtherMonth(occ.startAt)
+            CappedFontScale(1f) {
+                Column(
+                    Modifier.align(Alignment.TopStart).padding(12.dp).size(width = 48.dp, height = if (month == null) 48.dp else 62.dp)
+                        .clip(RoundedCornerShape(16.dp)).background(EV.white),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(evWeekdayShort(occ.startAt), style = evInter(11, FontWeight.Bold, 0.8f), color = accent, maxLines = 1, softWrap = false)
+                    Text(evDayNum(occ.startAt), style = evSerif(18, FontWeight.SemiBold), color = EV.navy, maxLines = 1, softWrap = false)
+                    if (month != null) {
+                        Text(month, style = evInter(11, FontWeight.Bold, 0.8f), color = EV.secondary, maxLines = 1, softWrap = false)
+                    }
+                }
             }
             // Countdown chip (bottom-start)
             val cd = evCountdown(occ.startAt)
@@ -246,8 +229,8 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    Icon(Icons.Filled.Schedule, null, tint = if (urgent) EV.navy else EV.white, modifier = Modifier.size(10.dp))
-                    Text(cd, style = evInter(8, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
+                    Icon(Lucide.Clock4, null, tint = if (urgent) EV.navy else EV.white, modifier = Modifier.size(14.dp))
+                    Text(cd, style = evInter(11, FontWeight.Bold), color = if (urgent) EV.navy else EV.white)
                 }
             }
             // Rescheduled pill (top-end) — wire truth: a moved occurrence arrives
@@ -259,32 +242,35 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
                     Modifier.align(Alignment.TopEnd).padding(12.dp)
                         .clip(RoundedCornerShape(999.dp)).background(EV.goldTile)
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) { Text("RESCHEDULED", style = evInter(8, FontWeight.Bold, 1f), color = EV.navy) }
+                ) { Text("RESCHEDULED", style = evInter(11, FontWeight.Bold, 1f), color = EV.navy) }
             }
             // Category tag (bottom-end)
             occ.category?.takeIf { it.isNotBlank() }?.let { c ->
                 Box(
                     Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp)
-                        .clip(RoundedCornerShape(999.dp)).background(accent.copy(alpha = 0.9f))
+                        // The word on a white pill (rule 6) — no category hue.
+                        .clip(RoundedCornerShape(999.dp)).background(EV.white)
+                        .border(1.dp, EV.border, RoundedCornerShape(999.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) { Text(c.uppercase(), style = evInter(8, FontWeight.Bold, 1f), color = EV.white) }
+                ) { Text(c.uppercase(), style = evInter(11, FontWeight.Bold, 1f), color = EV.navy) }
             }
         }
         // Body
         Column(Modifier.padding(16.dp)) {
-            Text(occ.title, style = evSerif(15, FontWeight.SemiBold), color = EV.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // An event's title wraps to two lines, never cut (§8.1 rule 9).
+            Text(occ.title, style = evSerif(15, FontWeight.SemiBold), color = EV.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             occ.description?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = evInter(11), color = EV.secondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                EvMetaBit(Icons.Filled.Schedule, evTimeRange(occ.startAt, occ.endAt))
-                occ.location?.takeIf { it.isNotBlank() }?.let { EvMetaBit(Icons.Filled.Place, it) }
+                EvMetaBit(Lucide.Clock4, evTimeRange(occ.startAt, occ.endAt))
+                occ.location?.takeIf { it.isNotBlank() }?.let { EvMetaBit(Lucide.MapPin, it) }
             }
             Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(1.dp).background(EV.border))
             Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Person, null, tint = EV.secondary, modifier = Modifier.size(15.dp))
+                Icon(Lucide.User, null, tint = EV.secondary, modifier = Modifier.size(14.dp))
                 Text(
-                    if (occ.going > 0) "${occ.going} going" else "Be the first to RSVP",
+                    evGoingLine(occ.going, mine = myRsvp == "going") ?: "Be the first to RSVP",
                     style = evInter(11, FontWeight.SemiBold), color = EV.secondary,
                 )
             }
@@ -295,7 +281,7 @@ fun EvCardView(occ: CalendarOccurrence, onClick: () -> Unit, modifier: Modifier 
 @Composable
 private fun EvMetaBit(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(icon, null, tint = EV.secondary, modifier = Modifier.size(12.dp))
+        Icon(icon, null, tint = EV.secondary, modifier = Modifier.size(14.dp))
         Text(text, style = evInter(11), color = EV.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -338,9 +324,9 @@ fun evTimeRange(start: String?, end: String?): String {
     return if (e == s) s else "$s – $e"
 }
 
-/** "Sunday, July 5" */
+/** "Sun 5 Jul" — the one date form (§8.1 rule 8); it read "Sunday, July 5". */
 fun evDateFull(iso: String?): String =
-    evZdt(iso)?.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.ENGLISH)).orEmpty()
+    evZdt(iso)?.let { org.nuruplace.member.util.NuruDates.day(it.toLocalDate()) }.orEmpty()
 
 /** "SUN" */
 fun evWeekdayShort(iso: String?): String =
@@ -348,6 +334,37 @@ fun evWeekdayShort(iso: String?): String =
 
 /** "5" */
 fun evDayNum(iso: String?): String = evZdt(iso)?.dayOfMonth?.toString().orEmpty()
+
+/** Who is going, said from the member's side (Q5; final walk C5, Android
+ *  #12): their own RSVP is theirs — "You're going", not "1 going". Null when
+ *  nobody is going yet. */
+fun evGoingLine(going: Int, mine: Boolean): String? = when {
+    mine && going <= 1 -> "You're going"
+    mine -> "You and ${evOthers(going - 1)} are going"
+    going > 0 -> "$going going"
+    else -> null
+}
+
+/** The gathering's GOING tile: "You", "You and 2 others", "3 people". Null
+ *  when nobody is going yet. */
+fun evGoingTile(going: Int, mine: Boolean): String? = when {
+    mine && going <= 1 -> "You"
+    mine -> "You and ${evOthers(going - 1)}"
+    going == 1 -> "1 person"
+    going > 1 -> "$going people"
+    else -> null
+}
+
+private fun evOthers(n: Int): String = if (n == 1) "1 other" else "$n others"
+
+/** "NOV" when [iso] falls in a month other than [today]'s, for the card's
+ *  date chip; null in this month (§8.1 rule 8; iOS Ev.otherMonthLabel). */
+fun evOtherMonth(iso: String?, today: LocalDate = LocalDate.now(EV_ZONE)): String? =
+    evZdt(iso)?.toLocalDate()?.let { evOtherMonth(it, today) }
+
+internal fun evOtherMonth(date: LocalDate, today: LocalDate): String? =
+    if (date.year == today.year && date.month == today.month) null
+    else date.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)).uppercase()
 
 /** Today / Tomorrow / In N days ("" when past or unknown). */
 fun evCountdown(iso: String?): String {

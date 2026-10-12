@@ -26,24 +26,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Message
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -71,6 +62,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.CreatePrayerBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.PrayerWallPost
@@ -85,17 +77,29 @@ import org.nuruplace.member.ui.components.Moment
 import org.nuruplace.member.ui.components.WaveformBars
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.components.noticeOnFailure
 import org.nuruplace.member.ui.components.voiceClock
+import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.theme.TypeScale
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
 import org.nuruplace.member.util.relTime
 import java.io.File
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
 @Composable
-fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenPost: (String) -> Unit) {
+fun PrayerWallScreen(
+    embedded: Boolean = false,
+    onBack: () -> Unit = {},
+    /** Nothing below this screen clears the system's gesture bar — it is on a
+     *  pushed route (the Prayer Room reached from a shortcut or Home), not
+     *  above the tab bar — so the floating "+" clears it itself (§7.1 rule 3). */
+    clearNavigationBar: Boolean = false,
+    onOpenPost: (String) -> Unit,
+) {
     var sort by remember { mutableStateOf("latest") }
     var composing by remember { mutableStateOf(false) }
 
@@ -106,7 +110,9 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
     Box(Modifier.fillMaxSize()) {
         NuruRefreshBox(refreshing = refreshing, onRefresh = { reloadRef[0]?.let { refreshing = true; it() } }) {
             Column(
-                Modifier.fillMaxSize().background(GrowPal.coolPaper).verticalScroll(rememberScrollState()),
+                // Warm paper, the page every tab stands on (§8.1 rule 1; final
+                // walk C16: it was the portal's cool #F7F9FC) — as iOS.
+                Modifier.fillMaxSize().background(GrowPal.paper).verticalScroll(rememberScrollState()),
             ) {
                 // Navy hero — embedded (My Prayer Room) supplies its own back
                 // button + title + segmented control instead.
@@ -127,19 +133,19 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
                                 Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.40f))
                                     .clickable { onBack() },
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Lucide.ArrowLeft, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                             Box(
                                 Modifier.size(40.dp).clip(CircleShape).background(GrowPal.gold)
                                     .clickable { composing = true },
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.Add, null, tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
+                            ) { Icon(Lucide.Plus, null, tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
                         }
                         Column(
                             Modifier.align(Alignment.BottomStart).padding(24.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text("PRAY FOR ONE ANOTHER", style = gInter(11, FontWeight.Medium, 1.8f), color = GrowPal.gold)
-                            Text("Carry one another", style = gSerif(24, FontWeight.SemiBold), color = Color.White)
+                            Text("Carry one another", style = gSerif(26, FontWeight.SemiBold), color = Color.White)
                             Text(
                                 "“Carry each other's burdens, and in this way you will fulfill the law of Christ.” — Galatians 6:2",
                                 style = gInter(12), color = Color.White.copy(alpha = 0.55f), maxLines = 2,
@@ -156,22 +162,39 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
                 }) { posts: List<PrayerWallPost>, reload ->
                     reloadRef[0] = reload
                     val scope = rememberCoroutineScope()
+                    val wallContext = LocalContext.current
                     val player = remember { VoicePlayer() }
                     DisposableEffect(Unit) { onDispose { player.release() } }
                     Column(
                         Modifier.padding(horizontal = 20.dp)
-                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 96.dp),
+                            .padding(top = if (embedded) 20.dp else 16.dp, bottom = 32.dp)
+                            // On the pushed page the list's end clears the gesture bar.
+                            .then(if (clearNavigationBar) Modifier.navigationBarsPadding() else Modifier),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // Embedded (My Prayer Room) has no hero to carry "+": the
+                        // list opens with a gentle prompt on gold tint (§8.1 rule
+                        // 5), as on iOS. It floated over the cards instead (rule
+                        // 9). With no prayers yet, the state card offers it.
+                        if (embedded && posts.isNotEmpty()) SharePrayerPrompt { composing = true }
                         // Sort pills
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             SortPill("Latest", "latest", sort) { sort = it }
                             SortPill("Most prayed", "prayed", sort) { sort = it }
                         }
                         if (posts.isEmpty()) {
-                            Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                                Text("No prayer requests yet.", style = gInter(13), color = GrowPal.ink600)
-                            }
+                            // §4's one state card with a labelled way forward (Cycle 3's
+                            // closing walk): it was one bare line beside an unlabelled "+".
+                            org.nuruplace.member.ui.components.StateCard(
+                                title = PrayerWallWords.EMPTY_TITLE,
+                                // One story about who sees a shared prayer — the
+                                // share prompt's (§9.7 M8): the congregation.
+                                line = PrayerWallWords.EMPTY_LINE,
+                                glyph = Lucide.Heart,
+                                actionLabel = "Share a prayer",
+                                onAction = { composing = true },
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
                         } else {
                             posts.forEach { p ->
                                 PrayerCard(
@@ -180,9 +203,8 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
                                     onOpen = { onOpenPost(p.postId) },
                                     onPray = {
                                         scope.launch {
-                                            try {
-                                                Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")); reload()
-                                            } catch (_: Exception) {}
+                                            noticeOnFailure(wallContext) { Net.client.api.prayerWallReact(p.postId, ReactBody("🙏")) }
+                                                ?.let { reload() }
                                         }
                                     },
                                 )
@@ -194,16 +216,32 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
                 }
             }
         }
-        // Embedded (My Prayer Room) has no hero to carry the "+" compose
-        // action, so it floats one instead — same compose sheet.
-        if (embedded) {
-            Box(
-                Modifier.align(Alignment.BottomEnd).padding(20.dp)
-                    .size(56.dp).clip(CircleShape).background(GrowPal.gold)
-                    .clickable { composing = true },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Add, "Share a prayer", tint = GrowPal.navyDeep, modifier = Modifier.size(22.dp)) }
+    }
+}
+
+/** "Share a prayer · Let the church carry it with you." — the embedded
+ *  wall's way to post, atop the list (iOS's sharePrompt). */
+@Composable
+private fun SharePrayerPrompt(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp)
+            .clip(shape)
+            .background(GrowPal.goldTint.copy(alpha = 0.55f))
+            .border(1.dp, GrowPal.gold.copy(alpha = 0.25f), shape)
+            .clickable(onClickLabel = "Share a prayer") { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(GrowPal.white), contentAlignment = Alignment.Center) {
+            Icon(Lucide.Plus, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(18.dp))
         }
+        Column(Modifier.weight(1f)) {
+            Text("Share a prayer", style = org.nuruplace.member.ui.theme.NuruType.rowTitle, color = GrowPal.navy)
+            Text("Let the church carry it with you.", style = org.nuruplace.member.ui.theme.NuruType.micro, color = GrowPal.ink600)
+        }
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -211,13 +249,14 @@ fun PrayerWallScreen(embedded: Boolean = false, onBack: () -> Unit = {}, onOpenP
 private fun SortPill(label: String, key: String, sort: String, onSelect: (String) -> Unit) {
     val on = sort == key
     Box(
+        // Pills select in navy (§8.1 rule 6) — they selected into a gold tint.
         Modifier.clip(Capsule)
-            .background(if (on) GrowPal.goldChipBg else GrowPal.white)
-            .border(1.dp, if (on) GrowPal.gold else GrowPal.border, Capsule)
+            .background(if (on) GrowPal.navy else GrowPal.white)
+            .then(if (on) Modifier else Modifier.border(1.dp, GrowPal.border, Capsule))
             .clickable { onSelect(key) }
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
-        Text(label, style = gInter(12, FontWeight.Bold), color = if (on) GrowPal.navyDeep else GrowPal.ink600)
+        Text(label, style = gInter(12, FontWeight.Bold), color = if (on) Color.White else GrowPal.ink600)
     }
 }
 
@@ -262,10 +301,10 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playing) Lucide.Pause else Lucide.Play,
                     if (playing) "Pause voice prayer" else "Play voice prayer",
                     tint = GrowPal.navyDeep,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
                 WaveformBars(
                     levels = p.audioWaveform.orEmpty(),
@@ -275,7 +314,7 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
                     maxBarHeight = 18.dp,
                 )
                 if (playing && player.durationSec > 0) {
-                    Text(voiceClock(player.durationSec), style = gInter(10, FontWeight.SemiBold), color = GrowPal.ink400)
+                    Text(voiceClock(player.durationSec), style = gInter(11, FontWeight.SemiBold), color = GrowPal.ink400)
                 }
             }
         }
@@ -301,7 +340,7 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Message, null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
+                Icon(Lucide.MessageSquare, null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
                 Text((p.commentCount ?: 0).toString(), style = gInter(11), color = GrowPal.ink400)
             }
         }
@@ -311,7 +350,8 @@ private fun PrayerCard(p: PrayerWallPost, player: VoicePlayer, onOpen: () -> Uni
 @Composable
 internal fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.Dp) {
     Box(
-        Modifier.size(size).clip(CircleShape).background(GrowPal.tintBlue),
+        // The palette's gold-chip tint and navy initials (§8.1 rule 1; final walk C16).
+        Modifier.size(size).clip(CircleShape).background(Nuru.goldChipBg),
         contentAlignment = Alignment.Center,
     ) {
         if (!url.isNullOrBlank()) {
@@ -319,8 +359,8 @@ internal fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.D
         } else {
             Text(
                 initials(name),
-                style = gInter((size.value * 0.4f).toInt().coerceAtLeast(9), FontWeight.SemiBold),
-                color = GrowPal.navyMid,
+                style = gInter(TypeScale.initials(size.value), FontWeight.SemiBold),
+                color = Nuru.navy,
             )
         }
     }
@@ -332,7 +372,7 @@ private fun AnsweredChip() {
         Modifier.clip(Capsule).background(GrowPal.successBg).padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Icon(Icons.Filled.CheckCircle, null, tint = GrowPal.successText, modifier = Modifier.size(11.dp))
+            Icon(Lucide.CheckCircle, null, tint = GrowPal.successText, modifier = Modifier.size(14.dp))
             Text("Answered", style = gInter(11, FontWeight.Medium), color = GrowPal.successText)
         }
     }
@@ -341,11 +381,16 @@ private fun AnsweredChip() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = GrowPal.white, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         val context = LocalContext.current
         var title by remember { mutableStateOf("") }
         var body by remember { mutableStateOf("") }
         var posting by remember { mutableStateOf(false) }
+        // A post that didn't reach the wall keeps everything in the sheet and
+        // says why above the button (§7.4); its ids stay with it, so posting
+        // again can't put it up twice.
+        var postError by remember { mutableStateOf<String?>(null) }
+        var postIds by remember { mutableStateOf<Pair<String, String>?>(null) }
         // Voice prayer attachment — record, keep the file + its waveform, post.
         val recorder = remember { VoiceRecorder() }
         var attached by remember { mutableStateOf<File?>(null) }
@@ -417,7 +462,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                         Modifier.size(36.dp).clip(Capsule).background(GrowPal.white).border(1.dp, GrowPal.border, Capsule)
                             .clickable { recorder.cancel() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, "Discard recording", tint = GrowPal.ink400, modifier = Modifier.size(15.dp)) }
+                    ) { Icon(Lucide.X, "Discard recording", tint = GrowPal.ink400, modifier = Modifier.size(14.dp)) }
                     Box(
                         Modifier.size(36.dp).clip(Capsule).background(GrowPal.gold)
                             .clickable {
@@ -429,7 +474,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                 }
                             },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Check, "Keep recording", tint = GrowPal.navyDeep, modifier = Modifier.size(16.dp)) }
+                    ) { Icon(Lucide.Check, "Keep recording", tint = GrowPal.navyDeep, modifier = Modifier.size(18.dp)) }
                 }
                 attached != null -> Row(
                     Modifier.fillMaxWidth()
@@ -440,7 +485,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = GrowPal.goldChipText, modifier = Modifier.size(16.dp))
+                    Icon(Lucide.Mic, null, tint = GrowPal.goldChipText, modifier = Modifier.size(18.dp))
                     WaveformBars(
                         levels = attachedWave,
                         color = GrowPal.goldLo.copy(alpha = 0.6f),
@@ -457,7 +502,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                 attachedDur = 0
                             },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Close, "Remove voice prayer", tint = GrowPal.ink400, modifier = Modifier.size(13.dp)) }
+                    ) { Icon(Lucide.X, "Remove voice prayer", tint = GrowPal.ink400, modifier = Modifier.size(14.dp)) }
                 }
                 else -> Row(
                     Modifier.clip(Capsule).background(GrowPal.coolPaper).border(1.dp, GrowPal.border, Capsule)
@@ -466,22 +511,27 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = GrowPal.navyDeep, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Mic, null, tint = GrowPal.navyDeep, modifier = Modifier.size(14.dp))
                     Text("Add voice", style = gInter(12, FontWeight.Bold), color = GrowPal.navyDeep)
                 }
             }
             val canPost = (body.isNotBlank() || attached != null) && !posting
+            postError?.let { Text(it, style = gInter(12), color = Nuru.danger) }
             Box(
                 Modifier.fillMaxWidth().height(52.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (canPost) GrowPal.navyDeep else GrowPal.navyDeep.copy(alpha = 0.5f))
+                    // The sheet's one primary: gold fill, navy words, radius 14
+                    // (§8.1 rule 4; it was navy-filled — owner, 2026-10-08).
+                    .background(if (canPost) GrowPal.gold else GrowPal.gold.copy(alpha = 0.45f))
                     .clickable(enabled = canPost) {
                         val t = title
                         val b = body
                         val f = attached
                         val wave = attachedWave
-                        val pid = UUID.randomUUID().toString()
+                        val ids = postIds ?: (UUID.randomUUID().toString() to UUID.randomUUID().toString()).also { postIds = it }
+                        val pid = ids.first
                         posting = true
+                        postError = null
                         scope.launch {
                             try {
                                 var url: String? = null
@@ -490,23 +540,30 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                                         val part = MultipartBody.Part.createFormData("file", f.name, f.readBytes().toRequestBody("audio/mp4".toMediaTypeOrNull()))
                                         Net.client.api.uploadVoiceNote(part).url.ifBlank { null }
                                     }
-                                    if (url == null) return@launch   // upload failed — keep the sheet open to retry
+                                    if (url == null) {   // upload answered with no address — keep the sheet open to retry
+                                        postError = "Couldn't post that. ${org.nuruplace.member.data.net.StateLanguage.serverError.sentence}"
+                                        return@launch
+                                    }
                                 }
                                 Net.client.api.createPrayerWallPost(
                                     CreatePrayerBody(
                                         postId = pid,
                                         title = t.ifBlank { null },
                                         body = b.trim().ifBlank { "Voice prayer" },
-                                        clientMutationId = UUID.randomUUID().toString(),
+                                        clientMutationId = ids.second,
                                         audioUrl = url,
                                         audioWaveform = if (url != null && wave.isNotEmpty()) wave else null,
                                     ),
                                 )
                                 // Warm toast — the server accepted the post (key = its uuid).
-                                CelebrationCenter.fire(Moment("wallpost-$pid", "Your prayer is on the wall", "Your cell is standing with you 🙏", confetti = false))
+                                CelebrationCenter.fire(Moment("wallpost-$pid", "Your prayer is on the wall", PrayerWallWords.POSTED, confetti = false))
+                                postIds = null
                                 onPosted()
                                 onDismiss()
-                            } catch (_: Exception) {
+                            } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                                throw c
+                            } catch (e: Exception) {
+                                postError = ApiException.failureLine("Couldn't post that.", e, context)
                             } finally {
                                 posting = false
                             }
@@ -514,7 +571,7 @@ private fun ComposeSheet(scope: CoroutineScope, onDismiss: () -> Unit, onPosted:
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (posting) "Posting…" else "Post to wall", style = gInter(16, FontWeight.Medium), color = Color.White)
+                Text(if (posting) "Posting…" else "Post to wall", style = gInter(16, FontWeight.Bold), color = GrowPal.navy)
             }
         }
     }
@@ -527,4 +584,15 @@ private fun initials(name: String): String {
         parts.size == 1 -> parts[0].take(2).uppercase()
         else -> (parts.first().take(1) + parts.last().take(1)).uppercase()
     }
+}
+
+/** The wall's words — one story about who sees a shared prayer (final walk
+ *  M8): everyone in the member's congregation, as the share prompt says. iOS
+ *  PrayerWallWords, word for word. */
+object PrayerWallWords {
+    const val EMPTY_TITLE = "No requests yet"
+    const val EMPTY_LINE = "Be the first to share a prayer. Everyone in your congregation will see it and can pray with you."
+    /** Said once a prayer reaches the wall — "Your cell is standing with you"
+     *  told the other story. */
+    const val POSTED = "Everyone in your congregation can pray with you."
 }

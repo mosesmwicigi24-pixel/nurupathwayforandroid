@@ -31,16 +31,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Cameraswitch
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.RemoveRedEye
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +49,7 @@ import coil.compose.AsyncImage
 import org.nuruplace.member.ui.components.LivePulsingDot
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 // ── Top bar ──────────────────────────────────────────────────────────────
 
@@ -92,7 +83,7 @@ fun LiveTopBar(
                 Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
                     .clickable { onClose() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp)) }
+            ) { Icon(Lucide.X, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(22.dp)) }
 
             Spacer(Modifier.width(8.dp))
 
@@ -142,7 +133,7 @@ private fun LiveCountersChip(viewerCount: Int, handCount: Int) {
         LivePulsingDot(size = 7.dp)
         Text("LIVE", style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold)
         Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
-        Icon(Icons.Filled.RemoveRedEye, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(12.dp))
+        Icon(Lucide.Eye, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
         Text(abbreviateCount(viewerCount), style = NuruType.micro, color = Color.White.copy(alpha = 0.85f))
         if (handCount > 0) {
             Text("·", style = NuruType.micro, color = Color.White.copy(alpha = 0.5f))
@@ -254,18 +245,18 @@ private fun DockControlButton(
 ) {
     when (item) {
         LiveDockItem.CAMERA_TOGGLE -> DockIconButton(
-            icon = if (state.cameraOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+            icon = if (state.cameraOn) Lucide.Video else Lucide.VideoOff,
             description = if (state.cameraOn) "Turn camera off" else "Turn camera on",
             onClick = onToggleCamera,
         )
-        LiveDockItem.SWITCH_CAMERA -> DockIconButton(Icons.Filled.Cameraswitch, "Switch camera", onSwitchCamera)
+        LiveDockItem.SWITCH_CAMERA -> DockIconButton(Lucide.SwitchCamera, "Switch camera", onSwitchCamera)
         LiveDockItem.MIC_TOGGLE -> DockIconButton(
-            icon = if (state.micMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+            icon = if (state.micMuted) Lucide.MicOff else Lucide.Mic,
             description = if (state.micMuted) "Unmute" else "Mute",
             onClick = onToggleMic,
         )
         LiveDockItem.SPEAKER -> DockIconButton(
-            icon = if (state.speakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+            icon = if (state.speakerOn) Lucide.Volume2 else Lucide.VolumeX,
             description = if (state.speakerOn) "Switch to earpiece" else "Switch to speaker",
             onClick = onToggleSpeaker,
         )
@@ -285,7 +276,7 @@ private fun DockIconButton(
             .clickable { onClick() }
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp)) }
 }
 
 @Composable

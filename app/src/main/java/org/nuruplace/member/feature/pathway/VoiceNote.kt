@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -47,12 +46,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -65,6 +58,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.util.VoicePlayer
 import org.nuruplace.member.util.VoiceRecorder
+import org.nuruplace.member.ui.icons.Lucide
 
 private val VnGold = Color(0xFFC89B3C)
 private val VnBg = Color(0xFFFFF8E6)
@@ -102,7 +96,7 @@ fun VoiceNoteCard(note: ModuleVoiceNote) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playing) Lucide.Pause else Lucide.Play,
                     contentDescription = if (playing) "Pause" else "Play",
                     tint = Nuru.navy, modifier = Modifier.size(18.dp),
                 )
@@ -127,7 +121,7 @@ fun VoiceNoteLeaderRow(moduleId: String, existing: ModuleVoiceNote?, onShared: (
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Mic, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp))
+        Icon(Lucide.Mic, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
         Text(
             if (existing == null) "Leave a word for your flock" else "Re-record your word",
@@ -166,7 +160,7 @@ private fun VoiceRecordDialog(
         if (recorder.isRecording && recorder.elapsedSec >= 300) recordedFile = recorder.stop()
     }
 
-    AlertDialog(
+    org.nuruplace.member.ui.components.NuruAlertDialog(
         onDismissRequest = { if (!uploading) { recorder.stop(); preview.stop(); onDismiss() } },
         containerColor = Color.White,
         title = {
@@ -187,9 +181,9 @@ private fun VoiceRecordDialog(
                     recorder.isRecording -> {
                         Text(
                             "%d:%02d".format(recorder.elapsedSec / 60, recorder.elapsedSec % 60),
-                            style = NuruType.rowTitle.copy(fontSize = 34.sp), color = Nuru.navy,
+                            style = NuruType.rowTitle.copy(fontSize = 28.sp), color = Nuru.navy,
                         )
-                        VnPill(Icons.Filled.Stop, "Stop", Color(0xFFB3261E)) { recordedFile = recorder.stop() }
+                        VnPill(Lucide.Square, "Stop", Color(0xFFB3261E)) { recordedFile = recorder.stop() }
                     }
                     recordedFile != null -> {
                         Text(
@@ -198,15 +192,15 @@ private fun VoiceRecordDialog(
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             VnPill(
-                                if (preview.playingId == "preview") Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                if (preview.playingId == "preview") Lucide.Pause else Lucide.Play,
                                 "Listen back", Nuru.navy,
                             ) { recordedFile?.let { preview.toggle("preview", it.absolutePath) } }
-                            VnPill(Icons.Filled.Mic, "Redo", Nuru.navy) {
+                            VnPill(Lucide.Mic, "Redo", Nuru.navy) {
                                 preview.stop(); recordedFile = null; askMic.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         }
                     }
-                    else -> VnPill(Icons.Filled.Mic, "Start recording", Nuru.navy) {
+                    else -> VnPill(Lucide.Mic, "Start recording", Nuru.navy) {
                         error = null
                         askMic.launch(Manifest.permission.RECORD_AUDIO)
                     }
@@ -240,7 +234,8 @@ private fun VoiceRecordDialog(
                             )
                         }.onFailure {
                             uploading = false
-                            error = "Couldn't share the voice note. Try again."
+                            // Why it didn't go (§4); the recording stays to send again.
+                            error = org.nuruplace.member.data.net.ApiException.failureLine("Couldn't share the voice note.", it, ctx)
                         }
                     }
                 }) {
@@ -284,16 +279,12 @@ fun CellPresenceLine() {
             val p = Net.client.api.communityPresence()
             if (p.count <= 0) return@runCatching null
             val who = if (p.scope == "cell") "your cell" else "your congregation"
-            val names = when {
-                p.names.size > 1 -> p.names.dropLast(1).joinToString(", ") + " and " + p.names.last()
-                else -> p.names.joinToString(", ")
-            }
-            val others = p.count - p.names.size
-            when {
-                others > 0 -> "$names and $others other${if (others == 1) "" else "s"} from $who opened a lesson this week."
-                p.count == 1 -> "$names from $who opened a lesson this week. You're not walking alone."
-                else -> "$names from $who opened a lesson this week."
-            }
+            // One "and" (Cycle 3's closing walk, B13): "Cara, Ben, Ada and 2
+            // others" — it read "Cara, Ben and Ada and 2 others".
+            val others = (p.count - p.names.size).coerceAtLeast(0)
+            val names = joinNames(p.names, others)
+            if (p.count == 1) "$names from $who opened a lesson this week. You're not walking alone."
+            else "$names from $who opened a lesson this week."
         }.getOrNull()
     }
     val text = line ?: return
@@ -303,7 +294,7 @@ fun CellPresenceLine() {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(Icons.Filled.LocalFireDepartment, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp).padding(top = 1.dp))
+        Icon(Lucide.Flame, contentDescription = null, tint = Nuru.eyebrow, modifier = Modifier.size(14.dp).padding(top = 1.dp))
         Spacer(Modifier.width(8.dp))
         Text(text, style = NuruType.caption, color = Nuru.ink)
     }

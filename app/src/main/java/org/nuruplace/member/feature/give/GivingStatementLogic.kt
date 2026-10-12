@@ -8,20 +8,78 @@
 // BY FUND and the day list. Pledge-tied rows sit in one collapsed PARTNER
 // PLEDGES group with its own total, and Gifts + Partner pledges = Total, to
 // the shilling.
+//
+// Giving Cycle 2: every sum is PER CURRENCY — a USD PayPal gift and shilling
+// gifts read "KSh 3,500 + US$ 20.00", never one number (the server's totals[]
+// rule: shillings first, then by code) — and a gift belongs to the Nairobi
+// year it was MADE in (created_at), as the server's statement and PDF count
+// it, so the app, the PDF and the office agree at the turn of the year.
+//
+// Every gift is LISTED, whatever became of it — a failed one with its chip
+// and the server's reason, one still processing with its chip — as iOS lists
+// them; only money that went through is COUNTED (giftSettled: succeeded,
+// settled, completed — the one settled rule): the sums, BY FUND, the gift
+// count and the PARTNER PLEDGES total. The rows are separated whenever the
+// year has any pledge-tied row, settled or not, so an unsettled pledge
+// payment never drops out of both lists; the hero splits only when there is
+// settled pledge money.
 package org.nuruplace.member.feature.give
 
 import org.nuruplace.member.data.net.GivingRecord
 import java.time.LocalDate
 
-/** One period's rows, split. `totalMinor` = gifts + pledges by construction. */
+/** Money in one currency — one entry of a per-currency sum. */
+internal data class CurrencyAmount(val currency: String, val minor: Long)
+
+/** A row's currency code, upper-case; blank reads as shillings. */
+private fun currencyOf(r: GivingRecord): String = r.currency.trim().uppercase().ifEmpty { GIVE_FORM_CURRENCY }
+
+/** Shillings first, then by code — the server's totals[] order. */
+private val SHILLINGS_FIRST = compareBy<String> { it != GIVE_FORM_CURRENCY }.thenBy { it }
+
+/** Rows summed per currency, shillings first then by code. No rows → no entries. */
+internal fun currencySums(records: List<GivingRecord>): List<CurrencyAmount> =
+    records.groupBy(::currencyOf)
+        .map { (currency, rows) -> CurrencyAmount(currency, rows.sumOf { it.amountMinor.toLong() }) }
+        .sortedWith(compareBy(SHILLINGS_FIRST) { it.currency })
+
+/** "KSh 3,500 + US$ 20.00" — never one sum across currencies; nothing at
+ *  all reads "KSh 0". */
+internal fun moneyTotals(sums: List<CurrencyAmount>): String =
+    sums.ifEmpty { listOf(CurrencyAmount(GIVE_FORM_CURRENCY, 0)) }.joinToString(" + ") { money(it.minor, it.currency) }
+
+/** The first currency's amount — the hero's big number. */
+internal fun primaryAmount(sums: List<CurrencyAmount>): String =
+    money(sums.firstOrNull()?.minor ?: 0, sums.firstOrNull()?.currency ?: GIVE_FORM_CURRENCY)
+
+/** The rest, under the big number: "+ US$ 20.00"; null with one currency. */
+internal fun extraAmounts(sums: List<CurrencyAmount>): String? =
+    sums.drop(1).takeIf { it.isNotEmpty() }?.joinToString(" ") { "+ ${money(it.minor, it.currency)}" }
+
+/** The Nairobi year a gift counts in: the year it was made (created_at), as
+ *  the server's statements and PDF count it; else when it settled. */
+internal fun givingYear(r: GivingRecord): Int? =
+    (parseNairobi(r.createdAt) ?: parseNairobi(r.settledAt))?.year
+
+/** One period's rows, split — every status LISTED, only settled money
+ *  COUNTED. Total = gifts + pledges, per currency, by construction. */
 internal data class GivingSplit(
     val gifts: List<GivingRecord>,
     val pledges: List<GivingRecord>,
 ) {
-    val giftsMinor: Int get() = gifts.sumOf { it.amountMinor }
-    val pledgesMinor: Int get() = pledges.sumOf { it.amountMinor }
-    val totalMinor: Int get() = giftsMinor + pledgesMinor
+    val giftsSums: List<CurrencyAmount> get() = currencySums(gifts.filter(::isSettledRecord))
+    val pledgesSums: List<CurrencyAmount> get() = currencySums(pledges.filter(::isSettledRecord))
+    val totalSums: List<CurrencyAmount> get() = currencySums((gifts + pledges).filter(::isSettledRecord))
+
+    /** Money went through toward a pledge — the hero splits Gifts / Partner pledges. */
+    val hasPledgeMoney: Boolean get() = pledgesSums.any { it.minor != 0L }
 }
+
+/** The gift's money went through (GiveHistoryLogic.giftSettled). */
+internal fun isSettledRecord(r: GivingRecord): Boolean = giftSettled(r.status)
+
+/** How many of [records] went through — the "N gifts" and "N payments" counts. */
+internal fun settledCount(records: List<GivingRecord>): Int = records.count(::isSettledRecord)
 
 /** A row counted toward a pledge (wire pledge_id, contract 2026-09-25). A
  *  blank id is no pledge, the same rule as the partners statement. */
@@ -32,24 +90,43 @@ internal fun givingSplit(records: List<GivingRecord>): GivingSplit {
     return GivingSplit(gifts = gifts, pledges = pledges)
 }
 
-/** The hero's words. With no pledge money it stays "Total given" over the
- *  one number; with some, the big number is Gifts and one muted line carries
- *  "Partner pledges KSh Y · Total KSh X+Y". `footLabel` is BY FUND's foot,
- *  which now sums gifts only. (Settled rows only reach here, so "no pledge
- *  rows" and "Y = 0" are the same thing; keying on the rows means a pledge
- *  row can never drop out of both the day list and the group.) */
-internal data class GivingHero(val label: String, val amountMinor: Int, val pledgeLine: String?, val footLabel: String)
+/** The hero's words. With no settled pledge money it stays "Total given"
+ *  over the one number; with some, the big number is Gifts and one muted
+ *  line carries "Partner pledges KSh Y · Total KSh X+Y". `footLabel` is BY
+ *  FUND's foot, which sums gifts only. (iOS keys the split on settled pledge
+ *  money, the rows on any pledge row — [pledgeGroup].) */
+internal data class GivingHero(val label: String, val amounts: List<CurrencyAmount>, val pledgeLine: String?, val footLabel: String) {
+    /** The big number: the first currency ("KSh 3,500"). */
+    val primary: String get() = primaryAmount(amounts)
+
+    /** Under it, any other currency ("+ US$ 20.00"); null with one. */
+    val extra: String? get() = extraAmounts(amounts)
+}
 
 internal fun givingHero(split: GivingSplit): GivingHero =
-    if (split.pledges.isEmpty()) {
-        GivingHero("Total given", split.totalMinor, null, "TOTAL GIVEN")
+    if (!split.hasPledgeMoney) {
+        GivingHero("Total given", split.totalSums, null, "TOTAL GIVEN")
     } else {
         GivingHero(
             label = "Gifts",
-            amountMinor = split.giftsMinor,
-            pledgeLine = "Partner pledges ${ksh(split.pledgesMinor)} · Total ${ksh(split.totalMinor)}",
+            amounts = split.giftsSums,
+            pledgeLine = "Partner pledges ${moneyTotals(split.pledgesSums)} · Total ${moneyTotals(split.totalSums)}",
             footLabel = "TOTAL GIFTS",
         )
+    }
+
+/** One BY FUND row: a fund's gifts in ONE currency — a fund given to in
+ *  shillings and dollars has two rows, never one sum. */
+internal data class FundLine(val fund: String, val currency: String, val minor: Long, val count: Int)
+
+/** BY FUND, in the order the funds first appear (newest gift first), each
+ *  fund's currencies shillings first — settled gifts only (a failed gift is
+ *  listed below, never counted here). */
+internal fun fundLines(records: List<GivingRecord>): List<FundLine> =
+    records.filter(::isSettledRecord).groupBy { it.fund }.flatMap { (fund, rows) ->
+        rows.groupBy(::currencyOf)
+            .map { (currency, rs) -> FundLine(fund, currency, rs.sumOf { it.amountMinor.toLong() }, rs.size) }
+            .sortedWith(compareBy(SHILLINGS_FIRST) { it.currency })
     }
 
 /** One day of rows, newest first. `date` is null for rows whose timestamp
@@ -64,18 +141,33 @@ internal fun statementDays(records: List<GivingRecord>): List<StatementDay> =
         .groupBy { parseNairobi(it.createdAt)?.toLocalDate() }
         .map { (date, recs) -> StatementDay(date, recs) }
 
-/** The collapsed PARTNER PLEDGES group: its total, its count, the header line
- *  "KSh Y · N payments", and the rows by day for when it opens. */
-internal data class PledgeGroup(val totalMinor: Int, val count: Int, val days: List<StatementDay>) {
-    val summary: String get() = "${ksh(totalMinor)} · $count payment${if (count == 1) "" else "s"}"
+/** The collapsed PARTNER PLEDGES group: its settled total per currency, how
+ *  many settled and how many not, the header line "KSh Y · N payments · 1
+ *  not settled" (iOS), and every row by day for when it opens. */
+internal data class PledgeGroup(
+    val totals: List<CurrencyAmount>,
+    val count: Int,
+    val days: List<StatementDay>,
+    val unsettled: Int = 0,
+) {
+    val summary: String
+        get() = "${moneyTotals(totals)} · $count payment${if (count == 1) "" else "s"}" +
+            (if (unsettled > 0) " · $unsettled not settled" else "")
 }
 
-/** Null — no group at all — when the period has no pledge money. */
+/** Null — no group at all — when the period has no pledge-tied row. A row
+ *  still processing or failed is listed inside, and said in the header. */
 internal fun pledgeGroup(split: GivingSplit): PledgeGroup? {
     if (split.pledges.isEmpty()) return null
-    return PledgeGroup(split.pledgesMinor, split.pledges.size, statementDays(split.pledges))
+    val settled = settledCount(split.pledges)
+    return PledgeGroup(split.pledgesSums, settled, statementDays(split.pledges), unsettled = split.pledges.size - settled)
 }
 
 /** The gold tag a pledge row wears: the server's pledge title, else "Partner"
  *  (→ "Partner pledge") for an older row that carries only the id. */
 internal fun pledgeTagTitle(r: GivingRecord): String = r.pledgeTitle?.trim()?.takeIf { it.isNotEmpty() } ?: "Partner"
+
+/** The one time a gift shows, on its statement row as on its receipt: when it
+ *  settled; until then, when it was sent. (The day it is listed under, and
+ *  the year it counts in, stay the server's created day — totals untouched.) */
+internal fun statementTime(r: GivingRecord): String = r.settledAt?.takeIf { it.isNotBlank() } ?: r.createdAt

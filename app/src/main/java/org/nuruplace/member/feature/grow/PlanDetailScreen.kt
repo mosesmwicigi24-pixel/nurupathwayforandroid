@@ -4,6 +4,8 @@
 // vertical scroll (hero + about + "what you'll read" + finish-&-earn + nudge) with a
 // pinned bottom CTA bar (gold "Start/Continue/Review" + a white "Invite" no-op).
 // Server owns enrolment + completion (§1.1); the heart + expand toggles are LOCAL.
+// The heart is a quiet like (owner, 2026-10-05) — it never says "Saved", since
+// nothing is saved anywhere until saving exists as its own feature.
 package org.nuruplace.member.feature.grow
 
 import androidx.compose.foundation.background
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,19 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
+import org.nuruplace.member.ui.components.NuruAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -58,6 +49,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,8 +66,13 @@ import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.ReadingGroupRow
 import org.nuruplace.member.data.net.ReadingPlanDay
 import org.nuruplace.member.data.net.ReadingPlanDetail
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.Haptics
+import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 // Vertical scrim over the hero cover (iOS #081424 @ 40% / 10% / 92%, top→bottom).
 private val heroScrim = Brush.verticalGradient(
@@ -84,16 +83,28 @@ private val heroScrim = Brush.verticalGradient(
 fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Unit, onOpenChat: (String) -> Unit = {}) {
     var loading by remember { mutableStateOf(true) }
     var detail by remember { mutableStateOf<ReadingPlanDetail?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A plan that did not load, in the state language (§4).
+    var error by remember { mutableStateOf<StateMessage?>(null) }
+    val failContext = androidx.compose.ui.platform.LocalContext.current
     // A segment ack told us this day number should already be open. Kept
     // until a fetch actually shows it unlocked, so a day that still comes
     // back locked (a completion still catching up through the sync path)
     // reads as "finishing sync" rather than "you're not there yet".
     var awaitingUnlock by remember { mutableStateOf<Int?>(null) }
+    // "Begin Day 1" in flight (it starts the plan), and why it did not land
+    // (§4) — it used to fail without a word, and leave the button as it was.
+    var starting by remember { mutableStateOf(false) }
+    var startError by remember { mutableStateOf<String?>(null) }
+    // A pause, named kindly once (EXPERIENCE.md §9.1 rule 5) — from the
+    // plan's row in GET /growth/plans (its `last_day_finished_at`; the
+    // detail doesn't carry it). Null while it's being read.
+    var pause by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
         loading = true
+        pause = runCatching { Net.client.api.plans().data.firstOrNull { it.planId == planId } }.getOrNull()
+            ?.let { row -> planPausedOn(row)?.let { pauseLine(it, planDay(row)) } }
         runCatching { Net.client.api.plan(planId) }
             .onSuccess {
                 detail = it; error = null
@@ -102,7 +113,7 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                     awaitingUnlock = null
                 }
             }
-            .onFailure { error = "Couldn't load this plan." }
+            .onFailure { error = ApiException.state(it, failContext) }
         loading = false
     }
 
@@ -128,10 +139,29 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
         when {
             d != null -> PlanDetailContent(
                 d = d,
+                pause = pause,
                 awaitingUnlock = awaitingUnlock,
                 onBack = onBack,
                 onOpenDay = onOpenDay,
-                onStart = { scope.launch { runCatching { Net.client.api.startPlan(planId) }; reload() } },
+                onStart = {
+                    if (!starting) {
+                        starting = true
+                        scope.launch {
+                            val started = runCatching { Net.client.api.startPlan(planId) }
+                            started.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+                            if (started.isSuccess) {
+                                reload()
+                                // "Begin Day 1" lands where it points (§7.1
+                                // rule 1): one tap starts the plan and opens
+                                // Day 1 (EXPERIENCE.md §7.4 #2).
+                                onOpenDay(detail?.nextDay ?: 1)
+                            } else {
+                                startError = ApiException.message(started.exceptionOrNull()!!, failContext)
+                            }
+                            starting = false
+                        }
+                    }
+                },
                 onRetrySync = { scope.launch { reload() } },
                 onOpenChat = onOpenChat,
             )
@@ -139,19 +169,30 @@ fun PlanDetailScreen(planId: String, onBack: () -> Unit, onOpenDay: (Int) -> Uni
                 color = PL.gold,
                 modifier = Modifier.align(Alignment.Center),
             )
-            else -> Text(
-                error ?: "Couldn't load this plan.",
-                style = plInter(13),
-                color = PL.ink2,
-                modifier = Modifier.align(Alignment.Center),
+            // Full width, with a way back — this page has no header of its own here.
+            else -> FailedState(
+                error ?: StateLanguage.serverError,
+                onRetry = { scope.launch { reload() } },
+                onBack = onBack,
+                modifier = Modifier.align(Alignment.Center).padding(20.dp),
             )
         }
+    }
+    startError?.let { msg ->
+        NuruAlertDialog(
+            onDismissRequest = { startError = null },
+            confirmButton = { TextButton(onClick = { startError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
+            title = { Text("Couldn't start this plan", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
+            text = { Text(msg, style = plInter(13), color = PL.ink2) },
+            containerColor = Color.White,
+        )
     }
 }
 
 @Composable
 private fun PlanDetailContent(
     d: ReadingPlanDetail,
+    pause: String?,
     awaitingUnlock: Int?,
     onBack: () -> Unit,
     onOpenDay: (Int) -> Unit,
@@ -173,7 +214,7 @@ private fun PlanDetailContent(
         val n = nextDay ?: 1
         val title = d.days.firstOrNull { it.dayNumber == n }?.title
         val named = if (title != null) "Day $n — $title" else "Day $n"
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { lockedNudgeFor = null },
             confirmButton = {
                 TextButton(onClick = { lockedNudgeFor = null }) {
@@ -262,7 +303,7 @@ private fun PlanDetailContent(
         )
     }
     inviteError?.let { msg ->
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { inviteError = null },
             confirmButton = { TextButton(onClick = { inviteError = null }) { Text("OK", style = plInter(13, FontWeight.Bold), color = PL.goldDeep) } },
             title = { Text("Couldn't send that invite", style = plSerif(16, FontWeight.SemiBold), color = PL.navy) },
@@ -284,6 +325,7 @@ private fun PlanDetailContent(
                     AboutCard(d)
                     WhatYoullRead(
                         d = d, done = done, allDone = allDone, nextDay = nextDay,
+                        pause = pause,
                         awaitingUnlock = awaitingUnlock,
                         onOpenDay = onOpenDay,
                         onLockedDay = { lockedNudgeFor = it },
@@ -295,7 +337,6 @@ private fun PlanDetailContent(
             }
             CtaBar(
                 d = d,
-                done = done,
                 allDone = allDone,
                 firstIncomplete = firstIncomplete,
                 onOpenDay = onOpenDay,
@@ -304,10 +345,11 @@ private fun PlanDetailContent(
                 onInvite = { startInvite() },
             )
         }
-        // Floats above the CTA bar (whose own foot already carries tabBarSpace).
+        // Floats above the CTA bar: 108dp up from the gesture bar — the bar
+        // is 73dp tall there.
         toast?.let {
             ReadingToast(
-                it, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp),
+                it, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 108.dp),
                 actionLabel = toastAction?.first, onAction = toastAction?.second,
             )
         }
@@ -318,7 +360,7 @@ private fun PlanDetailContent(
 
 @Composable
 private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
-    var saved by remember { mutableStateOf(false) }
+    var liked by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxWidth().height(256.dp)) {
         PLCover(d.imageUrl, modifier = Modifier.matchParentSize())
@@ -334,12 +376,14 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
             d.category?.takeIf { it.isNotEmpty() }?.let { c ->
                 Text(
                     c.uppercase(),
-                    style = plInter(9, FontWeight.Bold, 1.26f),
+                    style = plInter(11, FontWeight.Bold, 1.4f),
                     color = PL.navy,
                     maxLines = 1,
+                    // A label pill is white with navy words (§8.1 rule 6; final
+                    // walk C16: "FOUNDATIONS" was gold-filled).
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(PL.gold)
+                        .background(Color.White)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }
@@ -355,8 +399,8 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                HeroMeta(Icons.Filled.Schedule, "${d.dayCount} days")
-                HeroMeta(Icons.Filled.MenuBook, "Devotional")
+                HeroMeta(Lucide.Clock4, "${d.dayCount} days")
+                HeroMeta(Lucide.BookOpen, "Devotional")
             }
         }
 
@@ -369,14 +413,20 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CircleBtn(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.weight(1f))
-            CircleBtn(onClick = { saved = !saved }) {
-                if (saved) {
-                    Icon(Icons.Filled.Favorite, "Saved", tint = PL.gold, modifier = Modifier.size(17.dp))
+            CircleBtn(
+                onClick = { liked = !liked },
+                modifier = Modifier.semantics {
+                    contentDescription = "Like"
+                    stateDescription = if (liked) "On" else "Off"
+                },
+            ) {
+                if (liked) {
+                    Icon(Lucide.Heart, null, tint = PL.gold, modifier = Modifier.size(18.dp))
                 } else {
-                    Icon(Icons.Filled.FavoriteBorder, "Save", tint = Color.White, modifier = Modifier.size(17.dp))
+                    Icon(Lucide.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -386,15 +436,15 @@ private fun CoverHero(d: ReadingPlanDetail, onBack: () -> Unit) {
 @Composable
 private fun HeroMeta(icon: ImageVector, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = PL.goldLight, modifier = Modifier.size(13.dp))
+        Icon(icon, null, tint = PL.goldLight, modifier = Modifier.size(14.dp))
         Text(text, style = plInter(12), color = Color.White.copy(alpha = 0.8f))
     }
 }
 
 @Composable
-private fun CircleBtn(onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun CircleBtn(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(
-        Modifier.size(40.dp)
+        modifier.size(40.dp)
             .clip(CircleShape)
             .background(Color.Black.copy(alpha = 0.35f))
             .clickable(onClick = onClick),
@@ -423,6 +473,7 @@ private fun WhatYoullRead(
     done: Int,
     allDone: Boolean,
     nextDay: Int?,
+    pause: String?,
     awaitingUnlock: Int?,
     onOpenDay: (Int) -> Unit,
     onLockedDay: (Int) -> Unit,
@@ -437,8 +488,16 @@ private fun WhatYoullRead(
             Spacer(Modifier.weight(1f))
             if (done > 0) {
                 val pct = Math.round(done.toDouble() / maxOf(d.days.size, 1) * 100).toInt()
-                Text("$pct% done", style = plInter(10, FontWeight.Bold), color = PL.catText)
+                Text("$pct% done", style = plInter(11, FontWeight.Bold), color = PL.catText)
             }
+        }
+        // The pause, once, kindly (§9.1 rule 5): when, and the day that waits.
+        pause?.let {
+            Text(
+                it, style = plInter(13, FontWeight.SemiBold), color = PL.navy,
+                modifier = Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(Nuru.goldTint).padding(horizontal = 12.dp, vertical = 10.dp),
+            )
         }
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             visible.forEach { day ->
@@ -463,7 +522,7 @@ private fun WhatYoullRead(
             if (!showAll && d.days.size > 4) {
                 Text(
                     "+ ${d.days.size - 4} more days",
-                    style = plInter(10),
+                    style = plInter(11),
                     color = PL.ink3,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -489,7 +548,7 @@ private fun Nudge() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.AutoAwesome, null, tint = PL.gold, modifier = Modifier.size(16.dp))
+        Icon(Lucide.Sparkles, null, tint = PL.gold, modifier = Modifier.size(18.dp))
         Text(
             "Consistency over intensity — a few faithful minutes a day.",
             style = plSerif(12, FontWeight.Normal, italic = true),
@@ -517,7 +576,6 @@ private fun PlanWhiteCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun CtaBar(
     d: ReadingPlanDetail,
-    done: Int,
     allDone: Boolean,
     firstIncomplete: ReadingPlanDay?,
     onOpenDay: (Int) -> Unit,
@@ -525,19 +583,21 @@ private fun CtaBar(
     inviting: Boolean,
     onInvite: () -> Unit,
 ) {
-    val target = if (allDone) d.days.firstOrNull() else firstIncomplete
-    val targetDay = target?.dayNumber ?: 1
-    val label = if (done > 0) {
-        if (allDone) "Review plan" else "Continue · Day $targetDay"
-    } else {
-        "Start plan"
-    }
+    // The day to read: the server's next_day (the same day the list marks),
+    // else the first unfinished one; Day 1 to review a finished plan.
+    val targetDay = if (allDone) d.days.firstOrNull()?.dayNumber ?: 1 else d.nextDay ?: firstIncomplete?.dayNumber ?: 1
+    // The page follows progress (EXPERIENCE.md §7.4 #2), in iOS's words: it
+    // said "Start plan" until a whole day was done, even with parts of Day 1
+    // read; now "Begin Day 1" · "Continue · Day N" · "Read again".
+    val label = planCtaLabel(begun = planBegun(d), allDone = allDone, day = targetDay)
 
-    Column(Modifier.fillMaxWidth().background(Color.White)) {
+    // Clear of the system's gesture bar, and no more (§7.1 rule 3): it
+    // reserved 96dp (Spacing.tabBarSpace) for a tab bar this page doesn't show.
+    Column(Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding()) {
         // Top hairline (iOS: 1px PL.border across the top of the white CTA bar).
         Box(Modifier.fillMaxWidth().height(1.dp).background(PL.border))
         Row(
-            Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = Spacing.tabBarSpace),
+            Modifier.padding(horizontal = 20.dp).padding(top = 12.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -555,7 +615,7 @@ private fun CtaBar(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.MenuBook, null, tint = PL.navy, modifier = Modifier.size(16.dp))
+                Icon(Lucide.BookOpen, null, tint = PL.navy, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = plInter(14, FontWeight.Bold), color = PL.navy)
             }
@@ -574,7 +634,7 @@ private fun CtaBar(
                 if (inviting) {
                     CircularProgressIndicator(color = PL.navy, modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Filled.Share, null, tint = PL.navy, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Share2, null, tint = PL.navy, modifier = Modifier.size(14.dp))
                 }
                 Text("Invite", style = plInter(13, FontWeight.SemiBold), color = PL.navy)
             }
@@ -603,12 +663,12 @@ private fun PLFinishEarnCard(category: String?, dayCount: Int) {
                 .border(1.dp, PL.gold.copy(alpha = 0.33f), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.EmojiEvents, null, tint = PL.goldLight, modifier = Modifier.size(20.dp))
+            Icon(Lucide.Trophy, null, tint = PL.goldLight, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 "FINISH & EARN",
-                style = plInter(9, FontWeight.Bold, 1.44f),
+                style = plInter(11, FontWeight.Bold, 1.4f),
                 color = PL.goldLight,
             )
             Text(
@@ -657,20 +717,22 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
             contentAlignment = Alignment.Center,
         ) {
             if (done) {
-                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("DAY", style = plInter(7, FontWeight.Bold), color = PL.gold)
+                    Text("DAY", style = plInter(11, FontWeight.Bold).copy(lineHeight = 12.sp), color = PL.gold)
                     Text("${day.dayNumber}", style = plSerif(14, FontWeight.SemiBold), color = PL.navy)
                 }
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            // A day is a content row: its title Fraunces, wrapping to two
+            // lines (§8.1 rules 3 and 9; final walk C16: Inter, cut at one).
             Text(
                 day.title ?: "Reading & reflection",
-                style = plInter(12, FontWeight.SemiBold),
+                style = plSerif(15, FontWeight.SemiBold),
                 color = PL.navy,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
@@ -686,18 +748,22 @@ private fun PLDetailDayRow(day: ReadingPlanDay, isNext: Boolean, syncing: Boolea
             )
         }
         if (isNext) {
+            // The day the member is on says what is left once it's begun
+            // ("1 part left"), not "Start" (EXPERIENCE.md §7.4 #2).
+            // Rule 4's compact in-row action — a navy pill — not a second
+            // gold primary beside "Continue · Day N" (owner, 2026-10-08).
             Text(
-                "Start",
-                style = plInter(9, FontWeight.Bold),
-                color = PL.navy,
-                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.gold).padding(horizontal = 8.dp, vertical = 2.dp),
+                nextDayPill(day),
+                style = plInter(11, FontWeight.Bold),
+                color = Color.White,
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(PL.navy).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         } else if (syncing) {
-            Icon(Icons.Filled.Schedule, null, tint = PL.goldDeep, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Clock4, null, tint = PL.goldDeep, modifier = Modifier.size(14.dp))
         } else if (locked) {
-            Icon(Icons.Filled.Lock, null, tint = PL.chev, modifier = Modifier.size(13.dp))
+            Icon(Lucide.Lock, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         } else {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
+            Icon(Lucide.ChevronRight, null, tint = PL.chev, modifier = Modifier.size(14.dp))
         }
     }
 }

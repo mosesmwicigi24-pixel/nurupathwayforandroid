@@ -26,17 +26,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatColorText
-import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatLineSpacing
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
+import org.nuruplace.member.ui.components.NuruAlertDialog
+import org.nuruplace.member.ui.components.NuruDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -49,6 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +58,7 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Spacing
 import java.util.UUID
+import org.nuruplace.member.ui.icons.Lucide
 
 /** A new-or-existing thought being edited. */
 data class SelahDraft(
@@ -84,6 +79,10 @@ fun SelahEditorScreen(
     onDismiss: () -> Unit,
     onSave: (SelahDraft) -> Unit,
     onDelete: (() -> Unit)?,
+    /** On its way to the server. */
+    saving: Boolean = false,
+    /** Why the last save or delete didn't land — the thought stays open. */
+    error: String? = null,
 ) {
     val view = LocalView.current
     val context = LocalContext.current
@@ -105,9 +104,11 @@ fun SelahEditorScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface).clickable { onDismiss() },
+                Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface)
+                    .clickable(onClickLabel = "Close the thought") { onDismiss() }
+                    .semantics { contentDescription = "Close" },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Filled.Close, "Close", tint = Nuru.navy, modifier = Modifier.size(14.dp)) }
+            ) { Icon(Lucide.X, null, tint = Nuru.navy, modifier = Modifier.size(14.dp)) }
             Spacer(Modifier.weight(1f))
             Text("SELAH", style = NuruType.sectionLabel, color = Nuru.eyebrow)
             Spacer(Modifier.weight(1f))
@@ -116,7 +117,7 @@ fun SelahEditorScreen(
                     Modifier.size(32.dp).clip(CircleShape).background(Nuru.surface)
                         .clickable { Haptics.tap(view); pendingDelete = true },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Delete, "Delete thought", tint = Nuru.danger, modifier = Modifier.size(14.dp)) }
+                ) { Icon(Lucide.Trash2, "Delete thought", tint = Nuru.danger, modifier = Modifier.size(14.dp)) }
             } else {
                 Box(Modifier.size(32.dp))
             }
@@ -191,9 +192,10 @@ fun SelahEditorScreen(
                         Box(
                             Modifier.size(18.dp).align(Alignment.TopEnd).clip(CircleShape)
                                 .background(Color.Black.copy(alpha = 0.55f))
-                                .clickable { Haptics.tap(view); drawingUrls = drawingUrls - url },
+                                .clickable(onClickLabel = "Remove this drawing") { Haptics.tap(view); drawingUrls = drawingUrls - url }
+                                .semantics { contentDescription = "Remove drawing" },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Close, null, tint = Color.White, modifier = Modifier.size(10.dp)) }
+                        ) { Icon(Lucide.X, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                     }
                 }
             }
@@ -206,11 +208,12 @@ fun SelahEditorScreen(
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ToolbarIcon(Icons.Filled.FormatBold, controller.selectionBold) { Haptics.tap(view); controller.toggleBold() }
-            ToolbarIcon(Icons.Filled.FormatItalic, controller.selectionItalic) { Haptics.tap(view); controller.toggleItalic() }
+            // Each named for TalkBack (§9.7 C13): the five read as empty buttons.
+            ToolbarIcon(Lucide.Bold, controller.selectionBold, "Bold") { Haptics.tap(view); controller.toggleBold() }
+            ToolbarIcon(Lucide.Italic, controller.selectionItalic, "Italic") { Haptics.tap(view); controller.toggleItalic() }
             Box {
-                ToolbarIcon(Icons.Filled.FormatColorText, false) { colorMenuOpen = true }
-                DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
+                ToolbarIcon(Lucide.Baseline, false, "Text colour") { colorMenuOpen = true }
+                NuruDropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                     SelahColor.entries.forEach { c ->
                         DropdownMenuItem(text = { Text(c.label) }, onClick = {
                             colorMenuOpen = false; Haptics.tap(view); controller.applyColor(c)
@@ -219,8 +222,8 @@ fun SelahEditorScreen(
                 }
             }
             Box {
-                ToolbarIcon(Icons.Filled.TextFields, false) { fontMenuOpen = true }
-                DropdownMenu(expanded = fontMenuOpen, onDismissRequest = { fontMenuOpen = false }) {
+                ToolbarIcon(Lucide.Type, false, "Font") { fontMenuOpen = true }
+                NuruDropdownMenu(expanded = fontMenuOpen, onDismissRequest = { fontMenuOpen = false }) {
                     SelahFont.entries.forEach { f ->
                         DropdownMenuItem(text = { Text(f.label) }, onClick = {
                             fontMenuOpen = false; Haptics.tap(view); controller.applyFont(context, f)
@@ -229,8 +232,8 @@ fun SelahEditorScreen(
                 }
             }
             Box {
-                ToolbarIcon(Icons.Filled.FormatLineSpacing, false) { spacingMenuOpen = true }
-                DropdownMenu(expanded = spacingMenuOpen, onDismissRequest = { spacingMenuOpen = false }) {
+                ToolbarIcon(Lucide.List, false, "Line spacing") { spacingMenuOpen = true }
+                NuruDropdownMenu(expanded = spacingMenuOpen, onDismissRequest = { spacingMenuOpen = false }) {
                     SelahSpacing.entries.forEach { s ->
                         DropdownMenuItem(text = { Text(s.label) }, onClick = {
                             spacingMenuOpen = false; Haptics.tap(view); controller.applySpacing(s.multiplier)
@@ -239,16 +242,17 @@ fun SelahEditorScreen(
                 }
             }
             if (isPenCapableDevice(context)) {
-                ToolbarIcon(Icons.Filled.EditNote, false) { Haptics.tap(view); showDrawing = true }
+                ToolbarIcon(Lucide.NotebookPen, false, "Draw") { Haptics.tap(view); showDrawing = true }
             }
         }
 
+        error?.let { Text(it, style = NuruType.caption, color = Nuru.danger, modifier = Modifier.padding(horizontal = Spacing.screen).padding(top = Spacing.sm)) }
         Box(
             Modifier.fillMaxWidth().padding(Spacing.screen).height(52.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (!isEmpty) Nuru.gold else Nuru.ink300)
-                .clickable(enabled = !isEmpty) {
-                    Haptics.confirm(view)
+                .clickable(enabled = !isEmpty && !saving) {
+                    Haptics.tap(view)
                     val editable = editableRef ?: controller.editText?.text
                     val (body, spans) = editable?.let { SelahRichText.extract(it) } ?: (draft.body to draft.spans)
                     draft.title = title.trim()
@@ -259,12 +263,12 @@ fun SelahEditorScreen(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(if (draft.isNew) "Save thought" else "Save changes", style = NuruType.cardCta, color = Nuru.navy)
+            Text(if (saving) "Saving…" else if (draft.isNew) "Save thought" else "Save changes", style = NuruType.cardCta, color = Nuru.navy)
         }
     }
 
     if (showDrawing) {
-        androidx.compose.ui.window.Dialog(
+        org.nuruplace.member.ui.components.NuruDialog(
             onDismissRequest = { showDrawing = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         ) {
@@ -276,7 +280,7 @@ fun SelahEditorScreen(
     }
 
     if (pendingDelete) {
-        AlertDialog(
+        NuruAlertDialog(
             onDismissRequest = { pendingDelete = false },
             title = { Text("Delete this thought?", style = NuruType.rowTitle, color = Nuru.ink) },
             text = { Text("It will be removed from Selah on every device.", style = NuruType.body, color = Nuru.ink600) },
@@ -292,13 +296,14 @@ fun SelahEditorScreen(
 }
 
 @Composable
-private fun ToolbarIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean, onClick: () -> Unit) {
+private fun ToolbarIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, active: Boolean, label: String, onClick: () -> Unit) {
     Box(
         Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))
             .background(if (active) Nuru.navy else Nuru.surface)
-            .clickable { onClick() },
+            .clickable(onClickLabel = label) { onClick() }
+            .semantics { contentDescription = label; selected = active },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = if (active) Color.White else Nuru.navy, modifier = Modifier.size(17.dp))
+        Icon(icon, null, tint = if (active) Color.White else Nuru.navy, modifier = Modifier.size(18.dp))
     }
 }

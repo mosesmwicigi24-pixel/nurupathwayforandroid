@@ -23,16 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -48,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +58,7 @@ import org.nuruplace.member.ui.components.VerseQuoteCard
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
 import org.nuruplace.member.ui.theme.scaledLineHeight
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun DevotionalScreen(onBack: () -> Unit) {
@@ -74,7 +70,9 @@ fun DevotionalScreen(onBack: () -> Unit) {
         var saved by remember(d.devotionalId) { mutableStateOf(d.myReflection != null) }
         var busy by remember(d.devotionalId) { mutableStateOf(false) }
         var error by remember(d.devotionalId) { mutableStateOf<String?>(null) }
-        var savedFav by remember(d.devotionalId) { mutableStateOf(false) }
+        // A quiet like (owner, 2026-10-05): this phone only, never "Saved" —
+        // nothing is saved anywhere until saving exists as its own feature.
+        var liked by remember(d.devotionalId) { mutableStateOf(false) }
 
         fun submit() {
             if (busy) return
@@ -130,7 +128,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Lucide.ArrowLeft,
                             contentDescription = "Back",
                             tint = GrowPal.navy,
                             modifier = Modifier.size(18.dp),
@@ -179,7 +177,7 @@ fun DevotionalScreen(onBack: () -> Unit) {
                                 d.body.split("\n\n").forEach { para ->
                                     Text(
                                         para,
-                                        style = gInter(14).copy(lineHeight = scaledLineHeight(21)),
+                                        style = gInter(16).copy(lineHeight = scaledLineHeight(24)),
                                         color = GrowPal.ink,
                                     )
                                 }
@@ -211,14 +209,14 @@ fun DevotionalScreen(onBack: () -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Icon(
-                                    Icons.Filled.Check,
+                                    Lucide.Check,
                                     contentDescription = null,
                                     tint = GrowPal.gold,
-                                    modifier = Modifier.size(10.dp),
+                                    modifier = Modifier.size(14.dp),
                                 )
                                 Text(
                                     "Submitted",
-                                    style = gInter(10, FontWeight.Bold),
+                                    style = gInter(11, FontWeight.Bold),
                                     color = GrowPal.gold,
                                 )
                             }
@@ -233,31 +231,35 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         )
                     }
 
-                    // Field
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 110.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(GrowPal.surface)
-                            .border(1.dp, GrowPal.border, RoundedCornerShape(14.dp))
-                            .padding(12.dp),
-                    ) {
-                        if (reflection.isBlank()) {
-                            Text(
-                                "Write your reflection…",
-                                style = gInter(14),
-                                color = GrowPal.ink400,
-                            )
-                        }
-                        BasicTextField(
-                            value = reflection,
-                            onValueChange = { reflection = it; saved = false },
-                            textStyle = gInter(14).copy(color = GrowPal.ink),
-                            cursorBrush = SolidColor(GrowPal.gold),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                    // Field — the whole box is the field (its decoration):
+                    // before, only its first line took a tap.
+                    BasicTextField(
+                        value = reflection,
+                        onValueChange = { reflection = it; saved = false },
+                        textStyle = gInter(14).copy(color = GrowPal.ink),
+                        cursorBrush = SolidColor(GrowPal.gold),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { field ->
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 110.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(GrowPal.surface)
+                                    .border(1.dp, GrowPal.border, RoundedCornerShape(14.dp))
+                                    .padding(12.dp),
+                            ) {
+                                if (reflection.isBlank()) {
+                                    Text(
+                                        "Write your reflection…",
+                                        style = gInter(14),
+                                        color = GrowPal.ink400,
+                                    )
+                                }
+                                field()
+                            }
+                        },
+                    )
 
                     // Hint
                     val trimmed = reflection.trim()
@@ -279,21 +281,22 @@ fun DevotionalScreen(onBack: () -> Unit) {
                             .fillMaxWidth()
                             .height(44.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (canSubmit) GrowPal.navy else GrowPal.navy.copy(alpha = 0.18f))
+                            // The page's one primary (§8.1 rule 4): gold, navy words.
+                            .background(if (canSubmit) GrowPal.gold else GrowPal.navy.copy(alpha = 0.18f))
                             .clickable(enabled = canSubmit) { submit() },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (busy) {
                             CircularProgressIndicator(
                                 Modifier.size(18.dp),
-                                color = Color.White,
+                                color = GrowPal.navy,
                                 strokeWidth = 2.dp,
                             )
                         } else {
                             Text(
                                 if (saved) "Update reflection" else "Submit reflection",
                                 style = gInter(14, FontWeight.SemiBold),
-                                color = if (canSubmit) Color.White else GrowPal.navy.copy(alpha = 0.55f),
+                                color = GrowPal.navy.copy(alpha = if (canSubmit) 1f else 0.55f),
                             )
                         }
                     }
@@ -315,21 +318,21 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     Column(
                         Modifier
                             .weight(1f)
-                            .clickable { savedFav = !savedFav }
+                            .toggleable(value = liked, role = Role.Switch) { liked = it }
                             .padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Icon(
-                            if (savedFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            if (liked) Lucide.Heart else Lucide.Heart,
                             contentDescription = null,
-                            tint = if (savedFav) GrowPal.gold else GrowPal.navy,
-                            modifier = Modifier.size(16.dp),
+                            tint = if (liked) GrowPal.gold else GrowPal.navy,
+                            modifier = Modifier.size(18.dp),
                         )
                         Text(
-                            if (savedFav) "Saved" else "Save",
-                            style = gInter(10, FontWeight.Medium),
-                            color = if (savedFav) GrowPal.gold else GrowPal.navy,
+                            "Like",
+                            style = gInter(11, FontWeight.Medium),
+                            color = if (liked) GrowPal.gold else GrowPal.navy,
                         )
                     }
                     Column(
@@ -341,14 +344,14 @@ fun DevotionalScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Icon(
-                            Icons.Filled.Share,
+                            Lucide.Share2,
                             contentDescription = null,
                             tint = GrowPal.navy,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(18.dp),
                         )
                         Text(
                             "Share",
-                            style = gInter(10, FontWeight.Medium),
+                            style = gInter(11, FontWeight.Medium),
                             color = GrowPal.navy,
                         )
                     }
@@ -365,10 +368,10 @@ fun DevotionalScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
-                        Icons.Filled.VolunteerActivism,
+                        Lucide.Heart,
                         contentDescription = null,
                         tint = GrowPal.gold,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                     Text(
                         "Every faithful day adds up. There's no rush — just presence.",

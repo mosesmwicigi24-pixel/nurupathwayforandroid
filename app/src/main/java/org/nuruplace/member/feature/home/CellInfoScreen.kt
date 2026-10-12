@@ -1,8 +1,9 @@
 // Cell info — the destination behind the "This week at Nuru" featured-cell card.
 // Renders entirely from GET /me/cell-summary (cell-truth, pathway#453): the
 // member's OWN cell — leader, faces, meeting rhythm, next gathering, honest
-// turnout, and a shepherd's note for the cell's leader. Port of the iOS
-// CellInfoView.
+// attendance (CellAttendance.kt), a shepherd's note for the cell's leader, and
+// a way forward: "Watch replays" (the cell's) and "Open community ›" (the
+// cell's own room) — EXPERIENCE.md §7.4 #16. Port of the iOS CellInfoView.
 package org.nuruplace.member.feature.home
 
 import androidx.compose.foundation.background
@@ -17,6 +18,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,8 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,8 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import org.nuruplace.member.data.net.CellSummary
+import org.nuruplace.member.data.net.ChatConversation
 import org.nuruplace.member.data.net.LiveNowRow
 import org.nuruplace.member.data.net.MeResponse
 import org.nuruplace.member.data.net.Net
@@ -61,6 +62,7 @@ import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
 import org.nuruplace.member.util.fmtEventTime
+import org.nuruplace.member.ui.icons.Lucide
 
 @Composable
 fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
@@ -69,9 +71,13 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
     // server already scopes cell-scope rows to the caller's own cell, so no
     // extra client-side cellId matching (or a second endpoint) is needed here.
     var liveNow by remember { mutableStateOf<List<LiveNowRow>>(emptyList()) }
+    // The cell's own room in Community (the server keeps every member in it)
+    // — where "Open community" lands; null → the You tab's Community.
+    var cellRoomId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         cell = runCatching { Net.client.api.cellSummary().cell }.getOrNull()
         liveNow = runCatching { Net.client.api.getLiveNow().data }.getOrDefault(emptyList())
+        cellRoomId = runCatching { cellRoom(Net.client.api.chatInbox().conversations, cell?.name) }.getOrNull()
     }
     val cellLive = liveNow.firstOrNull { it.scope == "cell" }
     // Nuru Live (L3) — the cell entry point is forced to scope=cell (this
@@ -81,9 +87,13 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
     var showGoLiveSheet by remember { mutableStateOf(false) }
 
     val name = cell?.name?.takeIf { it.isNotBlank() } ?: "Your cell"
+    // This cell's replays — the same list, scoped to the cell (iOS parity).
+    val cellReplays = cell?.cellGroupId?.takeIf { it.isNotBlank() }
+        ?.let { id -> "live-replays?scope=cell&cellId=$id&cellName=${android.net.Uri.encode(name)}" }
+        ?: "live-replays"
     Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
         ScreenHeader(name, kicker = "Your cell", onBack = onBack)
-        Column(Modifier.fillMaxWidth().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(Spacing.screen), verticalArrangement = Arrangement.spacedBy(Spacing.base)) {
             if (canGoLive(me) && me?.profile?.cellGroupId != null && cellLive == null) {
                 GoLiveButton(onClick = { showGoLiveSheet = true })
             }
@@ -91,7 +101,7 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                 LiveStreamBanner(
                     row = row,
                     onOpen = { onNavigate(liveNowRoute(row)) },
-                    onReplays = { onNavigate("live-replays") },
+                    onReplays = { onNavigate(cellReplays) },
                 )
             }
             val c = cell
@@ -106,19 +116,36 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
 
             NuruCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AvatarCircle(c.leader?.avatarUrl, c.leader?.name ?: name, size = 52)
+                    // No leader yet: an empty seat — not an avatar made of the
+                    // cell's own initial ("D" for Dev Cell A; walk E18).
+                    if (c.leader != null) {
+                        AvatarCircle(c.leader.avatarUrl, c.leader.name, size = 52)
+                    } else {
+                        // The empty seat on the gold-tint tile every row icon sits
+                        // on (§8.1 rule 7; final walk C16: a grey disc).
+                        Box(
+                            Modifier.size(52.dp).clip(CircleShape).background(Nuru.goldTint),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Lucide.Armchair, contentDescription = "No leader yet", tint = Nuru.navy, modifier = Modifier.size(22.dp))
+                        }
+                    }
                     Spacer(Modifier.size(Spacing.md))
                     Column(Modifier.weight(1f)) {
                         Kicker("Cell leader")
-                        Text(c.leader?.name ?: "Not assigned yet", style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Bold)
+                        // A name is a content row title; the empty value is the
+                        // quiet Inter every other empty value wears (§8.1 rule 3).
+                        if (c.leader != null) Text(c.leader.name, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Bold)
+                        else Text("Not assigned yet", style = NuruType.body, color = Nuru.ink600)
                         c.leader?.role?.let { Text(it, style = NuruType.caption, color = Nuru.ink600) }
                     }
                 }
             }
 
-            c.roster?.takeIf { it.count > 0 }?.let {
+            val facesShown = c.roster?.takeIf { it.count > 0 }?.let {
                 MembersFacesRow(it, c.members, onOpen = { onNavigate("cell-roster") })
-            }
+                true
+            } ?: false
 
             // Meeting rhythm — the OWN cell's server-derived (or admin-typed)
             // rhythm. When nothing is on the calendar and no real series
@@ -130,10 +157,9 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                     c.meets?.let { RhythmRow("Meets", it) }
                     c.next?.let { RhythmRow("Next session", fmtEventTime(it.startAt)) }
                     c.room?.let { RhythmRow("Where", it) }
-                    if (notScheduled) {
-                        Spacer(Modifier.height(Spacing.sm))
-                        Text("Not scheduled yet", style = NuruType.body, color = Nuru.ink600)
-                    }
+                    // When it meets, always said (final walk C4): with nothing
+                    // on the books, "No gathering set yet" — iOS CellRhythmWords.
+                    if (notScheduled) RhythmRow("Next gathering", CELL_NO_GATHERING, muted = true)
                 }
             }
 
@@ -171,24 +197,75 @@ fun CellInfoScreen(me: MeResponse? = null, onBack: () -> Unit, onNavigate: (Stri
                 }
             }
 
+            // Attendance with the server's meaning (EXPERIENCE.md §7.4 #16), the
+            // same words as iOS: the member's part in the cell's real recent
+            // meetings, then the cell's turnout over them — or "Your cell
+            // hasn't met yet". It read "48% · last 8 meetings" here and
+            // "0/8 · you, this month" on iOS (8 = a scoring baseline).
             NuruCard {
-                Kicker("Cell stats")
+                Kicker("Attendance")
                 Spacer(Modifier.height(Spacing.xs))
-                StatRow("Members", c.members.toString())
-                // Honest attendance: the whole cell's turnout when the server
-                // can compute it; else the member's own month; else a dash.
-                val t = c.turnout
-                val attendanceValue = when {
-                    t != null -> {
-                        val arrow = when (t.trend) { "up" -> " ↑"; "down" -> " ↓"; "steady" -> " →"; else -> "" }
-                        "${(t.rate * 100).roundToInt()}% · last ${t.meetings} meetings$arrow"
+                val met = CellAttendanceWords.hasMet(c.attendance.you, c.turnout)
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        CellAttendanceWords.lines(c.attendance.you, c.turnout).forEach { line ->
+                            Text(
+                                line, style = NuruType.body,
+                                color = if (met) Nuru.ink else Nuru.ink600,
+                                fontWeight = if (met) FontWeight.Bold else FontWeight.SemiBold,
+                            )
+                        }
                     }
-                    c.attendance.expected > 0 -> "${c.attendance.attended}/${c.attendance.expected} you, this month"
-                    else -> "—"
+                    // The cell's trend, in the state colours (§8.1 rule 1).
+                    when (c.turnout?.takeIf { it.meetings > 0 }?.trend) {
+                        "up" -> Text("↑", style = NuruType.body, color = Nuru.success, fontWeight = FontWeight.Bold)
+                        "down" -> Text("↓", style = NuruType.body, color = Nuru.danger, fontWeight = FontWeight.Bold)
+                        "steady" -> Text("→", style = NuruType.body, color = Nuru.ink600, fontWeight = FontWeight.Bold)
+                        else -> Unit
+                    }
                 }
-                StatRow("Attendance", attendanceValue)
-                c.levelLabel?.let { StatRow("Level", it) }
-                c.focus?.let { StatRow("Focus", it) }
+            }
+
+            // The member count once (walk E18): the faces row above says
+            // "5 members", so the stats don't say it again; nothing left to
+            // show, no card.
+            val showMembersStat = !facesShown
+            if (showMembersStat || c.levelLabel != null || c.focus != null) {
+                NuruCard {
+                    Kicker("Cell stats")
+                    Spacer(Modifier.height(Spacing.xs))
+                    if (showMembersStat) StatRow("Members", c.members.toString())
+                    c.levelLabel?.let { StatRow("Level", it) }
+                    c.focus?.let { StatRow("Focus", it) }
+                }
+            }
+
+            // A way forward (EXPERIENCE.md §7.4 #16 — the page ended in stats):
+            // the cell's replays, and its own room in Community, as iOS.
+            NuruCard(modifier = Modifier.pressScale().clickable { onNavigate(cellReplays) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Nuru.goldTint),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Lucide.Clapperboard, null, tint = Nuru.navy, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.size(Spacing.md))
+                    Text("Watch replays", style = NuruType.controlTitle, color = Nuru.ink, modifier = Modifier.weight(1f))
+                    Icon(Lucide.ChevronRight, null, tint = Nuru.ink300, modifier = Modifier.size(22.dp))
+                }
+            }
+            // The page's one primary (§8.1 rule 4, as iOS): gold, navy words —
+            // it was navy with white.
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radii.button))
+                    .background(Nuru.gold)
+                    .clickable { onNavigate(cellRoomId?.let { "chat/$it" } ?: "you") },
+                contentAlignment = Alignment.Center,
+            ) {
+                // Its words alone — no chevron inside a button (§8.1 rule 4;
+                // final walk C16).
+                Text("Open community", style = NuruType.cardCta, color = Nuru.navy)
             }
         }
     }
@@ -245,20 +322,20 @@ private fun MembersFacesRow(roster: CellSummary.Roster, members: Int, onOpen: ()
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                Lucide.ChevronRight,
                 contentDescription = "Open the roster",
                 tint = Nuru.ink300,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
     }
 }
 
 @Composable
-private fun RhythmRow(label: String, value: String) {
+private fun RhythmRow(label: String, value: String, muted: Boolean = false) {
     Spacer(Modifier.height(Spacing.sm))
     Text(label, style = NuruType.micro, color = Nuru.ink400)
-    Text(value, style = NuruType.body, color = Nuru.ink, fontWeight = FontWeight.SemiBold)
+    Text(value, style = NuruType.body, color = if (muted) Nuru.ink600 else Nuru.ink, fontWeight = if (muted) FontWeight.Normal else FontWeight.SemiBold)
 }
 
 @Composable
@@ -268,3 +345,20 @@ private fun StatRow(label: String, value: String) {
         Text(value, style = NuruType.rowTitle, color = Nuru.ink, fontWeight = FontWeight.Bold)
     }
 }
+
+/**
+ * The cell's own room in Community — "Open community" lands there, the cell's
+ * space as iOS's lands on the cell's board (EXPERIENCE.md §7.4 #16). The server
+ * keeps every member in their cell's group room, titled "‹cell› cell"; the
+ * title match wins, else the only group room. Null (no room, or more than one
+ * with none named for this cell) → the You tab's Community.
+ */
+internal fun cellRoom(conversations: List<ChatConversation>, cellName: String?): String? {
+    val rooms = conversations.filter { it.kind == "group" }
+    val named = cellName?.takeIf { it.isNotBlank() }?.let { n -> rooms.firstOrNull { it.title == "$n cell" } }
+    return (named ?: rooms.singleOrNull())?.conversationId
+}
+
+/** The cell page's words for a cell with no gathering on the books (final
+ *  walk C4) — iOS CellRhythmWords.noneSet. */
+internal const val CELL_NO_GATHERING = "No gathering set yet"

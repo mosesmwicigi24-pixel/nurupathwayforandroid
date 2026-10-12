@@ -73,8 +73,11 @@ android {
     buildTypes {
         debug {
             // Point debug at prod for on-emulator design verification (fast, no R8).
-            // Flip back to http://10.0.2.2:8080/v1 for local-backend development.
-            buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
+            // For local-backend development pass -PapiBaseUrl=http://10.0.2.2:8080/v1
+            // (Giving cycles: money flows are tested against a local server with a
+            // fake M-Pesa — never against production from a debug build).
+            val apiBase = (project.findProperty("apiBaseUrl") as String?) ?: "https://pathway.nuruplace.org/v1"
+            buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://pathway.nuruplace.org/v1\"")
@@ -98,6 +101,23 @@ android {
                 nativeSymbolUploadEnabled = true
             }
         }
+        // A release-MODE build for measuring on the emulator — R8, no
+        // debuggable runtime, the same code as release — signed with the
+        // DEBUG key, so it installs over the debug app and can never be
+        // uploaded to Play (EXPERIENCE.md §9.4: the Cycle 1 cold-launch freeze
+        // is measured here, not on a store build). It talks to the local API
+        // (-PapiBaseUrl, default the emulator's host) and uploads nothing.
+        create("localRelease") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            val apiBase = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8080/v1/"
+            buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+            configure<CrashlyticsExtension> {
+                mappingFileUploadEnabled = false
+                nativeSymbolUploadEnabled = false
+            }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -117,7 +137,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.material.icons.core)
-    implementation(libs.androidx.material.icons.extended)
+    // material-icons-extended left with the Lucide switch (EXPERIENCE.md
+    // §8.1 rule 7): no code draws a Material icon any more.
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

@@ -15,11 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,17 +29,18 @@ import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.ui.theme.Radii
 import org.nuruplace.member.ui.theme.Spacing
+import org.nuruplace.member.ui.icons.Lucide
 
 private data class GrowEntry(val route: String, val title: String, val subtitle: String, val icon: ImageVector)
 
 @Composable
 fun GrowHubScreen(onOpen: (String) -> Unit) {
     val entries = listOf(
-        GrowEntry("devotional", "Today's devotional", "A word for today + reflect", Icons.AutoMirrored.Filled.List),
-        GrowEntry("memory-verses", "Memory verses", "Hide His Word in your heart", Icons.Filled.Star),
-        GrowEntry("plans", "Reading plans", "Journey through Scripture", Icons.AutoMirrored.Filled.List),
-        GrowEntry("prayer-room", "My Prayer Room", "Your private prayers", Icons.Filled.Favorite),
-        GrowEntry("verses", "Verse library", "Verses you've saved", Icons.Filled.Star),
+        GrowEntry("devotional", "Today's devotional", "A word for today + reflect", Lucide.List),
+        GrowEntry("memory-verses", "Memory verses", "Hide His Word in your heart", Lucide.Star),
+        GrowEntry("plans", "Reading plans", "Journey through Scripture", Lucide.List),
+        GrowEntry("prayer-room", "My Prayer Room", "Your private prayers", Lucide.Heart),
+        GrowEntry("verses", "Verse library", "Verses you've saved", Lucide.Star),
     )
     Column(
         Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState()),
@@ -63,13 +59,13 @@ fun GrowHubScreen(onOpen: (String) -> Unit) {
                         Box(
                             Modifier.size(44.dp).clip(RoundedCornerShape(Radii.control)).background(Nuru.goldTint),
                             contentAlignment = Alignment.Center,
-                        ) { Icon(e.icon, null, tint = Nuru.goldLo, modifier = Modifier.size(22.dp)) }
+                        ) { Icon(e.icon, null, tint = Nuru.navy, modifier = Modifier.size(22.dp)) }
                         Spacer(Modifier.size(Spacing.base))
                         Column(Modifier.weight(1f)) {
                             Text(e.title, style = NuruType.cardTitle, color = Nuru.ink)
                             Text(e.subtitle, style = NuruType.caption, color = Nuru.ink600)
                         }
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
+                        Icon(Lucide.ArrowRight, null, tint = Nuru.ink300, modifier = Modifier.size(18.dp))
                     }
                 }
             }

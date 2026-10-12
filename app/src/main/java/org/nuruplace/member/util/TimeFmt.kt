@@ -11,14 +11,9 @@ import java.time.format.DateTimeFormatter
 fun todayIso(): String = LocalDate.now().toString()
 fun isoPlusDays(days: Long): String = LocalDate.now().plusDays(days).toString()
 
-private val eventFmt = DateTimeFormatter.ofPattern("EEE d MMM · HH:mm")
-
-/** Format an ISO instant as e.g. "Sat 5 Jul · 10:00" in the device zone. */
-fun fmtEventTime(iso: String?): String {
-    if (iso.isNullOrBlank()) return ""
-    val inst = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""
-    return runCatching { eventFmt.format(inst.atZone(ZoneId.systemDefault())) }.getOrDefault("")
-}
+/** An ISO instant as "Sat 5 Jul · 10:00 AM" in the device zone — the one
+ *  date form and a 12-hour time (§8.1 rule 8; it read a 24-hour "10:00"). */
+fun fmtEventTime(iso: String?): String = NuruDates.dayTime(iso).orEmpty()
 
 fun relTime(iso: String?): String {
     if (iso.isNullOrBlank()) return ""

@@ -1,0 +1,18 @@
+Fonts for the Sunday Letter (the editorial letter, owner 2026-10-07)
+
+Copied from the Nuru Pathway backend (pathway packages/backend/assets/fonts/letter,
+fetched 2026-10-07 from Google Fonts), so the letter on the phone is set in the
+same faces as its "Keep this letter" PDF. Each is licensed under the SIL Open
+Font License, Version 1.1 (https://openfontlicense.org), which allows bundling
+and embedding with software.
+
+res/font/mrs_saint_delafield.ttf  (MrsSaintDelafield-Regular.ttf)
+  Mrs Saint Delafield (Sudtipos) - OFL-1.1
+  Copyright (c) 2004 Alejandro Paul (sudtipos@sudtipos.com), with Reserved Font
+  Name "Mrs Saint Delafield".
+  The letter's signature.
+
+res/font/fraunces_italic.ttf  (Fraunces-RegularItalic.ttf, Fraunces 72pt Italic)
+  Fraunces (Undercase Type) - OFL-1.1
+  Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces).
+  The letter's italics: its nameplate, salutation, pull quote, verse and captions.

@@ -22,8 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,31 +33,40 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import org.nuruplace.member.data.net.ApiException
 import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.data.net.StateLanguage
+import org.nuruplace.member.data.net.StateMessage
 import org.nuruplace.member.data.net.RosterRes
 import org.nuruplace.member.data.net.RosterRow
+import org.nuruplace.member.ui.components.FailedState
 import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.icons.Lucide
 
 private val CardShape = RoundedCornerShape(24.dp)
 private val ControlShape = RoundedCornerShape(14.dp)
 private val Capsule = RoundedCornerShape(999.dp)
 private val Green = Color(0xFF16A34A)
 private val Red = Color(0xFFDC2626)
-private val Blue = Color(0xFF2563EB)
+// "Steady" reads navy — neither green, amber nor red (§8.1 rule 1).
+private val Blue = Color(0xFF0B1F33)
 
 @Composable
 fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
     var roster by remember { mutableStateOf<RosterRes?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A failed load in the state language (§4) — never the exception's own text.
+    var error by remember { mutableStateOf<StateMessage?>(null) }
+    val context = LocalContext.current
     var loading by remember { mutableStateOf(true) }
     var reloadKey by remember { mutableIntStateOf(0) }
 
@@ -68,7 +75,7 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
         error = null
         runCatching { Net.client.api.disciples() }
             .onSuccess { roster = it }
-            .onFailure { error = it.message ?: "Couldn't load your disciples." }
+            .onFailure { error = ApiException.state(it, context) }
         loading = false
     }
 
@@ -86,9 +93,9 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
                         .border(1.dp, GrowPal.border, CircleShape)
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Lucide.ArrowLeft, null, tint = GrowPal.navy, modifier = Modifier.size(18.dp)) }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Your disciples", style = gSerif(20, FontWeight.SemiBold), color = GrowPal.navy)
+                    Text("Your disciples", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
                     roster?.summary?.let { s ->
                         Text(
                             "${s.totalStudents} walking with you · ${s.awaitingAction} awaiting action",
@@ -108,7 +115,7 @@ fun DisciplerRosterScreen(onBack: () -> Unit, onOpenStudent: (String) -> Unit) {
             when {
                 loading && r == null -> item { LoadingSkeleton() }
                 r == null && error != null -> item {
-                    ErrorCard(error ?: "Couldn't load your disciples.") { reloadKey++ }
+                    FailedState(error ?: StateLanguage.serverError, onRetry = { reloadKey++ })
                 }
                 r != null && r.summary.totalStudents == 0 -> item { EmptyCard() }
                 r != null -> {
@@ -202,7 +209,7 @@ private fun StudentAvatar(name: String, url: String?) {
         ) {
             val initials = name.split(" ").filter { it.isNotBlank() }.take(2)
                 .joinToString("") { it.first().uppercase() }
-            Text(initials.ifEmpty { "?" }, style = gSerif(17, FontWeight.SemiBold), color = GrowPal.gold)
+            Text(initials.ifEmpty { "?" }, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.gold)
         }
     }
 }
@@ -222,7 +229,7 @@ private fun BandPill(band: String) {
             .border(1.dp, color.copy(alpha = 0.25f), Capsule)
             .padding(horizontal = 9.dp, vertical = 4.dp),
     ) {
-        Text(label, style = gInter(10, FontWeight.Bold), color = color)
+        Text(label, style = gInter(11, FontWeight.Bold), color = color)
     }
 }
 
@@ -246,23 +253,6 @@ private fun LoadingSkeleton() {
 }
 
 @Composable
-private fun ErrorCard(message: String, onRetry: () -> Unit) {
-    RosterCard {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(message, style = gInter(13), color = GrowPal.ink600, modifier = Modifier.fillMaxWidth())
-            Box(
-                Modifier.fillMaxWidth().height(44.dp).clip(ControlShape).background(GrowPal.surface)
-                    .border(1.dp, GrowPal.border, ControlShape)
-                    .clickable { onRetry() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Try again", style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)
-            }
-        }
-    }
-}
-
-@Composable
 private fun EmptyCard() {
     // No students yet — warm, not an error.
     RosterCard {
@@ -273,7 +263,7 @@ private fun EmptyCard() {
             ) { Text("🌱", fontSize = 22.sp) }
             Text(
                 "No disciples assigned yet",
-                style = gInter(17, FontWeight.Bold), color = GrowPal.ink,
+                style = gInter(18, FontWeight.Bold), color = GrowPal.ink,
             )
             Text(
                 "When members are placed in your care, they'll appear here.",

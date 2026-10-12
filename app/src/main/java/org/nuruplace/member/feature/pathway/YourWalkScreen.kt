@@ -27,16 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -62,6 +52,7 @@ import org.nuruplace.member.data.net.WalkEvent
 import org.nuruplace.member.feature.community.Avatar
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
+import org.nuruplace.member.ui.icons.Lucide
 
 private val WkGold = Color(0xFFC89B3C)
 private val WkNavy = Color(0xFF0B1F33)
@@ -88,7 +79,7 @@ fun YourWalkScreen(onBack: () -> Unit) {
                     .clickable { onBack() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.height(14.dp))
             Text("YOUR WALK", style = NuruType.micro, color = WkGold, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
@@ -106,7 +97,7 @@ fun YourWalkScreen(onBack: () -> Unit) {
                 Modifier.fillMaxWidth().padding(top = 80.dp, start = 40.dp, end = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(Icons.Filled.Flag, contentDescription = null, tint = WkGold, modifier = Modifier.size(26.dp))
+                Icon(Lucide.Flag, contentDescription = null, tint = WkGold, modifier = Modifier.size(26.dp))
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Your walk begins with the next lesson you open.",
@@ -126,14 +117,14 @@ fun YourWalkScreen(onBack: () -> Unit) {
 @Composable
 private fun WalkNode(e: WalkEvent, isFirst: Boolean, isLast: Boolean) {
     val glyph: ImageVector = when (e.kind) {
-        "began" -> Icons.Filled.Flag
-        "module" -> Icons.AutoMirrored.Filled.MenuBook
-        "reflection" -> Icons.Filled.Edit
-        "level" -> Icons.Filled.School
-        "certificate" -> Icons.Filled.Verified
-        "verse" -> Icons.Filled.FormatQuote
-        "plan" -> Icons.Filled.Bookmark
-        else -> Icons.Filled.EmojiEvents
+        "began" -> Lucide.Flag
+        "module" -> Lucide.BookOpen
+        "reflection" -> Lucide.Pencil
+        "level" -> Lucide.GraduationCap
+        "certificate" -> Lucide.BadgeCheck
+        "verse" -> Lucide.Quote
+        "plan" -> Lucide.BookMarked
+        else -> Lucide.Trophy
     }
     val milestone = e.kind in setOf("level", "certificate", "began")
 
@@ -146,7 +137,7 @@ private fun WalkNode(e: WalkEvent, isFirst: Boolean, isLast: Boolean) {
                     .border(1.dp, if (milestone) Color.Transparent else WkGold.copy(alpha = 0.5f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(glyph, contentDescription = null, tint = if (milestone) WkNavy else Nuru.eyebrow, modifier = Modifier.size(15.dp))
+                Icon(glyph, contentDescription = null, tint = if (milestone) WkNavy else Nuru.eyebrow, modifier = Modifier.size(14.dp))
             }
             if (!isLast) {
                 Box(Modifier.width(2.dp).weight(1f).background(WkGold.copy(alpha = 0.35f)))
@@ -178,23 +169,14 @@ private fun WalkNode(e: WalkEvent, isFirst: Boolean, isLast: Boolean) {
 // ─────────────────────────── Footprints strip ───────────────────────────
 
 @Composable
-fun FootprintsStrip(moduleId: String) {
+fun FootprintsStrip(moduleId: String, youFinished: Boolean = false) {
     var res by remember { mutableStateOf<FootprintsRes?>(null) }
     LaunchedEffect(moduleId) {
         res = runCatching { Net.client.api.moduleFootprints(moduleId) }.getOrNull()
     }
     val r = res ?: return
     if (r.count <= 0 || r.footprints.isEmpty()) return
-    val names = r.footprints.map { it.firstName }
-    val shown = when (names.size) {
-        1 -> names[0]
-        2 -> "${names[0]} and ${names[1]}"
-        else -> names.dropLast(1).joinToString(", ") + " and " + names.last()
-    }
-    val others = r.count - names.size
-    val line = if (others > 0) {
-        "$shown and $others other${if (others == 1) "" else "s"} walked here before you."
-    } else "$shown walked here before you."
+    val line = footprintsLine(r.footprints.map { it.firstName }, r.count, youFinished)
 
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp))
@@ -212,5 +194,29 @@ fun FootprintsStrip(moduleId: String) {
         }
         Spacer(Modifier.width(10.dp))
         Text(line, style = NuruType.caption, color = Nuru.ink.copy(alpha = 0.75f), modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * The footprints line under a lesson. The server lists cell-mates who
+ * finished it — at any time — so "before you" is true only while the member
+ * hasn't finished it yet. Once they have, "walked here too" (Cycle 3's closing
+ * walk, B10: "Eli walked here before you" read on Ada's page though Eli
+ * finished two seconds after her). Names are joined with commas and one
+ * "and": "Cara, Ben and 2 others", never "Cara and Ben and 2 others".
+ */
+internal fun footprintsLine(names: List<String>, count: Int, youFinished: Boolean): String {
+    val others = (count - names.size).coerceAtLeast(0)
+    val who = joinNames(names, others)
+    return if (youFinished) "$who walked here too." else "$who walked here before you."
+}
+
+/** "Ada", "Ada and Ben", "Ada, Ben and Cara", "Ada, Ben and 2 others". */
+internal fun joinNames(names: List<String>, others: Int = 0): String {
+    val parts = names + if (others > 0) listOf("$others other${if (others == 1) "" else "s"}") else emptyList()
+    return when (parts.size) {
+        0 -> ""
+        1 -> parts[0]
+        else -> parts.dropLast(1).joinToString(", ") + " and " + parts.last()
     }
 }

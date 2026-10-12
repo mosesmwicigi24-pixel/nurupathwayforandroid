@@ -139,7 +139,14 @@ data class Certificate(
  *  at something that doesn't exist. `route` is only "module" or "pathway"
  *  today; unknown routes are tolerated and simply don't render a button. */
 @Serializable
-data class LetterNextStepParams(val moduleId: String? = null)
+data class LetterNextStepParams(
+    // The server writes params in camelCase (letters.ts: { moduleId }); the
+    // global snake_case strategy reads "module_id" — and it renames
+    // @SerialName names too — so the letter's "Module X is waiting" never
+    // found its lesson. @JsonNames adds the camelCase key as written.
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.json.JsonNames("moduleId") val moduleId: String? = null,
+)
 
 @Serializable
 data class LetterNextStep(
@@ -156,13 +163,6 @@ data class LetterNextStep(
  *  nullable WITH a default, and the accessors below normalise blank strings to
  *  null too, because a whitespace title is as unrenderable as a missing one. */
 @Serializable
-data class PastoralLetterHighlights(
-    val moments: List<String> = emptyList(),
-    val nextStep: LetterNextStep? = null,
-    val shareLine: String? = null,
-)
-
-@Serializable
 data class PastoralLetter(
     val letterId: String = "",
     val weekOf: String = "",
@@ -175,7 +175,33 @@ data class PastoralLetter(
     val salutation: String? = null,
     val theme: String? = null,
     val imageKey: String? = null,
-    val highlights: PastoralLetterHighlights? = null,
+    // The wire's shape (backend intelligence/letters.ts rowFromDb, since v2
+    // #410): `highlights` is the week's moments — an ARRAY of strings — and
+    // `next_step` / `share_line` sit beside it. They were read as one object
+    // {moments, next_step, share_line}, so every v2 letter failed to decode
+    // and Home said "Your letter arrives Sunday evening" over a letter that
+    // was waiting (and "Read it" opened the You tab). As iOS reads them.
+    @kotlinx.serialization.SerialName("highlights") val highlightLines: List<String> = emptyList(),
+    @kotlinx.serialization.SerialName("next_step") val rawNextStep: LetterNextStep? = null,
+    @kotlinx.serialization.SerialName("share_line") val rawShareLine: String? = null,
+    // --- v3, the editorial letter (pathway#512, owner 2026-10-07). All
+    // DERIVED by the server, none written by the model, and all optional
+    // here: a server without #512 sends none of them, and the letter then
+    // falls back to what v2 carries (EditorialLetter's fallbacks). ---
+    /** This letter's place in the member's series, from 1. */
+    val issueNo: Int? = null,
+    val readingMinutes: Int? = null,
+    /** The body split on blank lines (the model writes two). */
+    val paragraphs: List<String> = emptyList(),
+    /** The verse in full, from the church's daily-verse library. */
+    val scripture: LetterScripture? = null,
+    /** From the eye-checked nature library; the bundled theme art is the fallback. */
+    val photo: LetterPhoto? = null,
+    /** True counts of the letter's own week, 0 to 3, never a zero. */
+    val figures: List<LetterFigure> = emptyList(),
+    val signedBy: LetterSignedBy? = null,
+    /** GET it (authed) for the one-page A4 letter — a path on the API's host. */
+    val pdfUrl: String? = null,
 ) {
     val isUnread: Boolean get() = readAt == null
 
@@ -194,13 +220,30 @@ data class PastoralLetter(
             ?: ""
 
     val moments: List<String>
-        get() = highlights?.moments.orEmpty().mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+        get() = highlightLines.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
 
     val nextStep: LetterNextStep?
-        get() = highlights?.nextStep?.takeIf { it.label.isNotBlank() && it.route.isNotBlank() }
+        get() = rawNextStep?.takeIf { it.label.isNotBlank() && it.route.isNotBlank() }
 
-    val shareLine: String? get() = highlights?.shareLine?.trim()?.takeIf { it.isNotEmpty() }
+    val shareLine: String? get() = rawShareLine?.trim()?.takeIf { it.isNotEmpty() }
 }
+
+/** v3: the verse the letter rests on — its words when the church's library
+ *  has them (`text` null: the reference alone, as before). */
+@Serializable
+data class LetterScripture(val ref: String = "", val text: String? = null, val version: String? = null)
+
+/** v3: the letter's photograph and the words that go with it. */
+@Serializable
+data class LetterPhoto(val id: String = "", val url: String = "", val alt: String = "", val caption: String = "")
+
+/** v3: one true figure of the week — "5 of 7" · "days in the Word". */
+@Serializable
+data class LetterFigure(val value: String = "", val label: String = "")
+
+/** v3: who signs the letter — "Pastor Moses" · "Nuru Place". */
+@Serializable
+data class LetterSignedBy(val name: String = "", val role: String = "")
 
 @Serializable
 data class LatestLetterRes(val letter: PastoralLetter? = null)

@@ -6,30 +6,39 @@
 // back for an older server that sends none of them.
 package org.nuruplace.member.feature.give
 
+import org.nuruplace.member.data.net.GiftFailure
 import org.nuruplace.member.data.net.GivingDetail
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val WHEN_FMT = DateTimeFormatter.ofPattern("EEE d MMM yyyy · h:mm a", Locale.ENGLISH)
 private val DAY_ONLY_FMT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 private fun String?.clean(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 /** The fund's display name: the server's `fund_name`, else the local table's
- *  name for the code, else the code capitalised (giveFund's own fallback). */
-fun receiptFundName(d: GivingDetail): String = d.fundName.clean() ?: giveFund(d.fund).name
+ *  name for the code, else the code capitalised (giveFund's own fallback);
+ *  "General" when there is no code at all (iOS fundDisplayName). */
+fun receiptFundName(d: GivingDetail): String =
+    d.fundName.clean() ?: d.fund.clean()?.let { giveFund(it).name } ?: "General"
 
 /** The pledge's title when this gift counts toward one. */
 fun receiptPledgeTitle(d: GivingDetail): String? = d.pledge?.title.clean()
 
 /** Where the gift went — the hero's line under the amount:
  *  pledge → "toward your School fees pledge" · need → "to Sound desk" ·
- *  else "to the Discipleship fund". A pledge outranks a need. */
+ *  else "to the Discipleship fund". A pledge outranks a need. A name that
+ *  already ends in the word is not doubled (iOS destinationPhrase):
+ *  "toward your Building pledge", "to the Building Fund". */
 fun receiptDestinationLine(d: GivingDetail): String {
-    receiptPledgeTitle(d)?.let { return "toward your $it pledge" }
+    receiptPledgeTitle(d)?.let { return "toward your ${pledgeTag(it)}" }
     d.need?.title.clean()?.let { return "to $it" }
-    return "to the ${receiptFundName(d)} fund"
+    return "to the ${fundWord(receiptFundName(d))}"
 }
+
+/** "Discipleship fund"; a name that already ends in "fund" (any case) is
+ *  not doubled — "Building Fund". */
+internal fun fundWord(name: String): String =
+    if (name.trim().lowercase(Locale.ROOT).endsWith("fund")) name.trim() else "${name.trim()} fund"
 
 /** "Thank you, Moses." — the first word of the server's member_name, else of
  *  the signed-in profile's name, else null (the line is omitted). */
@@ -38,9 +47,18 @@ fun receiptFirstName(memberName: String?, profileName: String?): String? =
         n.clean()?.split(Regex("\\s+"))?.firstOrNull().clean()
     }
 
-/** "M-Pesa" — the server's method_label, else the local table's, else "—". */
+/** "M-Pesa" — the server's method_label, else the local table's; a gift
+ *  with no method at all reads "M-Pesa", as iOS (givingMethodName). */
 fun receiptMethodLabel(d: GivingDetail): String =
-    d.methodLabel.clean() ?: d.method.clean()?.let { giveMethodLabel(it) } ?: "—"
+    d.methodLabel.clean() ?: d.method.clean()?.let { giveMethodLabel(it) } ?: "M-Pesa"
+
+/** Mobile money has a phone prompt to wait on — by the rail's code or its
+ *  label (iOS isMobileMoney). */
+fun receiptIsMobileMoney(d: GivingDetail): Boolean {
+    val code = d.method.clean()?.lowercase()
+    val label = receiptMethodLabel(d).lowercase()
+    return code == "mpesa" || code == "airtel" || "m-pesa" in label || "airtel" in label
+}
 
 /** The provider's own reference (the M-Pesa receipt code, a PayPal order id…), if any. */
 fun receiptProviderRef(d: GivingDetail): String? = d.receiptCode.clean() ?: d.providerRef.clean()
@@ -56,31 +74,38 @@ fun receiptReferenceLabel(d: GivingDetail): String {
     }
 }
 
-/** ("KSh", "500") / ("$", "12.50") — the hero's small currency mark beside the
- *  big number. Currency-aware like [money] (a PayPal gift settles in USD). */
+/** ("KSh", "500") / ("US$", "12.50") — the hero's small currency mark beside
+ *  the big number. Currency-aware like [money] (a PayPal gift settles in USD). */
 fun receiptAmountParts(minor: Int, currency: String?): Pair<String, String> {
     val s = money(minor, currency)
-    return if (s.startsWith("$")) "$" to s.drop(1) else s.substringBefore(' ') to s.substringAfter(' ')
+    return s.substringBefore(' ') to s.substringAfter(' ')
 }
 
-/** How a not-yet-succeeded gift is chipped; null = succeeded (the green check says it). */
-enum class ReceiptTone { Waiting, NotCompleted, Refunded }
+/** How a not-yet-succeeded gift is chipped; null = succeeded (the green check
+ *  says it). Other = a status this app does not know, said as sent. */
+enum class ReceiptTone { Waiting, NotCompleted, Refunded, Other }
 
 data class ReceiptChip(val label: String, val tone: ReceiptTone)
 
-private val MOBILE_MONEY = setOf("mpesa", "airtel")
-
-/** Status → chip. pending / processing (or anything unknown — never assume
- *  received) → "Waiting for M-Pesa" for mobile money, "Processing" otherwise;
- *  failed / cancelled → "Not completed"; refunded → "Refunded";
- *  succeeded / settled / completed → null. */
+/** Status → chip, as iOS ReceiptState reads the wire (requires_action |
+ *  processing | succeeded | failed | refunded, plus the older spellings):
+ *  succeeded / settled / completed → null; requires_action / processing /
+ *  pending / initiated → "Waiting for M-Pesa" for mobile money, else
+ *  "Waiting for confirmation" (no phone prompt to wait on); failed /
+ *  cancelled / expired → "Not completed"; refunded → "Refunded"; anything
+ *  else — never assumed received — its own words ("On Hold"). */
 fun receiptStatusChip(d: GivingDetail): ReceiptChip? = when (d.status.lowercase().trim()) {
     "succeeded", "settled", "completed" -> null
-    "failed", "cancelled", "canceled" -> ReceiptChip("Not completed", ReceiptTone.NotCompleted)
+    "requires_action", "processing", "pending", "initiated" -> ReceiptChip(
+        if (receiptIsMobileMoney(d)) "Waiting for ${receiptMethodLabel(d)}" else "Waiting for confirmation",
+        ReceiptTone.Waiting,
+    )
+    "failed", "cancelled", "canceled", "expired" -> ReceiptChip("Not completed", ReceiptTone.NotCompleted)
     "refunded" -> ReceiptChip("Refunded", ReceiptTone.Refunded)
     else -> ReceiptChip(
-        if (d.method.clean()?.lowercase() in MOBILE_MONEY) "Waiting for ${receiptMethodLabel(d)}" else "Processing",
-        ReceiptTone.Waiting,
+        d.status.trim().replace('_', ' ').split(Regex("\\s+")).filter { it.isNotEmpty() }
+            .joinToString(" ") { w -> w.lowercase(Locale.ROOT).replaceFirstChar { it.uppercase() } },
+        ReceiptTone.Other,
     )
 }
 
@@ -90,11 +115,40 @@ fun receiptEyebrow(chip: ReceiptChip?): String = when (chip?.tone) {
     ReceiptTone.Waiting -> "GIFT PENDING"
     ReceiptTone.NotCompleted -> "GIFT NOT COMPLETED"
     ReceiptTone.Refunded -> "GIFT REFUNDED"
+    ReceiptTone.Other -> "GIFT"
 }
+
+/** The thank-you belongs to a gift that arrived, is on its way, or is in a
+ *  state we can't name — never to one that failed or was refunded. */
+fun receiptThanks(chip: ReceiptChip?): Boolean =
+    chip?.tone != ReceiptTone.NotCompleted && chip?.tone != ReceiptTone.Refunded
+
+/** "100% reaches the fund" is a promise about money that moves — never said
+ *  under a gift that failed or was refunded (iOS reachesFund). */
+fun receiptReachesFund(chip: ReceiptChip?): Boolean = receiptThanks(chip)
+
+/** Gift · Fee cover · Total — the receipt's amount rows when the member
+ *  covered the fee (fee_cover_minor > 0, Giving Cycle 2): amount_minor is the
+ *  total charged, so the gift is the total less the fee. Null otherwise (the
+ *  hero's one amount says it all). */
+fun receiptFeeRows(d: GivingDetail): List<Pair<String, String>>? {
+    val fee = d.feeCoverMinor?.takeIf { it > 0 && it < d.amountMinor } ?: return null
+    return listOf(
+        "Gift" to money(d.amountMinor - fee, d.currency),
+        "Fee cover" to "${money(fee, d.currency)} · covered by you",
+        "Total" to money(d.amountMinor, d.currency),
+    )
+}
+
+/** Why a gift that did not go through failed — the server's reason and hint,
+ *  shown verbatim in the hero under its chip (Giving Cycle 1; iOS). Null
+ *  unless it did not complete and the server named why. */
+fun receiptFailure(d: GivingDetail): GiftFailure? =
+    d.failure?.takeIf { receiptStatusChip(d)?.tone == ReceiptTone.NotCompleted && it.reason.isNotBlank() }
 
 /** "100% of this gift reaches the Discipleship fund." (+ " · counts toward your pledge"). */
 fun receiptWhereItWent(d: GivingDetail): String {
-    val base = "100% of this gift reaches the ${receiptFundName(d)} fund."
+    val base = "100% of this gift reaches the ${fundWord(receiptFundName(d))}."
     val onPledge = receiptPledgeTitle(d) != null || d.pledge?.pledgeId.clean() != null
     return if (onPledge) "$base · counts toward your pledge" else base
 }
@@ -102,8 +156,21 @@ fun receiptWhereItWent(d: GivingDetail): String {
 /** The instant the receipt is dated by: settled_at once settled, else created_at. */
 private fun receiptInstant(d: GivingDetail) = parseNairobi(d.settledAt.clean() ?: d.createdAt)
 
-/** "Fri 25 Sep 2026 · 8:11 PM" (Nairobi), "—" when unknown. */
-fun receiptWhen(d: GivingDetail): String = receiptInstant(d)?.format(WHEN_FMT) ?: "—"
+/** "Fri 25 Sep 2026 · 8:11 PM" (Nairobi), "—" when unknown — the hero's line. */
+fun receiptWhen(d: GivingDetail, today: java.time.LocalDate = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Nairobi"))): String =
+    receiptInstant(d)?.let { org.nuruplace.member.util.NuruDates.dayTime(it.toInstant(), it.zone, today) } ?: "—"
+
+/** "25 September 2026 · 8:11 PM" (Nairobi), "—" when unknown — the details'
+ *  Date row (iOS whenFull). */
+fun receiptWhenFull(d: GivingDetail, today: java.time.LocalDate = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Nairobi"))): String =
+    receiptWhen(d, today)
+
+
+/** The receipt's verse, on the Give page's verse card (iOS verseFooter). */
+const val RECEIPT_VERSE = "“God loves a cheerful giver.”"
+
+/** Said under the buttons when the PDF can't be had and the summary goes alone. */
+const val RECEIPT_SHARE_FALLBACK = "The PDF isn't available right now — sharing the details instead."
 
 /** "25 Sep 2026" (Nairobi) — the share line's date; empty when unknown. */
 fun receiptDay(d: GivingDetail): String = receiptInstant(d)?.format(DAY_ONLY_FMT) ?: ""
@@ -127,5 +194,3 @@ fun receiptFileName(d: GivingDetail): String {
     return "nuru-receipt-${key.ifEmpty { "gift" }}.pdf"
 }
 
-/** "3f2a9c1e…" — the transaction id shortened for the eye (a tap copies the full id). */
-fun receiptShortId(d: GivingDetail): String = d.transactionId.take(8) + "…"

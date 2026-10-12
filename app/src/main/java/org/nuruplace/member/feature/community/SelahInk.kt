@@ -69,6 +69,8 @@ import org.nuruplace.member.ui.theme.Spacing
 import java.io.ByteArrayOutputStream
 
 /** True on tablet-class Android hardware — see header note. */
+private const val DRAWING_FAILED = "Couldn't save the drawing."
+
 fun isPenCapableDevice(context: Context): Boolean =
     context.resources.configuration.smallestScreenWidthDp >= 600
 
@@ -156,10 +158,12 @@ fun SelahDrawingSheet(onDismiss: () -> Unit, onSave: (String) -> Unit) {
                             )
                             val url = Net.client.api.uploadPostImage(part).url
                             uploading = false
-                            if (url.isNotBlank()) { Haptics.confirm(view); onSave(url) } else { error = "Couldn't save the drawing. Try again." }
+                            if (url.isNotBlank()) { Haptics.confirm(view); onSave(url) }
+                            else { error = "$DRAWING_FAILED ${org.nuruplace.member.data.net.StateLanguage.serverError.sentence}" }
                         } catch (e: Exception) {
                             uploading = false
-                            error = "Couldn't save the drawing. Try again."
+                            // Why it didn't save (§4); the drawing stays on the canvas.
+                            error = org.nuruplace.member.data.net.ApiException.failureLine(DRAWING_FAILED, e, context)
                         }
                     }
                 },

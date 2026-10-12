@@ -19,11 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +55,8 @@ import org.nuruplace.member.ui.components.GrowCreamHeader
 import org.nuruplace.member.ui.components.GrowPal
 import org.nuruplace.member.ui.components.gInter
 import org.nuruplace.member.ui.components.gSerif
+import org.nuruplace.member.ui.theme.Nuru
+import org.nuruplace.member.ui.icons.Lucide
 
 private val Capsule = RoundedCornerShape(999.dp)
 
@@ -96,7 +93,7 @@ private fun BackTile(onBack: () -> Unit) {
             .clickable { onBack() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
+        Icon(Lucide.ArrowLeft, contentDescription = "Back", tint = GrowPal.navy, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -113,6 +110,12 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
         val answers = remember { mutableStateMapOf<String, Int>().apply { draft?.chosen?.let { putAll(it) } } }
         var step by remember { mutableIntStateOf(draft?.chosen?.size?.coerceIn(0, set.data.lastIndex) ?: 0) }
         var busy by remember { mutableStateOf(false) }
+        // Why the answers didn't save — over the choices, the answers kept
+        // (§7.4, §4); one id for the submission, so a retry after an answer
+        // that did land can't score it twice.
+        var submitError by remember { mutableStateOf<String?>(null) }
+        val submissionId = remember { java.util.UUID.randomUUID().toString() }
+        val giftsContext = androidx.compose.ui.platform.LocalContext.current
         // Every answer, the moment it is given.
         val answersSnap = answers.toMap()
         LaunchedEffect(answersSnap) { if (answersSnap.isNotEmpty()) QuizDraftStore.saveGifts(set, answersSnap) }
@@ -120,11 +123,12 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
         val submit: () -> Unit = {
             if (!busy) {
                 busy = true
+                submitError = null
                 scope.launch {
                     try {
                         Net.client.api.submitGifts(
                             GiftSubmitBody(
-                                java.util.UUID.randomUUID().toString(),
+                                submissionId,
                                 set.setId,
                                 answers.map { GiftAnswerInput(it.key, it.value) },
                             ),
@@ -136,7 +140,10 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                                    subtitle = "You've finished the assessment."),
                         )
                         onDone()
-                    } catch (_: Exception) {
+                    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+                        throw c
+                    } catch (e: Exception) {
+                        submitError = org.nuruplace.member.data.net.ApiException.saveFailureLine(e, giftsContext)
                     } finally {
                         busy = false
                     }
@@ -159,7 +166,7 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                         Box(Modifier.size(40.dp)) // symmetry spacer
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("Spiritual gifts", style = gSerif(24, FontWeight.SemiBold), color = GrowPal.navy)
+                    Text("Spiritual gifts", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
                 }
             }
 
@@ -191,10 +198,11 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
 
                         Text(
                             q.prompt,
-                            style = gSerif(20, FontWeight.Medium).copy(lineHeight = 27.sp),
+                            style = gSerif(18, FontWeight.Medium).copy(lineHeight = 25.sp),
                             color = GrowPal.navy,
                         )
 
+                        submitError?.let { Text(it, style = gInter(12), color = Nuru.danger) }
                         // Likert options — strongest first
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(
@@ -219,7 +227,7 @@ private fun GiftAssessment(onDone: () -> Unit, onBack: () -> Unit) {
                                 ) {
                                     Text(label, style = gInter(13, FontWeight.Medium), color = GrowPal.navy)
                                     Spacer(Modifier.weight(1f))
-                                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
+                                    Icon(Lucide.ChevronRight, contentDescription = null, tint = GrowPal.ink400, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -245,7 +253,7 @@ private fun ResultsPane(gifts: MyGifts, onBack: () -> Unit, onRetake: () -> Unit
                     Box(Modifier.size(40.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Your Calling", style = gSerif(24, FontWeight.SemiBold), color = GrowPal.navy)
+                Text("Your Calling", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
 
@@ -292,9 +300,9 @@ private fun TopGiftsCard(gifts: MyGifts) {
             Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(GrowPal.gold.copy(alpha = 0.13f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(22.dp))
+            Icon(Lucide.Sparkles, contentDescription = null, tint = GrowPal.gold, modifier = Modifier.size(22.dp))
         }
-        Text("YOUR TOP GIFTS", style = gInter(10, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
+        Text("YOUR TOP GIFTS", style = gInter(11, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
         gifts.assessment?.personaSummary?.let {
             Text(it, style = gInter(12), color = GrowPal.ink600, textAlign = TextAlign.Center)
         }
@@ -304,7 +312,8 @@ private fun TopGiftsCard(gifts: MyGifts) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             bars.forEachIndexed { i, e ->
                 val pct = (e.value * 100).toInt().coerceIn(0, 100)
-                val col = listOf(Color(0xFF6366F1), Color(0xFFDC2626), GrowPal.gold)[i % 3]
+                // Progress is gold (§8.1 rule 1) — the bars were indigo and red.
+                val col = GrowPal.gold
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(e.key.replaceFirstChar { it.uppercase() }, style = gInter(13, FontWeight.SemiBold), color = GrowPal.navy)
@@ -332,7 +341,7 @@ private fun PersonaCard(p: GiftPersona) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            p.emoji?.let { Text(it, fontSize = 20.sp) }
+            p.emoji?.let { Text(it, fontSize = 22.sp) }
             Text(p.personaName.ifBlank { p.title }, style = gSerif(18, FontWeight.SemiBold), color = GrowPal.navy)
         }
         p.tagline?.let { Text(it, style = gInter(12, FontWeight.SemiBold), color = GrowPal.gold) }
@@ -351,7 +360,7 @@ private fun ServingTracksCard(tracks: List<ServingTrack>) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("WHERE YOU MIGHT SERVE", style = gInter(10, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
+        Text("WHERE YOU MIGHT SERVE", style = gInter(11, FontWeight.Bold, 1.8f), color = GrowPal.goldLo)
         tracks.forEach { t ->
             Row(
                 Modifier
@@ -366,7 +375,7 @@ private fun ServingTracksCard(tracks: List<ServingTrack>) {
                     Modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(GrowPal.gold),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(13.dp))
+                    Icon(Lucide.Check, contentDescription = null, tint = GrowPal.navy, modifier = Modifier.size(14.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text(t.title, style = gInter(12, FontWeight.Medium), color = GrowPal.navy)
@@ -392,7 +401,7 @@ private fun IntroPane(onBack: () -> Unit, onStart: () -> Unit) {
                     Box(Modifier.size(40.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Your Calling", style = gSerif(24, FontWeight.SemiBold), color = GrowPal.navy)
+                Text("Your Calling", style = gSerif(26, FontWeight.SemiBold), color = GrowPal.navy)
             }
         }
 

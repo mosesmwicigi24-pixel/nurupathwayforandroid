@@ -1,0 +1,136 @@
+// "I paid another way" (Giving Cycle 5) — the claim form's rules and the claim
+// list's words, kept pure so PledgeClaimLogicTest pins them. A member who paid
+// a pledge outside the app (at the office, by bank, to M-Pesa directly) tells
+// the church here; the office checks it before it counts. What the server
+// takes (partners.ts createClaim): the amount in the PLEDGE's currency —
+// whole shillings for KES, cents for USD — the day it was paid, today or
+// within the last year on the Nairobi calendar, and a note of at most 300
+// characters; the same amount and day already waiting, or five waiting at
+// once, is refused (409 CONFLICT) in the server's own words. Online only:
+// nothing here is ever queued (OfflineQueue refuses pledge writes anyway).
+//
+// Also here: the pledge flow's "First collection: 5 October" — a pledge
+// collected automatically is collected on its due day from the first one
+// strictly after today, never today (PartnerStatementMath.firstDueAfter).
+package org.nuruplace.member.feature.give
+
+import org.nuruplace.member.data.net.ClaimBody
+import org.nuruplace.member.data.net.PledgeClaim
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+/** A claim's note, at most this long (the server's limit). */
+const val CLAIM_NOTE_MAX = 300
+
+/** Said on the form while the phone is offline (iOS PledgeClaimSheet). */
+const val CLAIM_OFFLINE_LINE = "You're offline. Telling the office needs a connection — nothing is saved to send later."
+
+/** Said when the request got no answer at all (iOS sendClaim). */
+const val CLAIM_NO_ANSWER_LINE = "We couldn't reach the church just now. Try again in a moment."
+
+
+/** The days a payment can be told about: a year back to today (Nairobi).
+ *  The server allows 366 days back, so a year always passes. */
+fun claimDateRange(today: LocalDate): ClosedRange<LocalDate> = today.minusDays(365)..today
+
+fun claimDateAllowed(day: LocalDate, today: LocalDate): Boolean = day in claimDateRange(today)
+
+/** Why the typed amount cannot be sent (null = fine), in the pledge's
+ *  currency: whole shillings for KES, dollars and cents for USD. */
+fun claimAmountError(text: String, currency: String): String? {
+    val t = text.trim().replace(",", "")
+    if (t.isEmpty()) return "Enter the amount you paid."
+    return if (currencyCode(currency) == USD_CURRENCY) {
+        val cents = usdCentsOf(t) ?: return "Enter the amount you paid."
+        if (cents <= 0) "Enter the amount you paid." else null
+    } else {
+        if ('.' in t) return "Shillings only — no cents."
+        val major = t.takeIf { s -> s.all { it.isDigit() } }?.toLongOrNull() ?: return "Enter the amount you paid."
+        if (major <= 0) "Enter the amount you paid." else if (major > 10_000_000) "That's more than one payment can be." else null
+    }
+}
+
+/** The typed amount in minor units of the pledge's currency; null when it is not one. */
+fun claimAmountMinor(text: String, currency: String): Int? {
+    if (claimAmountError(text, currency) != null) return null
+    val t = text.trim().replace(",", "")
+    return if (currencyCode(currency) == USD_CURRENCY) usdCentsOf(t) else t.toIntOrNull()?.times(100)
+}
+
+/** The claim form, checked: ready to send, or why not. */
+sealed interface ClaimPlan {
+    data class Ready(val body: ClaimBody) : ClaimPlan
+    data class Invalid(val message: String) : ClaimPlan
+}
+
+/** Everything the form holds, checked against what the server takes. The
+ *  currency is always the PLEDGE's — never the member's choice. */
+fun planClaim(amountText: String, pledgeCurrency: String, paidOn: LocalDate, note: String, today: LocalDate): ClaimPlan {
+    claimAmountError(amountText, pledgeCurrency)?.let { return ClaimPlan.Invalid(it) }
+    if (!claimDateAllowed(paidOn, today)) return ClaimPlan.Invalid("Choose the day you paid — today or within the last year.")
+    val trimmed = note.trim()
+    if (trimmed.length > CLAIM_NOTE_MAX) return ClaimPlan.Invalid("Keep the note to $CLAIM_NOTE_MAX characters.")
+    return ClaimPlan.Ready(
+        ClaimBody(
+            amountMinor = claimAmountMinor(amountText, pledgeCurrency)!!,
+            currency = currencyCode(pledgeCurrency),
+            paidOn = paidOn.toString(),
+            note = trimmed.ifEmpty { null },
+        ),
+    )
+}
+
+/** What stops the claim from going, said as the member types (iOS
+ *  ClaimRules.problem) — null when it can go. */
+fun claimProblem(amountText: String, pledgeCurrency: String, paidOn: LocalDate, note: String, today: LocalDate): String? =
+    (planClaim(amountText, pledgeCurrency, paidOn, note, today) as? ClaimPlan.Invalid)?.message
+
+/** The form's first line (iOS): what it is for, by the pledge's name. */
+fun claimIntro(pledgeTitle: String): String =
+    "Tell the office about money you gave toward “$pledgeTitle” outside the app — cash, a bank transfer, a paybill. " +
+        "They'll match it and add it to your pledge."
+
+/** "AMOUNT · IN SHILLINGS" · "AMOUNT · IN US DOLLARS" — the pledge's money. */
+fun claimAmountLabel(currency: String): String = "AMOUNT · IN ${currencyWords(currency).uppercase(Locale.ENGLISH)}"
+
+/** Under the amount (iOS): how to write it, in the pledge's money. */
+fun claimAmountHelp(currency: String): String =
+    if (currencyCode(currency) == USD_CURRENCY) "In ${currencyWords(currency)} — this pledge's currency." else "In whole shillings, as you paid it."
+
+/** How a claim stands, for its colour. */
+enum class ClaimTone { Waiting, Recorded, Unmatched }
+
+fun claimTone(status: String?): ClaimTone = when (status?.trim()?.lowercase()) {
+    "confirmed" -> ClaimTone.Recorded
+    "rejected" -> ClaimTone.Unmatched
+    else -> ClaimTone.Waiting
+}
+
+/** "The office is checking it" · "Recorded — thank you" · "The office couldn't match it". */
+fun claimStatusLine(status: String?): String = when (claimTone(status)) {
+    ClaimTone.Waiting -> "The office is checking it"
+    ClaimTone.Recorded -> "Recorded — thank you"
+    ClaimTone.Unmatched -> "The office couldn't match it"
+}
+
+/** "KSh 3,000 · paid Sat 12 Sep" — the year only when it isn't this one
+ *  (the one date form, §8.1 rule 8). */
+fun claimRowLine(c: PledgeClaim, today: LocalDate): String {
+    val day = c.paidOn?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+        ?.let { d -> org.nuruplace.member.util.NuruDates.day(d, today) }
+    return listOfNotNull(money(c.amountMinor, c.currency), day?.let { "paid $it" }).joinToString(" · ")
+}
+
+/** The day a monthly pledge collected automatically is first collected: its
+ *  due day (held to 1–28) strictly after today — never today. */
+fun firstCollectionDate(today: LocalDate, dueDay: Int): LocalDate = firstDueAfter(today, dueDay)
+
+/** "Mon 5 Oct" — "Tue 5 Jan 2027" when it is not this year. */
+fun firstCollectionDay(today: LocalDate, dueDay: Int): String {
+    val d = firstCollectionDate(today, dueDay)
+    return org.nuruplace.member.util.NuruDates.day(d, today)
+}
+
+/** "First collection: 5 October" — under the toggle. */
+fun firstCollectionLine(today: LocalDate, dueDay: Int): String = "First collection: ${firstCollectionDay(today, dueDay)}"

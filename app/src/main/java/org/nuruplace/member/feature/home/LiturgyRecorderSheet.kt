@@ -43,15 +43,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import org.nuruplace.member.ui.components.NuruModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -83,6 +78,7 @@ import org.nuruplace.member.ui.components.voiceClock
 import org.nuruplace.member.ui.theme.Nuru
 import org.nuruplace.member.ui.theme.NuruType
 import org.nuruplace.member.util.VoiceRecorder
+import org.nuruplace.member.ui.icons.Lucide
 
 /** Server clock order — used only as a display fallback (the server's own
  *  GET admin/liturgy/recordings response already arrives in this order); if
@@ -104,7 +100,7 @@ private fun bandLabel(band: String): String = when (band) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiturgyRecorderSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+    NuruModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
         val scope = rememberCoroutineScope()
         var rows by remember { mutableStateOf<List<LiturgyRecordingStatus>>(emptyList()) }
         var loading by remember { mutableStateOf(true) }
@@ -119,7 +115,7 @@ fun LiturgyRecorderSheet(onDismiss: () -> Unit) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 28.dp),
         ) {
-            Text("His Voice — the daily liturgy", style = NuruType.rowTitle.copy(fontSize = 17.sp), color = Nuru.navy)
+            Text("His Voice — the daily liturgy", style = NuruType.cardTitle, color = Nuru.navy)
             Spacer(Modifier.height(4.dp))
             Text(
                 "Record any hour in your own voice. Every other hour keeps reading in Nuru's voice — that's expected, not a gap to fill.",
@@ -160,6 +156,7 @@ private fun BandRow(
 ) {
     val hasRecording = !row.audioUrl.isNullOrBlank()
     val scope = rememberCoroutineScope()
+    val rowContext = androidx.compose.ui.platform.LocalContext.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(Nuru.tintBlue.copy(alpha = if (expanded) 1f else 0.55f))
@@ -186,14 +183,16 @@ private fun BandRow(
                         .border(1.dp, Nuru.border, CircleShape)
                         .clickable {
                             scope.launch {
-                                runCatching { Net.client.api.deleteLiturgyRecording(row.band) }
-                                onDeleted()
+                                // Gone only once the server says so (§7.4).
+                                org.nuruplace.member.ui.components.noticeOnFailure(rowContext, lead = "Couldn't delete that recording.") {
+                                    Net.client.api.deleteLiturgyRecording(row.band)
+                                }?.let { onDeleted() }
                             }
                         },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Filled.Delete,
+                        Lucide.Trash2,
                         "Delete the recording for ${bandLabel(row.band)}",
                         tint = Nuru.ink400,
                         modifier = Modifier.size(14.dp),
@@ -225,6 +224,7 @@ private fun BandRow(
 private fun BandRecorder(band: String, onSaved: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val uploadContext = androidx.compose.ui.platform.LocalContext.current
     val recorder = remember { VoiceRecorder() }
     var attached by remember { mutableStateOf<File?>(null) }
     var attachedDur by remember { mutableStateOf(0) }
@@ -259,7 +259,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                     Modifier.size(28.dp).clip(CircleShape).background(Nuru.tintBlue)
                         .clickable { recorder.cancel() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Close, "Discard the recording", tint = Nuru.ink400, modifier = Modifier.size(13.dp)) }
+                ) { Icon(Lucide.X, "Discard the recording", tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
                 Box(
                     Modifier.size(28.dp).clip(CircleShape).background(Nuru.gold)
                         .clickable {
@@ -270,7 +270,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                             }
                         },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Check, "Keep the recording", tint = Nuru.navyDeep, modifier = Modifier.size(14.dp)) }
+                ) { Icon(Lucide.Check, "Keep the recording", tint = Nuru.navyDeep, modifier = Modifier.size(14.dp)) }
             }
             attached != null -> {
                 val f = attached
@@ -280,7 +280,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = Nuru.goldChipText, modifier = Modifier.size(15.dp))
+                    Icon(Lucide.Mic, null, tint = Nuru.goldChipText, modifier = Modifier.size(14.dp))
                     Text(
                         voiceClock(attachedDur),
                         style = NuruType.micro.copy(fontWeight = FontWeight.Bold),
@@ -295,20 +295,22 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                                 .border(1.dp, Nuru.border, CircleShape)
                                 .clickable { f?.delete(); attached = null; attachedDur = 0 },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.Close, "Discard this take", tint = Nuru.ink400, modifier = Modifier.size(12.dp)) }
+                        ) { Icon(Lucide.X, "Discard this take", tint = Nuru.ink400, modifier = Modifier.size(14.dp)) }
                         Box(
                             Modifier.clip(RoundedCornerShape(999.dp)).background(Nuru.navy)
                                 .clickable {
                                     if (f == null) return@clickable
                                     uploading = true
                                     scope.launch {
-                                        val ok = runCatching {
+                                        // The take stays until the server has it; a failure says so (§7.4).
+                                        val ok = org.nuruplace.member.ui.components.noticeOnFailure(uploadContext, lead = "Couldn't save that recording.") {
                                             val filePart = MultipartBody.Part.createFormData(
                                                 "file", f.name, f.asRequestBody("audio/mp4".toMediaTypeOrNull()),
                                             )
                                             val durationPart = attachedDur.toString().toRequestBody("text/plain".toMediaTypeOrNull())
                                             Net.client.api.uploadLiturgyRecording(band, filePart, durationPart)
-                                        }.isSuccess
+                                            true
+                                        } == true
                                         uploading = false
                                         if (ok) {
                                             f.delete()
@@ -331,7 +333,7 @@ private fun BandRecorder(band: String, onSaved: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(Icons.Filled.Mic, null, tint = Nuru.navy, modifier = Modifier.size(15.dp))
+                Icon(Lucide.Mic, null, tint = Nuru.navy, modifier = Modifier.size(14.dp))
                 Text("Tap to record", style = NuruType.micro.copy(fontWeight = FontWeight.Bold), color = Nuru.navy)
             }
         }

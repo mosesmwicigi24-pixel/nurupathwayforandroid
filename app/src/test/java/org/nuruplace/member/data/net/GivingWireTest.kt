@@ -68,6 +68,132 @@ class GivingWireTest {
     }
 
     @Test
+    fun `schedule body carries phone_number only when one was chosen`() {
+        val pinned = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "monthly", "mpesa", "k", phoneNumber = "+254722000111"))).jsonObject
+        assertEquals("+254722000111", pinned["phone_number"]!!.jsonPrimitive.content)
+        val follows = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "monthly", "mpesa", "k"))).jsonObject
+        assertFalse("phone_number" in follows) // absent = every cycle follows the profile number
+    }
+
+    @Test
+    fun `intent body names the fee cover only when there is one`() {
+        val covered = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 101_300, "KES", "mpesa", idempotencyKey = "k", coverFeeMinor = 1_300))).jsonObject
+        assertEquals("1300", covered["cover_fee_minor"]!!.jsonPrimitive.content)
+        assertEquals("101300", covered["amount_minor"]!!.jsonPrimitive.content) // still the total
+        val plain = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 100_000, "KES", "mpesa", idempotencyKey = "k"))).jsonObject
+        assertFalse("cover_fee_minor" in plain)
+    }
+
+    @Test
+    fun `history and detail decode fee_cover_minor, null when absent`() {
+        val r = json.decodeFromString<GivingRecord>("""{"transaction_id":"t","amount_minor":101300,"status":"succeeded","fee_cover_minor":1300}""")
+        assertEquals(1_300, r.feeCoverMinor)
+        assertNull(json.decodeFromString<GivingRecord>("""{"transaction_id":"t","fee_cover_minor":null}""").feeCoverMinor)
+        assertNull(json.decodeFromString<GivingRecord>("""{"transaction_id":"t"}""").feeCoverMinor)
+        val d = json.decodeFromString<GivingDetail>("""{"transaction_id":"t","amount_minor":101300,"fee_cover_minor":1300,"ledger":[]}""")
+        assertEquals(1_300, d.feeCoverMinor)
+    }
+
+    // ── Giving Cycle 4: a recurring gift the member controls ──
+
+    @Test
+    fun `a schedule asks for its first charge now or next, and leaves heads_up to the server`() {
+        val now = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "weekly", "mpesa", "k", firstCharge = "now"))).jsonObject
+        assertEquals("now", now["first_charge"]!!.jsonPrimitive.content)
+        assertFalse("heads_up" in now) // the server's default (on)
+        val old = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 100_000, "KES", "weekly", "mpesa", "k"))).jsonObject
+        assertFalse("first_charge" in old)
+    }
+
+    @Test
+    fun `the created schedule carries today's prompt, or why it could not go out`() {
+        val given = json.decodeFromString<CreatedScheduleRes>(
+            """{"schedule_id":"s1","status":"active","next_run_at":"2026-10-05T09:30:00.000Z","reused":false,
+                "first_charge":{"transaction_id":"t1","status":"processing","idempotency_key":"sched:s1:first","reused":false,"provider":"mpesa",
+                                "fund":{"code":"tithe","name":"Tithe"},"pledge":null}}""",
+        )
+        assertEquals("s1", given.scheduleId)
+        assertEquals("t1", given.firstCharge?.transactionId)
+        assertEquals("processing", given.firstCharge?.status)
+        assertNull(given.firstChargeError)
+        val failed = json.decodeFromString<CreatedScheduleRes>(
+            """{"schedule_id":"s2","status":"active","next_run_at":"2026-10-05T09:30:00.000Z","reused":false,
+                "first_charge":null,"first_charge_error":"Add the M-Pesa number to prompt for this gift."}""",
+        )
+        assertNull(failed.firstCharge)
+        assertEquals("Add the M-Pesa number to prompt for this gift.", failed.firstChargeError)
+        // first_charge "next" (and an older server): neither key.
+        val next = json.decodeFromString<CreatedScheduleRes>("""{"schedule_id":"s3","status":"active","next_run_at":"2026-10-28T09:30:00.000Z","reused":false}""")
+        assertNull(next.firstCharge)
+        assertNull(next.firstChargeError)
+    }
+
+    @Test
+    fun `a change sends only what changed, and a number back to the profile as null`() {
+        assertEquals("""{"amount_minor":150000}""", json.encodeToString(UpdateScheduleBody(amountMinor = 150_000)))
+        assertEquals("""{"day":0}""", json.encodeToString(UpdateScheduleBody(day = 0)))
+        assertEquals("""{"phone_number":null}""", json.encodeToString(UpdateScheduleBody(phoneNumber = kotlinx.serialization.json.JsonNull)))
+        assertEquals("""{"phone_number":"+254711222333"}""", json.encodeToString(UpdateScheduleBody(phoneNumber = kotlinx.serialization.json.JsonPrimitive("+254711222333"))))
+        assertEquals("""{"heads_up":false}""", json.encodeToString(UpdateScheduleBody(headsUp = false)))
+    }
+
+    @Test
+    fun `a pause sends its date only when there is one`() {
+        assertEquals("""{"resume_on":"2026-10-05"}""", json.encodeToString(PauseScheduleBody("2026-10-05")))
+        assertEquals("{}", json.encodeToString(PauseScheduleBody()))
+        val r = json.decodeFromString<ScheduleStateRes>("""{"schedule_id":"s1","status":"paused","pause_reason":"member","resume_on":"2026-10-05"}""")
+        assertEquals("paused", r.status)
+        assertEquals("member", r.pauseReason)
+        assertEquals("2026-10-05", r.resumeOn)
+        assertEquals("2026-10-05T09:30:00.000Z", json.decodeFromString<ScheduleStateRes>("""{"schedule_id":"s1","status":"active","next_run_at":"2026-10-05T09:30:00.000Z"}""").nextRunAt)
+    }
+
+    @Test
+    fun `schedules decode why they are paused, the heads-up and their day`() {
+        val s = json.decodeFromString<GivingSchedule>(
+            """{"schedule_id":"s1","fund":"tithe","amount_minor":100000,"frequency":"monthly","method":"mpesa","status":"paused",
+                "next_run_at":"2026-10-31T09:30:00.000Z","pause_reason":"member","resume_on":"2026-11-15","heads_up":false,
+                "anchor_day":31,"consecutive_failures":0}""",
+        )
+        assertEquals("member", s.pauseReason)
+        assertEquals("2026-11-15", s.resumeOn)
+        assertFalse(s.headsUp)
+        assertEquals(31, s.anchorDay)
+        // An older server: none of them — heads-up reads as on, as the server defaults.
+        val old = json.decodeFromString<GivingSchedule>("""{"schedule_id":"s2","status":"active","pause_reason":null,"resume_on":null,"anchor_day":null}""")
+        assertNull(old.pauseReason)
+        assertNull(old.resumeOn)
+        assertTrue(old.headsUp)
+        assertNull(old.anchorDay)
+        assertEquals(0, old.consecutiveFailures)
+    }
+
+    @Test
+    fun `a retry sends its key, and a number only when there is one`() {
+        val withPhone = json.parseToJsonElement(json.encodeToString(RetryGiftBody("k-12345678", "+254711222333"))).jsonObject
+        assertEquals(setOf("idempotency_key", "phone_number"), withPhone.keys)
+        val bare = json.parseToJsonElement(json.encodeToString(RetryGiftBody("k-12345678"))).jsonObject
+        assertEquals(setOf("idempotency_key"), bare.keys) // absent = the profile's number
+    }
+
+    @Test
+    fun `a retry answer decodes like an intent, with retry_of`() {
+        val r = json.decodeFromString<GivingIntentResult>(
+            """{"transaction_id":"t2","status":"processing","idempotency_key":"k","reused":false,"provider":"mpesa",
+                "fund":{"code":"tithe","name":"Tithe"},"pledge":null,"retry_of":"t1"}""",
+        )
+        assertEquals("t2", r.transactionId)
+        assertEquals("t1", r.retryOf)
+        assertNull(json.decodeFromString<GivingIntentResult>("""{"transaction_id":"t","status":"processing"}""").retryOf)
+    }
+
+    @Test
+    fun `intent body carries the prompt number as phone_number`() {
+        val i = json.parseToJsonElement(json.encodeToString(GiveBody("tithe", 100_000, "KES", "mpesa", phoneNumber = "+254711222333", idempotencyKey = "k"))).jsonObject
+        assertEquals("+254711222333", i["phone_number"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `schedule and intent bodies carry pledge_id when bound`() {
         val s = json.parseToJsonElement(json.encodeToString(CreateScheduleBody("tithe", 1, "KES", "weekly", "airtel", "k", pledgeId = "pl"))).jsonObject
         assertEquals("pl", s["pledge_id"]!!.jsonPrimitive.content)
@@ -208,6 +334,19 @@ class GivingWireTest {
         assertEquals("Tithe", p.pledges.single().targetTitle)
         assertNull(p.pledges.single().scheduleId)
         assertEquals("pay", p.due.single().action)
+    }
+
+    @Test
+    fun `the programme's membership decides STANDING or JOIN, as iOS`() {
+        fun partnership(membership: String?, isPartner: Boolean) =
+            Partnership(isPartner = isPartner, membership = membership?.let { PartnerMembership(status = it) })
+        assertTrue(partnership("active", isPartner = false).isProgrammeMember)
+        assertTrue(partnership("paused", isPartner = false).isProgrammeMember)
+        // Left the programme: JOIN, even with a recurring gift still counted (is_partner).
+        assertFalse(partnership("left", isPartner = true).isProgrammeMember)
+        // An older server with no membership block: is_partner decides.
+        assertTrue(partnership(null, isPartner = true).isProgrammeMember)
+        assertFalse(partnership(null, isPartner = false).isProgrammeMember)
     }
 
     @Test

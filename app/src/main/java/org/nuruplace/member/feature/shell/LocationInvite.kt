@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import org.nuruplace.member.ui.components.NuruDialog
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -84,23 +84,27 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
+    // Server first (EXPERIENCE.md §7.4, owner 2026-10-05): the invite closes
+    // once the server has the area. A failure keeps it open, says why above
+    // the button, and the member can try again or choose "Not now".
+    var failure by remember { mutableStateOf<String?>(null) }
 
     fun captureAndShare() {
+        if (working) return
         working = true
+        failure = null
         scope.launch {
-            val client = LocationServices.getFusedLocationProviderClient(context)
-            val loc = withContext(Dispatchers.IO) {
-                runCatching {
-                    @Suppress("MissingPermission")
-                    Tasks.await(client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null))
-                }.getOrNull()
+            when (val r = LocationSharing.change(context, want = true)) {
+                is LocationShareResult.Saved -> {
+                    AppPrefs.updateShareLocation(true)
+                    working = false
+                    onDismiss()
+                }
+                is LocationShareResult.Failed -> {
+                    failure = r.line
+                    working = false
+                }
             }
-            if (loc != null) {
-                runCatching { Net.client.api.shareLocation(LocationBody(loc.latitude, loc.longitude)) }
-                AppPrefs.updateShareLocation(true)
-            }
-            working = false
-            onDismiss()
         }
     }
 
@@ -108,7 +112,7 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
         if (granted) captureAndShare() else onDismiss()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    NuruDialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
                 .background(Brush.verticalGradient(listOf(Color(0xFF0F2A47), Color(0xFF081020))))
@@ -122,7 +126,7 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text(
                 "Be found by your church family",
-                style = NuruType.rowTitle.copy(fontSize = 21.sp), color = Color.White,
+                style = NuruType.rowTitle.copy(fontSize = 22.sp), color = Color.White,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))
@@ -136,6 +140,10 @@ fun LocationInviteDialog(onDismiss: () -> Unit) {
                 style = NuruType.micro, color = Color.White.copy(alpha = 0.55f), textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(20.dp))
+            failure?.let {
+                Text(it, style = NuruType.caption, color = Color(0xFFFCA5A5), textAlign = TextAlign.Center)
+                Spacer(Modifier.height(10.dp))
+            }
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
                     .background(Brush.linearGradient(listOf(InviteGold, Color(0xFFB6862F))))
