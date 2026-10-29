@@ -62,6 +62,8 @@ import org.nuruplace.member.data.net.MarkReadBody
 import org.nuruplace.member.data.net.Net
 import org.nuruplace.member.data.net.NotificationRow
 import org.nuruplace.member.data.net.NotificationsRes
+import org.nuruplace.member.feature.departments.departmentNotificationBody
+import org.nuruplace.member.feature.departments.departmentNotificationTitle
 import org.nuruplace.member.ui.components.AsyncContent
 import org.nuruplace.member.ui.components.InboxUnread
 import org.nuruplace.member.ui.theme.Nuru
@@ -102,19 +104,25 @@ internal fun noticeData(n: NotificationRow): Map<String, String> = buildMap {
 internal fun noticeRoute(n: NotificationRow): String? =
     org.nuruplace.member.data.firebase.NuruMessagingService.destFor(noticeData(n))
 
-/** A row's headline: a giving notice's own words (feature/give/
- *  GivingNotificationCopy.kt — the push's, from dispatch.ts) ahead of the
- *  payload's `title`, which on the Partners notices is the pledge's NAME;
- *  else the payload's title; else the template, humanised. */
-private fun titleOf(n: NotificationRow): String =
+/** A row's headline — one order for every notice: a giving notice's own
+ *  words (feature/give/GivingNotificationCopy.kt — the push's, from
+ *  dispatch.ts) ahead of the payload's `title`, which on the Partners notices
+ *  is the pledge's NAME; else the payload's own non-empty title (dispatch.ts
+ *  pushCopy() prefers it too); else a department notice's words (feature/
+ *  departments/DepartmentNotificationCopy.kt — the push's title); else the
+ *  template, humanised. Internal so the copy tests pin what the inbox shows. */
+internal fun titleOf(n: NotificationRow): String =
     org.nuruplace.member.feature.give.givingNotificationTitle(n.template, n.payload)
-        ?: n.payload?.title
+        ?: n.payload?.title?.takeIf { it.isNotEmpty() }
+        ?: departmentNotificationTitle(n.template, n.payload)
         ?: n.template.replace('_', ' ').replaceFirstChar { it.uppercase() }
 
-/** A row's line: the payload's own body when it carries one (dispatch.ts
- *  prefers it too), else a giving notice's words; null when neither. */
-private fun bodyOf(n: NotificationRow): String? =
+/** A row's line: the payload's own non-empty body (dispatch.ts prefers it
+ *  too), else a department notice's words (the push's body), else a giving
+ *  notice's words; null when none. */
+internal fun bodyOf(n: NotificationRow): String? =
     n.payload?.body?.takeIf { it.isNotEmpty() }
+        ?: departmentNotificationBody(n.template, n.payload)
         ?: org.nuruplace.member.feature.give.givingNotificationBody(n.template, n.payload)
 
 /** What a notice is about — one family per kind of notice, one icon each
