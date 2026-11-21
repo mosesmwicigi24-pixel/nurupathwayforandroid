@@ -4572,3 +4572,48 @@ after joining, Intercede counts once and greys for the day; a new need from
 another account arrives as a push that opens the Ekklesia segment; Home
 shows the Ekklesia card and, for a member with unprayed needs, the
 "wait on the watch" nudge.
+
+## 2026-11-21 — Read aloud + the reading theme on the four readers (branch feat/listen-and-night-reading; iOS nurupathwayforios, same branch; backend N/A)
+
+**Why:** a member wrote to the pastor asking for light/dark theme settings
+("dark mode would be particularly useful for reading at night") and a voice
+that reads the written content aloud ("listen to the teachings and articles
+instead of having to read everything"). Both are on-device features: no wire
+change, no new endpoint, no key, nothing read leaves the phone.
+
+**Scope:** the four long-form readers — a plan's part reader, today's
+Devotional, the Sunday Letter, a Pathway lesson. App-wide dark mode is NOT
+in this change: every screen's colours are drawn light by hand (~1,000
+hard-coded whites and literals here, as on iOS), so it needs its own design
+pass. The readers are where night reading happens.
+
+**Reading theme** (`data/ReadingTheme.kt`, `AppPrefs.readingTheme`,
+`nuru.readingTheme`): Automatic (the phone's dark mode — `AppPrefs.systemDark`,
+kept by `MainActivity`), Day, Night. Settings → Display has the three-way row;
+every reader has the moon/sun button, which picks the other page explicitly.
+The plan reader's old night toggle reset on cold start — it is this setting
+now. Day pages are unchanged; night is the readers' existing dark sepia
+(ReaderPalette). `VerseQuoteCard(night =)` and `GrowCreamHeader(night =)`
+gained night looks (default off, so every other caller is unchanged). The
+letter's and the lesson's palettes became getters on the theme; navy FILLS
+(white on them, or words on gold) stay dark via `navyFill` / `onGold`.
+
+**Read aloud** (`feature/listen/`): `ListenScript.kt` (pure — what is said:
+markdown and tables read plainly, scripture references as words against the
+book whitelist, inline verse numbers dropped, ≤1200-char paragraphs);
+`ReadAloud.kt` (on-device TextToSpeech: paragraphs queued, pause = stop and
+resume from the paragraph, skip ±1, speed 0.8–1.5× in `nuru.listen.speed`,
+keeps reading with the screen locked, stops when the reader is left; the
+liturgy's guards — never over TalkBack, never while the church is live —
+and transient audio focus so Radio pauses and comes back);
+`ListenControls.kt` (header glyph + the player bar). What each reader says:
+`grow/ReaderListen.kt`, `pathway/ModuleListen.kt`, `EditorialLetter.listenPieces`.
+A film/recording part reads nothing (it would talk over the speaker).
+
+**Verify:** `./gradlew :app:testDebugUnitTest --tests '*ListenScriptTest'
+--tests '*ReaderListenTest' --tests '*ReadingThemeTest'` (24 tests; full
+suite 1175 green); on device: each reader shows Listen and the moon; Listen
+reads the page top to bottom, the bar pauses/resumes/skips and changes speed,
+locking the phone keeps it reading, leaving the reader stops it; with TalkBack
+on there is no Listen; Settings → Display → Reading theme → Night turns all
+four readers, and Automatic follows the phone.

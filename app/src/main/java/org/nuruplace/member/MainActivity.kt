@@ -82,6 +82,10 @@ class MainActivity : FragmentActivity() {
         installSplashScreen()   // branded TGNM splash on every cold start
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // The phone's dark mode, for the reading theme's Automatic setting
+        // (data/ReadingTheme.kt). A change normally recreates the activity
+        // and lands here again; onConfigurationChanged covers the rest.
+        AppPrefs.systemDark = isNightMode(resources.configuration)
         PendingDest.set(
             readingJoinDest(intent) ?: intent?.getStringExtra("nuru.dest")
                 // A restored activity's intent was already followed once.
@@ -121,6 +125,14 @@ class MainActivity : FragmentActivity() {
             })
         }
     }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        AppPrefs.systemDark = isNightMode(newConfig)
+    }
+
+    private fun isNightMode(config: android.content.res.Configuration): Boolean =
+        (config.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

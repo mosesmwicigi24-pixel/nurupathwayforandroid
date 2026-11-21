@@ -348,7 +348,7 @@ object LiturgyVoice {
      *  access to the same content — hiding this control in that case loses
      *  nothing and avoids the "two voices at once" the control must never
      *  cause. */
-    private fun isSpokenFeedbackActive(context: Context): Boolean {
+    internal fun isSpokenFeedbackActive(context: Context): Boolean {
         val am = context.getSystemService(AccessibilityManager::class.java) ?: return false
         return runCatching {
             am.isEnabled &&
@@ -367,6 +367,6 @@ object LiturgyVoice {
      *  HomeScreen.kt's `churchLive`) — rather than threading a new parameter
      *  through every call site. Cell-scope streams don't count here: this is
      *  specifically about the CHURCH's own service being live. */
-    private fun isChurchBroadcastingLive(): Boolean =
+    internal fun isChurchBroadcastingLive(): Boolean =
         LiveDiscoveryCenter.streams.value.any { it.scope == "church" }
 }

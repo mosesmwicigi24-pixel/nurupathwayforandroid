@@ -24,6 +24,8 @@
 // in line (a cap two lines of 34 sp deep would crowd the line beside it).
 package org.nuruplace.member.feature.home
 
+import org.nuruplace.member.data.ReadingTheme
+import org.nuruplace.member.feature.listen.ListenPiece
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -105,18 +107,32 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 // ── The page's colours (board A) ─────────────────────────────────────────────
-private val Paper = Color(0xFFFBF6EC)
-private val Ink = Color(0xFF1B2430)
-private val Navy = Color(0xFF0B1F33)
-private val GoldText = Color(0xFFA87F2E)
-private val GoldRule = Color(0xFFC89B3C)
-private val Muted = Color(0xFF5B6678)
-private val Hairline = Color(0x1A0B1F33)
-private val FigureRule = Color(0x59A87F2E)
-private val VerseGround = Color(0xFFFFF4DA)
-private val ChevronInk = Color(0xFFB5BDC9)
+// The page's colours on the day page (the board's own) and the night page
+// (the reading theme, data/ReadingTheme.kt — the readers' dark sepia, as
+// ReaderPalette). Getters, not values: each read follows the theme, so the
+// whole letter turns with the moon button without touching a call site.
+// `Navy` is only ever text here, so on the night page it is the light ink.
+private val night: Boolean get() = ReadingTheme.night
+internal val LetterPaper: Color get() = if (night) Color(0xFF171411) else Color(0xFFFBF6EC)
+private val Paper: Color get() = LetterPaper
+private val Ink: Color get() = if (night) Color(0xFFEBE3D3) else Color(0xFF1B2430)
+internal val LetterNavyInk: Color get() = if (night) Color(0xFFEBE3D3) else Color(0xFF0B1F33)
+private val Navy: Color get() = LetterNavyInk
+internal val LetterGoldText: Color get() = if (night) Color(0xFFD9B65A) else Color(0xFFA87F2E)
+private val GoldText: Color get() = LetterGoldText
+private val GoldRule: Color get() = if (night) Color(0xFFD9B65A) else Color(0xFFC89B3C)
+internal val LetterMuted: Color get() = if (night) Color(0xFF9A9280) else Color(0xFF5B6678)
+private val Muted: Color get() = LetterMuted
+internal val LetterHairline: Color get() = if (night) Color(0x17FFFFFF) else Color(0x1A0B1F33)
+private val Hairline: Color get() = LetterHairline
+private val FigureRule: Color get() = if (night) Color(0x59D9B65A) else Color(0x59A87F2E)
+private val VerseGround: Color get() = if (night) Color(0xFF251E13) else Color(0xFFFFF4DA)
+private val ChevronInk: Color get() = if (night) Color(0xFF6B6455) else Color(0xFFB5BDC9)
+// Words on the gold seal — dark on both pages.
 private val SealInk = Color(0xFF1E2A1F)
-private val ErrorInk = Color(0xFFB42318)
+private val ErrorInk: Color get() = if (night) Color(0xFFF87171) else Color(0xFFB42318)
+/** The white cards on the page (YOUR WEEK, IN GRACE). */
+internal val LetterCard: Color get() = if (night) Color(0xFF221E19) else Color.White
 private val Seal = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFFB6862F)))
 
 /** The letter's Fraunces: the app's own uprights, with Fraunces' true italic
@@ -258,6 +274,24 @@ internal object EditorialLetter {
         val ref = verseRef(letter) ?: return null
         val version = letter.scripture?.version?.trim()?.takeIf { it.isNotEmpty() }
         return if (verseText(letter.scripture) != null && version != null) "$ref · $version" else ref
+    }
+
+    /** What Read aloud says (feature/listen), in the page's order: the title,
+     *  the salutation, the letter, the verse, and who signed it. The pull
+     *  quote repeats a line of the letter and the week's figures are a
+     *  table, so neither is read. */
+    fun listenPieces(letter: PastoralLetter): List<ListenPiece> = buildList {
+        letter.displayTitle?.takeIf { it.isNotBlank() }?.let { add(ListenPiece.Heading(it)) }
+        letter.displaySalutation?.takeIf { it.isNotBlank() }?.let { add(ListenPiece.Prose(it)) }
+        paragraphs(letter).forEach { add(ListenPiece.Prose(it)) }
+        val ref = verseRef(letter)
+        val words = verseText(letter.scripture)
+        when {
+            words != null -> add(ListenPiece.Scripture(words, ref, ref?.let(org.nuruplace.member.feature.grow.ScriptureRefs::startVerse)))
+            ref != null -> add(ListenPiece.Prose("Scripture: $ref"))
+        }
+        val signer = listOfNotNull(signerName(letter.signedBy), signerRole(letter.signedBy)).joinToString(", ")
+        add(ListenPiece.Prose("With grace, $signer."))
     }
 
     /** The handwritten name — only when the server says who signed. */
@@ -549,7 +583,7 @@ private fun PullQuote(line: String, onShare: () -> Unit) {
 private fun WeekInGrace(figures: List<LetterFigure>, moments: List<String>) {
     val shape = RoundedCornerShape(20.dp)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(Color.White).border(1.dp, Hairline, shape)
+        Modifier.fillMaxWidth().clip(shape).background(LetterCard).border(1.dp, Hairline, shape)
             .padding(horizontal = 16.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {

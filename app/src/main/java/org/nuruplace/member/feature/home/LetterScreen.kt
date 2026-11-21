@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -279,6 +280,10 @@ fun LetterDialog(
         }
     }
 
+    // Read aloud (feature/listen) — the letter as the page sets it.
+    val listenWords = remember(letter) { org.nuruplace.member.feature.listen.ListenScript.paragraphs(EditorialLetter.listenPieces(letter)) }
+    val listen = org.nuruplace.member.feature.listen.rememberListen(listenWords)
+
     // NuruDialog: the letter reads at the member's own text size (a plain
     // Dialog's window dropped it — NuruDialog.kt).
     NuruDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -302,15 +307,54 @@ fun LetterDialog(
             // circle of the paper's own colour, with a hairline and a soft
             // shadow: it sits above the words passing under it, never among
             // them (at the largest size the title runs beneath it).
-            Box(
-                Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 14.dp)
-                    .size(36.dp)
-                    .shadow(4.dp, CircleShape, ambientColor = Color(0x2E0B1F33), spotColor = Color(0x2E0B1F33))
-                    .clip(CircleShape).background(Color(0xFFFBF6EC))
-                    .border(1.dp, Color(0x1A0B1F33), CircleShape)
-                    .clickable(onClickLabel = "Close") { onDismiss() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Lucide.X, "Close", tint = Color(0xFF0B1F33), modifier = Modifier.size(18.dp)) }
+            // Listen and the night page sit beside it, the same circles.
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (listen.available) {
+                    LetterCircle(onClickLabel = listen.label, onClick = { listen.toggle() }) {
+                        org.nuruplace.member.feature.listen.ListenIcon(listen, tint = LetterNavyInk)
+                    }
+                }
+                LetterCircle(
+                    onClickLabel = if (org.nuruplace.member.data.ReadingTheme.night) "Day page" else "Night page",
+                    onClick = { org.nuruplace.member.data.AppPrefs.updateReadingTheme(org.nuruplace.member.data.ReadingTheme.toggled(org.nuruplace.member.data.ReadingTheme.night)) },
+                ) {
+                    Icon(
+                        if (org.nuruplace.member.data.ReadingTheme.night) Lucide.Sun else Lucide.Moon,
+                        if (org.nuruplace.member.data.ReadingTheme.night) "Day page" else "Night page",
+                        tint = LetterNavyInk, modifier = Modifier.size(18.dp),
+                    )
+                }
+                LetterCircle(onClickLabel = "Close", onClick = onDismiss) {
+                    Icon(Lucide.X, "Close", tint = LetterNavyInk, modifier = Modifier.size(18.dp))
+                }
+            }
+            // The player floats over the page's foot while the letter is read.
+            org.nuruplace.member.feature.listen.ListenBar(
+                listen,
+                org.nuruplace.member.feature.listen.ListenColors(
+                    bar = LetterCard, ink = LetterNavyInk, inkDim = LetterMuted,
+                    accent = Color(0xFFC89B3C), onAccent = Color(0xFF0B1F33), border = LetterHairline,
+                ),
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 20.dp),
+            )
         }
     }
+}
+
+/** The circles over the letter (listen · night page · close): a solid circle
+ *  of the paper's own colour, a hairline and a soft shadow, so each sits above
+ *  the words passing under it. */
+@Composable
+private fun LetterCircle(onClickLabel: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        Modifier.size(36.dp)
+            .shadow(4.dp, CircleShape, ambientColor = Color(0x2E0B1F33), spotColor = Color(0x2E0B1F33))
+            .clip(CircleShape).background(LetterPaper)
+            .border(1.dp, LetterHairline, CircleShape)
+            .clickable(onClickLabel = onClickLabel) { onClick() },
+        contentAlignment = Alignment.Center,
+    ) { content() }
 }

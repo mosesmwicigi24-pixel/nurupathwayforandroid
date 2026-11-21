@@ -105,10 +105,15 @@ internal class ReaderPalette(val night: Boolean) {
     val navy = Color(0xFF0A1628)   // CTA text on gold, constant
 }
 
-/** Persisted-for-the-session reader night mode (survives navigation; resets on
- *  cold start — a DataStore-backed toggle is a follow-up). */
+/** The reading theme, resolved (data/ReadingTheme.kt): every reader — a
+ *  plan's parts, the devotional, the Sunday letter, a lesson — draws its
+ *  ReaderPalette from it, so a member's choice holds on all four and across
+ *  restarts (it used to reset on cold start and covered the plan reader only). */
 internal object ReaderMode {
-    var night by mutableStateOf(false)
+    val night: Boolean get() = org.nuruplace.member.data.ReadingTheme.night
+
+    /** The moon/sun button: the other page, chosen explicitly. */
+    fun toggle() = org.nuruplace.member.data.AppPrefs.updateReadingTheme(org.nuruplace.member.data.ReadingTheme.toggled(night))
 }
 
 /** A part finished in its reader → emit its segment ids so the day hub ticks the
@@ -451,7 +456,7 @@ internal fun RScriptureQuote(reference: String, pal: ReaderPalette) {
     LaunchedEffect(reference) { ScriptureStore.passage(reference).onSuccess { passage = it } }
     val text = passage?.text ?: reference
     RLongPressSave(reference = reference, text = text, version = passage?.version, pal = pal) {
-        VerseQuoteCard(verse = text, reference = passage?.let(::passageCaption) ?: reference)
+        VerseQuoteCard(verse = text, reference = passage?.let(::passageCaption) ?: reference, night = pal.night)
     }
 }
 

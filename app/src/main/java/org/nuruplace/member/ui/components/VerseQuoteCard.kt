@@ -33,6 +33,13 @@ import org.nuruplace.member.ui.theme.nuruSerif
  *  card is built to, matching the iOS card + the reference screenshot. */
 private val VerseCream = Color(0xFFFBF3DF)
 
+/** The same card on a reader's night page (data/ReadingTheme.kt) — the
+ *  ReaderPalette night values, so a verse never glares cream on the dark page. */
+private val NightCream = Color(0xFF251E13)
+private val NightGold = Color(0xFFD9B65A)
+private val NightInk = Color(0xFFEBE3D3)
+private val NightInkDim = Color(0xFF9A9280)
+
 /**
  * A single Scripture excerpt set apart from its surroundings. [verse] is the
  * quoted text (no surrounding quote marks needed — the glyph carries that);
@@ -43,34 +50,35 @@ private val VerseCream = Color(0xFFFBF3DF)
  * line-spacing preferences (AppPrefs) — no local override needed.
  */
 @Composable
-fun VerseQuoteCard(verse: String, reference: String, modifier: Modifier = Modifier) {
+fun VerseQuoteCard(verse: String, reference: String, modifier: Modifier = Modifier, night: Boolean = false) {
+    val gold = if (night) NightGold else Nuru.gold
     Box(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(VerseCream),
+            .background(if (night) NightCream else VerseCream),
     ) {
-        Box(Modifier.width(4.dp).fillMaxHeight().background(Nuru.gold))
+        Box(Modifier.width(4.dp).fillMaxHeight().background(gold))
         Column(Modifier.padding(start = 26.dp, end = 20.dp, top = 8.dp, bottom = 20.dp)) {
             // The hanging quote glyph overhangs the verse block above-left,
             // rather than sitting inline with the first line.
             Text(
                 "“",
                 style = nuruSerif(28, FontWeight.SemiBold),
-                color = Nuru.gold,
+                color = gold,
                 modifier = Modifier.offset(x = (-4).dp, y = 6.dp),
             )
             Text(
                 verse,
                 style = nuruSerif(18, FontWeight.Normal),
-                color = Nuru.navy,
+                color = if (night) NightInk else Nuru.navy,
                 modifier = Modifier.offset(y = (-22).dp),
             )
             if (reference.isNotBlank()) {
                 Text(
                     reference.uppercase(),
                     style = nuruSans(11, FontWeight.SemiBold, tracking = 1.4f),
-                    color = Nuru.ink600,
+                    color = if (night) NightInkDim else Nuru.ink600,
                     modifier = Modifier.padding(top = 10.dp).offset(y = (-22).dp),
                 )
             }

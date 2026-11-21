@@ -349,6 +349,56 @@ private fun DisplayCard() {
         }
         Spacer(Modifier.height(8.dp))
         Text("Adjusts line spacing across the whole app.", style = pInter(11), color = PROF.sub)
+
+        // The reading theme (data/ReadingTheme.kt; member suggestion,
+        // 2026-11-21): how the readers are lit. The same choice as the
+        // moon/sun button on each reader.
+        Spacer(Modifier.height(16.dp))
+        Text("Reading theme", style = NuruType.controlTitle, color = PROF.navy)
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            org.nuruplace.member.data.ReadingTheme.entries.forEach { theme ->
+                val selected = AppPrefs.readingTheme == theme.key
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) PROF.goldChipBg else PROF.surface)
+                        .border(
+                            if (selected) 1.5.dp else 1.dp,
+                            if (selected) PROF.gold else PROF.border,
+                            RoundedCornerShape(14.dp),
+                        )
+                        .clickable { AppPrefs.updateReadingTheme(theme) }
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(
+                            when (theme) {
+                                org.nuruplace.member.data.ReadingTheme.AUTO -> Lucide.Smartphone
+                                org.nuruplace.member.data.ReadingTheme.DAY -> Lucide.Sun
+                                org.nuruplace.member.data.ReadingTheme.NIGHT -> Lucide.Moon
+                            },
+                            if (selected) PROF.navy else PROF.sub,
+                            14.dp,
+                        )
+                        Text(
+                            theme.label,
+                            style = pInter(14, if (selected) FontWeight.Bold else FontWeight.Medium),
+                            color = if (selected) PROF.navy else PROF.sub,
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Plans, the devotional, the Sunday letter and lessons. Automatic follows your phone's dark mode. Each reader has a listen button too.",
+            style = pInter(11), color = PROF.sub,
+        )
     }
 }
 
