@@ -1,7 +1,6 @@
-// Read aloud — the on-device engine (member suggestion, 2026-11-21). Android's
-// built-in TextToSpeech, never a cloud voice, for the same reasons the spoken
-// liturgy chose it (LiturgyVoice.kt's header): no per-play cost, no key, works
-// offline, nothing a member reads leaves the phone.
+// Read aloud. Plan readings can use server-authorized narration, with the
+// device voice as an offline/service fallback; other readers remain on-device.
+// Only plan and scripture text goes to the provider, never a member's reflection.
 //
 // LiturgyVoice reads ONE short utterance and is scoped to its card. A plan
 // reading, a devotional, a letter or a lesson is long, so this engine adds what
@@ -27,18 +26,37 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
+import java.util.UUID
+import java.io.File
+import java.io.FileInputStream
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import org.nuruplace.member.data.AppPrefs
+import org.nuruplace.member.data.net.Net
+import org.nuruplace.member.BuildConfig
 import org.nuruplace.member.feature.home.LiturgyVoice
 import org.nuruplace.member.feature.home.isLanguageUsable
 import org.nuruplace.member.feature.home.isVoiceUsable
 import org.nuruplace.member.feature.home.pickLiturgyVoiceLocale
+
+data class PlanNarration(val planId: String, val day: Int, val part: String, val version: String) {
+    fun valid(): Boolean = runCatching { UUID.fromString(planId) }.isSuccess && day in 1..366 &&
+        part in setOf("word", "respond") && version.matches(Regex("[a-f0-9]{64}"))
+}
 
 object ReadAloud {
     enum class Status {
@@ -59,6 +77,7 @@ object ReadAloud {
         val key: String? = null,
         val index: Int = 0,
         val total: Int = 0,
+        val deviceFallback: Boolean = false,
     ) {
         fun isFor(k: String): Boolean = key == k && (status == Status.PLAYING || status == Status.PAUSED)
     }
@@ -76,6 +95,12 @@ object ReadAloud {
     private var users = 0
     private var focusRequest: AudioFocusRequest? = null
     @Volatile private var paragraphs: List<String> = emptyList()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var narration: PlanNarration? = null
+    private var narrationJob: Job? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var narrationFile: File? = null
+    internal var testAudioLoader: (suspend (PlanNarration, Int) -> ByteArray)? = null
 
     /** Bumped every time the queue is rebuilt, so a callback from words that
      *  were flushed (a skip, a pause, a new reading) is told apart from the
@@ -170,19 +195,20 @@ object ReadAloud {
     }
 
     /** The one button: start [key] from the top, pause it, or resume it. */
-    fun toggle(context: Context, key: String, words: List<String>) {
+    fun toggle(context: Context, key: String, words: List<String>, narration: PlanNarration? = null, isPlan: Boolean = false) {
         val s = _state.value
         when {
             s.isFor(key) && s.status == Status.PLAYING -> pause()
             s.isFor(key) && s.status == Status.PAUSED -> resume(context)
-            else -> play(context, key, words, 0)
+            else -> play(context, key, words, 0, narration, isPlan)
         }
     }
 
-    fun play(context: Context, key: String, words: List<String>, from: Int = 0) {
+    fun play(context: Context, key: String, words: List<String>, from: Int = 0, narration: PlanNarration? = null, isPlan: Boolean = false) {
         if (words.isEmpty() || !offered(context)) return
         paragraphs = words
-        _state.value = State(Status.PAUSED, key, from.coerceIn(0, words.lastIndex), words.size)
+        this.narration = narration?.takeIf { it.valid() }
+        _state.value = State(Status.PAUSED, key, from.coerceIn(0, words.lastIndex), words.size, isPlan && this.narration == null)
         resume(context)
     }
 
@@ -191,6 +217,7 @@ object ReadAloud {
         if (s.status != Status.PLAYING) return
         generation++
         tts?.stop()
+        discardAudio()
         appContext?.let { abandonFocus(it) }
         _state.value = s.copy(status = Status.PAUSED)
     }
@@ -230,6 +257,8 @@ object ReadAloud {
     fun stop() {
         generation++
         tts?.stop()
+        discardAudio()
+        narration = null
         appContext?.let { abandonFocus(it) }
         paragraphs = emptyList()
         _state.update { if (it.status == Status.PLAYING || it.status == Status.PAUSED) State(Status.READY) else it.copy(key = null) }
@@ -238,6 +267,8 @@ object ReadAloud {
     private fun release() {
         generation++
         tts?.stop()
+        discardAudio()
+        narration = null
         tts?.shutdown()
         tts = null
         appContext?.let { abandonFocus(it) }
@@ -250,6 +281,76 @@ object ReadAloud {
         val engine = tts ?: return
         val gen = ++generation
         engine.stop()
+        discardAudio()
+        val source = narration
+        if (source != null) {
+            _state.update { it.copy(status = Status.PLAYING, index = index) }
+            narrationJob = scope.launch {
+                var pending: File? = null
+                try {
+                    withContext(Dispatchers.IO) {
+                        val context = appContext ?: error("Reader is unavailable")
+                        val file = File.createTempFile("nuru-plan-", ".mp3", context.cacheDir)
+                        pending = file
+                        val testLoader = if (BuildConfig.DEBUG) testAudioLoader else null
+                        if (testLoader != null) {
+                            val bytes = testLoader(source, index)
+                            require(bytes.isNotEmpty() && bytes.size <= 10 * 1024 * 1024)
+                            file.writeBytes(bytes)
+                        } else Net.client.api.planNarrationAudio(source.planId, source.day, source.part, source.version, index).use { body ->
+                            require(body.contentType()?.toString()?.substringBefore(';')?.trim()?.lowercase() == "audio/mpeg")
+                            var count = 0L
+                            body.byteStream().use { input -> file.outputStream().use { output ->
+                                val buffer = ByteArray(8192)
+                                while (true) {
+                                    currentCoroutineContext().ensureActive()
+                                    val n = input.read(buffer)
+                                    if (n < 0) break
+                                    count += n
+                                    require(count <= 10L * 1024 * 1024)
+                                    output.write(buffer, 0, n)
+                                }
+                            } }
+                            require(count > 0)
+                        }
+                    }
+                    if (gen != generation || _state.value.status != Status.PLAYING) return@launch
+                    val file = pending ?: error("Audio is unavailable")
+                    val player = MediaPlayer()
+                    mediaPlayer = player
+                    FileInputStream(file).use { player.setDataSource(it.fd) }
+                    player.setAudioAttributes(speechAttributes)
+                    player.prepare()
+                    player.playbackParams = player.playbackParams.setSpeed(AppPrefs.listenSpeed)
+                    player.setOnCompletionListener {
+                        if (gen == generation && _state.value.status == Status.PLAYING) {
+                            if (index < paragraphs.lastIndex) speakFrom(index + 1) else finished()
+                        }
+                    }
+                    player.setOnErrorListener { _, _, _ ->
+                        if (gen == generation && _state.value.status == Status.PLAYING) {
+                            narration = null
+                            _state.update { it.copy(deviceFallback = true) }
+                            speakFrom(index)
+                        }
+                        true
+                    }
+                    narrationFile = file
+                    pending = null
+                    player.start()
+                } catch (error: Exception) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    if (gen == generation && _state.value.status == Status.PLAYING) {
+                        narration = null
+                        _state.update { it.copy(deviceFallback = true) }
+                        speakFrom(index)
+                    }
+                } finally {
+                    pending?.delete()
+                }
+            }
+            return
+        }
         engine.setSpeechRate(BASE_RATE * AppPrefs.listenSpeed)
         for (j in index..paragraphs.lastIndex) {
             engine.speak(paragraphs[j], if (j == index) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, Bundle.EMPTY, "nuru.read.$gen.$j")
@@ -258,9 +359,20 @@ object ReadAloud {
     }
 
     private fun finished() {
+        discardAudio()
+        narration = null
         appContext?.let { abandonFocus(it) }
         paragraphs = emptyList()
         _state.value = State(Status.READY)
+    }
+
+    private fun discardAudio() {
+        narrationJob?.cancel()
+        narrationJob = null
+        mediaPlayer?.release()
+        mediaPlayer = null
+        narrationFile?.delete()
+        narrationFile = null
     }
 
     private fun errored(utteranceId: String?) {

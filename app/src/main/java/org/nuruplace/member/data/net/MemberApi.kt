@@ -11,6 +11,8 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Streaming
+import okhttp3.ResponseBody
 
 interface MemberApi {
     @POST("auth/login")
@@ -129,6 +131,14 @@ interface MemberApi {
 
     @GET("growth/plans/{id}")
     suspend fun plan(@Path("id") planId: String): ReadingPlanDetail
+
+    @GET("growth/plans/{id}/days/{day}/narration/{part}")
+    suspend fun planNarration(@Path("id") planId: String, @Path("day") day: Int, @Path("part") part: String): PlanNarrationManifest
+
+    @Streaming
+    @POST("growth/plans/{id}/days/{day}/narration/{part}/{version}/{index}/audio")
+    suspend fun planNarrationAudio(@Path("id") planId: String, @Path("day") day: Int, @Path("part") part: String,
+        @Path("version") version: String, @Path("index") index: Int): ResponseBody
 
     @POST("growth/plans/{id}/start")
     suspend fun startPlan(@Path("id") planId: String): Unit

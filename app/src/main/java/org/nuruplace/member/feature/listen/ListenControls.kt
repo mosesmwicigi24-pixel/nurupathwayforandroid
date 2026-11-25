@@ -72,6 +72,7 @@ class ListenController internal constructor(
     val index: Int,
     val total: Int,
     val speed: Float,
+    val deviceFallback: Boolean,
     private val onToggle: () -> Unit,
     private val onSkip: (Int) -> Unit,
     private val onSpeed: () -> Unit,
@@ -94,9 +95,9 @@ class ListenController internal constructor(
 /** Binds the engine for as long as the calling screen is on screen. [paragraphs]
  *  is the reading as ListenScript built it; an empty list offers nothing. */
 @Composable
-fun rememberListen(paragraphs: List<String>): ListenController {
+fun rememberListen(paragraphs: List<String>, narration: PlanNarration? = null, isPlan: Boolean = false): ListenController {
     val context = LocalContext.current
-    val key = remember(paragraphs) { ListenScript.key(paragraphs) }
+    val key = remember(paragraphs, narration, isPlan) { ListenScript.key(paragraphs) + (if (isPlan) ":plan" else "") + (narration?.let { ":${it.planId}:${it.day}:${it.part}:${it.version}" } ?: "") }
 
     DisposableEffect(Unit) {
         ReadAloud.bind(context)
@@ -123,7 +124,8 @@ fun rememberListen(paragraphs: List<String>): ListenController {
         index = if (active) state.index else 0,
         total = paragraphs.size,
         speed = AppPrefs.listenSpeed,
-        onToggle = { ReadAloud.toggle(context, key, paragraphs) },
+        deviceFallback = active && state.deviceFallback,
+        onToggle = { ReadAloud.toggle(context, key, paragraphs, narration, isPlan) },
         onSkip = { delta -> ReadAloud.skip(context, delta) },
         onSpeed = { ReadAloud.cycleSpeed() },
         onStop = { ReadAloud.stop() },
@@ -183,7 +185,7 @@ fun ListenBar(c: ListenController, colors: ListenColors, modifier: Modifier = Mo
                 Spacer(Modifier.width(6.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (c.playing) "Reading aloud" else "Paused",
+                        if (c.deviceFallback) "Device voice" else if (c.playing) "Reading aloud" else "Paused",
                         style = barStyle(13, FontWeight.SemiBold), color = colors.ink, maxLines = 1,
                     )
                     Text(

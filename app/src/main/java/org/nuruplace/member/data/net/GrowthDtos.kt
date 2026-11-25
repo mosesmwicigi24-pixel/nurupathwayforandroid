@@ -5,6 +5,9 @@ package org.nuruplace.member.data.net
 
 import kotlinx.serialization.Serializable
 
+@Serializable
+data class PlanNarrationManifest(val words: List<String>, val version: String)
+
 // --- Devotional ---
 @Serializable
 data class Devotional(

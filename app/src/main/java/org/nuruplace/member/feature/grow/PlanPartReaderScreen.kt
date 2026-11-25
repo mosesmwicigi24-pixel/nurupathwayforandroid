@@ -127,10 +127,28 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
     LaunchedEffect(toFetch) {
         toFetch.forEach { ref -> ScriptureStore.passage(ref).onSuccess { passages[ScriptureRefs.normalize(ref)] = it.text } }
     }
-    val listenWords = remember(part, group, day?.title, passages.toMap()) {
+    val deviceWords = remember(part, group, day?.title, passages.toMap()) {
         org.nuruplace.member.feature.listen.ListenScript.paragraphs(planPartListenPieces(part, group, day?.title, passages))
     }
-    val listen = org.nuruplace.member.feature.listen.rememberListen(listenWords)
+    var cloud by remember(planId, dayNumber, part) { mutableStateOf<org.nuruplace.member.data.net.PlanNarrationManifest?>(null) }
+    LaunchedEffect(planId, dayNumber, part, day?.locked, group) {
+        cloud = null
+        if (day != null && !day.locked && part in listOf("word", "respond") && group.isNotEmpty()) {
+            try {
+                val result = Net.client.api.planNarration(planId, dayNumber, part)
+                val source = org.nuruplace.member.feature.listen.PlanNarration(planId, dayNumber, part, result.version)
+                // Do not change the active player's words while it is reading.
+                if (source.valid() && result.words.isNotEmpty() && result.words.size <= 100 &&
+                    result.words.all { it.isNotEmpty() && it.length <= 1200 } &&
+                    org.nuruplace.member.feature.listen.ReadAloud.state.value.key == null) cloud = result
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                // Keep the on-device reader when offline or cloud narration is unavailable.
+            }
+        }
+    }
+    val source = cloud?.let { org.nuruplace.member.feature.listen.PlanNarration(planId, dayNumber, part, it.version) }
+    val listen = org.nuruplace.member.feature.listen.rememberListen(cloud?.words ?: deviceWords, source, isPlan = true)
 
     val scroll = rememberScrollState()
     val progress by remember { derivedStateOf { if (scroll.maxValue > 0) scroll.value.toFloat() / scroll.maxValue else 0f } }
