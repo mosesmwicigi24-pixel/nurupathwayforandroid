@@ -35,6 +35,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +94,16 @@ fun PrayerJournalScreen(
         var composerSaving by remember { mutableStateOf(false) }
         var composerError by remember { mutableStateOf<String?>(null) }
         var composerIds by remember { mutableStateOf<Pair<String, String>?>(null) }
+        var awaitingConfirmation by remember { mutableStateOf<Set<String>>(emptySet()) }
+        val pendingCount by Net.client.offline.pending.collectAsState()
+        LaunchedEffect(entries) {
+            val received = entries.map { it.entryId }.toSet()
+            awaitingConfirmation = awaitingConfirmation - received
+        }
+        LaunchedEffect(pendingCount, awaitingConfirmation) {
+            // A reconnect may drain the queue after the first offline reload failed.
+            if (pendingCount == 0 && awaitingConfirmation.isNotEmpty()) reload()
+        }
         val journalContext = androidx.compose.ui.platform.LocalContext.current
         // Entry ids shared to Corporate Prayer during this session — session-
         // local exactly like iOS's `sharedToWall` (the server has no separate
@@ -131,7 +142,13 @@ fun PrayerJournalScreen(
                         AddPrayerPill { editing = null; composerIds = null; composerError = null; showComposer = true }
                     }
                 }
-                if (visible.isEmpty()) {
+                if (awaitingConfirmation.isNotEmpty()) {
+                    item {
+                        Text("Prayer submitted for sync. Check the journal after reconnecting.",
+                            style = NuruType.body, color = Nuru.ink600)
+                    }
+                }
+                if (visible.isEmpty() && awaitingConfirmation.isEmpty()) {
                     item { EmptyPrayers(tab) }
                 } else {
                     items(visible, key = { it.entryId }) { e ->
@@ -203,6 +220,9 @@ fun PrayerJournalScreen(
                         if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Failed) {
                             composerError = outcome.line
                         } else {
+                            if (outcome is org.nuruplace.member.data.offline.WriteOutcome.Queued && editing == null) {
+                                awaitingConfirmation = awaitingConfirmation + ids.first
+                            }
                             composerIds = null
                             showComposer = false
                             reload()

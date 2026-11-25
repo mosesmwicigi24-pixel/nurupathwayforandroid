@@ -347,6 +347,9 @@ private fun HubHeader(
                 Text("$pct%", style = PW.t(11, FontWeight.SemiBold), color = PW.ink2, maxLines = 1, softWrap = false)
             }
         }
+        if ((active?.lessonsDone ?: 0) > 0) {
+            Text("Level progress includes the exam", style = PW.t(11), color = PW.ink2, modifier = Modifier.padding(top = 6.dp))
+        }
         if (remaining > 0) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Icon(Lucide.Sparkles, null, tint = PW.eyebrow, modifier = Modifier.size(14.dp))

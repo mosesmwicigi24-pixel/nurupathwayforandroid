@@ -4,6 +4,9 @@
 // layer so nothing is lost while offline.
 package org.nuruplace.member.data.offline
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -26,7 +29,11 @@ private class FakeDao : MutationDao {
     override suspend fun insert(mutation: PendingMutation) { rows.add(mutation) }
     override suspend fun oldest(limit: Int): List<PendingMutation> = rows.sortedBy { it.seq }.take(limit)
     override suspend fun count(): Int = rows.size
-    override suspend fun maxSeq(): Long = rows.maxOfOrNull { it.seq } ?: 0
+    override suspend fun maxSeq(): Long {
+        val maximum = rows.maxOfOrNull { it.seq } ?: 0
+        yield() // exercise interleaving between reading the sequence and insertion
+        return maximum
+    }
     override suspend fun deleteById(mutationId: String) { rows.removeAll { it.mutationId == mutationId } }
     override suspend fun markFailed(mutationId: String, error: String?) {}
 }
@@ -60,6 +67,13 @@ private fun row(seq: Long, id: String = "m$seq") =
     PendingMutation(mutationId = id, seq = seq, domain = "prayer_entries", op = "upsert", payloadJson = "{}", createdAt = seq)
 
 class OfflineQueueTest {
+    @Test fun `concurrent enqueues keep distinct sequence numbers`() = runTest {
+        val dao = FakeDao()
+        val q = queue(dao, FakeNet(false), unsupportedApi)
+        (1..10).map { async { q.enqueue("prayer_entries", "upsert", obj("{}")) } }.awaitAll()
+        assertEquals((1L..10L).toList(), dao.rows.map { it.seq }.sorted())
+    }
+
     @Test fun `applied and duplicate rows are removed`() = runTest {
         val dao = FakeDao().apply { rows += listOf(row(1, "a"), row(2, "b")) }
         val api = FakeApi { body ->
@@ -84,6 +98,32 @@ class OfflineQueueTest {
         val api = FakeApi { throw IOException("offline") }
         queue(dao, FakeNet(true), api).drain()
         assertEquals(2, dao.rows.size)   // nothing lost
+    }
+
+    @Test fun `unknown statuses and unrelated acknowledgements do not delete queued work`() = runTest {
+        val dao = FakeDao().apply { rows += row(1, "ours") }
+        val api = FakeApi { SyncPushResult(listOf(SyncMutationResult("ours", "pending"), SyncMutationResult("another", "applied"))) }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(listOf("ours"), dao.rows.map { it.mutationId })
+        assertEquals(1, api.pushes)
+    }
+
+    @Test fun `acknowledgement for work enqueued during push cannot remove it`() = runTest {
+        val dao = FakeDao().apply { rows += row(1, "ours") }
+        val api = FakeApi {
+            dao.rows += row(2, "new")
+            SyncPushResult(listOf(SyncMutationResult("ours", "applied"), SyncMutationResult("new", "applied")))
+        }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(listOf("new"), dao.rows.map { it.mutationId })
+    }
+
+    @Test fun `full batch with an incomplete response does not spin or drop rows`() = runTest {
+        val dao = FakeDao().apply { repeat(100) { rows += row((it + 1).toLong()) } }
+        val api = FakeApi { SyncPushResult(emptyList()) }
+        queue(dao, FakeNet(true), api).drain()
+        assertEquals(100, dao.rows.size)
+        assertEquals(1, api.pushes)
     }
 
     @Test fun `offline drain is a no-op`() = runTest {

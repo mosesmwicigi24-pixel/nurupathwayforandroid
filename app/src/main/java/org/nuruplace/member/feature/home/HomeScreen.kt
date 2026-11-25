@@ -48,12 +48,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import org.nuruplace.member.ui.theme.Radii
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -438,304 +441,365 @@ fun HomeScreen(
     // flag flips, so a later return to Home composes instantly.
     val entrance = remember { (!homeEntrancePlayed).also { homeEntrancePlayed = true } }
 
+    val scrollState = rememberLazyListState()
+    // What the opening will hold, worked out before it is drawn (the
+    // order below never changes): "What needs you today" — the
+    // exam's own nudge only while that exam can be taken (§7.2 #1),
+    // never one that repeats a YOUR WEEK row (§9.1 rule 3), and a
+    // first day's side task held back (§9.1 rule 4) — or the
+    // reflection strip; and the Live-now card.
+    val shownNudges = nudges.filter {
+        nudgeOffered(it, pathway) && !YourWeek.repeats(it, week, letterCard = letter != null) && !YourWeek.heldOnFirstDay(it, journey)
+    }
+    // Android only (§7.3): while the phone has notifications off,
+    // "Turn on notifications" goes first.
+    val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
+        { NotificationsOffCard(onTurnOn = notificationsCard.turnOn, onNotNow = notificationsCard.notNow) }
+    } else null
+    val needsRail = shownNudges.isNotEmpty() || notifyLead != null
+    val reflectionStrip = shownNudges.isEmpty() && reflectionDue && !YourWeek.firstDay(journey)
+    val upcomingLive = liveNowInfo(upcoming)
+    // A quiet divider when dark cards would touch (owner, 2026-10-07):
+    // the navy letter on the liturgy's photograph on a first day, the
+    // navy Live-now card right on the letter. Nothing moves.
+    val quietBefore = HomeQuiet.dividersBefore(
+        HomeQuiet.opening(
+            verseArt = verse?.art?.url?.isNotBlank() == true, video = welcomeVideo != null,
+            liveNow = upcomingLive != null, needsRail = needsRail, reflectionStrip = reflectionStrip,
+        ),
+    )
     Box(Modifier.fillMaxSize()) {
         NuruRefreshBox(refreshing = refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
-        Column(Modifier.fillMaxSize().background(Nuru.paper).verticalScroll(rememberScrollState())) {
-            HomeHeader(
-                firstName = me?.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() },
-                level = journey?.levelNumber ?: level,
-                levelUnknown = homeFailure != null,
-                journeyPill = journey?.pill,
-                // Unknown until the scores answer — never a "0" that isn't true.
-                growthScore = scores?.overall?.score,
-                trend = scores?.trend,
-                personalWord = personalWord,
-                onBell = onOpenNotifications,
-                onScan = { onNavigate("service-checkin") },
-                churchLive = churchLive,
-                onLive = { churchLive?.let { onNavigate(liveNowRoute(it)) } },
-            )
-
-            Column(
-                // 20dp between feed cards (iOS build-31 warmth) — the 16dp base read
-                // congested with this many cards; each one gets room to breathe.
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(top = Spacing.base),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                // Nuru Live (L3) — the broadcaster entry point, gold and gated
-                // on the live:go RBAC grant, sitting right above the L2 LIVE
-                // banner slot so a broadcaster sees both "go live" and
-                // "who's live now" together.
-                if (canGoLive(me)) {
-                    Box(Modifier.fillMaxWidth()) { GoLiveButton(onClick = { showGoLiveSheet = true }) }
-                }
-                // Nuru Live — the very top of Home, above everything else,
-                // whenever the church is live right now.
-                churchLive?.let { row ->
-                    LiveStreamBanner(
-                        row = row,
-                        onOpen = { onNavigate(liveNowRoute(row)) },
-                        onReplays = { onNavigate("live-replays") },
+            LazyColumn(state = scrollState, modifier = Modifier.fillMaxSize().background(Nuru.paper)) {
+                item(key = "header") {
+                    HomeHeader(
+                        firstName = me?.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() },
+                        level = journey?.levelNumber ?: level,
+                        levelUnknown = homeFailure != null,
+                        journeyPill = journey?.pill,
+                        // Unknown until the scores answer — never a "0" that isn't true.
+                        growthScore = scores?.overall?.score,
+                        personalWord = personalWord,
+                        onBell = onOpenNotifications,
+                        onScan = { onNavigate("service-checkin") },
+                        churchLive = churchLive,
+                        onLive = { churchLive?.let { onNavigate(liveNowRoute(it)) } },
                     )
                 }
-                if (pendingSync > 0) {
-                    Text(
-                        "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
-                        style = NuruType.micro, color = Nuru.eyebrow,
-                    )
-                }
-                // First paint with nothing loaded yet → hold the page's shape (no
-                // spinner, no pop); cards stagger in once the wire answers.
-                if (!loadedOnce && rhythm == null && verse == null && streak == null) {
-                    HomeSkeleton()
-                    // The Scaffold already insets the NavHost by the bottom bar,
-                    // so only a breath of air is needed here, not tabBarSpace.
-                    Spacer(Modifier.height(Spacing.base))
-                    return@Column
-                }
-                homeFailure?.let { failed ->
-                    org.nuruplace.member.ui.components.FailedState(failed, onRetry = { refreshing = true; refreshTick++ })
-                    Spacer(Modifier.height(Spacing.base))
-                    return@Column
-                }
-                radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
-                // Owner's order (2026-08-25, stated exactly): verse for today →
-                // featured video → the Sunday Letter → reflection due → the
-                // liturgy. Everything else stays where it always was — the ONLY
-                // move relative to the original feed is the liturgy stepping
-                // BELOW the reflection strip (iOS HomeView parity).
-                verse?.let { v ->
-                    Entrance(entrance, 6) {
-                        VerseCard(
-                            v = v,
-                            reactions = verseReactions,
-                            saved = verseSaved,
-                            onReact = { emoji ->
-                                // Optimistic: reflect the tap at once (one per member/
-                                // day — tapping my own removes it, a different one
-                                // moves it), then reconcile; roll back on failure so a
-                                // dropped request never blanks the counts (iOS parity).
-                                val previous = verseReactions
-                                val cur = verseReactions ?: VerseReactions()
-                                val counts = cur.counts.toMutableMap()
-                                fun drop(e: String) {
-                                    val n = (counts[e] ?: 0) - 1
-                                    if (n > 0) counts[e] = n else counts.remove(e)
-                                }
-                                val newMine: String?
-                                if (cur.mine == emoji) {
-                                    drop(emoji); newMine = null
-                                } else {
-                                    cur.mine?.let { drop(it) }
-                                    counts[emoji] = (counts[emoji] ?: 0) + 1; newMine = emoji
-                                }
-                                verseReactions = VerseReactions(counts, newMine, counts.values.sum())
-                                scope.launch {
-                                    runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
-                                        .onSuccess { verseReactions = it }
-                                        .onFailure { verseReactions = previous }
-                                }
-                            },
-                            // "Saved" and the success haptic on the server's
-                            // ack; a failure is felt and the button stays
-                            // "Save" (EXPERIENCE.md §7.4: no success before the
-                            // server; iOS the same). It dropped failures silently.
-                            onSave = {
-                                if (!verseSaved && !verseSaving) {
-                                    verseSaving = true
-                                    scope.launch {
-                                        val r = runCatching {
-                                            Net.client.api.saveVerse(
-                                                VerseUpsertBody(
-                                                    savedVerseId = java.util.UUID.randomUUID().toString(),
-                                                    reference = v.reference,
-                                                    version = v.version,
-                                                    verseText = v.text,
-                                                    clientMutationId = java.util.UUID.randomUUID().toString(),
-                                                ),
-                                            )
-                                        }
-                                        r.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
-                                        verseSaving = false
-                                        if (r.isSuccess) {
-                                            verseSaved = true
-                                            org.nuruplace.member.ui.components.Haptics.confirm(homeView)
-                                        } else {
-                                            org.nuruplace.member.ui.components.Haptics.reject(homeView)
-                                        }
-                                    }
-                                }
-                            },
-                            onShare = {
-                                val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
-                                fun shareText() {
-                                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
-                                    }
-                                    context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
-                                }
-                                val art = v.art?.takeIf { it.url.isNotBlank() }
-                                if (art != null) {
-                                    // Render the tableau to a real photograph; fall back to
-                                    // the words if the render can't happen (offline, CDN hiccup).
-                                    scope.launch {
-                                        val ok = VerseImageShare.share(
-                                            context, art,
-                                            v.text ?: "Your word is a lamp to my feet, and a light for my path.",
-                                            v.reference, v.version,
-                                        )
-                                        if (!ok) shareText()
-                                    }
-                                } else {
-                                    shareText()
-                                }
-                            },
-                        )
-                    }
-                }
-                // What the opening will hold, worked out before it is drawn (the
-                // order below never changes): "What needs you today" — the
-                // exam's own nudge only while that exam can be taken (§7.2 #1),
-                // never one that repeats a YOUR WEEK row (§9.1 rule 3), and a
-                // first day's side task held back (§9.1 rule 4) — or the
-                // reflection strip; and the Live-now card.
-                val shownNudges = nudges.filter {
-                    nudgeOffered(it, pathway) && !YourWeek.repeats(it, week, letterCard = letter != null) && !YourWeek.heldOnFirstDay(it, journey)
-                }
-                // Android only (§7.3): while the phone has notifications off,
-                // "Turn on notifications" goes first.
-                val notifyLead: (@Composable () -> Unit)? = if (notificationsCard.shown) {
-                    { NotificationsOffCard(onTurnOn = notificationsCard.turnOn, onNotNow = notificationsCard.notNow) }
-                } else null
-                val needsRail = shownNudges.isNotEmpty() || notifyLead != null
-                val reflectionStrip = shownNudges.isEmpty() && reflectionDue && !YourWeek.firstDay(journey)
-                val liveNow = liveNowInfo(upcoming)
-                // A quiet divider when dark cards would touch (owner, 2026-10-07):
-                // the navy letter on the liturgy's photograph on a first day, the
-                // navy Live-now card right on the letter. Nothing moves.
-                val quietBefore = HomeQuiet.dividersBefore(
-                    HomeQuiet.opening(
-                        verseArt = verse?.art?.url?.isNotBlank() == true, video = welcomeVideo != null,
-                        liveNow = liveNow != null, needsRail = needsRail, reflectionStrip = reflectionStrip,
-                    ),
-                )
-                // 0 · Featured welcome video — right under the header (owner ask); it
-                // IS the "start here" moment, so it leads the feed. The thin ON AIR
-                // bar stays pinned above it while a broadcast is live.
-                welcomeVideo?.let { w ->
-                    Entrance(entrance, 0) {
-                        FeaturedVideo(w, videoPlaying, onPlay = { videoPlaying = true })
-                    }
-                }
-                // 0b · Live now — a worship-ish gathering happening right now or
-                // starting within the hour (iOS HomeView.liveNowInfo/liveNowCard
-                // parity). Driven by the same calendar occurrences as Upcoming;
-                // no invented live-stream data, just a route to the real event.
-                liveNow?.let { info ->
-                    Entrance(entrance, 1) {
-                        LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
-                    }
-                }
-                // The Sunday Letter knock — three states (knock / quiet row / awaiting).
-                // Awaiting opens the You tab: with no letter yet the letters
-                // archive would be empty, and You is where "yours" lives.
-                if (HomeEdge.LETTER in quietBefore) SelahDivider()
-                if (letter == null) Entrance(entrance, 2) { LetterAwaitingCard(onClick = { onSelectTab("profile") }) }
-                letter?.takeIf { !it.isUnread }?.let { lt ->
-                    LetterReadRow(lt) { showLetter = true }
-                    if (showLetter) {
-                        LetterDialog(
-                            lt, onDismiss = { showLetter = false }, onRead = {},
-                            onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
-                            onWriteBack = { id -> showLetter = false; onNavigate("chat/$id?ctx=pastoral") },
-                            onOpenLetters = { id -> showLetter = false; onNavigate(lettersRoute(id)) },
-                        )
-                    }
-                }
-                letter?.takeIf { it.isUnread }?.let { lt ->
-                    LetterKnockCard(lt) { showLetter = true }
-                    if (showLetter) {
-                        LetterDialog(
-                            lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") },
-                            onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
-                            onWriteBack = { id -> showLetter = false; onNavigate("chat/$id?ctx=pastoral") },
-                            onOpenLetters = { id -> showLetter = false; onNavigate(lettersRoute(id)) },
-                        )
-                    }
-                }
-                // "What needs you today" — the server-ranked rail (GET /me/home/
-                // nudges). If the endpoint fails or has nothing, the old single-
-                // purpose reflection strip stands in, so Home never loses the
-                // nudge that ticks the rhythm. The unread-letter nudge opens the
-                // same letter sheet the knock card does, in place.
-                // (shownNudges, notifyLead: worked out above, with the opening.)
-                if (needsRail) {
-                    Entrance(entrance, 2) {
-                        NeedsYouRail(shownNudges, lead = notifyLead) { n ->
-                            if (n.route == "letter" && letter != null) showLetter = true
-                            else onNavigate(nudgeRouteFor(n))
+                item(key = "feed-top-space") { Spacer(Modifier.height(Spacing.base)) }
+                if (canGoLive(me) || churchLive != null || pendingSync > 0) {
+                    item(key = "live-and-sync") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            // Nuru Live (L3) — the broadcaster entry point, gold and gated
+                            // on the live:go RBAC grant, sitting right above the L2 LIVE
+                            // banner slot so a broadcaster sees both "go live" and
+                            // "who's live now" together.
+                            if (canGoLive(me)) {
+                                Box(Modifier.fillMaxWidth()) { GoLiveButton(onClick = { showGoLiveSheet = true }) }
+                            }
+                            // Nuru Live — the very top of Home, above everything else,
+                            // whenever the church is live right now.
+                            churchLive?.let { row ->
+                                LiveStreamBanner(
+                                    row = row,
+                                    onOpen = { onNavigate(liveNowRoute(row)) },
+                                    onReplays = { onNavigate("live-replays") },
+                                )
+                            }
+                            if (pendingSync > 0) {
+                                Text(
+                                    "⏳ $pendingSync change${if (pendingSync == 1) "" else "s"} waiting to sync",
+                                    style = NuruType.micro, color = Nuru.eyebrow,
+                                )
+                            }
                         }
                     }
                 }
-                if (reflectionStrip) {
-                    // Reflection due — deep-links to the devotional's reflection
-                    // composer, the one act that ticks the rhythm and clears this.
-                    Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
+                if (!loadedOnce && rhythm == null && verse == null && streak == null) {
+                    item(key = "skeleton") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            HomeSkeleton()
+                        }
+                    }
+                } else if (homeFailure != null) {
+                    item(key = "load-error") {
+                        homeFailure?.let { failed ->
+                            Box(Modifier.padding(horizontal = Spacing.base).padding(bottom = 20.dp)) {
+                                org.nuruplace.member.ui.components.FailedState(failed, onRetry = { refreshing = true; refreshTick++ })
+                            }
+                        }
+                    }
+                } else {
+                    if (radio?.live == true) {
+                        item(key = "radio") {
+                            Column(
+                                Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp),
+                            ) {
+                                radio?.takeIf { it.live }?.let { OnAirCard(it) { onNavigate("radio") } }
+                            }
+                        }
+                    }
+                    if (verse != null) {
+                        item(key = "verse") {
+                            Column(
+                                Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp),
+                            ) {
+                                verse?.let { v ->
+                                    Entrance(entrance, 6) {
+                                        VerseCard(
+                                            v = v,
+                                            reactions = verseReactions,
+                                            saved = verseSaved,
+                                            onReact = { emoji ->
+                                                // Optimistic: reflect the tap at once (one per member/
+                                                // day — tapping my own removes it, a different one
+                                                // moves it), then reconcile; roll back on failure so a
+                                                // dropped request never blanks the counts (iOS parity).
+                                                val previous = verseReactions
+                                                val cur = verseReactions ?: VerseReactions()
+                                                val counts = cur.counts.toMutableMap()
+                                                fun drop(e: String) {
+                                                    val n = (counts[e] ?: 0) - 1
+                                                    if (n > 0) counts[e] = n else counts.remove(e)
+                                                }
+                                                val newMine: String?
+                                                if (cur.mine == emoji) {
+                                                    drop(emoji); newMine = null
+                                                } else {
+                                                    cur.mine?.let { drop(it) }
+                                                    counts[emoji] = (counts[emoji] ?: 0) + 1; newMine = emoji
+                                                }
+                                                verseReactions = VerseReactions(counts, newMine, counts.values.sum())
+                                                scope.launch {
+                                                    runCatching { Net.client.api.reactToVerse(VerseReactionBody(emoji)) }
+                                                        .onSuccess { verseReactions = it }
+                                                        .onFailure { verseReactions = previous }
+                                                }
+                                            },
+                                            // "Saved" and the success haptic on the server's
+                                            // ack; a failure is felt and the button stays
+                                            // "Save" (EXPERIENCE.md §7.4: no success before the
+                                            // server; iOS the same). It dropped failures silently.
+                                            onSave = {
+                                                if (!verseSaved && !verseSaving) {
+                                                    verseSaving = true
+                                                    scope.launch {
+                                                        val r = runCatching {
+                                                            Net.client.api.saveVerse(
+                                                                VerseUpsertBody(
+                                                                    savedVerseId = java.util.UUID.randomUUID().toString(),
+                                                                    reference = v.reference,
+                                                                    version = v.version,
+                                                                    verseText = v.text,
+                                                                    clientMutationId = java.util.UUID.randomUUID().toString(),
+                                                                ),
+                                                            )
+                                                        }
+                                                        r.exceptionOrNull()?.let { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
+                                                        verseSaving = false
+                                                        if (r.isSuccess) {
+                                                            verseSaved = true
+                                                            org.nuruplace.member.ui.components.Haptics.confirm(homeView)
+                                                        } else {
+                                                            org.nuruplace.member.ui.components.Haptics.reject(homeView)
+                                                            org.nuruplace.member.ui.components.QuickNotice.show(
+                                                                org.nuruplace.member.data.net.ApiException.failureLine(
+                                                                    "Couldn't save that.", r.exceptionOrNull()!!, context,
+                                                                ),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            onShare = {
+                                                val text = listOfNotNull(v.text?.let { "“$it”" }, "${v.reference} · ${v.version}").joinToString("\n")
+                                                fun shareText() {
+                                                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                                                    }
+                                                    context.startActivity(android.content.Intent.createChooser(send, "Share verse"))
+                                                }
+                                                val art = v.art?.takeIf { it.url.isNotBlank() }
+                                                if (art != null) {
+                                                    // Render the tableau to a real photograph; fall back to
+                                                    // the words if the render can't happen (offline, CDN hiccup).
+                                                    scope.launch {
+                                                        val ok = VerseImageShare.share(
+                                                            context, art,
+                                                            v.text ?: "Your word is a lamp to my feet, and a light for my path.",
+                                                            v.reference, v.version,
+                                                        )
+                                                        if (!ok) shareText()
+                                                    }
+                                                } else {
+                                                    shareText()
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (welcomeVideo != null || upcomingLive != null) {
+                        item(key = "video-and-live") {
+                            Column(
+                                Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp),
+                            ) {
+                                // 0 · Featured welcome video — right under the header (owner ask); it
+                                // IS the "start here" moment, so it leads the feed. The thin ON AIR
+                                // bar stays pinned above it while a broadcast is live.
+                                welcomeVideo?.let { w ->
+                                    Entrance(entrance, 0) {
+                                        FeaturedVideo(w, videoPlaying, onPlay = { videoPlaying = true })
+                                    }
+                                }
+                                // 0b · Live now — a worship-ish gathering happening right now or
+                                // starting within the hour (iOS HomeView.liveNowInfo/liveNowCard
+                                // parity). Driven by the same calendar occurrences as Upcoming;
+                                // no invented live-stream data, just a route to the real event.
+                                upcomingLive?.let { info ->
+                                    Entrance(entrance, 1) {
+                                        LiveNowCard(info) { onNavigate("event/${info.occ.occurrenceId}?end=${android.net.Uri.encode(info.occ.endAt)}") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item(key = "letter") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            // The Sunday Letter knock — three states (knock / quiet row / awaiting).
+                            // Awaiting opens the You tab: with no letter yet the letters
+                            // archive would be empty, and You is where "yours" lives.
+                            if (HomeEdge.LETTER in quietBefore) SelahDivider()
+                            if (letter == null) Entrance(entrance, 2) { LetterAwaitingCard(onClick = { onSelectTab("profile") }) }
+                            letter?.takeIf { !it.isUnread }?.let { lt ->
+                                LetterReadRow(lt) { showLetter = true }
+                                if (showLetter) {
+                                    LetterDialog(
+                                        lt, onDismiss = { showLetter = false }, onRead = {},
+                                        onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
+                                        onWriteBack = { id -> showLetter = false; onNavigate("chat/$id?ctx=pastoral") },
+                                        onOpenLetters = { id -> showLetter = false; onNavigate(lettersRoute(id)) },
+                                    )
+                                }
+                            }
+                            letter?.takeIf { it.isUnread }?.let { lt ->
+                                LetterKnockCard(lt) { showLetter = true }
+                                if (showLetter) {
+                                    LetterDialog(
+                                        lt, onDismiss = { showLetter = false }, onRead = { letter = lt.copy(readAt = "read") },
+                                        onNextStep = { route, moduleId -> showLetter = false; openWeek(letterStepDest(route, moduleId)) },
+                                        onWriteBack = { id -> showLetter = false; onNavigate("chat/$id?ctx=pastoral") },
+                                        onOpenLetters = { id -> showLetter = false; onNavigate(lettersRoute(id)) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item(key = "needs-and-liturgy") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            // "What needs you today" — the server-ranked rail (GET /me/home/
+                            // nudges). If the endpoint fails or has nothing, the old single-
+                            // purpose reflection strip stands in, so Home never loses the
+                            // nudge that ticks the rhythm. The unread-letter nudge opens the
+                            // same letter sheet the knock card does, in place.
+                            // (shownNudges, notifyLead: worked out above, with the opening.)
+                            if (needsRail) {
+                                Entrance(entrance, 2) {
+                                    NeedsYouRail(shownNudges, lead = notifyLead) { n ->
+                                        if (n.route == "letter" && letter != null) showLetter = true
+                                        else onNavigate(nudgeRouteFor(n))
+                                    }
+                                }
+                            }
+                            if (reflectionStrip) {
+                                // Reflection due — deep-links to the devotional's reflection
+                                // composer, the one act that ticks the rhythm and clears this.
+                                Entrance(entrance, 2) { ReflectionStrip { onNavigate("devotional") } }
+                            }
+                            // The hour's word — BELOW the reflection strip (owner's order).
+                            if (HomeEdge.LITURGY in quietBefore) SelahDivider()
+                            Entrance(entrance, 0) {
+                                LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
+                            }
+                        }
+                    }
+                    item(key = "week") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            // 3 · YOUR WEEK — one card, each pillar's next thing (§6.1). It
+                            // took the place of the "For you today" hero, the continue-level
+                            // card, the plan-resume banner, the minis row, the this-week and
+                            // "Your cell" cards, and the upcoming list.
+                            // Its reads answer with the first load: until then the card
+                            // holds its shape — a row never says "Didn't load" while it is
+                            // still loading (final walk M4), nor guesses a "none" form.
+                            Entrance(entrance, 3) { if (loadedOnce) YourWeekCard(week) { openWeek(it) } else YourWeekSkeleton() }
+                        }
+                    }
+                    item(key = "rest") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = Spacing.base).padding(bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            // 4 · The day — today's rhythm, then today's echo (the app
+                            // remembers you, Wave 1; nothing at all on a day without one).
+                            rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
+                            Entrance(entrance, 5) { HomeEchoCard() }
+                            if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
+                            // 5 · The family. Both prayer-wall taps open My Prayer Room — the
+                            // wall preview on its Corporate tab, the post itself pushed
+                            // directly (deep-link parity).
+                            if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-room?tab=corporate") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
+                            // Ekklesia opens the intercessory watch in the Prayer Room.
+                            org.nuruplace.member.feature.community.EkklesiaPulse.summary?.let { ek ->
+                                Entrance(entrance, 7) { EkklesiaHomeCard(ek, onOpen = { onNavigate(org.nuruplace.member.feature.community.EkklesiaWords.ROUTE) }) }
+                            }
+                            // 5b · Celebrate the family (moments, Phase 4).
+                            CelebrationsRail()
+                            FeaturedCarousel(
+                                announcement = announcement,
+                                featuredEvent = featuredEvent,
+                                events = homeEvents,
+                                // The featured gathering has its own card just below:
+                                // never twice on one screen (§7.2 #9).
+                                ownCardSeries = featuredEvent?.seriesId,
+                                onAll = { onNavigate("events-calendar") },
+                                onOpenAnnouncement = { id -> onNavigate("announcement/$id") },
+                                onOpenEvent = { id -> onNavigate("event/$id?end=") },
+                            )
+                            featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
+                            // 6 · Growing — the scores (with the journey's one-line step),
+                            // grow your faith, and the encouragement.
+                            scores?.let { ProgressCard(it) { onNavigate("pathway") } }
+                            if (scores != null) SelahDivider()   // — selah: a rest before Grow
+                            GrowSection(onNavigate, discipler)
+                            EncouragementCard(prayers.size)
+                            // 7 · Support God's work — only while the Giving row says "Give".
+                            if (askToGive) GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
+                        }
+                    }
                 }
-                // The hour's word — BELOW the reflection strip (owner's order).
-                if (HomeEdge.LITURGY in quietBefore) SelahDivider()
-                Entrance(entrance, 0) {
-                    LiturgyCard(canManageRecordings = me?.profile?.role in setOf("Admin", "SuperAdmin"))
-                }
-                // 3 · YOUR WEEK — one card, each pillar's next thing (§6.1). It
-                // took the place of the "For you today" hero, the continue-level
-                // card, the plan-resume banner, the minis row, the this-week and
-                // "Your cell" cards, and the upcoming list.
-                // Its reads answer with the first load: until then the card
-                // holds its shape — a row never says "Didn't load" while it is
-                // still loading (final walk M4), nor guesses a "none" form.
-                Entrance(entrance, 3) { if (loadedOnce) YourWeekCard(week) { openWeek(it) } else YourWeekSkeleton() }
-                // 4 · The day — today's rhythm, then today's echo (the app
-                // remembers you, Wave 1; nothing at all on a day without one).
-                rhythm?.let { r -> Entrance(entrance, 4) { RhythmCard(r, streak?.streak?.current ?: 0) } }
-                Entrance(entrance, 5) { HomeEchoCard() }
-                if (rhythm != null) SelahDivider()   // — selah: a rest for the eye
-                // 5 · The family. Both prayer-wall taps open My Prayer Room — the
-                // wall preview on its Corporate tab, the post itself pushed
-                // directly (deep-link parity).
-                if (prayers.isNotEmpty()) Entrance(entrance, 7) { PrayerWallCard(prayers, onOpenWall = { onNavigate("prayer-room?tab=corporate") }, onOpenPost = { onNavigate("prayer-wall/${it}") }) }
-                // 5a · Ekklesia — the watch: an intercessor's needs for today, or the
-                // door in (one line, never a nag). Opens the Prayer Room on its tab.
-                org.nuruplace.member.feature.community.EkklesiaPulse.summary?.let { ek ->
-                    Entrance(entrance, 7) { EkklesiaHomeCard(ek, onOpen = { onNavigate(org.nuruplace.member.feature.community.EkklesiaWords.ROUTE) }) }
-                }
-                // 5b · Celebrate the family (moments, Phase 4).
-                CelebrationsRail()
-                FeaturedCarousel(
-                    announcement = announcement,
-                    featuredEvent = featuredEvent,
-                    events = homeEvents,
-                    // The featured gathering has its own card just below:
-                    // never twice on one screen (§7.2 #9).
-                    ownCardSeries = featuredEvent?.seriesId,
-                    onAll = { onNavigate("events-calendar") },
-                    onOpenAnnouncement = { id -> onNavigate("announcement/$id") },
-                    onOpenEvent = { id -> onNavigate("event/$id?end=") },
-                )
-                featuredEvent?.let { FeaturedGatheringCard(it) { onSelectTab("events") } }
-                // 6 · Growing — the scores (with the journey's one-line step),
-                // grow your faith, and the encouragement.
-                scores?.let { ProgressCard(it) { onNavigate("pathway") } }
-                if (scores != null) SelahDivider()   // — selah: a rest before Grow
-                GrowSection(onNavigate, discipler)
-                EncouragementCard(prayers.size)
-                // 7 · Support God's work — only while the Giving row says "Give".
-                if (askToGive) GiveCard(railsLine = giveRailsLine(giveRails)) { onSelectTab("give") }
-                // Scaffold already reserves the bottom bar; tabBarSpace here
-                // double-counted it and left a hole under the Give card.
-                Spacer(Modifier.height(Spacing.base))
+                item(key = "bottom-space") { Spacer(Modifier.height(Spacing.base)) }
             }
-        }
         }
 
         // Nuru Live discovery — the mini-window pop-up: a MUTED autoplaying
@@ -799,7 +863,6 @@ private fun HomeHeader(
     /** The overall growth score, 0–100 — a score, never a percent; null
      *  until it is known (the ring waits, empty, with no number). */
     growthScore: Int?,
-    trend: org.nuruplace.member.data.net.ScoreTrend? = null,
     personalWord: String? = null,
     onBell: () -> Unit,
     onScan: () -> Unit,
@@ -847,7 +910,12 @@ private fun HomeHeader(
             if ((growthScore ?: 0) > 0) {
                 // A figure in a fixed ring keeps the everyday size; the page's
                 // own words carry the score too, and they grow (§9.6 #4).
-                org.nuruplace.member.ui.components.CappedFontScale(1f) { Box {
+                org.nuruplace.member.ui.components.CappedFontScale(1f) { Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = "Growth score $growthScore out of 100"
+                    },
+                ) {
                     ProgressRing(pct = growthScore ?: 0, size = 42.dp, stroke = 4.dp, track = Nuru.track, arc = Nuru.gold) {
                         // One face for the score wherever it's a ring's figure —
                         // Fraunces, as on the progress card below (§8.1 rule 3;
@@ -855,11 +923,9 @@ private fun HomeHeader(
                         // a score isn't a state, so not green (rule 1).
                         growthScore?.let { Text("$it", style = nuruSerif(12, FontWeight.SemiBold), color = Nuru.goldChipText) }
                     }
-                    trend?.takeIf { it.delta != 0 }?.let { t ->
-                        TrendBadge(t, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp))
-                    }
+                    Text("Growth score", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Nuru.goldChipText)
                 } }
-                Spacer(Modifier.width(Spacing.md))
+                Spacer(Modifier.width(Spacing.sm))
             }
             // The one bell (EXPERIENCE.md §7.2 #4, §8.1 rule 7): the inbox, a
             // dot only while something is unread — the same bell, at the far
@@ -870,7 +936,9 @@ private fun HomeHeader(
         Text(if (firstName != null) "$greeting, $firstName." else "$greeting.", style = NuruType.greeting, color = Nuru.navy)
         // Nuru's daily word (GET /me/home/greeting) — hanging gold quote + serif
         // voice, mirroring iOS HomePersonalWord. Absent until the wire answers.
-        personalWord?.let { word ->
+        personalWord?.let { greeting ->
+            val prefix = firstName?.let { "$it, " }
+            val word = if (prefix != null && greeting.startsWith(prefix, ignoreCase = true)) greeting.drop(prefix.length).replaceFirstChar { it.titlecase() } else greeting
             // Owner (2026-08-26): the quoted head-card word steps down one point
             // — the hanging gold glyph and the line it opens. Sizes are written
             // out (not NuruType.title / NuruType.body) precisely because this
@@ -1011,25 +1079,6 @@ private fun ProgressRing(
             if (pct > 0) drawArc(arc, -90f, 360f * (pct.coerceIn(0, 100) / 100f), false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(sw, cap = StrokeCap.Round))
         }
         center()
-    }
-}
-
-/** A tiny ▲/▼ badge — points earned or lost vs the previous 28 days. */
-@Composable
-private fun TrendBadge(t: org.nuruplace.member.data.net.ScoreTrend, modifier: Modifier = Modifier) {
-    val up = !t.isDown
-    Row(
-        modifier.clip(RoundedCornerShape(999.dp))
-            // State colours only (§8.1 rule 1): up is green, down amber — it was orange.
-            .background(if (up) Nuru.success else Nuru.warning)
-            .border(1.dp, Color.White, RoundedCornerShape(999.dp))
-            .padding(horizontal = 3.dp, vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            (if (up) "▲" else "▼") + kotlin.math.abs(t.delta),
-            style = NuruType.micro, color = Color.White, fontWeight = FontWeight.Bold,
-        )
     }
 }
 
@@ -1348,6 +1397,18 @@ private fun RhythmCard(r: RhythmToday, streak: Int) {
             RhythmTile(RhythmTileWords.WORD, r.word, Modifier.weight(1f))
             RhythmTile(RhythmTileWords.REFLECTION, r.reflection, Modifier.weight(1f))
         }
+        val remaining = listOf("Prayer" to r.prayer, "Word" to r.word, "Reflection" to r.reflection)
+            .filterNot { it.second }.map { it.first }
+        val message = when (remaining.size) {
+            3 -> "Start with a moment of prayer."
+            2 -> "1 of 3 complete · ${remaining.joinToString(" and ")} remain"
+            1 -> "2 of 3 complete · ${remaining.first()} remains"
+            else -> null
+        }
+        message?.let {
+            Spacer(Modifier.height(Spacing.md))
+            Text(it, style = NuruType.caption, color = Nuru.ink600)
+        }
     }
 }
 
@@ -1591,9 +1652,13 @@ private fun VerseCard(
                 val mine = reactions?.mine == e
                 Row(
                     Modifier.clip(RoundedCornerShape(999.dp))
-                        .background(if (mine) Nuru.goldChipBg else Nuru.white)
-                        .border(1.dp, if (mine) Nuru.gold else Nuru.border, RoundedCornerShape(999.dp))
+                        .background(if (mine) Nuru.goldChipBg else Nuru.verseBg)
+                        .border(1.dp, if (mine) Nuru.gold else Nuru.gold.copy(alpha = 0.25f), RoundedCornerShape(999.dp))
                         .clickable { onReact(e) }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "$e, $count reactions"
+                            stateDescription = if (mine) "Selected" else "Not selected"
+                        }
                         .padding(horizontal = 7.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -1806,26 +1871,12 @@ private fun FeaturedCarousel(
             RowScopeLink("View all", onAll)
         }
         val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pages.size })
-        // Gentle auto-advance every 6s; pauses whenever a finger is on the rail
-        // — and runs only while Home is the screen in front (EXPERIENCE.md
-        // §9.7 M7): resumed, and its window holding the focus. The letter, a
-        // sheet or a dialog over Home, a page pushed over it, the app in the
-        // background — each stops it. It animated on behind the open letter
-        // and was the main thread in three ANRs on the final walk.
-        val lifecycleState by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-            .currentStateFlow.collectAsState()
-        val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
-        val advances = carouselAdvances(
-            pages.size,
-            resumed = lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED),
-            windowFocused = windowFocused,
-        )
-        LaunchedEffect(pages.size, advances) {
-            if (!advances) return@LaunchedEffect
-            while (true) {
-                kotlinx.coroutines.delay(6_000)
-                if (!pagerState.isScrollInProgress) {
-                    pagerState.animateScrollToPage((pagerState.currentPage + 1) % pages.size)
+        // Keep the selected story in place while the member reads it. A saved
+        // partial swipe can otherwise return with two stories cut off.
+        LaunchedEffect(pagerState) {
+            androidx.compose.runtime.snapshotFlow { pagerState.isScrollInProgress }.collect { scrolling ->
+                if (!scrolling && kotlin.math.abs(pagerState.currentPageOffsetFraction) > 0.001f) {
+                    pagerState.scrollToPage(pagerState.currentPage)
                 }
             }
         }
