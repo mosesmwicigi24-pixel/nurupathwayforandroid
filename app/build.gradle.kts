@@ -54,6 +54,7 @@ android {
         applicationId = "com.nuruplace"   // MUST match the installed app to update testers
         minSdk = 26
         targetSdk = 36
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 84                  // bump every release so devices take it as an update
         versionName = "2.59.0"
         vectorDrawables { useSupportLibrary = true }
@@ -209,5 +210,7 @@ dependencies {
     implementation(libs.firebase.crashlytics.ndk)
     debugImplementation(libs.androidx.ui.tooling)
     testImplementation(libs.junit)
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.1")
     testImplementation(libs.kotlinx.coroutines.test)
 }
