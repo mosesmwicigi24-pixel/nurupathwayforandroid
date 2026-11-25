@@ -2,8 +2,7 @@ package org.nuruplace.member.feature.listen
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import android.util.Base64
 import java.util.Collections
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,7 +18,7 @@ class PlanAudioSimulationTest {
         val source = PlanNarration("4c5fbfa1-d7e7-4d8f-8a89-a2970a95c904", 1, "word", "a".repeat(64))
         instrumentation.runOnMainSync {
             ReadAloud.bind(context)
-            ReadAloud.testAudioLoader = { _, index -> requested.add(index); silentWave() }
+            ReadAloud.testAudioLoader = { _, index -> requested.add(index); silentMp3() }
         }
         try {
             waitUntil { ReadAloud.state.value.status == ReadAloud.Status.READY }
@@ -38,12 +37,6 @@ class PlanAudioSimulationTest {
         assertTrue("Timed out waiting for player", condition())
     }
 
-    private fun silentWave(): ByteArray {
-        val samples = 1600
-        val out = ByteBuffer.allocate(44 + samples * 2).order(ByteOrder.LITTLE_ENDIAN)
-        out.put("RIFF".toByteArray()); out.putInt(36 + samples * 2); out.put("WAVEfmt ".toByteArray()); out.putInt(16)
-        out.putShort(1); out.putShort(1); out.putInt(8000); out.putInt(16000); out.putShort(2); out.putShort(16)
-        out.put("data".toByteArray()); out.putInt(samples * 2)
-        return out.array()
-    }
+    // Generated silence, encoded as MP3 to exercise the production codec.
+    private fun silentMp3(): ByteArray = Base64.decode("SUQzBAAAAAAAIlRTU0UAAAAOAAADTGF2ZjYzLjEuMTAyAAAAAAAAAAAAAAD/8zTEAAAAA0gAAAAATEFNRTQuMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVX/8zTEOwAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVX/8zTEdgAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVX/8zTEsQAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVX/8zTExAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUU0LjBVVVVVVVVVVVVVVVX/8zTExAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/8zTExAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/8zTExAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/8zTExAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=", Base64.DEFAULT)
 }
