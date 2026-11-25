@@ -8,6 +8,21 @@ import org.junit.Test
 /** What Read aloud says, and where it cuts — the engine itself needs a device. */
 class ListenScriptTest {
 
+    @Test fun `voice selection prefers installed offline quality and never selects a network voice`() {
+        val voices = listOf(
+            ReadingVoiceCandidate("gb", "en-GB", 300, false, true),
+            ReadingVoiceCandidate("us", "en-US", 500, false, true),
+            ReadingVoiceCandidate("online", "en-GB", 600, true, true),
+            ReadingVoiceCandidate("missing", "en-GB", 700, false, false),
+            ReadingVoiceCandidate("french", "fr-FR", 800, false, true),
+        )
+        assertEquals("us", selectReadingVoice(voices, "en-GB")?.name)
+        assertNull(selectReadingVoice(voices.filter { it.requiresNetwork || !it.installed }, "en-GB"))
+        assertEquals("gb", selectReadingVoice(voices.take(1), "en-GB")?.name)
+        val equallyGood = listOf(voices[0], voices[0].copy(name = "selected"))
+        assertEquals("selected", selectReadingVoice(equallyGood, "en-GB", "selected")?.name)
+    }
+
     @Test fun `a heading is read once with a pause after it`() {
         assertEquals(listOf("Building Successful."), ListenScript.paragraphs(listOf(ListenPiece.Heading("Building Successful"))))
     }
