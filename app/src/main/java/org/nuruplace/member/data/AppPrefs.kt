@@ -17,6 +17,11 @@ object AppPrefs {
     private const val KEY_TEXT_SCALE = "nuru.textScale"
     private const val KEY_LINE_SPACING = "nuru.lineSpacing"
     private const val KEY_READER_TEXT_SCALE = "nuru.readerTextScale"
+    // The reading theme (Settings → Display; the readers' moon button) and the
+    // Read aloud speed — this phone's choices, kept across sign-outs (iOS
+    // @AppStorage "nuru.readingTheme" / "nuru.listen.speed").
+    private const val KEY_READING_THEME = "nuru.readingTheme"
+    private const val KEY_LISTEN_SPEED = "nuru.listen.speed"
     private const val KEY_SHARE_LOCATION = "nuru.privacy.shareLocation"
     private const val KEY_LOCATION_INVITE = "nuru.locationInviteShown"
     // The notification permission has been asked on this install (data/
@@ -84,6 +89,20 @@ object AppPrefs {
     var readerTextScale by mutableFloatStateOf(1.0f)
         private set
 
+    /** How the reading screens (plan readings, the devotional, letters,
+     *  lessons) are lit: [ReadingTheme] key — "auto" follows the phone's dark
+     *  mode, "day" is warm paper, "night" the dark sepia page. */
+    var readingTheme by mutableStateOf(ReadingTheme.AUTO.key)
+        private set
+
+    /** The phone's own dark mode, kept current by MainActivity (onCreate and
+     *  onConfigurationChanged) so "auto" resolves anywhere, composable or not. */
+    var systemDark by mutableStateOf(false)
+
+    /** Read aloud speed, a ListenSpeed step (1.0 = normal). */
+    var listenSpeed by mutableFloatStateOf(1.0f)
+        private set
+
     /** Opt-in approximate-location sharing (server keeps only a coarse geohash). */
     var shareLocation by mutableStateOf(false)
         private set
@@ -105,6 +124,8 @@ object AppPrefs {
         textScale = prefs.getFloat(KEY_TEXT_SCALE, 1.0f)
         lineSpacing = prefs.getFloat(KEY_LINE_SPACING, 1.0f)
         readerTextScale = prefs.getFloat(KEY_READER_TEXT_SCALE, 1.0f)
+        readingTheme = ReadingTheme.from(prefs.getString(KEY_READING_THEME, null)).key
+        listenSpeed = prefs.getFloat(KEY_LISTEN_SPEED, 1.0f)
         shareLocation = prefs.getBoolean(KEY_SHARE_LOCATION, false)
         hideGiveYearTotal = prefs.getBoolean(KEY_GIVE_HIDE_YEAR_TOTAL, false)
     }
@@ -117,6 +138,16 @@ object AppPrefs {
     fun updateReaderTextScale(scale: Float) {
         readerTextScale = scale
         if (::prefs.isInitialized) prefs.edit().putFloat(KEY_READER_TEXT_SCALE, scale).apply()
+    }
+
+    fun updateReadingTheme(theme: ReadingTheme) {
+        readingTheme = theme.key
+        if (::prefs.isInitialized) prefs.edit().putString(KEY_READING_THEME, theme.key).apply()
+    }
+
+    fun updateListenSpeed(speed: Float) {
+        listenSpeed = speed
+        if (::prefs.isInitialized) prefs.edit().putFloat(KEY_LISTEN_SPEED, speed).apply()
     }
 
     fun updateTextScale(scale: Float) {

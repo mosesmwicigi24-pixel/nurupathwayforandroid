@@ -119,6 +119,19 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
         done = group.isNotEmpty() && group.all { it.completed }
     }
 
+    // Read aloud (feature/listen): what this part says, top to bottom. A bare
+    // reference is read once its passage lands — the same cached fetch the
+    // quote card makes.
+    val passages = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    val toFetch = planPartPassagesToFetch(part, group)
+    LaunchedEffect(toFetch) {
+        toFetch.forEach { ref -> ScriptureStore.passage(ref).onSuccess { passages[ScriptureRefs.normalize(ref)] = it.text } }
+    }
+    val listenWords = remember(part, group, day?.title, passages.toMap()) {
+        org.nuruplace.member.feature.listen.ListenScript.paragraphs(planPartListenPieces(part, group, day?.title, passages))
+    }
+    val listen = org.nuruplace.member.feature.listen.rememberListen(listenWords)
+
     val scroll = rememberScrollState()
     val progress by remember { derivedStateOf { if (scroll.maxValue > 0) scroll.value.toFloat() / scroll.maxValue else 0f } }
 
@@ -165,14 +178,21 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                     ReaderChip(onClick = onBack) { Icon(Lucide.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(8.dp))
                     Text("DAY $dayNumber", style = rInter(11, FontWeight.Bold, 1.6f), color = pal.gold, modifier = Modifier.weight(1f))
+                    // Read aloud: start, pause, resume (the bar below does the rest).
+                    if (listen.available) {
+                        ReaderChip(onClick = { listen.toggle() }) {
+                            org.nuruplace.member.feature.listen.ListenIcon(listen, tint = Color.White)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     // Text size: Small → Regular → Large → Small, one tap each,
                     // remembered per device (AppPrefs.readerTextScale).
                     ReaderChip(onClick = { AppPrefs.updateReaderTextScale(ReaderTextScale.next(AppPrefs.readerTextScale)) }) {
                         Text("Aa", style = rInter(13, FontWeight.Bold), color = Color.White)
                     }
                     Spacer(Modifier.width(8.dp))
-                    ReaderChip(onClick = { ReaderMode.night = !ReaderMode.night }) {
-                        Icon(if (ReaderMode.night) Lucide.Sun else Lucide.Moon, "Reader mode", tint = Color.White, modifier = Modifier.size(18.dp))
+                    ReaderChip(onClick = { ReaderMode.toggle() }) {
+                        Icon(if (ReaderMode.night) Lucide.Sun else Lucide.Moon, if (ReaderMode.night) "Day page" else "Night page", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
                 Text(partName, style = rSerif(26, FontWeight.Medium), color = Color.White, modifier = Modifier.padding(top = 10.dp))
@@ -214,6 +234,7 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
             // the canvas runs under it.
             val fade = Brush.verticalGradient(listOf(pal.bg.copy(alpha = 0f), pal.bg))
             Column(Modifier.fillMaxWidth().background(fade).navigationBarsPadding().padding(horizontal = 20.dp).padding(top = 10.dp, bottom = 12.dp)) {
+                org.nuruplace.member.feature.listen.ListenBar(listen, pal.listenColors())
                 // Why the part was not saved (§4), right above the button that
                 // tries again — the state colour, readable in night mode too.
                 finishError?.let { err ->
@@ -265,10 +286,10 @@ private fun PartContent(part: String, group: List<PlanSegment>, pal: ReaderPalet
                     val ref = seg.reference
                     when {
                         content != null -> RLongPressSave(reference = ref?.takeIf { ScriptureRefs.isReference(it) }, text = content, version = null, pal = pal) {
-                            VerseQuoteCard(verse = content, reference = ref ?: "Scripture")
+                            VerseQuoteCard(verse = content, reference = ref ?: "Scripture", night = pal.night)
                         }
                         ref != null && ScriptureRefs.isReference(ref) -> RScriptureQuote(ref, pal)
-                        else -> VerseQuoteCard(verse = ref ?: seg.title, reference = ref ?: "Scripture")
+                        else -> VerseQuoteCard(verse = ref ?: seg.title, reference = ref ?: "Scripture", night = pal.night)
                     }
                     // Where the Word ends and the teaching begins.
                     if (hasTeaching) ROrnament(pal)

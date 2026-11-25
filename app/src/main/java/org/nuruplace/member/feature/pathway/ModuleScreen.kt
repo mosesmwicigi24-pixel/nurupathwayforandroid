@@ -89,21 +89,32 @@ import java.util.UUID
 import org.nuruplace.member.ui.icons.Lucide
 
 // Screen-local palette — iOS `enum ML` (ModuleView.swift), distinct from global Nuru.
+// Day values are the lesson's own; night values are the readers' dark sepia
+// (the reading theme, data/ReadingTheme.kt — ReaderPalette's night page).
+// Getters, so every read follows the theme. `navy` is TEXT navy (light on the
+// night page); a navy FILL with white on it, or words on gold, use [navyFill].
 private object ML {
-    val navy = Color(0xFF0A1628)
-    val cream = Color(0xFFF4F0E8)
-    val surface = Color(0xFFFBF8F1)
-    val gold = Color(0xFFC9A227)
-    val goldDeep = Color(0xFFB6862F)
-    val border = Color(0x140A2540)
-    val track = Color(0x1A0A2540)
-    val overline = Color(0xFF9A7A2A)
-    val kicker = Color(0xFFA8861C)
-    val secondary = Color(0xFF59667C)
-    val lead = Color(0xFF3A4A5F)
-    val bodyInk = Color(0xFF1B2733)
-    val goldGrad = Brush.linearGradient(listOf(gold, goldDeep))
-    val headerGrad = Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
+    private val n: Boolean get() = org.nuruplace.member.data.ReadingTheme.night
+    val navy: Color get() = if (n) Color(0xFFEBE3D3) else Color(0xFF0A1628)
+    val navyFill = Color(0xFF0A1628)
+    val cream: Color get() = if (n) Color(0xFF171411) else Color(0xFFF4F0E8)
+    val surface: Color get() = if (n) Color(0xFF251E13) else Color(0xFFFBF8F1)
+    /** The white cards and buttons on the page. */
+    val card: Color get() = if (n) Color(0xFF221E19) else Color.White
+    val gold: Color get() = if (n) Color(0xFFD9B65A) else Color(0xFFC9A227)
+    val goldDeep: Color get() = if (n) Color(0xFFE0C06A) else Color(0xFFB6862F)
+    val border: Color get() = if (n) Color(0x17FFFFFF) else Color(0x140A2540)
+    val track: Color get() = if (n) Color(0x24FFFFFF) else Color(0x1A0A2540)
+    val overline: Color get() = if (n) Color(0xFFD9B65A) else Color(0xFF9A7A2A)
+    val kicker: Color get() = if (n) Color(0xFFD9B65A) else Color(0xFFA8861C)
+    val secondary: Color get() = if (n) Color(0xFF9A9280) else Color(0xFF59667C)
+    val lead: Color get() = if (n) Color(0xFFD8CFBE) else Color(0xFF3A4A5F)
+    val bodyInk: Color get() = if (n) Color(0xFFEBE3D3) else Color(0xFF1B2733)
+    val error: Color get() = if (n) Color(0xFFF87171) else Color(0xFFB91C1C)
+    val whisper: Color get() = if (n) Color(0xFF251E13) else Color(0xFFFFF8E6)
+    val goldGrad: Brush get() = Brush.linearGradient(listOf(gold, goldDeep))
+    val headerGrad: Brush get() = if (n) Brush.linearGradient(listOf(Color(0xFF221E19), Color(0xFF171411)))
+        else Brush.linearGradient(listOf(Color(0xFFF6F4EF), Color(0xFFEFE8DA)))
 }
 
 // The margin companion (Wave 1, iOS ModuleView.whisperLines verbatim): ONE soft
@@ -214,7 +225,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
     if (showRevisit) {
         org.nuruplace.member.ui.components.NuruAlertDialog(
             onDismissRequest = { showRevisit = false },
-            containerColor = Color.White,
+            containerColor = ML.card,
             title = { Text("You've completed this module", style = mlSerif(18, FontWeight.SemiBold), color = ML.navy) },
             text = { Text("It is sealed — but you can still revisit what you wrote or try the quiz again.", style = ml(13), color = ML.secondary) },
             confirmButton = {
@@ -276,11 +287,14 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
 
     val readMinutes = remember(m) { (m.pages.joinToString(" ").split(Regex("\\s+")).size / 200).coerceAtLeast(1) }
     val sectionCount = m.pages.size.coerceAtLeast(1)
+    // Read aloud (feature/listen): the lesson as it is laid out.
+    val listenWords = remember(m) { org.nuruplace.member.feature.listen.ListenScript.paragraphs(moduleListenPieces(m)) }
+    val listen = org.nuruplace.member.feature.listen.rememberListen(listenWords)
 
     Box(Modifier.fillMaxSize().background(ML.cream)) {
         Column(Modifier.fillMaxSize().imePadding()) {
             if (!chromeHidden) {
-                Header(m, readMinutes, sectionCount, readDone, reflectDone, onBack = onBack, onExpand = { chromeHidden = true }, onExplain = { explainOpen = true }, onRetake = if (m.completed && m.requiresQuiz) ({ flush(); onTakeQuiz(m.moduleId) }) else null)
+                Header(m, readMinutes, sectionCount, readDone, reflectDone, listen = listen, onBack = onBack, onExpand = { chromeHidden = true }, onExplain = { explainOpen = true }, onRetake = if (m.completed && m.requiresQuiz) ({ flush(); onTakeQuiz(m.moduleId) }) else null)
             }
             // Lesson content
             Column(
@@ -321,12 +335,22 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                 reflectError?.let { line ->
                     Text(
                         line,
-                        style = ml(11), color = androidx.compose.ui.graphics.Color(0xFFB91C1C),
+                        style = ml(11), color = ML.error,
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 Spacer(Modifier.height(24.dp))
             }
+            // The Read aloud player, over the gate (and in reading mode too).
+            org.nuruplace.member.feature.listen.ListenBar(
+                listen,
+                org.nuruplace.member.feature.listen.ListenColors(
+                    bar = ML.card, ink = ML.navy, inkDim = ML.secondary, accent = ML.gold, onAccent = ML.navyFill, border = ML.border,
+                ),
+                // The gate / the exam bar below clear the gesture bar themselves;
+                // with neither showing, the player does.
+                Modifier.padding(horizontal = 20.dp).then(if (chromeHidden || (m.completed && examStep == null)) Modifier.navigationBarsPadding() else Modifier),
+            )
             if (!chromeHidden && examStep != null) {
                 ExamNextBar(examStep) { flush(); onOpenExam(m.levelNumber) }
             }
@@ -363,7 +387,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
         if (chromeHidden) {
             Box(
                 Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 14.dp).size(40.dp).clip(RoundedCornerShape(999.dp))
-                    .background(ML.navy.copy(alpha = 0.82f)).border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+                    .background(ML.navyFill.copy(alpha = 0.82f)).border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
                     .clickable { chromeHidden = false },
                 contentAlignment = Alignment.Center,
             ) { Icon(Lucide.Minimize2, "Exit reading mode", tint = Color.White, modifier = Modifier.size(18.dp)) }
@@ -389,7 +413,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
                     .padding(horizontal = 28.dp)
                     .padding(bottom = Spacing.tabBarSpace + 60.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFFFF8E6))
+                    .background(ML.whisper)
                     .border(1.dp, ML.gold.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 18.dp, vertical = 12.dp),
             )
@@ -400,7 +424,7 @@ private fun Loaded(m: ModuleDetail, onBack: () -> Unit, onTakeQuiz: (String) -> 
 // ─────────────────────────── Header (chrome-visible) ───────────────────────────
 
 @Composable
-private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDone: Boolean, reflectDone: Boolean, onBack: () -> Unit, onExpand: () -> Unit, onExplain: () -> Unit, onRetake: (() -> Unit)? = null) {
+private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDone: Boolean, reflectDone: Boolean, listen: org.nuruplace.member.feature.listen.ListenController, onBack: () -> Unit, onExpand: () -> Unit, onExplain: () -> Unit, onRetake: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(ML.headerGrad)
             .padding(horizontal = 20.dp).padding(top = 14.dp, bottom = 20.dp),
@@ -427,6 +451,24 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
             Spacer(Modifier.width(8.dp))
             MetaPill(Lucide.BookOpen, "$sectionCount section" + if (sectionCount == 1) "" else "s")
         }
+        // Listen (read aloud) and the night page — the two ways to take the
+        // lesson in other than reading it on a bright page.
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
+            if (listen.available) {
+                ActionPill(onClick = { listen.toggle() }, label = listen.label) {
+                    org.nuruplace.member.feature.listen.ListenIcon(listen, tint = ML.navy, small = true)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (listen.active) (if (listen.playing) "Pause" else "Resume") else "Listen", style = ml(11, FontWeight.SemiBold), color = ML.navy)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            val night = org.nuruplace.member.data.ReadingTheme.night
+            ActionPill(onClick = { org.nuruplace.member.data.AppPrefs.updateReadingTheme(org.nuruplace.member.data.ReadingTheme.toggled(night)) }, label = if (night) "Day page" else "Night page") {
+                Icon(if (night) Lucide.Sun else Lucide.Moon, null, tint = ML.navy, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (night) "Day" else "Night", style = ml(11, FontWeight.SemiBold), color = ML.navy)
+            }
+        }
         if (m.completed) {
             // Completed ribbon — ✓ COMPLETED · score, the finish time on its
             // own line under them (as iOS; "Mon 5 Oct · 10:08 AM" shared one
@@ -450,7 +492,7 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
                 Spacer(Modifier.width(6.dp))
                 if (onRetake != null) {
                     Box(
-                        Modifier.clip(RoundedCornerShape(999.dp)).background(ML.navy)
+                        Modifier.clip(RoundedCornerShape(999.dp)).background(ML.navyFill)
                             .clickable { onRetake() }.padding(horizontal = 12.dp, vertical = 6.dp),
                     ) { Text("Retake", style = ml(11, FontWeight.Bold), color = Color.White) }
                 }
@@ -467,25 +509,35 @@ private fun Header(m: ModuleDetail, readMinutes: Int, sectionCount: Int, readDon
 
 @Composable
 private fun SquareBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, cd: String, onClick: () -> Unit) {
-    Box(Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(16.dp)).clickable { onClick() }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(ML.card).border(1.dp, ML.border, RoundedCornerShape(16.dp)).clickable { onClick() }, contentAlignment = Alignment.Center) {
         Icon(icon, cd, tint = ML.navy, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun MetaPill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Row(Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.clip(RoundedCornerShape(999.dp)).background(ML.card).border(1.dp, ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
         Text(text, style = ml(11), color = ML.secondary)
     }
 }
 
+/** A tappable pill in the meta row (Listen · Night). */
+@Composable
+private fun ActionPill(onClick: () -> Unit, label: String, content: @Composable () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(999.dp)).background(ML.card).border(1.dp, ML.border, RoundedCornerShape(999.dp))
+            .clickable(onClickLabel = label, onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) { content() }
+}
+
 @Composable
 private fun Segment(label: String, done: Boolean, modifier: Modifier) {
     Row(modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else Color.Transparent).padding(vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        if (done) { Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
-        Text(label, style = ml(12, FontWeight.SemiBold), color = if (done) ML.navy else ML.secondary)
+        if (done) { Icon(Lucide.Check, null, tint = ML.navyFill, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
+        Text(label, style = ml(12, FontWeight.SemiBold), color = if (done) ML.navyFill else ML.secondary)
     }
 }
 
@@ -513,9 +565,9 @@ private fun BottomGate(
                 StepChip("Reflect", reflectDone)
             }
         }
-        error?.let { Text(it, style = ml(11), color = Color(0xFFB91C1C)) }
+        error?.let { Text(it, style = ml(11), color = ML.error) }
         when {
-            !complete -> Box(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, ML.border, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+            !complete -> Box(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(ML.card).border(1.dp, ML.border, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Lock, null, tint = ML.secondary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(8.dp))
@@ -548,17 +600,17 @@ private fun GateSeg(done: Boolean, modifier: Modifier) {
 
 @Composable
 private fun StepChip(label: String, done: Boolean) {
-    Row(Modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else Color.White).border(1.dp, if (done) Color.Transparent else ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (done) { Icon(Lucide.Check, null, tint = ML.navy, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)) }
-        Text(label, style = ml(11, FontWeight.Bold), color = if (done) ML.navy else ML.secondary)
+    Row(Modifier.clip(RoundedCornerShape(999.dp)).background(if (done) ML.gold.copy(alpha = 0.9f) else ML.card).border(1.dp, if (done) Color.Transparent else ML.border, RoundedCornerShape(999.dp)).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (done) { Icon(Lucide.Check, null, tint = ML.navyFill, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)) }
+        Text(label, style = ml(11, FontWeight.Bold), color = if (done) ML.navyFill else ML.secondary)
     }
 }
 
 @Composable
 private fun GoldCta(label: String, busy: Boolean, onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp)).background(ML.goldGrad).clickable(enabled = !busy) { onClick() }, contentAlignment = Alignment.Center) {
-        if (busy) CircularProgressIndicator(color = ML.navy, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-        else Text(label, style = ml(14, FontWeight.Bold), color = ML.navy)
+        if (busy) CircularProgressIndicator(color = ML.navyFill, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+        else Text(label, style = ml(14, FontWeight.Bold), color = ML.navyFill)
     }
 }
 
@@ -701,7 +753,7 @@ private fun MarkdownView(md: String) {
                     // and stays the plain gold-bar callout.
                     val scripture = remember(b.text) { splitScriptureQuote(b.text) }
                     if (scripture != null) {
-                        VerseQuoteCard(verse = scripture.first, reference = scripture.second)
+                        VerseQuoteCard(verse = scripture.first, reference = scripture.second, night = org.nuruplace.member.data.ReadingTheme.night)
                     } else {
                         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.surface)) {
                             Box(Modifier.width(3.dp).fillMaxHeight().background(ML.gold).align(Alignment.CenterStart))
@@ -833,7 +885,7 @@ internal const val RELOAD_FAILED = "Couldn't load your reflection."
 private fun ReflectionFolded(state: FoldedReflection, onRevisit: () -> Unit) {
     Column {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.card)
                 .border(1.dp, ML.gold.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -858,7 +910,7 @@ private fun ReflectionFolded(state: FoldedReflection, onRevisit: () -> Unit) {
         // The module is sealed — changing anything is intentional, one quiet door.
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Row(
-                Modifier.clip(RoundedCornerShape(999.dp)).background(Color.White)
+                Modifier.clip(RoundedCornerShape(999.dp)).background(ML.card)
                     .border(1.dp, ML.border, RoundedCornerShape(999.dp))
                     .clickable { onRevisit() }.padding(horizontal = 18.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -874,7 +926,7 @@ private fun ReflectionFolded(state: FoldedReflection, onRevisit: () -> Unit) {
 @Composable
 private fun ReflectionCard(value: String, onValue: (String) -> Unit, saved: Boolean, onSave: () -> Unit) {
     val canSave = value.trim().length >= 20
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).border(1.dp, if (saved) ML.gold.copy(alpha = 0.5f) else ML.border, RoundedCornerShape(16.dp)).padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ML.card).border(1.dp, if (saved) ML.gold.copy(alpha = 0.5f) else ML.border, RoundedCornerShape(16.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("REFLECTION", style = ml(11, FontWeight.Bold, 1.8f), color = ML.kicker, modifier = Modifier.weight(1f))
             if (saved) { Icon(Lucide.Check, null, tint = Color(0xFF16A34A), modifier = Modifier.size(14.dp)); Spacer(Modifier.width(3.dp)); Text("Saved", style = ml(11, FontWeight.Bold), color = Color(0xFF15803D)) }
