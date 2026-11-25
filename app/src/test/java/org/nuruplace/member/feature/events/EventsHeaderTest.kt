@@ -12,6 +12,12 @@ import org.nuruplace.member.data.net.CalendarOccurrence
 import java.time.LocalDate
 
 class EventsHeaderTest {
+    @Test fun weekHeadingNamesBothMonthsAcrossBoundaries() {
+        assertEquals("NOVEMBER 2026", weekMonthLabel(LocalDate.of(2026, 11, 1)))
+        assertEquals("NOV – DEC 2026", weekMonthLabel(LocalDate.of(2026, 11, 25)))
+        assertEquals("DEC 2026 – JAN 2027", weekMonthLabel(LocalDate.of(2026, 12, 28)))
+    }
+
     private val today = LocalDate.of(2026, 10, 4) // Sunday
 
     private fun occ(id: String, title: String, startAt: String) = CalendarOccurrence(id, title = title, startAt = startAt)
