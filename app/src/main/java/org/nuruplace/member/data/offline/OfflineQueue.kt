@@ -32,6 +32,7 @@ class OfflineQueue(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val drainLock = Mutex()
+    private val enqueueLock = Mutex()
 
     private val _pending = MutableStateFlow(0)
     /** Live count of queued mutations — for an "N pending" UI cue. */
@@ -49,17 +50,19 @@ class OfflineQueue(
      *  A money write is refused before anything is stored (§5.6). */
     suspend fun enqueue(domain: String, op: String, payload: JsonObject) {
         requireQueueable(domain, op, payload)
-        val seq = dao.maxSeq() + 1
-        dao.insert(
-            PendingMutation(
-                mutationId = payload.mutationIdOrNew(),
-                seq = seq,
-                domain = domain,
-                op = op,
-                payloadJson = json.encodeToString(JsonObject.serializer(), payload),
-                createdAt = nowMillis(),
-            ),
-        )
+        enqueueLock.withLock {
+            val seq = dao.maxSeq() + 1
+            dao.insert(
+                PendingMutation(
+                    mutationId = payload.mutationIdOrNew(),
+                    seq = seq,
+                    domain = domain,
+                    op = op,
+                    payloadJson = json.encodeToString(JsonObject.serializer(), payload),
+                    createdAt = nowMillis(),
+                ),
+            )
+        }
         refreshCount()
         drain()
     }
@@ -91,17 +94,22 @@ class OfflineQueue(
                     Log.w(TAG, "sync push failed, will retry: ${e.message}")
                     break
                 }
+                val sentIds = batch.map { it.mutationId }.toSet()
+                val settled = mutableSetOf<String>()
                 for (r in result.results) {
+                    if (r.mutationId !in sentIds || r.mutationId in settled) continue
                     when (r.status) {
-                        "applied", "duplicate" -> dao.deleteById(r.mutationId)
-                        else -> {
-                            Log.w(TAG, "mutation ${r.mutationId} rejected: ${r.code} ${r.detail}")
-                            dao.deleteById(r.mutationId)   // permanent refusal — drop, don't loop
+                        "applied", "duplicate", "rejected" -> {
+                            if (r.status == "rejected") Log.w(TAG, "mutation ${r.mutationId} rejected: ${r.code} ${r.detail}")
+                            dao.deleteById(r.mutationId)
+                            settled.add(r.mutationId)
                         }
+                        else -> Log.w(TAG, "Unrecognized sync status; queued work retained")
                     }
                 }
                 refreshCount()
-                if (batch.size < BATCH) break
+                // An incomplete answer must not drop work or spin on a full batch.
+                if (settled.size < batch.size || batch.size < BATCH) break
             }
         } finally {
             drainLock.unlock()

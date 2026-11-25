@@ -75,7 +75,7 @@ private val SealGrad = Brush.linearGradient(listOf(Color(0xFFE8CA6C), Color(0xFF
 @Composable
 fun LetterAwaitingCard(onClick: () -> Unit = {}) {
     val countdown = remember { letterCountdownLabel() }
-    LetterQuietCard("Your letter arrives Sunday evening", LetterWords.arrivalLine(countdown), onClick)
+    LetterQuietCard("Arrives Sunday evening", countdown, onClick)
 }
 
 /** "Today" / "Tomorrow" / "In N days" until the next Sunday 6 pm in East

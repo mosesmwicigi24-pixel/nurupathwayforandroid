@@ -83,7 +83,7 @@ fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: S
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize(),
         )
-        if (large) {
+        if (large || (text?.length ?: 0) > 140) {
             Box(Modifier.matchParentSize().background(DeepNavyBlockBrush))
         } else {
             // The photograph SHOWS (owner, 2026-08-25): no full veil — a slim top
@@ -141,7 +141,7 @@ fun VerseTableauHeader(art: VerseArt, text: String?, refLine: String, version: S
                         style = NuruType.rowTitle.copy(fontSize = size, lineHeight = size * 1.35),
                         color = Color.White,
                         // Four lines in the owner's card; the whole verse once it grows.
-                        maxLines = if (large) Int.MAX_VALUE else 4,
+                        maxLines = Int.MAX_VALUE,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(5.dp))

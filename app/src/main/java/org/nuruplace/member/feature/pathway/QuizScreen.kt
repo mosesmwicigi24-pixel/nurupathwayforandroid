@@ -493,7 +493,7 @@ private fun FailResult(v: QuizVerdict, moduleId: String?, examLevel: Int?, onDon
         Spacer(Modifier.height(Spacing.lg))
         Text("${v.score}%", style = NuruType.display, color = Nuru.ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(Spacing.xs))
-        Text("Almost there", style = NuruType.title, color = Nuru.ink, fontWeight = FontWeight.Bold)
+        Text("Keep going", style = NuruType.title, color = Nuru.ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(Spacing.sm))
         Text(
             if (examLevel != null) "You need ${v.passMark}% to pass the ${ExamWords.name(examLevel)}. Look back over Level $examLevel's lessons — then try again."

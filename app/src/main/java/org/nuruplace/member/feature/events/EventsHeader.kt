@@ -52,6 +52,17 @@ internal const val EVENTS_QUIET_LINE = "The calendar is quiet for now — gather
  *  week" (a Sunday) wasn't on it (Cycle 3 close walk E21). */
 internal fun thisWeekDays(today: LocalDate): List<LocalDate> = (0L..7L).map { today.plusDays(it) }
 
+/** Name both months when the eight-day strip crosses a calendar boundary. */
+internal fun weekMonthLabel(today: LocalDate): String {
+    val last = today.plusDays(7)
+    val monthYear = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+    val shortMonth = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
+    if (today.year == last.year && today.month == last.month) return today.format(monthYear).uppercase(Locale.ENGLISH)
+    val start = today.format(shortMonth).uppercase(Locale.ENGLISH)
+    val end = last.format(shortMonth).uppercase(Locale.ENGLISH)
+    return if (today.year == last.year) "$start – $end ${today.year}" else "$start ${today.year} – $end ${last.year}"
+}
+
 /** [day] falls in [thisWeekDays]. */
 internal fun inThisWeek(day: LocalDate, today: LocalDate): Boolean =
     !day.isBefore(today) && !day.isAfter(today.plusDays(7))

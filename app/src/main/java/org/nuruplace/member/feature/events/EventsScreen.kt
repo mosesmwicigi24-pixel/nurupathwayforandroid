@@ -46,6 +46,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -190,7 +194,7 @@ fun EventsScreen(
                 ) {
                     Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            today.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)).uppercase(),
+                            weekMonthLabel(today),
                             style = evInter(11, FontWeight.Bold, 1.4f), color = EV.overline,
                         )
                         Spacer(Modifier.weight(1f))
@@ -228,6 +232,14 @@ fun EventsScreen(
                                         },
                                     )
                                     .clickable { selectedDay = date; segment = EVENTS_TAB_TODAY }
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.ENGLISH))
+                                        stateDescription = listOfNotNull(
+                                            if (isToday) "Today" else null,
+                                            if (hasEvents) "Events scheduled" else null,
+                                        ).joinToString(", ")
+                                        this.selected = selected
+                                    }
                                     .padding(vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
