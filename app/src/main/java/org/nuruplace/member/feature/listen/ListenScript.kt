@@ -15,6 +15,24 @@ package org.nuruplace.member.feature.listen
 import org.nuruplace.member.feature.grow.ScriptureRefs
 import org.nuruplace.member.feature.grow.passageVerses
 
+/** Metadata only: selecting a voice must never require a network connection. */
+internal data class ReadingVoiceCandidate(
+    val name: String,
+    val language: String,
+    val quality: Int,
+    val requiresNetwork: Boolean,
+    val installed: Boolean,
+)
+
+internal fun selectReadingVoice(voices: List<ReadingVoiceCandidate>, preferredLanguage: String, currentName: String? = null): ReadingVoiceCandidate? =
+    voices.asSequence()
+        .filter { it.installed && !it.requiresNetwork && it.language.substringBefore('-').equals("en", ignoreCase = true) }
+        .sortedWith(compareByDescending<ReadingVoiceCandidate> { it.quality }
+            .thenBy { if (it.language.equals(preferredLanguage, ignoreCase = true)) 0 else 1 }
+            .thenBy { if (it.name == currentName) 0 else 1 }
+            .thenBy { it.name })
+        .firstOrNull()
+
 /** One block of a reading, as the screen shows it. */
 sealed interface ListenPiece {
     /** A title or section name — read once, with a pause after it. */

@@ -117,6 +117,22 @@ object ReadAloud {
             _state.value = State(Status.UNAVAILABLE)
             return
         }
+        // Engines may expose many installed voices. Prefer their highest-quality
+        // English offline voice; keep the engine's language fallback if it
+        // exposes none or rejects the selected voice.
+        runCatching {
+            val voices = engine.voices.orEmpty()
+            val selected = selectReadingVoice(voices.map { voice ->
+                ReadingVoiceCandidate(
+                    name = voice.name,
+                    language = voice.locale.toLanguageTag(),
+                    quality = voice.quality,
+                    requiresNetwork = voice.isNetworkConnectionRequired,
+                    installed = !voice.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED),
+                )
+            }, locale?.toLanguageTag().orEmpty(), engine.voice?.name)
+            voices.firstOrNull { it.name == selected?.name }?.let { engine.voice = it }
+        }
         engine.setPitch(PITCH)
         engine.setAudioAttributes(speechAttributes)
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
