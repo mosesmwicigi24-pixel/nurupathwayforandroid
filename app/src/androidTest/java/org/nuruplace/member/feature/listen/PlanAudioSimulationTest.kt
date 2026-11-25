@@ -11,6 +11,25 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class PlanAudioSimulationTest {
+    @Test fun invalidPlanAudioFallsBackToDeviceVoice() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val source = PlanNarration("4c5fbfa1-d7e7-4d8f-8a89-a2970a95c904", 1, "word", "a".repeat(64))
+        instrumentation.runOnMainSync {
+            ReadAloud.bind(context)
+            ReadAloud.testAudioLoader = { _, _ -> byteArrayOf(1, 2, 3, 4) }
+        }
+        try {
+            waitUntil { ReadAloud.state.value.status == ReadAloud.Status.READY }
+            instrumentation.runOnMainSync {
+                ReadAloud.play(context, "fallback-simulation", listOf("A longer reading. ".repeat(30)), narration = source, isPlan = true)
+            }
+            waitUntil { ReadAloud.state.value.deviceFallback }
+        } finally {
+            instrumentation.runOnMainSync { ReadAloud.stop(); ReadAloud.testAudioLoader = null; ReadAloud.unbind(null) }
+        }
+    }
+
     @Test fun playsTwoPlanParagraphsUsingTheRealMediaPlayer() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
