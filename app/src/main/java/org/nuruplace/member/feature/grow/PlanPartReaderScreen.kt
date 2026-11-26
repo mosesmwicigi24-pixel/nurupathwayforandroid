@@ -236,6 +236,10 @@ fun PlanPartReaderScreen(planId: String, dayNumber: Int, part: String, index: In
                             Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 28.dp),
                             verticalArrangement = Arrangement.spacedBy(18.dp),
                         ) {
+                            if (part == "word" && cloud?.words?.contains("World English Bible.") == true) {
+                                Text("Audio uses the World English Bible. The text shown may use another translation.",
+                                    style = rInter(12, FontWeight.Medium), color = pal.inkDim)
+                            }
                             PartContent(part = part, group = group, pal = pal, dayTitle = day?.title, reference = group.firstOrNull { it.kind.lowercase() == "scripture" }?.reference)
                             if (part == "respond") ReflectionBox(planId, dayNumber, pal)
                             EncouragementLine(pal)
